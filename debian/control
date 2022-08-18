@@ -1,0 +1,14 @@
+Source: unitotem-manager
+Section: utils
+Priority: optional
+Maintainer: Alessandro Campolo <campoloalex@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.0
+Homepage: https://github.com/a13ssandr0/unitotem-manager
+Rules-Requires-Root: binary-targets
+
+Package: unitotem-manager
+Architecture: all
+Depends: python3-pip, python3-apt, python3-venv, python3-distutils-extra, openssl, mediainfo, netplan.io, network-manager, libopenjp2-7-dev, haproxy
+Recommends: alsa-utils, chromium-browser
+Description: Management system for UniTotem
