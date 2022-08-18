@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Automatically added by dh_installsystemd/13.6ubuntu1
+if [ "$1" = remove ] && [ -d /run/systemd/system ] ; then
+	systemctl --system daemon-reload >/dev/null || true
+fi
+# End automatically added section
+# Automatically added by dh_installsystemd/13.6ubuntu1
+if [ "$1" = "remove" ]; then
+	if [ -x "/usr/bin/deb-systemd-helper" ]; then
+		deb-systemd-helper mask 'unitotem-manager.service' >/dev/null || true
+	fi
+fi
+
+if [ "$1" = "purge" ]; then
+	if [ -x "/usr/bin/deb-systemd-helper" ]; then
+		deb-systemd-helper purge 'unitotem-manager.service' >/dev/null || true
+		deb-systemd-helper unmask 'unitotem-manager.service' >/dev/null || true
+	fi
+fi
+# End automatically added section
+
+
+if [ "$1" == "remove" ] && [ -z "$2" ]; then
+    echo "Removing UniTotem ssl key"
+    rm /etc/ssl/unitotem.pem
+    if [ -f /etc/haproxy/haproxy.cfg ]; then
+        echo "Removing UniTotem haproxy configuration"
+        sed -i '/### UniTotem section, DO NOT EDIT ###/,/### End UniTotem section ###/d' /etc/haproxy/haproxy.cfg
+    fi
+    "Removing UniTotem virtual environment"
+    rm -r /var/unitotem-venv
+elif [ "$1" == "purge" ] && [ -z "$2" ]; then
+    rm -r /etc/unitotem
+    rm -r /usr/share/unitotem-manager/static/uploaded
+fi

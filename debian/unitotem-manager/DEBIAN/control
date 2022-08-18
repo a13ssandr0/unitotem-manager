@@ -1,0 +1,11 @@
+Package: unitotem-manager
+Version: 2.1.0-1
+Architecture: all
+Maintainer: Alessandro Campolo <campoloalex@gmail.com>
+Installed-Size: 20701
+Depends: python3-pip, python3-apt, python3-venv, python3-distutils-extra, openssl, mediainfo, netplan.io, network-manager, libopenjp2-7-dev, haproxy
+Recommends: alsa-utils, chromium-browser
+Section: utils
+Priority: optional
+Homepage: https://github.com/a13ssandr0/unitotem-manager
+Description: Management system for UniTotem

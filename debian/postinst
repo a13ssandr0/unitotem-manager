@@ -1,0 +1,37 @@
+#!/bin/bash
+
+if [ "$1" == "configure" ] && [ -z "$2" ]; then
+	# if $2 is null we are installing, run first setting code
+	echo "Creating virtual environment for UniTotem and installing required dependencies"
+	python3 -m venv /var/unitotem-venv --system-site-packages
+	/var/unitotem-venv/bin/pip3 install python-crontab flask flask-httpauth requests validators decorator qrcode PyChromeDevTools waitress pymediainfo ruamel.yaml pillow
+
+	echo "Creating ssl key for UniTotem"
+	openssl req -x509 -nodes -newkey rsa:2048 -keyout "/etc/ssl/unitotem_key.pem" -out "/etc/ssl/unitotem_crt.pem" -days 365000 -subj "/C=../ST=./L=./O=a13ssandr0/OU=UniTotem/CN=UniTotem/emailAddress=."
+	cat /etc/ssl/unitotem_{crt,key}.pem > "/etc/ssl/unitotem.pem"
+	rm /etc/ssl/unitotem_{crt,key}.pem
+	chmod 0600 "/etc/ssl/unitotem.pem"
+
+	if [ -f /etc/haproxy/haproxy.cfg ]; then
+	echo "Adding UniTotem haproxy configuration"
+	cat >> /etc/haproxy/haproxy.cfg << EOF
+### UniTotem section, DO NOT EDIT ###
+
+frontend unitotem-frontend
+	mode http
+	bind :80
+	bind :443 ssl crt /etc/ssl/unitotem.pem
+	http-request redirect scheme https code 301 unless { ssl_fc }
+	default_backend unitotem
+
+backend unitotem
+	option forwardfor
+	server unitotem1 127.0.0.1:5000
+
+### End UniTotem section
+EOF
+	fi
+
+fi
+
+#DEBHELPER#

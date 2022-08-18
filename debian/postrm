@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#DEBHELPER#
+
+if [ "$1" == "remove" ] && [ -z "$2" ]; then
+    echo "Removing UniTotem ssl key"
+    rm /etc/ssl/unitotem.pem
+    if [ -f /etc/haproxy/haproxy.cfg ]; then
+        echo "Removing UniTotem haproxy configuration"
+        sed -i '/### UniTotem section, DO NOT EDIT ###/,/### End UniTotem section ###/d' /etc/haproxy/haproxy.cfg
+    fi
+    "Removing UniTotem virtual environment"
+    rm -r /var/unitotem-venv
+elif [ "$1" == "purge" ] && [ -z "$2" ]; then
+    rm -r /etc/unitotem
+    rm -r /usr/share/unitotem-manager/static/uploaded
+fi
