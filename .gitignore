@@ -1,6 +1,7 @@
 debhelper-build-stamp
 .DS_Store
 .debhelper
+*.debhelper
 *.deb
 *.dsc
 *.build
@@ -10,4 +11,4 @@ debhelper-build-stamp
 *.log
 *.substvars
 /.vagrant
-/*/debian/files
+debian/unitotem-manager
