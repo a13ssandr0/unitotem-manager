@@ -12,3 +12,4 @@ debhelper-build-stamp
 *.substvars
 /.vagrant
 debian/unitotem-manager
+debian/files
