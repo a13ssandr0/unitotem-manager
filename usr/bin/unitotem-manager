@@ -262,6 +262,7 @@ def handle_api(request_data):
 
     elif 'set_passwd' in request_data:
         CONFIG['users'][AUTH.current_user()]['pass'] = generate_password_hash(request_data['set_passwd'])
+        save_config()
 
     elif 'audio_out' in request_data:
         set_audio_device(request_data['audio_out'])
