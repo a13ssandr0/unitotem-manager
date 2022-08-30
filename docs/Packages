@@ -6,10 +6,10 @@ Installed-Size: 20687
 Depends: python3-pip, python3-apt, python3-venv, python3-distutils-extra, openssl, mediainfo, netplan.io, network-manager, libopenjp2-7-dev, haproxy
 Recommends: alsa-utils, chromium-browser
 Filename: ./unitotem-manager_2.1.0_all.deb
-Size: 4354282
-MD5sum: 21eaeb19d92e93a9f6f8aeaaf8f7d773
-SHA1: 8b1461b2c9e2e4d0bd6e6d9c72812831dff4f06c
-SHA256: a1ed88623a311f9e095fdd40384bec3fd7186dbff90b6e744583b299e17f79bf
+Size: 4354278
+MD5sum: 67328e86d9f7d76e815816b49a8c3894
+SHA1: 2ff658ee46ef36df7e29e05b9f96f49fe9bf84a6
+SHA256: 59812dc40891ae9fdf87af89d4159ca6ff70483edda74c59aec7aaa994588742
 Section: utils
 Priority: optional
 Homepage: https://github.com/a13ssandr0/unitotem-manager
