@@ -361,13 +361,15 @@ def chrome_goto(asset: int = CURRENT_ASSET, force: bool = False, backwards: bool
 def chrome_navigate(url, retry=True):
     global CHROME
     res = CHROME.Page.navigate(url=url)
-    if not res or url not in res[0]['result']['entries'][-1]['userTypedURL']:
+    try:
+        if not res or url not in res[0]['result']['entries'][-1]['userTypedURL']:
+            raise Exception()
+    except Exception:
         if retry:
-            for i in range(5):
-                CHROME.close()
-                chrome_connect()
-                if chrome_navigate(url=url, retry=False):
-                    return True
+            CHROME.close()
+            chrome_connect()
+            if chrome_navigate(url=url, retry=False):
+                return True
         return False
     return True
 
