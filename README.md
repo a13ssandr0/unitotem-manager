@@ -9,3 +9,11 @@ sudo curl -s --compressed -o /etc/apt/sources.list.d/unitotem-manager.list "http
 sudo apt update
 sudo apt install unitotem-manager
 ```
+
+## Known bugs
+None
+
+## TODO
+- Add configuration Backup/Restore functionality
+- Add insufficient space warning when uploading files
+
