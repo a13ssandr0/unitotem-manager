@@ -13,3 +13,4 @@ debhelper-build-stamp
 debian/unitotem-manager
 debian/files
 usr/bin/__pycache__/unitotem_system_utils.cpython-310.pyc
+usr/share/unitotem-manager/static/uploaded

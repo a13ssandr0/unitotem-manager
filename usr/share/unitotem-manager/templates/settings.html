@@ -226,6 +226,9 @@
     </div>
 
     <main class="container-fluid col-lg-10 mt-md-3 mt-1">
+        <div class="progress" id="upload-progress" hidden>
+            <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+        </div>
         <div class="row">
 
             <div class="col-sm-6">
@@ -522,14 +525,14 @@
             let formData = new FormData();
             formData.append('data_zip_file', cfg_file);
             formData.append('options', JSON.stringify(cfg_options));
-            /*document.getElementById("upload-progress").removeAttribute("hidden");
+            document.getElementById("upload-progress").removeAttribute("hidden");
             let progressbar = document.getElementById("upload-progress-bar");
             xhttp.upload.addEventListener('progress', (event) => {
                 var perc = Math.round(event.loaded / event.total * 100);
                 progressbar.style = `width: ${perc}%`;
                 progressbar.innerHTML = perc + "%";
                 progressbar.ariaValueNow = perc;
-            });*/
+            });
             xhttp.open("POST", "./backup", true);
             xhttp.send(formData);
         }
@@ -548,8 +551,7 @@
                     }
                 };
             xhttp.open("DELETE", "./backup", true);
-            // xhttp.setRequestHeader("Content-type", "application/json");
-            xhttp.send(/*JSON.stringify(cmd)*/);
+            xhttp.send();
         }
 
         function showHide(element, show) {
