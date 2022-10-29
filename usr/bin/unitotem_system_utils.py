@@ -121,9 +121,12 @@ def get_dns_list():
         return [l.removeprefix('nameserver ').strip() for l in resolv_conf.readlines() if l.strip().startswith('nameserver')] # and not l.removeprefix('nameserver ').strip().startswith('127.')]
 
 
-def set_netplan(filename, file_content, apply = True):
-    with open(NETPLAN_DIR + filename, 'w') as netp:
-        netp.write(file_content)
+def set_netplan(filename: Union[str, None], file_content: Union[str, dict], apply = True):
+    if (isinstance(file_content, str)):
+        file_content = {filename: file_content}
+    for name, content in file_content.items():
+        with open(NETPLAN_DIR + name, 'w') as netp:
+            netp.write(content)
     gen_out = run(['netplan', 'generate'], stderr=PIPE, check=False).stderr.decode('utf-8').strip()
     if gen_out:
         return gen_out

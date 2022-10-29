@@ -31,55 +31,64 @@
                     <i class="bi bi-sliders"></i><span class="d-none d-sm-inline"> Settings</span>
                 </a>
             </div>
-            <button class="ms-5 ms-sm-4 ms-md-5 btn btn-outline-light" type="button" data-bs-toggle="modal" data-bs-target="#rebootConfirmModal">
+            <button class="ms-5 ms-sm-4 ms-md-5 btn btn-outline-light" type="button" data-bs-title="Do you want to reboot UniTotem?" data-bs-positive-btn="Reboot" data-bs-positive-action="sendCommand({'reboot': ''})" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
                 <i class="bi bi-bootstrap-reboot"></i><span class="d-none d-sm-inline"> Reboot</span>
             </button>
-            <button class="btn btn-outline-light" type="button" data-bs-toggle="modal" data-bs-target="#shutdownConfirmModal">
+            <button class="btn btn-outline-light" type="button" data-bs-title="Do you want to shutdown UniTotem?" data-bs-positive-btn="Shutdown" data-bs-positive-action="sendCommand({'shutdown': ''})" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
                 <i class="bi bi-power"></i><span class="d-none d-sm-inline"> Shutdown</span>
             </button>
         </div>
     </header>
 
-    <div class="modal" id="rebootConfirmModal" tabindex="-1" aria-labelledby="rebootConfirmModalLabel" aria-hidden="true">
+    <div class="modal" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Do you want to reboot UniTotem?</h5>
+                    <h5 class="modal-title"></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">No</button>
-                    <button type="button" id="reboot_btn" class="btn btn-danger" data-bs-dismiss="modal">Reboot</button>
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Yes</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="modal" id="shutdownConfirmModal" tabindex="-1" aria-labelledby="shutdownConfirmModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
+    <div class="modal fade" id="uploadBackupModal" tabindex="-1" aria-labelledby="uploadBackupModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Do you want to shutdown UniTotem?</h5>
+                    <h4 class="modal-title" id="uploadBackupModalLabel">Select elements to restore:</h4>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">No</button>
-                    <button type="button" id="shutdown_btn" class="btn btn-danger" data-bs-dismiss="modal">Shutdown</button>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="" id="mainConfCheck" disabled>
+                            <label class="form-check-label" for="mainConfCheck">Main configuration</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="" id="alsaCheck" disabled>
+                            <label class="form-check-label" for="alsaCheck">Alsa default audio device</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="" id="hostnameCheck" disabled>
+                            <label class="form-check-label" for="hostnameCheck">Device hostname</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="" id="netplanCheck" disabled>
+                            <label class="form-check-label" for="netplanCheck">Netplan configuration files</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="" id="fileCheck" disabled>
+                            <label class="form-check-label" for="fileCheck">Uploaded files</label>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Do you want to delete <span id="file_to_delete"></span>?</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">No</button>
-                    <button type="button" id="delete_confirm_btn" class="btn btn-danger" data-bs-dismiss="modal">Delete</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="restore_confirm" class="btn btn-warning" data-bs-dismiss="modal">Restore</button>
                 </div>
             </div>
         </div>
@@ -326,8 +335,8 @@
                             <div class="tab-pane fade{{' show active' if loop.index == 1 else ''}}" id="tab-pane-{{file}}" role="tabpanel" aria-labelledby="tab-{{file}}" tabindex="0">
                                 <div id="editor-{{file}}" style="width:100%;height:25em;">{{netplan_config[file]}}</div>
                                 <div class="mt-2 hstack gap-2">
-                                    <button type="button" class="btn btn-sm btn-danger" id="del_netplan_conf-{{file}}" data-bs-toggle="modal" data-bs-target="#deleteConfirmModal"><i class="bi bi-trash"></i> Delete</button>
-                                    <button type="button" class="btn btn-sm btn-success ms-auto" id="set_netplan_conf-{{file}}" hidden><i class="bi bi-check2"></i> Apply</button>
+                                    <button type="button" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete {{file}}.yaml?" data-bs-positive-btn="Delete" data-bs-positive-action="sendCommand({'del_netplan_conf': '{{file}}.yaml'}, true, showNetplanError)" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
+                                    <button type="button" class="btn btn-sm btn-success ms-auto" id="set_netplan_conf-{{file}}" onclick="sendCommand({'set_netplan_conf': '{{file}}.yaml', 'content': editor{{loop.index}}.getValue()}, true, showNetplanError)" hidden><i class="bi bi-check2"></i> Apply</button>
                                 </div>
                             </div>
                             {%endfor%}
@@ -382,6 +391,21 @@
                 </div>
             </div>
         </div>
+
+        <div class="row mt-5 mb-3 border-top">
+            <div class="mt-1 hstack gap-2">
+                <h4 class="my-auto">Configuration</h4>
+                <div class="btn-group ms-auto" role="group">
+                    <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-download"></i> Backup</button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="/backup" download>Configuration only</a></li>
+                        <li><a class="dropdown-item" href="/backup?include_uploaded" download>Configuration and files</a></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-sm btn-warning" id="restore"><i class="bi bi-upload"></i> Restore</button>
+                <button type="button" class="btn btn-sm btn-danger" id="reset"><i class="bi bi-trash"></i> Reset</button>
+            </div>
+        </div>
     </main>
 
     <footer class="fixed-bottom text-center border-top bg-white" style="width:100vw; z-index:1000;">
@@ -390,14 +414,63 @@
 
     <script src="/static/bootstrap/js/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
     <script src="/static/ace-builds/ace.js" type="text/javascript" charset="utf-8"></script>
+    <script type="text/javascript" src="/static/jszip.min.js"></script>
+    <script type="text/javascript" src="/static/jszip-utils.min.js"></script>
     <script type="text/javascript" charset="utf-8">
         {% for file in netplan_config %}
-        var editor{{loop.index}} = ace.edit("editor-{{file}}");
-        editor{{loop.index}}.setTheme("ace/theme/xcode");
-        editor{{loop.index}}.session.setMode("ace/mode/yaml");
+        var editor{{loop.index}} = ace.edit("editor-{{file}}", {theme: "ace/theme/xcode", mode: "ace/mode/yaml"});
         const editor{{loop.index}}_text = editor{{loop.index}}.getValue();
         editor{{loop.index}}.session.on('change', function(delta) {showHide(document.getElementById('set_netplan_conf-{{file}}'), editor{{loop.index}}.getValue() != editor{{loop.index}}_text);});
         {%endfor%}
+
+        var fileSelector = document.createElement('input');
+        fileSelector.setAttribute('type', 'file');
+        fileSelector.onchange = () => {
+            if (fileSelector.files.length > 0){
+                JSZip.loadAsync(fileSelector.files[0]).then(function(zip) {
+                    zip.file("config.json").async("string").then((content) =>{
+                        var json = JSON.parse(content);
+                        if (json.hasOwnProperty("CONFIG")){
+                            var mainConfCheck = document.getElementById("mainConfCheck");
+                            mainConfCheck.removeAttribute('disabled');
+                            mainConfCheck.setAttribute('checked', '');
+                        }
+                        if (json.hasOwnProperty("hostname")){
+                            var alsaCheck = document.getElementById("alsaCheck");
+                            alsaCheck.removeAttribute('disabled');
+                            alsaCheck.setAttribute('checked', '');
+                        }
+                        if (json.hasOwnProperty("def_audio_dev")){
+                            var hostnameCheck = document.getElementById("hostnameCheck");
+                            hostnameCheck.removeAttribute('disabled');
+                            hostnameCheck.setAttribute('checked', '');
+                        }
+                        if (json.hasOwnProperty("netplan")){
+                            var netplanCheck = document.getElementById("netplanCheck");
+                            netplanCheck.removeAttribute('disabled');
+                            netplanCheck.setAttribute('checked', '');
+                        }
+                        if (zip.folder("uploaded").filter((relativePath, file)=>{return true}).length){
+                            var fileCheck = document.getElementById("fileCheck");
+                            fileCheck.removeAttribute('disabled');
+                            fileCheck.setAttribute('checked', '');
+                        }
+                    }).then(()=>{
+                        new bootstrap.Modal('#uploadBackupModal').show();
+                        document.getElementById('restore_confirm').onclick = () => {
+                            var cfg_options = {
+                                CONFIG: document.getElementById("mainConfCheck").checked,
+                                hostname: document.getElementById("alsaCheck").checked,
+                                def_audio_dev: document.getElementById("hostnameCheck").checked,
+                                netplan: document.getElementById("netplanCheck").checked,
+                                uploaded: document.getElementById("fileCheck").checked
+                            }
+                            uploadConfig(fileSelector.files[0], cfg_options, true);
+                        }
+                    });
+                }, function() {alert("Not a valid zip file")}); 
+            }
+        }
 
         function setIPFormState(state) {
             if (state) {
@@ -431,6 +504,52 @@
             xhttp.open("POST", "./api", true);
             xhttp.setRequestHeader("Content-type", "application/json");
             xhttp.send(JSON.stringify(cmd));
+        }
+
+        function uploadConfig(cfg_file, cfg_options, on_success, on_error) {
+            let xhttp = new XMLHttpRequest();
+            if (on_success || on_error)
+                xhttp.onreadystatechange = () => {
+                    if (xhttp.readyState == 4){
+                        if (xhttp.status == 200) {
+                            if (on_success == true) location.reload();
+                            else if (on_success instanceof Function) on_success(xhttp.response);
+                        } else if (on_error) {
+                            on_error(xhttp.response, xhttp.status);
+                        }
+                    }
+                };
+            let formData = new FormData();
+            formData.append('data_zip_file', cfg_file);
+            formData.append('options', JSON.stringify(cfg_options));
+            /*document.getElementById("upload-progress").removeAttribute("hidden");
+            let progressbar = document.getElementById("upload-progress-bar");
+            xhttp.upload.addEventListener('progress', (event) => {
+                var perc = Math.round(event.loaded / event.total * 100);
+                progressbar.style = `width: ${perc}%`;
+                progressbar.innerHTML = perc + "%";
+                progressbar.ariaValueNow = perc;
+            });*/
+            xhttp.open("POST", "./backup", true);
+            xhttp.send(formData);
+        }
+
+        function resetConfig(on_success, on_error) {
+            let xhttp = new XMLHttpRequest();
+            if (on_success || on_error)
+                xhttp.onreadystatechange = () => {
+                    if (xhttp.readyState == 4){
+                        if (xhttp.status == 200) {
+                            if (on_success == true) location.reload();
+                            else if (on_success instanceof Function) on_success(xhttp.response);
+                        } else if (on_error) {
+                            on_error(xhttp.response, xhttp.status);
+                        }
+                    }
+                };
+            xhttp.open("DELETE", "./backup", true);
+            // xhttp.setRequestHeader("Content-type", "application/json");
+            xhttp.send(/*JSON.stringify(cmd)*/);
         }
 
         function showHide(element, show) {
@@ -512,21 +631,21 @@
         {% if is_updating %}check_is_updating();{% endif %}
         {% if is_upgrading %}check_is_upgrading();{% endif %}
 
-        document.getElementById('reboot_btn').onclick = () => {sendCommand({'reboot': ''});}
-        document.getElementById('shutdown_btn').onclick = () => {sendCommand({'shutdown': ''});}
         document.getElementById('add_file_btn').onclick = function () {sendCommand({'new_netplan_conf': document.getElementById('modal_input_filename').value + '.yaml'}, true);}
         document.getElementById('default_duration').onchange = () => {showHide(document.getElementById('set_def_duration').parentElement, document.getElementById('default_duration').value != parseInt(document.getElementById('default_duration').getAttribute('value')));};
         document.getElementById('inputHostname').oninput = () => {showHide(document.getElementById('set_hostname').parentElement, document.getElementById('inputHostname').value != document.getElementById('inputHostname').getAttribute('value'));};
-        document.getElementById('apt_update').onclick = () => {
+        var updateBtn = document.getElementById('apt_update');
+        updateBtn.onclick = () => {
             sendCommand({'update': ''});
-            this.setAttribute('disabled', '');
-            this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
+            updateBtn.setAttribute('disabled', '');
+            updateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
             check_is_updating();
         };
-        document.getElementById('apt_upgrade').onclick = () => {
+        var upgradeBtn = document.getElementById('apt_upgrade');
+        upgradeBtn.onclick = () => {
             sendCommand({'upgrade': ''});
-            this.setAttribute('disabled', '');
-            this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...';
+            upgradeBtn.setAttribute('disabled', '');
+            upgradeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...';
             check_is_upgrading();
         };
         document.getElementById('set_def_duration').onclick = () => {sendCommand({'set_def_duration': document.getElementById('default_duration').value}, true);};
@@ -549,14 +668,26 @@
         };
         document.getElementById('audio_out').onchange = () => {sendCommand({'audio_out': this.value});};
         document.getElementById('set_hostname').onclick = () => {sendCommand({'set_hostname': document.getElementById('inputHostname').value}, true);};
-        {% for file in netplan_config %}
-        document.getElementById('set_netplan_conf-{{file}}').onclick = () => {sendCommand({'set_netplan_conf': '{{file}}.yaml', 'content': editor{{loop.index}}.getValue()}, true, showNetplanError);};
-        document.getElementById('del_netplan_conf-{{file}}').onclick = () => {document.getElementById('file_to_delete').innerText = '{{file}}';};
-        {%endfor%}
-        document.getElementById('delete_confirm_btn').onclick = function () {sendCommand({'del_netplan_conf': document.getElementById('file_to_delete').innerText + '.yaml'}, true, showNetplanError);};
         var wifi_upd_timer = Number();
         document.getElementById('wifiDropBtn').addEventListener('show.bs.dropdown', event => {wifi_upd_timer=setInterval(sendCommand, 5000, {'get_wifis':''}, gen_wifi_list, (err) => clearInterval(wifi_upd_timer));});
         document.getElementById('wifiDropBtn').addEventListener('hide.bs.dropdown', event => {clearInterval(wifi_upd_timer);});
+        document.getElementById('restore').onclick = () => {fileSelector.click()};
+        document.getElementById('reset').onclick = () => {resetConfig();};
+
+        const confirmModal = document.getElementById('confirmModal');
+        confirmModal.addEventListener('show.bs.modal', event => {
+            const button = event.relatedTarget;
+            
+            confirmModal.querySelector('.modal-title').textContent = button.getAttribute('data-bs-title');
+            const positive_btn = confirmModal.querySelector('.btn-danger');
+            const negative_btn = confirmModal.querySelector('.btn-outline-primary');
+
+            positive_btn.innerHTML = button.getAttribute('data-bs-positive-btn');
+            positive_btn.setAttribute("onclick", button.getAttribute('data-bs-positive-action'));
+            negative_btn.innerHTML = button.getAttribute('data-bs-negative-btn');
+            negative_btn.setAttribute("onclick", button.getAttribute('data-bs-negative-action'));
+        });
+
     </script>
 </body>
 
