@@ -12,12 +12,36 @@
             background-color: #7431F9;
             color: white;
         }
+        
+        table {
+            table-layout: fixed;
+            word-wrap: break-word;
+        }
+
+        /* Chrome, Safari, Edge, Opera */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            appearance: none;
+            margin: 0;
+        }
+
+        /* Firefox */
+        input[type=number] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+
+        .asset-list-handle {
+            cursor: move;
+	        cursor: -webkit-grabbing;
+        }
     </style>
 </head>
 
 <body>
     <header class="page-header hdr container-fluid">
-        <div class="container-fluid col-lg-10 p-2 hstack gap-2">
+        <div class="container-fluid col-xl-10 p-2 hstack gap-2">
             <a class="navbar-brand" href="/">
                 <h1 class="my-auto"><b>U</b></h1>
             </a>
@@ -39,7 +63,7 @@
             </button>
         </div>
     </header>
-
+    
     <div class="modal fade" id="newAssetModal" tabindex="-1" aria-labelledby="newAssetModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -65,61 +89,7 @@
             </div>
         </div>
     </div>
-
-    <div class="modal fade" id="filesModal" tabindex="-1" aria-labelledby="filesModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h4 class="modal-title" id="filesModalLabel">File manager</h4>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form method=post enctype=multipart/form-data>
-                        <div class="mb-3 row">
-                            <div class="my-auto input-group mb-3">
-                                <input class="form-control" type="file" id="formFileMultiple" multiple>
-                                <button type="button" class="btn btn-sm btn-success ms-auto" id="upload_file_btn"><i class="bi bi-file-earmark-arrow-up"></i> Upload file</button>
-                            </div>
-                        </div>
-                    </form>
-                    <p>Maximum file size: 512MB</p>
-                    <div class="mb-3 row">
-                        <h5>Files</h5>
-                        <table class="mx-2">
-                            <thead class="border-bottom">
-                                <tr>
-                                    <th scope="col">Filename</th>
-                                    <th scope="col">Duration</th>
-                                    <th scope="col">Size</th>
-                                    <th scope="col">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in files_list %}
-                                <tr>
-                                    <td class="my-auto">{{ item.filename }}</td>
-                                    <td class="my-auto">{{ item.duration }}</td>
-                                    <td class="my-auto">{{ item.size }}</td>
-                                    <td>
-                                        <div class="btn-group my-2" role="group" aria-label="Basic outlined example">
-                                            <button type="button" title="Delete file" onclick="sendCommand({'delete_file': '{{ item.filename }}'}, true);" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                            <a type="button" title="Download file" class="btn btn-sm btn-outline-secondary" href="/static/uploaded/{{ item.filename }}" download="{{ item.filename }}"><i class="bi bi-download"></i></a>
-                                            <button type="button" title="Add to list" onclick="sendCommand({'add_asset': '{{ item.filename }}', 'duration': '{{ item.duration_s if item.duration_s else default_duration}}'}, true);" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    
     <div class="modal" id="rebootConfirmModal" tabindex="-1" aria-labelledby="rebootConfirmModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -134,7 +104,7 @@
             </div>
         </div>
     </div>
-
+    
     <div class="modal" id="shutdownConfirmModal" tabindex="-1" aria-labelledby="shutdownConfirmModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -149,76 +119,105 @@
             </div>
         </div>
     </div>
-
+    
     <div class="modal fade" id="urlErrorModal" tabindex="-1" aria-labelledby="urlErrorModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="urlErrorModalLabel">Invalid URL</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <h6>Entered URL is not valid or complete</h6>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
+                <div class="modal-header">
+                    <h5 class="modal-title" id="urlErrorModalLabel">Invalid URL</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>Entered URL is not valid or complete</h6>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
             </div>
         </div>
     </div>
-
-    <main class="container-fluid col-lg-10 mt-md-3 mt-1">
-        <div class="hstack gap-2">
-            <h3>Assets</h3>
-            <div class="ms-auto">
-                <div class="btn-group" role="group" aria-label="Basic outlined example">
-                    <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" id="back_btn"><i class="bi bi-arrow-left"></i></button>
-                    <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" id="refresh_btn"><i class="bi bi-arrow-clockwise"></i></button>
-                    <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" id="next_btn"><i class="bi bi-arrow-right"></i></button>
+    
+    <main class="container-fluid col-xl-10 mt-md-3 mt-1">
+        <div class="row">
+            <div class="col-lg-4 pe-lg-2">
+                <div class="hstack gap-2">
+                    <h3>File manager</h3>
+                    <div class="ms-auto">
+                        <div class="btn-group" role="group">
+                            <button type="button" title="Delete files" id="deleteFilesBtn" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            <button type="button" title="Download files" id="downloadFilesBtn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></a>
+                            <button type="button" title="Add to list" id="addToListBtn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-success" id="upload_file_btn" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</button>
+                </div>
+                <div class="progress" id="upload-progress" hidden>
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+                </div>
+                <ol class="list-group">
+                    {% for item in files_list|sort(attribute='filename') %}
+                    <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-start">
+                        <input class="form-check-input" type="checkbox" value="" name="filecheck" id="{{ item.filename }}" data-duration="{{ item.duration_s if item.duration_s else default_duration}}">
+                        <div class="ms-2 me-auto">
+                            <div class="text-break">{{ item.filename }}</div>
+                            <small class="text-muted">{{ ('Duration: ' + item.duration_s|string + 's | ') if item.duration_s else ''}}Size: {{ item.size }}</small>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ol>
+            </div>
+            <div class="col-lg-8 mt-4 mt-lg-0">
+                <div class="hstack gap-2">
+                    <h3>Playlist</h3>
+                    <div class="ms-auto">
+                        <div class="btn-group" role="group">
+                            <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" id="back_btn"><i class="bi bi-skip-backward"></i></button>
+                            <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" id="refresh_btn"><i class="bi bi-arrow-clockwise"></i></button>
+                            <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" id="next_btn"><i class="bi bi-skip-forward"></i></button>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal"><i class="bi bi-plus-circle"></i> Add URL</button>
+                </div>
+                <div class="row container-fluid justify-content-center">
+                    <table class="table">
+                        <thead class="border-bottom">
+                            <tr>
+                                <th scope="col" style="width: 2em;"></th>
+                                <th scope="col">URL</th>
+                                <th scope="col" style="width: 6em;">Duration</th>
+                                <th scope="col" style="width: 8em;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="asset_table">
+                            {% for item in urls_list %}
+                            <tr>
+                                <td class="align-middle asset-list-handle" style="width: 2em;"><i class="bi bi-arrow-down-up" style="color: grey;"></i></td>
+                                <td class="align-middle">{{ item.url }}</td>
+                                <td class="align-middle" style="width: 6em;" onclick="duration_editor(this, '{{ item.url }}');">{{ item.duration }}</td>
+                                <td class="align-middle" style="width: 8em;">
+                                    <div class="hstack gap-2">
+                                        <div class="form-check form-switch">
+                                            <input title="{{ 'Disable' if item.enabled else 'Enable' }} asset" onChange="sendCommand({'url': '{{ item.url }}', 'set-state': '{{ 'disabled' if item.enabled else 'enabled' }}'}, true);" class="form-check-input" type="checkbox" role="switch" {{ 'checked' if item.enabled else ''}}>
+                                        </div>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" title="Delete asset" onclick="sendCommand({'delete': '{{ item.url }}'}, true);" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                            <button type="button" title="Show asset" onclick="sendCommand({'goto': '{{ loop.index - 1 }}'}, true);" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal"><i class="bi bi-plus-circle"></i> Add asset</button>
-            <button class="btn btn-sm btn-success type="button" data-bs-toggle="modal" data-bs-target="#filesModal"><i class="bi bi-file-earmark-plus"></i> Files</button>
-        </div>
-        <div class="row container-fluid justify-content-center">
-            <table>
-                <thead class="border-bottom">
-                    <tr>
-                        <th scope="col"></th>
-                        <th scope="col">URL</th>
-                        <th scope="col">Duration</th>
-                        <th scope="col">Enabled</th>
-                        <th scope="col">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="asset_table">
-                    {% for item in urls_list %}
-                    <tr>
-                        <td class="my-auto"><i class="bi bi-chevron-bar-expand" style="color: grey;"></i></td>
-                        <td class="my-auto">{{ item.url }}</td>
-                        <td class="my-auto" onclick="duration_editor(this, '{{ item.url }}');">{{ item.duration }}</td>
-                        <td class="my-auto">
-                            <div class="form-check form-switch">
-                                <input title="{{ 'Disable' if item.enabled else 'Enable' }} asset" onChange="sendCommand({'url': '{{ item.url }}', 'set-state': '{{ 'disabled' if item.enabled else 'enabled' }}'}, true);" class="form-check-input" type="checkbox" role="switch" {{ 'checked' if item.enabled else ''}}>
-                            </div>
-                        </td>
-                        <td>
-                            <div class="btn-group my-2" role="group" aria-label="Basic outlined example">
-                                <button type="button" title="Delete asset" onclick="sendCommand({'delete': '{{ item.url }}'}, true);" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                                <button type="button" title="Show asset" onclick="sendCommand({'goto': '{{ loop.index - 1 }}'}, true);" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
         </div>
     </main>
-
+    
     <footer class="fixed-bottom text-center border-top bg-white" style="width:100vw; z-index:1000;">
         <h6 class="my-1" width="100%"><small class="text-muted"><a href="https://github.com/a13ssandr0/unitotem"><i class="bi bi-github"></i> Unitotem</a> {{ ut_vers }} by a13ssandro | Logged in as {{ logged_user }} | Display size: {{ disp_size }} | Used {{disk_used}} of {{disk_total}}</small></h6>
     </footer>
-
+    
     <script src="/static/bootstrap/js/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
     <script src="/static/Sortable.min.js"></script>
     <script>
@@ -229,24 +228,50 @@
                     'from': event.oldIndex,
                     "to": event.newIndex
                 }, true);
-            }
+            },
+            handle: ".asset-list-handle"
         });
 
+        var fileSelector = document.createElement('input');
+        fileSelector.setAttribute('type', 'file');
+        fileSelector.setAttribute('multiple', '');
+        fileSelector.onchange = () => {
+            if (fileSelector.files.length > 0){
+                uploadFiles(fileSelector.files, true);
+            }
+        }
+        
         function isValidUrl(urlString){try{return Boolean(new URL(urlString));} catch(e){return false;}}
-
-        function uploadFiles(files) {
+        
+        function uploadFiles(files, on_success, on_error) {
             let xhttp = new XMLHttpRequest();
-            xhttp.onreadystatechange = () => {
-                if (xhttp.readyState == 4 && xhttp.status == 200) location.reload();
-            };
+            if (on_success || on_error)
+                xhttp.onreadystatechange = () => {
+                    if (xhttp.readyState == 4){
+                        if (xhttp.status == 200) {
+                            if (on_success == true) location.reload();
+                            else if (on_success instanceof Function) on_success(xhttp.response);
+                        } else if (on_error) {
+                            on_error(xhttp.response, xhttp.status);
+                        }
+                    }
+                };
             let formData = new FormData();
             for (let i = 0; i<files.length; i++){
                 formData.append("file" + i, files[i]);
             }
+            document.getElementById("upload-progress").removeAttribute("hidden");
+            let progressbar = document.getElementById("upload-progress-bar");
+            xhttp.upload.addEventListener('progress', (event) => {
+                var perc = Math.round(event.loaded / event.total * 100);
+                progressbar.style = `width: ${perc}%`;
+                progressbar.innerHTML = perc + "%";
+                progressbar.ariaValueNow = perc;
+            });
             xhttp.open("POST", "./api", true);
             xhttp.send(formData);
         }
-
+        
         function sendCommand(cmd, on_success, on_error) {
             let xhttp = new XMLHttpRequest();
             if (on_success || on_error)
@@ -264,26 +289,51 @@
             xhttp.setRequestHeader("Content-type", "application/json");
             xhttp.send(JSON.stringify(cmd));
         }
-
+        
         function duration_editor(parent, url) {
+            let oldHTML = parent.outerHTML;
             let cur_dur = parent.innerHTML;
             parent.removeAttribute('onclick');
             parent.innerHTML = `
-                <div class="input-group mb-3" style="width: 18ch; max-width: 18ch;" >
-                    <input type="number" class="form-control" id="update-duration" min="0" value="${cur_dur}" aria-describedby="button-addon2">
-                    <button title="Save" class="btn btn-outline-success" type="button" onclick="sendCommand({'url': '${url}', 'update-duration': document.getElementById('update-duration').value}, true);" id="button-addon2"><i class="bi bi-check-lg"></i></button>
-                    <button title="Cancel" class="btn btn-outline-danger" type="button" onclick="duration_display(this, '${cur_dur.trim()}', '${url}');"><i class="bi bi-x-lg"></i></button>
-                </div>
+            <div class="input-group" style="width: 10ch; max-width: 10ch;">
+                <input type="number" class="form-control form-control-sm" id="update-duration" min="0" value="${cur_dur}" aria-describedby="duration-update-confirm-btn">
+                <button title="Save" class="btn btn-sm btn-outline-success" type="button" onclick="sendCommand({'url': '${url}', 'update-duration': document.getElementById('update-duration').value}, true);" id="duration-update-confirm-btn"><i class="bi bi-check-lg"></i></button>
+            </div>
             `;
+            document.getElementById('update-duration').onblur = (event) => {
+                if (event.relatedTarget && event.relatedTarget.id == "duration-update-confirm-btn") return;
+                parent.outerHTML = oldHTML;
+            }
+            document.getElementById('update-duration').focus();
         };
-
-        function duration_display(close_btn, cur_dur, url) {
-            close_btn.parentElement.parentElement.parentElement.outerHTML = `<td onclick="duration_editor(this, '${url}');">${cur_dur}</td>`;
-        };
-
-        document.getElementById('reboot_btn').onclick      = () => {sendCommand({'reboot': ''});}
-        document.getElementById('shutdown_btn').onclick    = () => {sendCommand({'shutdown': ''});}
-        document.getElementById('modal_input_url').oninput = (event) => {
+        
+        function downloadFiles(files) {
+            for (const [key, value] of Object.entries(files)) {
+                var link = document.createElement("a");
+                link.download = key;
+                link.href = "/static/uploaded/" + key;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            };
+        }
+        
+        checkedfiles = {};        
+        document.getElementsByName('filecheck').forEach(element => {
+            element.onclick = () => {
+                if (element.checked){
+                    checkedfiles[element.id] = {duration: element.getAttribute("data-duration")};
+                } else {
+                    delete checkedfiles[element.id];
+                }
+            }
+        });
+        document.getElementById("deleteFilesBtn").onclick   = () => {sendCommand({'delete_file': checkedfiles}, true);}
+        document.getElementById("downloadFilesBtn").onclick = () => {downloadFiles(checkedfiles);}
+        document.getElementById("addToListBtn").onclick     = () => {sendCommand({'add_asset': checkedfiles}, true);}
+        document.getElementById('reboot_btn').onclick       = () => {sendCommand({'reboot': ''});}
+        document.getElementById('shutdown_btn').onclick     = () => {sendCommand({'shutdown': ''});}
+        document.getElementById('modal_input_url').oninput  = (event) => {
             if (document.getElementById('modal_input_url').value.length && !isValidUrl(document.getElementById('modal_input_url').value)){
                 bootstrap.Popover.getOrCreateInstance(document.getElementById('modal_input_url'), {container: 'body', content: 'Invalid url', placement: 'bottom'}).show();
                 document.getElementById('modal_input_url').className = "border border-danger border-2 form-control";
@@ -292,13 +342,17 @@
                 document.getElementById('modal_input_url').className = "form-control";
             }
         }
-        document.getElementById('add_asset_btn').onclick   = () => {sendCommand({'add_asset': document.getElementById('modal_input_url').value, 'duration': document.getElementById('modal_input_duration').value}, true, (response, status)=>{
-            if (status == 406) new bootstrap.Modal('#urlErrorModal').show();
-        });}
-        document.getElementById('upload_file_btn').onclick = () => {uploadFiles(document.getElementById('formFileMultiple').files);}
-        document.getElementById('back_btn').onclick        = () => {sendCommand({'back': ''});}
-        document.getElementById('refresh_btn').onclick     = () => {sendCommand({'refresh': ''});}
-        document.getElementById('next_btn').onclick        = () => {sendCommand({'next': ''});}
+        document.getElementById('add_asset_btn').onclick    = () => {
+            var tmp = {'add_asset': {}};
+            tmp['add_asset'][document.getElementById('modal_input_url').value] = {'duration': document.getElementById('modal_input_duration').value};
+            sendCommand(tmp, true, (response, status)=>{
+                if (status == 406) new bootstrap.Modal('#urlErrorModal').show();
+            });
+        }
+        document.getElementById('upload_file_btn').onclick  = () => {fileSelector.click();}
+        document.getElementById('back_btn').onclick         = () => {sendCommand({'back': ''});}
+        document.getElementById('refresh_btn').onclick      = () => {sendCommand({'refresh': ''});}
+        document.getElementById('next_btn').onclick         = () => {sendCommand({'next': ''});}
     </script>
 </body>
 
