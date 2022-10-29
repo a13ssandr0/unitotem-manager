@@ -202,7 +202,7 @@ def backup_handler():
                     if options_json.get('uploaded', True):
                         for file in files:
                             if file.startswith('uploaded/'):
-                                zip_file.extract(file, join(WWW.config['UPLOAD_FOLDER'], file.removeprefix('uploaded/')))
+                                zip_file.extract(file, normpath(join(WWW.config['UPLOAD_FOLDER'], '..')))
                     return (res + '\n', 422) if 'res' in locals() else ('', 204)
             else:
                 return ('No file or too many files provided' if not len(request.files)==1 else f'Wrong mimetype: {request.files["data_zip_file"].mimetype}') + '\n', 400
