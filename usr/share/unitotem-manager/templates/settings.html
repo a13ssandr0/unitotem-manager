@@ -7,22 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/static/bootstrap/css/bootstrap.min.css" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
     <link rel="stylesheet" href="/static/bootstrap-icons/bootstrap-icons.css">
-    <style>
-        .hdr {
-            background-color: #7431F9;
-            color: white;
-        }
-    </style>
+    <style> .hdr { background-color: #7431F9; color: white; } </style>
 </head>
 
 <body>
     <header class="page-header hdr container-fluid">
         <div class="container-fluid col-lg-10 p-2 hstack gap-2">
-            <a class="navbar-brand" href="/">
-                <h1 class="my-auto"><b>U</b></h1>
-            </a>
-            <div class="ms-auto"></div>
-            <!--spacer-->
+            <a class="navbar-brand" href="/"><h1 class="my-auto"><b>U</b></h1></a>
+            <div class="ms-auto"><!--spacer--></div>
             <div class="btn-group" role="group">
                 <a class="btn btn-outline-light" type="button" href="/">
                     <i class="bi bi-list-task"></i><span class="d-none d-sm-inline"> Scheduler</span>
@@ -40,17 +32,29 @@
         </div>
     </header>
 
-    <div class="modal" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"></h5>
+                    <h5 class="modal-title" id="confirmModalLabel"></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">No</button>
                     <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Yes</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="messageModal" tabindex="-1" aria-labelledby="messageModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="messageModalLabel"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body"><h6></h6><code></code></div>
             </div>
         </div>
     </div>
@@ -111,24 +115,6 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" id="add_file_btn" class="btn btn-primary" data-bs-dismiss="modal">Add asset</button>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="netplanErrorModal" tabindex="-1" aria-labelledby="netplanErrorModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="netplanErrorModalLabel">Netplan config error</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <h6>Netplan returned an error:</h6>
-                <code id="netplanErrorText"></code>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
             </div>
         </div>
     </div>
@@ -294,7 +280,7 @@
                 <div class="mb-4 col">
                     <h4>Audio output</h4>
                     <h6><small class="text-muted">After changing device, restart the system to apply.</small></h6>
-                    <select class="form-select" aria-label="Default select example" id="audio_out">
+                    <select class="form-select" aria-label="Default select example" onchange="sendCommand({'audio_out': this.value})">
                         {% for key, device in audio %}
                         <option value="{{key}}" {{ 'selected' if key == def_audio_dev else '' }}>{{device}}</option>
                         {%endfor%}
@@ -338,8 +324,8 @@
                             <div class="tab-pane fade{{' show active' if loop.index == 1 else ''}}" id="tab-pane-{{file}}" role="tabpanel" aria-labelledby="tab-{{file}}" tabindex="0">
                                 <div id="editor-{{file}}" style="width:100%;height:25em;">{{netplan_config[file]}}</div>
                                 <div class="mt-2 hstack gap-2">
-                                    <button type="button" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete {{file}}.yaml?" data-bs-positive-btn="Delete" data-bs-positive-action="sendCommand({'del_netplan_conf': '{{file}}.yaml'}, true, showNetplanError)" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
-                                    <button type="button" class="btn btn-sm btn-success ms-auto" id="set_netplan_conf-{{file}}" onclick="sendCommand({'set_netplan_conf': '{{file}}.yaml', 'content': editor{{loop.index}}.getValue()}, true, showNetplanError)" hidden><i class="bi bi-check2"></i> Apply</button>
+                                    <button type="button" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete {{file}}.yaml?" data-bs-positive-btn="Delete" data-bs-positive-action="sendCommand({'del_netplan_conf': '{{file}}.yaml'}, true)" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
+                                    <button type="button" class="btn btn-sm btn-success ms-auto" id="set_netplan_conf-{{file}}" onclick="sendCommand({'set_netplan_conf': '{{file}}.yaml', 'content': editor{{loop.index}}.getValue()}, true)" hidden><i class="bi bi-check2"></i> Apply</button>
                                 </div>
                             </div>
                             {%endfor%}
@@ -420,10 +406,12 @@
     <script type="text/javascript" src="/static/jszip.min.js"></script>
     <script type="text/javascript" src="/static/jszip-utils.min.js"></script>
     <script type="text/javascript" charset="utf-8">
+        function byId(id){return document.getElementById(id)}
+
         {% for file in netplan_config %}
         var editor{{loop.index}} = ace.edit("editor-{{file}}", {theme: "ace/theme/xcode", mode: "ace/mode/yaml"});
         const editor{{loop.index}}_text = editor{{loop.index}}.getValue();
-        editor{{loop.index}}.session.on('change', function(delta) {showHide(document.getElementById('set_netplan_conf-{{file}}'), editor{{loop.index}}.getValue() != editor{{loop.index}}_text);});
+        editor{{loop.index}}.session.on('change', function(delta) {showHide(byId('set_netplan_conf-{{file}}'), editor{{loop.index}}.getValue() != editor{{loop.index}}_text);});
         {%endfor%}
 
         var fileSelector = document.createElement('input');
@@ -434,39 +422,39 @@
                     zip.file("config.json").async("string").then((content) =>{
                         var json = JSON.parse(content);
                         if (json.hasOwnProperty("CONFIG")){
-                            var mainConfCheck = document.getElementById("mainConfCheck");
+                            var mainConfCheck = byId("mainConfCheck");
                             mainConfCheck.removeAttribute('disabled');
                             mainConfCheck.setAttribute('checked', '');
                         }
                         if (json.hasOwnProperty("hostname")){
-                            var alsaCheck = document.getElementById("alsaCheck");
+                            var alsaCheck = byId("alsaCheck");
                             alsaCheck.removeAttribute('disabled');
                             alsaCheck.setAttribute('checked', '');
                         }
                         if (json.hasOwnProperty("def_audio_dev")){
-                            var hostnameCheck = document.getElementById("hostnameCheck");
+                            var hostnameCheck = byId("hostnameCheck");
                             hostnameCheck.removeAttribute('disabled');
                             hostnameCheck.setAttribute('checked', '');
                         }
                         if (json.hasOwnProperty("netplan")){
-                            var netplanCheck = document.getElementById("netplanCheck");
+                            var netplanCheck = byId("netplanCheck");
                             netplanCheck.removeAttribute('disabled');
                             netplanCheck.setAttribute('checked', '');
                         }
                         if (zip.folder("uploaded").filter((relativePath, file)=>{return true}).length){
-                            var fileCheck = document.getElementById("fileCheck");
+                            var fileCheck = byId("fileCheck");
                             fileCheck.removeAttribute('disabled');
                             fileCheck.setAttribute('checked', '');
                         }
                     }).then(()=>{
                         new bootstrap.Modal('#uploadBackupModal').show();
-                        document.getElementById('restore_confirm').onclick = () => {
+                        byId('restore_confirm').onclick = () => {
                             var cfg_options = {
-                                CONFIG: document.getElementById("mainConfCheck").checked,
-                                hostname: document.getElementById("alsaCheck").checked,
-                                def_audio_dev: document.getElementById("hostnameCheck").checked,
-                                netplan: document.getElementById("netplanCheck").checked,
-                                uploaded: document.getElementById("fileCheck").checked
+                                CONFIG: byId("mainConfCheck").checked,
+                                hostname: byId("alsaCheck").checked,
+                                def_audio_dev: byId("hostnameCheck").checked,
+                                netplan: byId("netplanCheck").checked,
+                                uploaded: byId("fileCheck").checked
                             }
                             uploadConfig(fileSelector.files[0], cfg_options, true);
                         }
@@ -477,33 +465,37 @@
 
         function setIPFormState(state) {
             if (state) {
-                document.getElementById('inputAddress').setAttribute('disabled', '');
-                document.getElementById('inputNetmask').setAttribute('disabled', '');
-                document.getElementById('inputGateway').setAttribute('disabled', '');
-                document.getElementById('inputDNS').setAttribute('disabled', '');
-                document.getElementById('dhcpSwitchLabel').innerText = 'Enabled';
+                byId('inputAddress').setAttribute('disabled', '');
+                byId('inputNetmask').setAttribute('disabled', '');
+                byId('inputGateway').setAttribute('disabled', '');
+                byId('inputDNS').setAttribute('disabled', '');
+                byId('dhcpSwitchLabel').innerText = 'Enabled';
             } else {
-                document.getElementById('inputAddress').removeAttribute('disabled');
-                document.getElementById('inputNetmask').removeAttribute('disabled');
-                document.getElementById('inputGateway').removeAttribute('disabled');
-                document.getElementById('inputDNS').removeAttribute('disabled');
-                document.getElementById('dhcpSwitchLabel').innerText = 'Disabled';
+                byId('inputAddress').removeAttribute('disabled');
+                byId('inputNetmask').removeAttribute('disabled');
+                byId('inputGateway').removeAttribute('disabled');
+                byId('inputDNS').removeAttribute('disabled');
+                byId('dhcpSwitchLabel').innerText = 'Disabled';
             }
         }
 
+        function readyStateHandler(xhttp, on_success, on_error){
+            if (xhttp.readyState == 4){
+                if (xhttp.status >= 200 && xhttp.status < 300) {
+                    if (on_success == true) location.reload();
+                    else if (on_success instanceof Function) on_success(xhttp.response);
+                } else if (!(on_error && on_error(xhttp.response, xhttp.status))) {
+                    messageModal.querySelector('.modal-title').textContent = "Error";
+                    messageModal.querySelector('.modal-body h6').textContent = `Request returned ${xhttp.status} (${xhttp.statusText})`;
+                    messageModal.querySelector('.modal-body code').textContent = xhttp.response;
+                    new bootstrap.Modal(messageModal).show();
+                }
+            }
+        };
+
         function sendCommand(cmd, on_success, on_error) {
             let xhttp = new XMLHttpRequest();
-            if (on_success || on_error)
-                xhttp.onreadystatechange = () => {
-                    if (xhttp.readyState == 4){
-                        if (xhttp.status == 200) {
-                            if (on_success == true) location.reload();
-                            else if (on_success instanceof Function) on_success(xhttp.response);
-                        } else if (on_error) {
-                            on_error(xhttp.response, xhttp.status);
-                        }
-                    }
-                };
+            xhttp.onreadystatechange = () => readyStateHandler(xhttp, on_success, on_error);
             xhttp.open("POST", "./api", true);
             xhttp.setRequestHeader("Content-type", "application/json");
             xhttp.send(JSON.stringify(cmd));
@@ -511,22 +503,12 @@
 
         function uploadConfig(cfg_file, cfg_options, on_success, on_error) {
             let xhttp = new XMLHttpRequest();
-            if (on_success || on_error)
-                xhttp.onreadystatechange = () => {
-                    if (xhttp.readyState == 4){
-                        if (xhttp.status == 200) {
-                            if (on_success == true) location.reload();
-                            else if (on_success instanceof Function) on_success(xhttp.response);
-                        } else if (on_error) {
-                            on_error(xhttp.response, xhttp.status);
-                        }
-                    }
-                };
+            xhttp.onreadystatechange = () => readyStateHandler(xhttp, on_success, on_error);
             let formData = new FormData();
             formData.append('data_zip_file', cfg_file);
             formData.append('options', JSON.stringify(cfg_options));
-            document.getElementById("upload-progress").removeAttribute("hidden");
-            let progressbar = document.getElementById("upload-progress-bar");
+            byId("upload-progress").removeAttribute("hidden");
+            let progressbar = byId("upload-progress-bar");
             xhttp.upload.addEventListener('progress', (event) => {
                 var perc = Math.round(event.loaded / event.total * 100);
                 progressbar.style = `width: ${perc}%`;
@@ -539,17 +521,7 @@
 
         function resetConfig(on_success, on_error) {
             let xhttp = new XMLHttpRequest();
-            if (on_success || on_error)
-                xhttp.onreadystatechange = () => {
-                    if (xhttp.readyState == 4){
-                        if (xhttp.status == 200) {
-                            if (on_success == true) location.reload();
-                            else if (on_success instanceof Function) on_success(xhttp.response);
-                        } else if (on_error) {
-                            on_error(xhttp.response, xhttp.status);
-                        }
-                    }
-                };
+            xhttp.onreadystatechange = () => readyStateHandler(xhttp, on_success, on_error);
             xhttp.open("DELETE", "./backup", true);
             xhttp.send();
         }
@@ -561,19 +533,14 @@
                 element.setAttribute('hidden', '');
         }
 
-        function showNetplanError(error_text) {
-            document.getElementById('netplanErrorText').innerText = error_text;
-            new bootstrap.Modal('#netplanErrorModal').show();
-        }
-
         function gen_wifi_list(wifi_json_str) {
             wifis = JSON.parse(wifi_json_str);
             let wifi_low = Math.round(parseInt(wifis[0].signal_total)/3);
             let wifi_high = Math.round(parseInt(wifis[0].signal_total)*2/3);
-            document.getElementById('wifi-menu').innerHTML = "";
+            byId('wifi-menu').innerHTML = "";
             for (let network of wifis){
-                document.getElementById('wifi-menu').innerHTML += 
-                `<li class="dropdown-item" onclick="sendCommand({'set_netplan_conf': '10-${network.essid ? network.essid : 'hidden' + network.mac.slice(-5)}.yaml', 'content': wifi_yaml('${network.essid}'), 'apply': false}, true, showNetplanError);">
+                byId('wifi-menu').innerHTML += 
+                `<li class="dropdown-item" onclick="sendCommand({'set_netplan_conf': '10-${network.essid ? network.essid : 'hidden' + network.mac.slice(-5)}.yaml', 'content': wifi_yaml('${network.essid}'), 'apply': false}, true);">
                     <span><i class="bi bi-${(parseInt(network.signal_quality) >= wifi_high) ? 'wifi' : ((parseInt(network.signal_quality) >= wifi_low) ? 'wifi-2' : 'wifi-1')}"></i> ${ network.essid ? network.essid : '<i><small class="text-muted">hidden</small></i>' }</span>
                     <h6><small class="text-muted">${network.mac} &bull; ${ network.frequency.startsWith('5') ? '5' : '2.4' }GHz</small></h6>
                 </li>`;
@@ -596,87 +563,87 @@
           password: "<super-secure>"`;
         }
         
-        function check_is_updating() {let upd = setInterval(sendCommand, 3000, {'is_updating': ''}, (response)=>{if (!JSON.parse(response) && document.getElementById('apt_update').hasAttribute('disabled')){
+        function check_is_updating() {let upd = setInterval(sendCommand, 3000, {'is_updating': ''}, (response)=>{if (!JSON.parse(response) && byId('apt_update').hasAttribute('disabled')){
             clearInterval(upd);
-            let btn = document.getElementById('apt_update');
+            let btn = byId('apt_update');
             btn.removeAttribute('disabled');
             btn.innerHTML='<i class="bi bi-arrow-clockwise"></i> Check updates';
             sendCommand({'update_count': ''}, (response) => {
                 let upd = parseInt(response);
-                document.getElementById('updateCount').innerHTML = `${(upd==0)?'No': upd} update${(upd==1)?'':'s'} available`;
+                byId('updateCount').innerHTML = `${(upd==0)?'No': upd} update${(upd==1)?'':'s'} available`;
             });
         }}, (err) => {
             clearInterval(upd);
-            let btn = document.getElementById('apt_update');
+            let btn = byId('apt_update');
             btn.removeAttribute('disabled');
             btn.innerHTML='<i class="bi bi-arrow-clockwise"></i> Check updates';
-            document.getElementById('updateCount').innerHTML = ':-( Something went wrong...';
+            byId('updateCount').innerHTML = ':-( Something went wrong...';
         });}
         
-        function check_is_upgrading() {let upg = setInterval(sendCommand, 3000, {'is_upgrading': ''}, (response)=>{if (!JSON.parse(response) && document.getElementById('apt_upgrade').hasAttribute('disabled')){
+        function check_is_upgrading() {let upg = setInterval(sendCommand, 3000, {'is_upgrading': ''}, (response)=>{if (!JSON.parse(response) && byId('apt_upgrade').hasAttribute('disabled')){
             clearInterval(upg);
-            let btn = document.getElementById('apt_upgrade');
+            let btn = byId('apt_upgrade');
             btn.removeAttribute('disabled');
             btn.innerHTML='<i class="bi bi-arrow-bar-up"></i> Do updates';
             sendCommand({'update_count': ''}, (response) => {
                 let upd = parseInt(response);
-                document.getElementById('updateCount').innerHTML = `${(upd==0)?'No': upd} update${(upd==1)?'':'s'} available`;
+                byId('updateCount').innerHTML = `${(upd==0)?'No': upd} update${(upd==1)?'':'s'} available`;
             });
         }}, (err) => {
             clearInterval(upg);
-            let btn = document.getElementById('apt_upgrade');
+            let btn = byId('apt_upgrade');
             btn.removeAttribute('disabled');
             btn.innerHTML='<i class="bi bi-arrow-bar-up"></i> Do updates';
-            document.getElementById('updateCount').innerHTML = ':-( Something went wrong...';
+            byId('updateCount').innerHTML = ':-( Something went wrong...';
         });}
 
         {% if is_updating %}check_is_updating();{% endif %}
         {% if is_upgrading %}check_is_upgrading();{% endif %}
 
-        document.getElementById('add_file_btn').onclick = function () {sendCommand({'new_netplan_conf': document.getElementById('modal_input_filename').value + '.yaml'}, true);}
-        document.getElementById('default_duration').onchange = () => {showHide(document.getElementById('set_def_duration').parentElement, document.getElementById('default_duration').value != parseInt(document.getElementById('default_duration').getAttribute('value')));};
-        document.getElementById('inputHostname').oninput = () => {showHide(document.getElementById('set_hostname').parentElement, document.getElementById('inputHostname').value != document.getElementById('inputHostname').getAttribute('value'));};
-        var updateBtn = document.getElementById('apt_update');
+        byId('add_file_btn').onclick = function () {sendCommand({'new_netplan_conf': byId('modal_input_filename').value + '.yaml'}, true);}
+        byId('default_duration').onchange = () => {showHide(byId('set_def_duration').parentElement, byId('default_duration').value != parseInt(byId('default_duration').getAttribute('value')));};
+        byId('inputHostname').oninput = () => {showHide(byId('set_hostname').parentElement, byId('inputHostname').value != byId('inputHostname').getAttribute('value'));};
+        var updateBtn = byId('apt_update');
         updateBtn.onclick = () => {
             sendCommand({'update': ''});
             updateBtn.setAttribute('disabled', '');
             updateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
             check_is_updating();
         };
-        var upgradeBtn = document.getElementById('apt_upgrade');
+        var upgradeBtn = byId('apt_upgrade');
         upgradeBtn.onclick = () => {
             sendCommand({'upgrade': ''});
             upgradeBtn.setAttribute('disabled', '');
             upgradeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...';
             check_is_upgrading();
         };
-        document.getElementById('set_def_duration').onclick = () => {sendCommand({'set_def_duration': document.getElementById('default_duration').value}, true);};
-        document.getElementById('inputNewPassword').oninput = document.getElementById('inputNewPassword2').oninput = () => {
-            showHide(document.getElementById('set_passwd').parentElement,
-                document.getElementById('inputNewPassword').value &&
-                document.getElementById('inputNewPassword').value == document.getElementById('inputNewPassword2').value
+        byId('set_def_duration').onclick = () => {sendCommand({'set_def_duration': byId('default_duration').value}, true);};
+        byId('inputNewPassword').oninput = byId('inputNewPassword2').oninput = () => {
+            showHide(byId('set_passwd').parentElement,
+                byId('inputNewPassword').value &&
+                byId('inputNewPassword').value == byId('inputNewPassword2').value
             );
         };
-        document.getElementById('set_passwd').onclick = () => {sendCommand({'set_passwd': document.getElementById('inputNewPassword').value}, true);};
-        document.getElementById('add_schedule').onclick = () => {
+        byId('set_passwd').onclick = () => {sendCommand({'set_passwd': byId('inputNewPassword').value}, true);};
+        byId('add_schedule').onclick = () => {
             sendCommand({
-                'schedule': document.getElementById('action_selector').value,
-                'm': document.getElementById('minute_selector').value,
-                'h': document.getElementById('hour_selector').value,
-                'dom': document.getElementById('monthday_selector').value,
-                'mon': document.getElementById('month_selector').value,
-                'dow': document.getElementById('weekday_selector').value
+                'schedule': byId('action_selector').value,
+                'm': byId('minute_selector').value,
+                'h': byId('hour_selector').value,
+                'dom': byId('monthday_selector').value,
+                'mon': byId('month_selector').value,
+                'dow': byId('weekday_selector').value
             }, true);
         };
-        document.getElementById('audio_out').onchange = () => {sendCommand({'audio_out': this.value});};
-        document.getElementById('set_hostname').onclick = () => {sendCommand({'set_hostname': document.getElementById('inputHostname').value}, true);};
+        byId('set_hostname').onclick = () => {sendCommand({'set_hostname': byId('inputHostname').value}, true);};
         var wifi_upd_timer = Number();
-        document.getElementById('wifiDropBtn').addEventListener('show.bs.dropdown', event => {wifi_upd_timer=setInterval(sendCommand, 5000, {'get_wifis':''}, gen_wifi_list, (err) => clearInterval(wifi_upd_timer));});
-        document.getElementById('wifiDropBtn').addEventListener('hide.bs.dropdown', event => {clearInterval(wifi_upd_timer);});
-        document.getElementById('restore').onclick = () => {fileSelector.click()};
-        document.getElementById('reset').onclick = () => {resetConfig();};
+        byId('wifiDropBtn').addEventListener('show.bs.dropdown', event => {wifi_upd_timer=setInterval(sendCommand, 5000, {'get_wifis':''}, gen_wifi_list, (err) => clearInterval(wifi_upd_timer));});
+        byId('wifiDropBtn').addEventListener('hide.bs.dropdown', event => {clearInterval(wifi_upd_timer);});
+        byId('restore').onclick = () => {fileSelector.click()};
+        byId('reset').onclick = () => {resetConfig();};
 
-        const confirmModal = document.getElementById('confirmModal');
+        const messageModal = byId('messageModal');
+        const confirmModal = byId('confirmModal');
         confirmModal.addEventListener('show.bs.modal', event => {
             const button = event.relatedTarget;
             

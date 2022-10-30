@@ -12,5 +12,5 @@ debhelper-build-stamp
 /.vagrant
 debian/unitotem-manager
 debian/files
-usr/bin/__pycache__/unitotem_system_utils.cpython-310.pyc
+__pycache__
 usr/share/unitotem-manager/static/uploaded
