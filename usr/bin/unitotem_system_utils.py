@@ -122,11 +122,14 @@ def get_dns_list():
 
 
 def set_netplan(filename: Union[str, None], file_content: Union[str, dict], apply = True):
-    if (isinstance(file_content, str)):
+    if isinstance(file_content, str):
         file_content = {filename: file_content}
     for name, content in file_content.items():
         with open(NETPLAN_DIR + name, 'w') as netp:
             netp.write(content)
+    return generate_netplan(apply)
+
+def generate_netplan(apply = True):
     gen_out = run(['netplan', 'generate'], stderr=PIPE, check=False).stderr.decode('utf-8').strip()
     if gen_out:
         return gen_out
@@ -138,11 +141,7 @@ def create_netplan(filename):
 
 def del_netplan_file(filename, apply = True):
     removefile(NETPLAN_DIR + filename)
-    gen_out = run(['netplan', 'generate'], stderr=PIPE, check=False).stderr.decode('utf-8').strip()
-    if gen_out:
-        return gen_out
-    if apply: run(['netplan', 'apply'])
-    return apply
+    return generate_netplan(apply)
 
 def get_netplan_file(filename):
     if not exists(NETPLAN_DIR + filename): return ''

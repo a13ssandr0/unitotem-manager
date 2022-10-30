@@ -362,7 +362,10 @@ def handle_api(request_data):
         response[0] = dumps(get_wifis())
 
     elif 'set_netplan_conf' in request_data:
-        res = set_netplan(secure_filename(request_data['set_netplan_conf']), request_data['content'], request_data.get('apply', True))
+        if request_data['set_netplan_conf']:
+            res = set_netplan(secure_filename(request_data['set_netplan_conf']), request_data['content'], request_data.get('apply', True))
+        else:
+            res = generate_netplan(request_data.get('apply', True))
         if res == True:
             if DEFAULT_AP and do_ip_addr(True): #AP is still enabled but now we are connected, AP is no longer needed
                 stop_hostpot()
@@ -371,6 +374,14 @@ def handle_api(request_data):
                 chrome_goto(0)
         elif isinstance(res, str):
             response = [res, 422] # unprocessable entity
+
+    elif 'get_netplan_conf' in request_data:
+        netplan_files = get_netplan_file_list()
+        if request_data['get_netplan_conf']:
+            if request_data['get_netplan_conf'] in netplan_files:
+                response[0] = dumps({request_data['get_netplan_conf']: get_netplan_file(request_data['get_netplan_conf'])})
+        else:
+            response[0] = dumps({f: get_netplan_file(f) for f in netplan_files})
 
     elif 'new_netplan_conf' in request_data:
         create_netplan(request_data['new_netplan_conf'])
