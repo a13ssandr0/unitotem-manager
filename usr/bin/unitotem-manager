@@ -238,7 +238,7 @@ def main_controller():
 
         return handle_api(request.json if request.is_json else dict(request.args))
 
-    except Exception as e:
+    except Exception:
         return format_exc(), 500
 
 
