@@ -322,10 +322,11 @@
                         <div class="tab-content" id="myTabContent">
                             {% for file in netplan_config %}
                             <div class="tab-pane fade{{' show active' if loop.index == 1 else ''}}" id="tab-pane-{{file}}" role="tabpanel" aria-labelledby="tab-{{file}}" tabindex="0">
-                                <div id="editor-{{file}}" style="width:100%;height:25em;">{{netplan_config[file]}}</div>
+                                <div id="editor-{{file}}" name="netplan-editor" style="width:100%;height:25em;">{{netplan_config[file]}}</div>
                                 <div class="mt-2 hstack gap-2">
-                                    <button type="button" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete {{file}}.yaml?" data-bs-positive-btn="Delete" data-bs-positive-action="sendCommand({'del_netplan_conf': '{{file}}.yaml'}, true)" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
-                                    <button type="button" class="btn btn-sm btn-success ms-auto" id="set_netplan_conf-{{file}}" onclick="sendCommand({'set_netplan_conf': '{{file}}.yaml', 'content': editor{{loop.index}}.getValue()}, true)" hidden><i class="bi bi-check2"></i> Apply</button>
+                                    <button type="button" name="del_btn" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete {{file}}.yaml?" data-bs-positive-btn="Delete" data-bs-positive-action="sendCommand({'del_netplan_conf': '{{file}}.yaml'}, true)" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
+                                    <button type="button" name="set_btn" class="btn btn-sm btn-outline-success ms-auto"><i class="bi bi-check2"></i> Save</button>
+                                    <button type="button" name="apply_btn" class="btn btn-sm btn-warning" onclick="sendCommand({'set_netplan_conf': '', 'apply': true});"><i class="bi bi-gear"></i> Apply</button>
                                 </div>
                             </div>
                             {%endfor%}
@@ -408,11 +409,24 @@
     <script type="text/javascript" charset="utf-8">
         function byId(id){return document.getElementById(id)}
 
-        {% for file in netplan_config %}
-        var editor{{loop.index}} = ace.edit("editor-{{file}}", {theme: "ace/theme/xcode", mode: "ace/mode/yaml"});
-        const editor{{loop.index}}_text = editor{{loop.index}}.getValue();
-        editor{{loop.index}}.session.on('change', function(delta) {showHide(byId('set_netplan_conf-{{file}}'), editor{{loop.index}}.getValue() != editor{{loop.index}}_text);});
-        {%endfor%}
+        document.getElementsByName('netplan-editor').forEach(editor => {
+            const aceEditor = ace.edit(editor.id, {theme: "ace/theme/xcode", mode: "ace/mode/yaml"});
+            var aceEditor_text = aceEditor.getValue();
+            const set_btn = editor.nextElementSibling.querySelector('[name=set_btn]');
+            aceEditor.session.on('change', (delta) => {
+                if (aceEditor.getValue() != aceEditor_text){
+                    set_btn.classList.replace('btn-outline-success', 'btn-success');
+                } else {
+                    set_btn.classList.replace('btn-success', 'btn-outline-success');
+                }
+            });
+            set_btn.onclick = () => {
+                sendCommand({'set_netplan_conf': editor.id.substr('editor-'.length) + '.yaml', 'content': aceEditor.getValue(), 'apply': false}, true);
+                aceEditor_text = aceEditor.getValue();
+                set_btn.classList.replace('btn-success', 'btn-outline-success');
+            }
+        });
+
 
         var fileSelector = document.createElement('input');
         fileSelector.setAttribute('type', 'file');
