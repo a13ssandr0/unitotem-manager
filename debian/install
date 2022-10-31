@@ -1,9 +1,9 @@
 usr/bin/*                                                   /usr/bin
 usr/share/unitotem-manager/static/Sortable.min.js           /usr/share/unitotem-manager/static
+usr/share/unitotem-manager/static/jszip-utils.min.js        /usr/share/unitotem-manager/static
+usr/share/unitotem-manager/static/jszip.min.js              /usr/share/unitotem-manager/static
 usr/share/unitotem-manager/static/ace-builds/*              /usr/share/unitotem-manager/static/ace-builds
-usr/share/unitotem-manager/static/ace-builds/snippets/*     /usr/share/unitotem-manager/static/ace-builds/snippets
 usr/share/unitotem-manager/static/bootstrap/css/*           /usr/share/unitotem-manager/static/bootstrap/css
 usr/share/unitotem-manager/static/bootstrap/js/*            /usr/share/unitotem-manager/static/bootstrap/js
 usr/share/unitotem-manager/static/bootstrap-icons/*         /usr/share/unitotem-manager/static/bootstrap-icons
-usr/share/unitotem-manager/static/bootstrap-icons/fonts/*   /usr/share/unitotem-manager/static/bootstrap-icons/fonts
 usr/share/unitotem-manager/templates/*                      /usr/share/unitotem-manager/templates

@@ -24,7 +24,7 @@ from werkzeug.utils import secure_filename
 
 from unitotem_system_utils import *
 
-VERSION = '2.1.0-beta'
+VERSION = '2.2.0'
 
 try:
     path[0].encode(getfilesystemencoding())

@@ -1,3 +1,23 @@
+unitotem-manager (2.2.0) stable; urgency=medium
+
+  * Simplified file manager, now appears in main page, not modal
+  * Removed unnecessary files from bootstrap, bootstrap-icons, ace-builds
+  * Added batch file deleting/loading-in-playlist
+  * Corrected a bug that made an entire row disappear when canceling duration editor
+  * Updated return codes for commands that return nothing
+  * Added configuration Backup/Restore/Reset
+  * Added batch file editing/creation for netplan config files
+  * Corrected postrm script
+  * Corrected update/upgrade buttons references in onclick functions
+  * Added progressbar for backup upload
+  * Corrected backup extract command
+  * Added modal to show errors
+  * Added command for retrieving netplan file
+  * Netplan save button is always visible
+  * Splitted netplan save and apply functions
+
+ -- Alessandro Campolo <campoloalex@gmail.com>  Mon, 31 Oct 2022 17:47:10 +0200
+
 unitotem-manager (2.1.0) jammy; urgency=medium
 
   * Initial release (Separated from UniTotem main project for easier updating)
