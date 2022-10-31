@@ -15,3 +15,20 @@ Priority: optional
 Homepage: https://github.com/a13ssandr0/unitotem-manager
 Description: Management system for UniTotem
 
+Package: unitotem-manager
+Version: 2.2.0
+Architecture: all
+Maintainer: Alessandro Campolo <campoloalex@gmail.com>
+Installed-Size: 2475
+Depends: python3-pip, python3-apt, python3-venv, python3-distutils-extra, openssl, mediainfo, netplan.io, network-manager, libopenjp2-7-dev, haproxy
+Recommends: alsa-utils, chromium-browser
+Filename: ./unitotem-manager_2.2.0_all.deb
+Size: 702760
+MD5sum: 7f78909fcef17f72378a559792d5a4fe
+SHA1: 12a2db186ee928849c60f1285645576acbc8989a
+SHA256: 21857aacf1a34f6a9a9b00b98b7c6353d99aff2dcfc487986117ee6e10f5b7b9
+Section: utils
+Priority: optional
+Homepage: https://github.com/a13ssandr0/unitotem-manager
+Description: Management system for UniTotem
+

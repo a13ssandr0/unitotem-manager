@@ -1,4 +1,10 @@
 #!/bin/bash
+cd "$(dirname ${BASH_SOURCE[0]})/.."
+
+dpkg-buildpackage -A
+rsync -v ../unitotem-manager_*.deb docs/
+
+cd "$(dirname ${BASH_SOURCE[0]})"
 
 dpkg-scanpackages --multiversion . > Packages
 gzip -k -f Packages
