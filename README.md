@@ -20,6 +20,5 @@ sudo apt install unitotem-manager
 None
 
 ## TODO
-- Add configuration Backup/Restore functionality
-- Add insufficient space warning when uploading files
+- No changes programmed
 
