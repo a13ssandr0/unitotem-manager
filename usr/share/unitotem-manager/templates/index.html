@@ -178,7 +178,7 @@
         function byId(id){return document.getElementById(id)}
 
         sortable_list = Sortable.create(byId('asset_table'), {
-            onUpdate: (event) => {sendCommand({'from': event.oldIndex,"to": event.newIndex}, true);},
+            onUpdate: (event) => {sendCommand({'reorder': event.oldIndex,"to": event.newIndex}, true);},
             handle: ".asset-list-handle"
         });
 

@@ -392,8 +392,8 @@
                         <li><a class="dropdown-item" href="/backup?include_uploaded" download>Configuration and files</a></li>
                     </ul>
                 </div>
-                <button type="button" class="btn btn-sm btn-warning" id="restore"><i class="bi bi-upload"></i> Restore</button>
-                <button type="button" class="btn btn-sm btn-danger" id="reset"><i class="bi bi-trash"></i> Reset</button>
+                <button type="button" class="btn btn-sm btn-warning" onclick="fileSelector.click()"><i class="bi bi-upload"></i> Restore</button>
+                <button type="button" class="btn btn-sm btn-danger" data-bs-title="Do you want to reset UniTotem configuration?" data-bs-positive-btn="Reset" data-bs-positive-action="resetConfig()" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Reset</button>
             </div>
         </div>
     </main>
@@ -653,8 +653,6 @@
         var wifi_upd_timer = Number();
         byId('wifiDropBtn').addEventListener('show.bs.dropdown', event => {wifi_upd_timer=setInterval(sendCommand, 5000, {'get_wifis':''}, gen_wifi_list, (err) => clearInterval(wifi_upd_timer));});
         byId('wifiDropBtn').addEventListener('hide.bs.dropdown', event => {clearInterval(wifi_upd_timer);});
-        byId('restore').onclick = () => {fileSelector.click()};
-        byId('reset').onclick = () => {resetConfig();};
 
         const messageModal = byId('messageModal');
         const confirmModal = byId('confirmModal');
