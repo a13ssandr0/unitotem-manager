@@ -1,3 +1,12 @@
+unitotem-manager (2.2.1) stable; urgency=high
+
+  * After uploading a file, now it is automatically added to the playlist
+  * Added --version cmdline argument
+  * Added --no-exit cmdline agument to disable exiting after 5 unsuccessful connection attempts to Chrome (for debugging)
+  * Corrected list reordering bug
+
+ -- Alessandro Campolo <campoloalex@gmail.com>  Mon, 1 Nov 2022 17:47:10 +0200
+
 unitotem-manager (2.2.0) stable; urgency=medium
 
   * Simplified file manager, now appears in main page, not modal

@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 from copy import copy
 from json import JSONDecodeError, dumps, loads
 from os import makedirs
@@ -18,13 +19,13 @@ from PyChromeDevTools import ChromeInterface
 from pymediainfo import MediaInfo
 from requests.exceptions import ConnectionError
 from validators import url as is_valid_url
-from waitress import serve
+from waitress.server import create_server
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from unitotem_system_utils import *
 
-VERSION = '2.2.0'
+VERSION = '2.2.1'
 
 try:
     path[0].encode(getfilesystemencoding())
@@ -97,9 +98,8 @@ def human_readable_size(size, decimal_places=2):
 def list_resources():
     return [f for f in listdir(WWW.config['UPLOAD_FOLDER']) if isfile(join(WWW.config['UPLOAD_FOLDER'], f))]
 
-def get_resources():
-    files = []
-    for f in listdir(WWW.config['UPLOAD_FOLDER']):
+def get_resources(name=None):
+    def get_file_info(f):
         if isfile(join(WWW.config['UPLOAD_FOLDER'], f)):
             dur = ''
             dur_s = ''
@@ -112,13 +112,20 @@ def get_resources():
                     dur = track.to_data()['duration']
                     dur_s = round(int(dur)/1000)
                     break
-            files.append({
+            return {
                 'filename': f,
                 'size': human_readable_size(getsize(join(WWW.config['UPLOAD_FOLDER'], f))),
                 'duration': dur,
                 'duration_s': dur_s
-            })
-    return files
+            }
+
+    if name:
+        return get_file_info(name)
+    else:
+        files = []
+        for f in listdir(WWW.config['UPLOAD_FOLDER']):
+            files.append(get_file_info(f))
+        return files
 
 @WWW.route("/", methods=['GET', 'POST'])
 @AUTH.login_required
@@ -234,6 +241,8 @@ def main_controller():
             for file in request.files.values():
                 if file and file.filename:
                     file.save(join(WWW.config['UPLOAD_FOLDER'], secure_filename(file.filename)), buffer_size=64 * 1024 * 1024)
+                    file_data = get_resources(secure_filename(file.filename))
+                    handle_api({'add_asset': {file_data['filename']: {'duration': file_data['duration_s']}}})
             return '', 201 # created
 
         return handle_api(request.json if request.is_json else dict(request.args))
@@ -311,9 +320,9 @@ def handle_api(request_data):
         chrome_goto(int(request_data['goto']), force=True)
 
     elif 'reorder' in request_data:
-        CONFIG['urls'].insert(int(request_data['to'])+1, CONFIG['urls'].pop(int(request_data['from'])))
+        CONFIG['urls'].insert(int(request_data['to']), CONFIG['urls'].pop(int(request_data['reorder'])))
         save_config()
-        if CURRENT_ASSET == int(request_data['to'])+1 or CURRENT_ASSET == int(request_data['from']):
+        if CURRENT_ASSET == int(request_data['to']) or CURRENT_ASSET == int(request_data['reorder']):
             chrome_goto()
 
     elif 'back' in request_data:
@@ -492,6 +501,11 @@ def chrome_connect():
 
 
 if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument('--no-exit', action='store_true', help='Do not exit after Chrome connection unsuccessful')
+    parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
+    cmdargs = vars(parser.parse_args())
+
     makedirs(WWW.config['UPLOAD_FOLDER'], exist_ok=True)
     makedirs(CFG_DIR, exist_ok=True)
     
@@ -511,7 +525,7 @@ if __name__ == "__main__":
         APT_THREAD.start()
 
     def chrome_control_main():
-        global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG, CHROME
+        global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG, CHROME, exitcode
         for i in range(5):
             try:
                 chrome_connect()
@@ -533,10 +547,17 @@ if __name__ == "__main__":
             print('Chrome not started, remote debugging tools not enabled or wrong port.\t Retrying...' + str(i+1))
             sleep(5)
         print('Max retries reached, could not connect to Chrome.')
-        #exit(1)
+        if not cmdargs['no_exit']:
+            exitcode = 1
+            server.close()
 
     Thread(target=chrome_control_main, daemon=True).start()
 
-    serve(WWW, listen='*:5000')
+    exitcode = 0
+
+    server = create_server(WWW, listen='*:5000')
+    server.run()
 
     stop_hostpot()
+
+    exit(exitcode)
