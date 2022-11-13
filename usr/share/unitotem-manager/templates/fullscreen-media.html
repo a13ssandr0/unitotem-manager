@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, minimum-scale=0.1">
+    <style>
+        body{margin: 0px; background: #{{bg_color}}; height: 100%; overflow: hidden;}
+
+        img {content:url("{{dst}}");}
+
+        img, video{
+            display: block;
+            position: absolute;
+            height: 100%;
+            width: 100%;
+            margin: auto;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            object-fit: contain;
+            user-select: none;
+        }
+    </style>
+</head>
+
+<body>
+    {% if mime.startswith('image') %}<img>
+    {% elif mime.startswith('video')%}<video autoplay><source src="{{dst}}" type="{{mime}}"></video>
+    {% endif %}
+</body>
+</html>

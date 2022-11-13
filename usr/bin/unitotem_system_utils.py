@@ -3,13 +3,14 @@ from io import BytesIO
 from os import listdir
 from os import remove as removefile
 from os.path import exists
-from re import match, sub, compile
+from re import match, search, sub, compile
 from socket import inet_aton, inet_ntoa
 from struct import pack
 from subprocess import PIPE, Popen, check_output, run
 from typing import Union
 
 from apt import Cache
+from PIL import Image
 from qrcode import make as make_qr
 from ruamel.yaml import YAML
 
@@ -38,6 +39,8 @@ ETC_RESOLV_CONF  = '/etc/resolv.conf'
 ASOUND_CONF      = '/etc/asound.conf'
 NETPLAN_DIR      = '/etc/netplan/'
 FALLBACK_AP_FILE = '/lib/netplan/99-unitotem-fb-ap.yaml'
+REBOOT_REQ       = '/var/run/reboot-required'
+REBOOT_REQ_PKGS  = '/var/run/reboot-required.pkgs'
 SCREEN_SIZE_FILE = '/sys/class/graphics/fb0/virtual_size'
 
 IF_ALL = 0
@@ -356,7 +359,7 @@ def get_audio_devices():
 def get_default_audio_device():
     if not exists(ASOUND_CONF): return 'a'
     with open(ASOUND_CONF, 'r') as conf:
-        m = match(r'defaults.(?:pcm|ctl).card (\d+)', conf.read())
+        m = search(r'defaults.(?:pcm|ctl).card (\d+)', conf.read())
         return str(m.group(1)) if m else 'a'
 
 def set_audio_device(dev: Union[str,int]):
@@ -389,9 +392,33 @@ def apt_upgrade():
     APT_CACHE.commit()
     apt_update()
 
+def reboot_required():
+    if exists(REBOOT_REQ_PKGS):
+        with open(REBOOT_REQ_PKGS, 'r') as file:
+            return len([line.strip("\n") for line in file if line != "\n"])
+    elif exists(REBOOT_REQ):
+        return True
+    return False
+
 def os_version():
     with open('/etc/os-release', 'r') as f:
         for line in f.readlines():
             line = line.strip()
             if 'PRETTY_NAME' in line:
                 return line.split('=')[1].strip('"')
+
+def get_dominant_color(pil_img, palette_size=16): # https://stackoverflow.com/a/61730849/9655651
+    # Resize image to speed up processing
+    img = pil_img.copy()
+    img.thumbnail((100, 100))
+
+    # Reduce colors (uses k-means internally)
+    paletted = img.convert('P', palette=Image.ADAPTIVE, colors=palette_size)
+
+    # Find the color that occurs most often
+    palette = paletted.getpalette()
+    color_counts = sorted(paletted.getcolors(), reverse=True)
+    palette_index = color_counts[0][1]
+    dominant_color = palette[palette_index*3:palette_index*3+3]
+
+    return hex((dominant_color[0]<<16) + (dominant_color[1]<<8) + dominant_color[2])

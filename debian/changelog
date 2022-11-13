@@ -1,3 +1,12 @@
+unitotem-manager (2.3.0) stable; urgency=medium
+
+  * Added a custom page that displays images and videos fullscreen, replacing browser's default one
+  * Fixed duration attribute when uploading non-video elements
+  * Improved error details visualization
+  * Images have a background with their dominant color to replace black bars when they don't match the aspect ratio of the screen
+
+ -- Alessandro Campolo <campoloalex@gmail.com>  Mon, 13 Nov 2022 20:26:50 +0200
+
 unitotem-manager (2.2.1) stable; urgency=high
 
   * After uploading a file, now it is automatically added to the playlist
