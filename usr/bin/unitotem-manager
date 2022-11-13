@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from copy import copy
 from json import JSONDecodeError, dumps, loads
+from mimetypes import MimeTypes
 from os import makedirs
 from os.path import abspath, exists, getsize, isfile, join, normpath, realpath
 from shutil import disk_usage
@@ -17,6 +18,7 @@ from flask import Flask, render_template, request, send_file
 from flask_httpauth import HTTPBasicAuth
 from PyChromeDevTools import ChromeInterface
 from pymediainfo import MediaInfo
+from requests import get
 from requests.exceptions import ConnectionError
 from validators import url as is_valid_url
 from waitress.server import create_server
@@ -25,7 +27,7 @@ from werkzeug.utils import secure_filename
 
 from unitotem_system_utils import *
 
-VERSION = '2.2.1'
+VERSION = '2.3.0'
 
 try:
     path[0].encode(getfilesystemencoding())
@@ -270,7 +272,7 @@ def handle_api(request_data):
             if is_valid_url(element) or element in list_resources():
                 CONFIG['urls'].append({
                     'url': ('file:' if element in list_resources() else '') + element,
-                    'duration': int(attrs.get('duration', CONFIG['default_duration'])),
+                    'duration': int(attrs.get('duration', '') or CONFIG['default_duration']),
                     'enabled': bool(attrs.get('enabled', False))
                 })
                 save = True
@@ -454,18 +456,40 @@ def first_boot_page():
         wifi=DEFAULT_AP
     )
 
+@WWW.route("/fsmedia/<path:mime>;<path:dst>")
+@WWW.route("/fsmedia/<path:mime>-<bg_color>;<path:dst>")
+def fullscreen_media(dst, mime, bg_color='000000'):
+    return render_template('fullscreen-media.html', **locals())
+
 @AUTH.verify_password
 def verify_password(username, password):
     if username in CONFIG['users'] and check_password_hash(CONFIG['users'][username]['pass'], password):
         return username
 
+def chrome_gen_url(input_url):
+    if input_url.startswith('file:'):
+        local_file = abspath(join(WWW.config['UPLOAD_FOLDER'], input_url.removeprefix('file:')))
+        mime = MimeTypes().guess_type(local_file)[0]
+        if mime.startswith('image'):
+            with Image.open(local_file) as img:
+                dom_col = get_dominant_color(img).removeprefix('0x')
+        input_url = 'http://localhost:5000/static/uploaded/' + input_url.removeprefix('file:')
+    else:
+        remote_file = get(input_url, stream=True)
+        mime = remote_file.headers['Content-Type'].split(';')[0]
+        if mime.startswith('image'):
+            with Image.open(remote_file.raw) as img:
+                dom_col = get_dominant_color(img).removeprefix('0x')
+    if (mime.startswith('video') or mime.startswith('image')):
+        return f'http://localhost:5000/fsmedia/{mime}-{locals().get("dom_col", "000000")};{input_url}'
+    return input_url
 
 def chrome_goto(asset: int = CURRENT_ASSET, force: bool = False, backwards: bool = False):
     global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG, CHROME
     if 0 <= asset < len(CONFIG['urls']):
         if CONFIG['urls'][asset]['enabled'] or force:
             CURRENT_ASSET = asset
-            chrome_navigate(('file://' + abspath(join(WWW.config['UPLOAD_FOLDER'], CONFIG['urls'][CURRENT_ASSET]['url'].removeprefix('file:')))) if CONFIG['urls'][CURRENT_ASSET]['url'].startswith('file:') else CONFIG['urls'][CURRENT_ASSET]['url'])
+            chrome_navigate(chrome_gen_url(CONFIG['urls'][CURRENT_ASSET]['url']))
             NEXT_CHANGE_TIME = (int(time()) + CONFIG['urls'][CURRENT_ASSET]['duration']) if CONFIG['urls'][CURRENT_ASSET]['duration'] else float('inf')
         else:
             chrome_goto(asset + (-1 if backwards else 1))
@@ -533,10 +557,10 @@ if __name__ == "__main__":
                     if time()>=NEXT_CHANGE_TIME:
                         if IS_FIRST_BOOT:
                             NEXT_CHANGE_TIME = float('inf')
-                            chrome_navigate('https://localhost/unitotem-first-boot')
+                            chrome_navigate('http://localhost:5000/unitotem-first-boot')
                         elif not enabled_asset_count():
                             NEXT_CHANGE_TIME = float('inf')
-                            chrome_navigate('https://localhost/unitotem-no-assets')
+                            chrome_navigate('http://localhost:5000/unitotem-no-assets')
                         else:
                             CURRENT_ASSET += 1
                             if CURRENT_ASSET >= len(CONFIG['urls']): CURRENT_ASSET = 0

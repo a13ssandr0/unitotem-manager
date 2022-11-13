@@ -9,7 +9,7 @@
             "type": "python",
             "request": "launch",
             "program": "usr/bin/unitotem-manager",
-            // "args": ["--no-exit"],
+            "args": ["--no-exit"],
             "console": "integratedTerminal",
             "justMyCode": true,
             "sudo": true
