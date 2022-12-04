@@ -2,30 +2,31 @@ from argparse import ArgumentParser
 from copy import copy
 from json import JSONDecodeError, dumps, loads
 from mimetypes import MimeTypes
+from multiprocessing import Pipe, Process
+from multiprocessing.connection import Connection
 from os import makedirs
 from os.path import abspath, exists, getsize, isfile, join, normpath, realpath
 from shutil import disk_usage
 from subprocess import run
-from sys import exit, path, getfilesystemencoding
+from sys import exit, getfilesystemencoding, path
 from threading import Thread
-from time import sleep, time, strftime
+from time import sleep, strftime, time
 from traceback import format_exc
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
+import webview
 from crontab import CronTab
 from flask import Flask, render_template, request, send_file
 from flask_httpauth import HTTPBasicAuth
-from PyChromeDevTools import ChromeInterface
+from PIL import Image
 from pymediainfo import MediaInfo
 from requests import get
-from requests.exceptions import ConnectionError
+from unitotem_system_utils import *
 from validators import url as is_valid_url
 from waitress.server import create_server
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
-
-from unitotem_system_utils import *
 
 VERSION = '2.3.0'
 
@@ -38,23 +39,23 @@ except UnicodeError:
 prefix = normpath(join(realpath(path[0]), '..'))
 share_path = join(prefix, 'share', 'unitotem-manager')
 
-APT_THREAD       = Thread()
-AUDIO_DEVICES    = [('a', 'Auto')] + get_audio_devices()
-AUTH             = HTTPBasicAuth()
-CFG_DIR          = '/etc/unitotem/'
-CFG_FILE         = CFG_DIR + 'unitotem.conf'
-CHROME           = ChromeInterface(auto_connect=False)
-CONFIG_DEF       = {'urls': [],'default_duration': 30, 'users': {'admin': {'pass': generate_password_hash("admin")}}}
-CONFIG           = copy(CONFIG_DEF)
-CURRENT_ASSET    = -1
-DEF_AUDIO_DEV    = get_default_audio_device()
-DEF_WIFI_CARD    = get_ifaces(IF_WIRELESS)[0]
-DEFAULT_AP       = None
-HOSTNAME         = get_hostname()
-IS_FIRST_BOOT    = False
-NEXT_CHANGE_TIME = 0
-OS_VERSION       = os_version()
-WWW              = Flask(__name__, static_url_path='/static', static_folder=join(share_path, 'static'), template_folder=join(share_path, 'templates'))
+APT_THREAD        = Thread()
+AUDIO_DEVICES     = [('a', 'Auto')] + get_audio_devices()
+AUTH              = HTTPBasicAuth()
+CFG_DIR           = '/etc/unitotem/'
+CFG_FILE          = CFG_DIR + 'unitotem.conf'
+CONFIG_DEF        = {'urls': [],'default_duration': 30, 'users': {'admin': {'pass': generate_password_hash("admin")}}}
+CONFIG            = copy(CONFIG_DEF)
+CURRENT_ASSET     = -1
+DEF_AUDIO_DEV     = get_default_audio_device()
+DEF_WIFI_CARD     = get_ifaces(IF_WIRELESS)[0]
+DEFAULT_AP        = None
+HOSTNAME          = get_hostname()
+IS_FIRST_BOOT     = False
+NEXT_CHANGE_TIME  = 0
+OS_VERSION        = os_version()
+SEND_P:Connection = None
+WWW               = Flask(__name__, static_url_path='/static', static_folder=join(share_path, 'static'), template_folder=join(share_path, 'templates'))
 WWW.config['TEMPLATES_AUTO_RELOAD'] = True
 WWW.config['UPLOAD_FOLDER']         = join(WWW.static_folder, 'uploaded')
 
@@ -124,10 +125,7 @@ def get_resources(name=None):
     if name:
         return get_file_info(name)
     else:
-        files = []
-        for f in listdir(WWW.config['UPLOAD_FOLDER']):
-            files.append(get_file_info(f))
-        return files
+        return list(map(get_file_info, listdir(WWW.config['UPLOAD_FOLDER'])))
 
 @WWW.route("/", methods=['GET', 'POST'])
 @AUTH.login_required
@@ -187,7 +185,7 @@ def backup_handler():
                         zip_file.write(join(WWW.config['UPLOAD_FOLDER'], file_name), "uploaded/" + file_name)
             
             zip_buffer.seek(0)
-            return send_file(zip_buffer, mimetype='application/zip', download_name=f"unitotem-manager-{strftime('%Y%m%d-%H%M%S')}.zip")
+            return send_file(zip_buffer, mimetype='application/zip', download_name=strftime('unitotem-manager-%Y%m%d-%H%M%S.zip'))
 
         elif request.method == 'POST':
             if 'data_zip_file' in request.files and (request.files['data_zip_file'].mimetype == 'application/octet-stream' or request.files['data_zip_file'].mimetype == 'application/zip'):
@@ -282,13 +280,13 @@ def handle_api(request_data):
     elif 'set-state' in request_data:
         for index, elem in enumerate(CONFIG['urls']):
             if request_data['url'] == elem['url']:
-                initiate_rotation = not enabled_asset_count()
+                start_rotation = not enabled_asset_count()
                 CONFIG['urls'][index]['enabled'] = 'enabled' in request_data['set-state']
                 save_config()
-                if initiate_rotation:
-                    chrome_goto(0)
+                if start_rotation:
+                    webview_goto(0)
                 elif index == CURRENT_ASSET:
-                    NEXT_CHANGE_TIME = int(time())
+                    NEXT_CHANGE_TIME = 0
                 break
 
     elif 'update-duration' in request_data:
@@ -298,7 +296,7 @@ def handle_api(request_data):
                 CONFIG['urls'][index]['duration'] = int(request_data['update-duration'])
                 save_config()
                 if index == CURRENT_ASSET:
-                    NEXT_CHANGE_TIME += (CONFIG['urls'][index]['duration'] - old_dur) if CONFIG['urls'][index]['duration'] else float('inf')
+                    NEXT_CHANGE_TIME += (CONFIG['urls'][index]['duration'] or float('inf')) - old_dur
                 break
 
     elif 'delete' in request_data:
@@ -306,7 +304,7 @@ def handle_api(request_data):
             if request_data['delete'] == CONFIG['urls'][elem_n]['url']:
                 try:
                     if CONFIG['urls'][CURRENT_ASSET]['url'] == CONFIG['urls'][elem_n]['url']:
-                        NEXT_CHANGE_TIME = int(time())
+                        NEXT_CHANGE_TIME = 0
                 finally:
                     CONFIG['urls'].pop(elem_n)
                     save_config()
@@ -319,22 +317,22 @@ def handle_api(request_data):
                 removefile(join(WWW.config['UPLOAD_FOLDER'], file))
 
     elif 'goto' in request_data:
-        chrome_goto(int(request_data['goto']), force=True)
+        webview_goto(int(request_data['goto']), force=True)
 
     elif 'reorder' in request_data:
         CONFIG['urls'].insert(int(request_data['to']), CONFIG['urls'].pop(int(request_data['reorder'])))
         save_config()
         if CURRENT_ASSET == int(request_data['to']) or CURRENT_ASSET == int(request_data['reorder']):
-            chrome_goto()
+            webview_goto()
 
     elif 'back' in request_data:
-        chrome_goto(CURRENT_ASSET-1, backwards=True)
+        webview_goto(CURRENT_ASSET-1, backwards=True)
 
     elif 'refresh' in request_data:
-        CHROME.Page.reload()
+        webview_goto()
 
     elif 'next' in request_data:
-        chrome_goto(CURRENT_ASSET+1)
+        webview_goto(CURRENT_ASSET+1)
 
     elif 'set_def_duration' in request_data:
         CONFIG['default_duration'] = int(request_data['set_def_duration'])
@@ -381,8 +379,8 @@ def handle_api(request_data):
             if DEFAULT_AP and do_ip_addr(True): #AP is still enabled but now we are connected, AP is no longer needed
                 stop_hostpot()
                 IS_FIRST_BOOT = False
-                NEXT_CHANGE_TIME = int(time())
-                chrome_goto(0)
+                NEXT_CHANGE_TIME = 0
+                webview_goto(0)
         elif isinstance(res, str):
             response = [res, 422] # unprocessable entity
 
@@ -456,79 +454,126 @@ def first_boot_page():
         wifi=DEFAULT_AP
     )
 
-@WWW.route("/fsmedia/<path:mime>;<path:dst>")
-@WWW.route("/fsmedia/<path:mime>-<bg_color>;<path:dst>")
-def fullscreen_media(dst, mime, bg_color='000000'):
-    return render_template('fullscreen-media.html', **locals())
-
 @AUTH.verify_password
 def verify_password(username, password):
     if username in CONFIG['users'] and check_password_hash(CONFIG['users'][username]['pass'], password):
         return username
 
-def chrome_gen_url(input_url):
+def media_gen_url(input_url:str):
     if input_url.startswith('file:'):
-        local_file = abspath(join(WWW.config['UPLOAD_FOLDER'], input_url.removeprefix('file:')))
-        mime = MimeTypes().guess_type(local_file)[0]
-        if mime.startswith('image'):
-            with Image.open(local_file) as img:
-                dom_col = get_dominant_color(img).removeprefix('0x')
-        input_url = 'http://localhost:5000/static/uploaded/' + input_url.removeprefix('file:')
+        file = input_url = abspath(join(WWW.config['UPLOAD_FOLDER'], input_url.removeprefix('file:')))
+        mime = MimeTypes().guess_type(input_url)[0]
     else:
         remote_file = get(input_url, stream=True)
         mime = remote_file.headers['Content-Type'].split(';')[0]
-        if mime.startswith('image'):
-            with Image.open(remote_file.raw) as img:
-                dom_col = get_dominant_color(img).removeprefix('0x')
+        file = remote_file.raw
+    
+    dom_col = '000000'
+    if mime.startswith('image'):
+        with Image.open(file) as img:
+            dom_col = get_dominant_color(img).removeprefix('0x')
+    generated = {'url': input_url}
     if (mime.startswith('video') or mime.startswith('image')):
-        return f'http://localhost:5000/fsmedia/{mime}-{locals().get("dom_col", "000000")};{input_url}'
-    return input_url
+        generated['type'] = mime
+        generated['color'] = dom_col
+    return generated
 
-def chrome_goto(asset: int = CURRENT_ASSET, force: bool = False, backwards: bool = False):
-    global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG, CHROME
+def webview_goto(asset: int = CURRENT_ASSET, force: bool = False, backwards: bool = False):
+    global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG
     if 0 <= asset < len(CONFIG['urls']):
         if CONFIG['urls'][asset]['enabled'] or force:
             CURRENT_ASSET = asset
-            chrome_navigate(chrome_gen_url(CONFIG['urls'][CURRENT_ASSET]['url']))
-            NEXT_CHANGE_TIME = (int(time()) + CONFIG['urls'][CURRENT_ASSET]['duration']) if CONFIG['urls'][CURRENT_ASSET]['duration'] else float('inf')
+            send_to_pipe(**media_gen_url(CONFIG['urls'][CURRENT_ASSET]['url']), wait_loaded=True)
+            NEXT_CHANGE_TIME = int(time()) + (CONFIG['urls'][CURRENT_ASSET]['duration'] or float('inf'))
         else:
-            chrome_goto(asset + (-1 if backwards else 1))
+            webview_goto(asset + (-1 if backwards else 1))
 
-def chrome_navigate(url, retry=True):
-    global CHROME
-    try:
-        res = CHROME.Page.navigate(url=url)
-        if not res or url not in res[0]['result']['entries'][-1]['userTypedURL']:
-            raise Exception()
-    except Exception:
-        if retry:
-            CHROME.close()
-            chrome_connect()
-            if chrome_navigate(url=url, retry=False):
-                return True
-        return False
-    return True
 
-def chrome_connect():
-    global CHROME
-    CHROME.get_tabs()
-    # on first boot (or after clearing Chromium cache and config folders) Chromium opens two tabs:
-    # - a "background_page" named "CryptoTokenExtension"
-    # - UniTotem boot screen
-    # UniTotem manager should connect to the second one (as it does from the second boot, being it the only one)
-    # to achieve this we'll activate the first tab of type "page"
-    for n, t in enumerate(CHROME.tabs):
-        if t['type']=='page':
-            CHROME.connect(tab=n)
-            CHROME.Page.bringToFront(id=t['id'])
-            break
+def main_ui(pipe:Connection):
+    def update_page(window:webview.Window):
+        while True:
+            data:dict = pipe.recv()
+            window.load_url(data['url'])
+            if 'type' in data:
+                # wait a little time for the document to load the base elements
+                sleep(0.01)
+                window.evaluate_js(r'document.body.style.background = "#' + data.get("color", "000000") + '"')
+                if data['type'].startswith('video'):
+                    window.evaluate_js(r"""
+                        var video = document.getElementsByTagName("video")[0];
+                        video.removeAttribute("controls");
+                        video.removeAttribute("class");
+                        video.style=`
+                            display: block !important;
+                            position: absolute !important;
+                            height: 100% !important;
+                            width: 100% !important;
+                            margin: auto !important;
+                            top: 50% !important;
+                            left: 50% !important;
+                            transform: translate(-50%, -50%) !important;
+                            object-fit: contain !important;
+                            user-select: none !important;
+                        `;
+                    """)
+                elif data['type'].startswith('image'):
+                    window.evaluate_js(r"""
+                        var img = document.getElementsByTagName("img")[0];
+                        img.style=`
+                            display: block !important;
+                            position: absolute !important;
+                            height: 100% !important;
+                            width: 100% !important;
+                            margin: auto !important;
+                            top: 50% !important;
+                            left: 50% !important;
+                            transform: translate(-50%, -50%) !important;
+                            object-fit: contain !important;
+                            user-select: none !important;
+                        `;
+                    """)
+
+    window = webview.create_window(
+        title='', url=join(WWW.template_folder, 'boot-screen.html'),
+        x=0, y=0, width=webview.screens[0].width, height=webview.screens[0].height,
+        resizable=False, frameless=True, fullscreen=True, background_color='#000000'
+    )
+    window.events.loaded += lambda: pipe.send(True)
+    webview.start(func=update_page, args=window, gui='gtk', debug=True)
+
+
+def send_to_pipe(url=None, wait_loaded=False, **kwargs):
+    if url: kwargs['url'] = url
+    SEND_P.send(kwargs)
+    if wait_loaded:
+        SEND_P.recv()
+
+
+def webview_control_main():
+    global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG
+    while(True):
+        if time()>=NEXT_CHANGE_TIME+1:
+            if IS_FIRST_BOOT:
+                NEXT_CHANGE_TIME = float('inf')
+                send_to_pipe('http://localhost:5000/unitotem-first-boot')
+            elif not enabled_asset_count():
+                NEXT_CHANGE_TIME = float('inf')
+                send_to_pipe('http://localhost:5000/unitotem-no-assets')
+            else:
+                CURRENT_ASSET += 1
+                if CURRENT_ASSET >= len(CONFIG['urls']): CURRENT_ASSET = 0
+                webview_goto(CURRENT_ASSET)
+        sleep(1)
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument('--no-exit', action='store_true', help='Do not exit after Chrome connection unsuccessful')
     parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
     cmdargs = vars(parser.parse_args())
+
+    recv_p, SEND_P = Pipe()
+    p = Process(target=main_ui, args=(recv_p,), daemon=True)
+    p.start()
 
     makedirs(WWW.config['UPLOAD_FOLDER'], exist_ok=True)
     makedirs(CFG_DIR, exist_ok=True)
@@ -548,40 +593,10 @@ if __name__ == "__main__":
         APT_THREAD = Thread(target=apt_update, name='update')
         APT_THREAD.start()
 
-    def chrome_control_main():
-        global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG, CHROME, exitcode
-        for i in range(5):
-            try:
-                chrome_connect()
-                while(True):
-                    if time()>=NEXT_CHANGE_TIME:
-                        if IS_FIRST_BOOT:
-                            NEXT_CHANGE_TIME = float('inf')
-                            chrome_navigate('http://localhost:5000/unitotem-first-boot')
-                        elif not enabled_asset_count():
-                            NEXT_CHANGE_TIME = float('inf')
-                            chrome_navigate('http://localhost:5000/unitotem-no-assets')
-                        else:
-                            CURRENT_ASSET += 1
-                            if CURRENT_ASSET >= len(CONFIG['urls']): CURRENT_ASSET = 0
-                            chrome_goto(CURRENT_ASSET)
-                    sleep(1)
-            except ConnectionError:
-                pass
-            print('Chrome not started, remote debugging tools not enabled or wrong port.\t Retrying...' + str(i+1))
-            sleep(5)
-        print('Max retries reached, could not connect to Chrome.')
-        if not cmdargs['no_exit']:
-            exitcode = 1
-            server.close()
-
-    Thread(target=chrome_control_main, daemon=True).start()
-
-    exitcode = 0
+    Thread(target=webview_control_main, daemon=True).start()
 
     server = create_server(WWW, listen='*:5000')
     server.run()
 
+    p.terminate()
     stop_hostpot()
-
-    exit(exitcode)
