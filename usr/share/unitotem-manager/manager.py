@@ -1,28 +1,23 @@
 from argparse import ArgumentParser
 from copy import copy
 from json import JSONDecodeError, dumps, loads
-from mimetypes import MimeTypes
-from multiprocessing import Pipe, Process
-from multiprocessing.connection import Connection
 from os import makedirs
-from os.path import abspath, exists, getsize, isfile, join, normpath, realpath
+from os.path import exists, getsize, isfile, join, normpath
 from shutil import disk_usage
 from subprocess import run
-from sys import exit, getfilesystemencoding, path
 from threading import Thread
 from time import sleep, strftime, time
 from traceback import format_exc
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
-import webview
 from crontab import CronTab
+from dasbus.connection import SystemMessageBus
+from dasbus.identifier import DBusServiceIdentifier
 from flask import Flask, render_template, request, send_file
 from flask_httpauth import HTTPBasicAuth
-from PIL import Image
 from pymediainfo import MediaInfo
-from requests import get
-from unitotem_system_utils import *
+from utils import *
 from validators import url as is_valid_url
 from waitress.server import create_server
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -30,32 +25,21 @@ from werkzeug.utils import secure_filename
 
 VERSION = '2.3.0'
 
-try:
-    path[0].encode(getfilesystemencoding())
-except UnicodeError:
-    print("Unrecognizable character encoding in install path, maybe there are non UTF-8 characters in the path.")
-    exit(1)
-
-prefix = normpath(join(realpath(path[0]), '..'))
-share_path = join(prefix, 'share', 'unitotem-manager')
 
 APT_THREAD        = Thread()
-AUDIO_DEVICES     = [('a', 'Auto')] + get_audio_devices()
 AUTH              = HTTPBasicAuth()
 CFG_DIR           = '/etc/unitotem/'
 CFG_FILE          = CFG_DIR + 'unitotem.conf'
 CONFIG_DEF        = {'urls': [],'default_duration': 30, 'users': {'admin': {'pass': generate_password_hash("admin")}}}
 CONFIG            = copy(CONFIG_DEF)
 CURRENT_ASSET     = -1
-DEF_AUDIO_DEV     = get_default_audio_device()
 DEF_WIFI_CARD     = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP        = None
-HOSTNAME          = get_hostname()
 IS_FIRST_BOOT     = False
 NEXT_CHANGE_TIME  = 0
 OS_VERSION        = os_version()
-SEND_P:Connection = None
-WWW               = Flask(__name__, static_url_path='/static', static_folder=join(share_path, 'static'), template_folder=join(share_path, 'templates'))
+UI_BUS            = DBusServiceIdentifier(namespace=("org", "unitotem", "viewer"), message_bus=SystemMessageBus()).get_proxy()
+WWW               = Flask(__name__, static_url_path='/static')
 WWW.config['TEMPLATES_AUTO_RELOAD'] = True
 WWW.config['UPLOAD_FOLDER']         = join(WWW.static_folder, 'uploaded')
 
@@ -133,6 +117,7 @@ def scheduler():
     return render_template('index.html', 
         ut_vers=VERSION,
         logged_user=AUTH.current_user(),
+        hostname = get_hostname(),
         disp_size=get_display_size(),
         disk_used=human_readable_size(disk_usage(WWW.config['UPLOAD_FOLDER']).used),
         disk_total=human_readable_size(disk_usage(WWW.config['UPLOAD_FOLDER']).total),
@@ -153,11 +138,11 @@ def settings():
         upd = get_upd_count(),
         is_updating = APT_THREAD.name == 'update' and APT_THREAD.is_alive(),
         is_upgrading = APT_THREAD.name == 'upgrade' and APT_THREAD.is_alive(),
-        hostname = HOSTNAME,
+        hostname = get_hostname(),
         netplan_config = {fname.removesuffix('.yaml'): get_netplan_file(fname) for fname in get_netplan_file_list()},
         default_duration = CONFIG['default_duration'],
-        audio = AUDIO_DEVICES,
-        def_audio_dev = DEF_AUDIO_DEV,
+        audio = get_audio_devices(),
+        def_audio_dev = get_default_audio_device(),
         crontab = [job for job in CronTab(user='root').crons if job.comment.startswith('unitotem:-)')],
         def_wifi = DEF_WIFI_CARD
     )
@@ -191,9 +176,9 @@ def backup_handler():
             if 'data_zip_file' in request.files and (request.files['data_zip_file'].mimetype == 'application/octet-stream' or request.files['data_zip_file'].mimetype == 'application/zip'):
                 with ZipFile(request.files['data_zip_file'].stream._file) as zip_file:
                     files = zip_file.namelist()
+                    options_json = loads(request.form['options'])
                     if 'config.json' in files:
                         config_json = loads(zip_file.read('config.json'))
-                        options_json = loads(request.form['options'])
                         if 'CONFIG' in config_json and options_json.get('CONFIG', True):
                             CONFIG = config_json['CONFIG']
                             CURRENT_ASSET    = -1
@@ -440,7 +425,7 @@ def no_assets_page():
         ut_vers=VERSION,
         os_vers=OS_VERSION,
         ip_addr=ip['addr'][0]['addr'] if ip else None,
-        hostname=HOSTNAME
+        hostname=get_hostname()
     )
 
 @WWW.route("/unitotem-first-boot")
@@ -450,7 +435,7 @@ def first_boot_page():
         ut_vers=VERSION,
         os_vers=OS_VERSION,
         ip_addr=ip['addr'][0]['addr'] if ip else None,
-        hostname=HOSTNAME,
+        hostname=get_hostname(),
         wifi=DEFAULT_AP
     )
 
@@ -459,106 +444,29 @@ def verify_password(username, password):
     if username in CONFIG['users'] and check_password_hash(CONFIG['users'][username]['pass'], password):
         return username
 
-def media_gen_url(input_url:str):
-    if input_url.startswith('file:'):
-        file = input_url = abspath(join(WWW.config['UPLOAD_FOLDER'], input_url.removeprefix('file:')))
-        mime = MimeTypes().guess_type(input_url)[0]
-    else:
-        remote_file = get(input_url, stream=True)
-        mime = remote_file.headers['Content-Type'].split(';')[0]
-        file = remote_file.raw
-    
-    dom_col = '000000'
-    if mime.startswith('image'):
-        with Image.open(file) as img:
-            dom_col = get_dominant_color(img).removeprefix('0x')
-    generated = {'url': input_url}
-    if (mime.startswith('video') or mime.startswith('image')):
-        generated['type'] = mime
-        generated['color'] = dom_col
-    return generated
-
 def webview_goto(asset: int = CURRENT_ASSET, force: bool = False, backwards: bool = False):
     global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG
     if 0 <= asset < len(CONFIG['urls']):
         if CONFIG['urls'][asset]['enabled'] or force:
             CURRENT_ASSET = asset
-            send_to_pipe(**media_gen_url(CONFIG['urls'][CURRENT_ASSET]['url']), wait_loaded=True)
+            url:str = CONFIG['urls'][CURRENT_ASSET]['url']
+            if url.startswith('file:'):
+                url = 'http://localhost:5000/static/uploaded/' + url.removeprefix('file:')
+            UI_BUS.Show(url)
             NEXT_CHANGE_TIME = int(time()) + (CONFIG['urls'][CURRENT_ASSET]['duration'] or float('inf'))
         else:
             webview_goto(asset + (-1 if backwards else 1))
 
-
-def main_ui(pipe:Connection):
-    def update_page(window:webview.Window):
-        while True:
-            data:dict = pipe.recv()
-            window.load_url(data['url'])
-            if 'type' in data:
-                # wait a little time for the document to load the base elements
-                sleep(0.01)
-                window.evaluate_js(r'document.body.style.background = "#' + data.get("color", "000000") + '"')
-                if data['type'].startswith('video'):
-                    window.evaluate_js(r"""
-                        var video = document.getElementsByTagName("video")[0];
-                        video.removeAttribute("controls");
-                        video.removeAttribute("class");
-                        video.style=`
-                            display: block !important;
-                            position: absolute !important;
-                            height: 100% !important;
-                            width: 100% !important;
-                            margin: auto !important;
-                            top: 50% !important;
-                            left: 50% !important;
-                            transform: translate(-50%, -50%) !important;
-                            object-fit: contain !important;
-                            user-select: none !important;
-                        `;
-                    """)
-                elif data['type'].startswith('image'):
-                    window.evaluate_js(r"""
-                        var img = document.getElementsByTagName("img")[0];
-                        img.style=`
-                            display: block !important;
-                            position: absolute !important;
-                            height: 100% !important;
-                            width: 100% !important;
-                            margin: auto !important;
-                            top: 50% !important;
-                            left: 50% !important;
-                            transform: translate(-50%, -50%) !important;
-                            object-fit: contain !important;
-                            user-select: none !important;
-                        `;
-                    """)
-
-    window = webview.create_window(
-        title='', url=join(WWW.template_folder, 'boot-screen.html'),
-        x=0, y=0, width=webview.screens[0].width, height=webview.screens[0].height,
-        resizable=False, frameless=True, fullscreen=True, background_color='#000000'
-    )
-    window.events.loaded += lambda: pipe.send(True)
-    webview.start(func=update_page, args=window, gui='gtk', debug=True)
-
-
-def send_to_pipe(url=None, wait_loaded=False, **kwargs):
-    if url: kwargs['url'] = url
-    SEND_P.send(kwargs)
-    if wait_loaded:
-        SEND_P.recv()
-
-
 def webview_control_main():
     global NEXT_CHANGE_TIME, CURRENT_ASSET, CONFIG
     while(True):
-        if time()>=NEXT_CHANGE_TIME+1:
+        if time()>=NEXT_CHANGE_TIME:
             if IS_FIRST_BOOT:
                 NEXT_CHANGE_TIME = float('inf')
-                send_to_pipe('http://localhost:5000/unitotem-first-boot')
+                UI_BUS.Show('http://localhost:5000/unitotem-first-boot')
             elif not enabled_asset_count():
                 NEXT_CHANGE_TIME = float('inf')
-                send_to_pipe('http://localhost:5000/unitotem-no-assets')
+                UI_BUS.Show('http://localhost:5000/unitotem-no-assets')
             else:
                 CURRENT_ASSET += 1
                 if CURRENT_ASSET >= len(CONFIG['urls']): CURRENT_ASSET = 0
@@ -568,12 +476,10 @@ def webview_control_main():
 
 if __name__ == "__main__":
     parser = ArgumentParser()
+    parser.add_argument('--no-gui', action='store_true', help='Start UniTotem Manager without webview gui (for testing)')
     parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
     cmdargs = vars(parser.parse_args())
 
-    recv_p, SEND_P = Pipe()
-    p = Process(target=main_ui, args=(recv_p,), daemon=True)
-    p.start()
 
     makedirs(WWW.config['UPLOAD_FOLDER'], exist_ok=True)
     makedirs(CFG_DIR, exist_ok=True)
@@ -593,10 +499,10 @@ if __name__ == "__main__":
         APT_THREAD = Thread(target=apt_update, name='update')
         APT_THREAD.start()
 
-    Thread(target=webview_control_main, daemon=True).start()
+    if not cmdargs.get('no_gui', False):
+        Thread(target=webview_control_main, daemon=True).start()
 
     server = create_server(WWW, listen='*:5000')
     server.run()
 
-    p.terminate()
     stop_hostpot()

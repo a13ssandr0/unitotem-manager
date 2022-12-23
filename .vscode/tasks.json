@@ -1,0 +1,9 @@
+{
+    "version": "2.0.0",
+    "tasks": [{
+        "label": "startPulse",
+        "command": "pulseaudio", // Could be any other shell command
+        "args": ["-D"],
+        "type": "shell"
+    }]
+}
