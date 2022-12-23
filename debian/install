@@ -1,4 +1,4 @@
-usr/bin/*                                                   /usr/bin
+usr/share/*.py                                              /usr/share
 usr/share/unitotem-manager/static/Sortable.min.js           /usr/share/unitotem-manager/static
 usr/share/unitotem-manager/static/jszip-utils.min.js        /usr/share/unitotem-manager/static
 usr/share/unitotem-manager/static/jszip.min.js              /usr/share/unitotem-manager/static

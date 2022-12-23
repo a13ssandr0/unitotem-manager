@@ -34,6 +34,9 @@ EOF
 
 fi
 
+
+# https://stackoverflow.com/questions/66775654/how-can-i-make-pulseaudio-run-as-root
+
 if [ "$1" == "configure" ]; then
 	# check if chromium allows remote control
 	# this means the systems is configured for running UniTotem

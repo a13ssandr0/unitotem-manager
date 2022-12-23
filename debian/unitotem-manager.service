@@ -2,7 +2,7 @@
 Description=UniTotem Manager
 
 [Service]
-ExecStart=/var/unitotem-venv/bin/python3 /usr/bin/unitotem-manager
+ExecStart=/var/unitotem-venv/bin/python3 /usr/share/unitotem-manager/manager.py
 Environment=PYTHONUNBUFFERED=1
 
 Restart=on-failure

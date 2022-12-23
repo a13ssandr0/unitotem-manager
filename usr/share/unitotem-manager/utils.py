@@ -3,17 +3,15 @@ from io import BytesIO
 from os import listdir
 from os import remove as removefile
 from os.path import exists
-from re import match, search, sub, compile
+from re import compile, match, sub
 from socket import inet_aton, inet_ntoa
 from struct import pack
 from subprocess import PIPE, Popen, check_output, run
 from typing import Union
 
 from apt import Cache
-from PIL import Image
 from qrcode import make as make_qr
 from ruamel.yaml import YAML
-
 
 # from https://github.com/iancoleman/python-iwlist
 # NO license provided
@@ -348,34 +346,6 @@ def do_ip_addr(get_default=False):
             tx_next_line = True
     return r[def_iface] if get_default and def_iface else False if get_default and not def_iface else r
 
-def is_connected():
-    pass
-
-def get_audio_devices():
-    cards = list(set([match(r'card (\d+): (\w+)', card).groups() for card in check_output(['aplay', '-l'], env={'LANG': 'C'}).decode('utf-8').splitlines() if card.startswith('card')]))
-    cards.sort()
-    return cards
-
-def get_default_audio_device():
-    if not exists(ASOUND_CONF): return 'a'
-    with open(ASOUND_CONF, 'r') as conf:
-        m = search(r'defaults.(?:pcm|ctl).card (\d+)', conf.read())
-        return str(m.group(1)) if m else 'a'
-
-def set_audio_device(dev: Union[str,int]):
-    if dev == 'a' and exists(ASOUND_CONF): removefile(ASOUND_CONF)
-    else:
-        try:
-            int(dev)
-            with open(ASOUND_CONF, 'r+' if exists(ASOUND_CONF) else 'w+' ) as conf:
-                orig = conf.read()
-                output = sub(r'defaults.(pcm|ctl).card (\d+)', r'defaults.\1.card ' + dev, orig)
-                if output == orig: output += f'\ndefaults.pcm.card {dev}\ndefaults.ctl.card {dev}\n'
-                conf.seek(0)
-                conf.write(output)
-                conf.truncate()
-        except ValueError:
-            pass
 
 
 def apt_update():
@@ -406,19 +376,3 @@ def os_version():
             line = line.strip()
             if 'PRETTY_NAME' in line:
                 return line.split('=')[1].strip('"')
-
-def get_dominant_color(pil_img, palette_size=16): # https://stackoverflow.com/a/61730849/9655651
-    # Resize image to speed up processing
-    img = pil_img.copy()
-    img.thumbnail((100, 100))
-
-    # Reduce colors (uses k-means internally)
-    paletted = img.convert('P', palette=Image.ADAPTIVE, colors=palette_size)
-
-    # Find the color that occurs most often
-    palette = paletted.getpalette()
-    color_counts = sorted(paletted.getcolors(), reverse=True)
-    palette_index = color_counts[0][1]
-    dominant_color = palette[palette_index*3:palette_index*3+3]
-
-    return hex((dominant_color[0]<<16) + (dominant_color[1]<<8) + dominant_color[2])

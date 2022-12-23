@@ -5,14 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: file corrente",
+            "name": "manager",
             "type": "python",
             "request": "launch",
-            "program": "usr/bin/unitotem-manager",
-            "args": ["--no-exit"],
+            "program": "usr/share/unitotem-manager/manager.py",
+            // "args": ["--no-gui"],
             "console": "integratedTerminal",
             "justMyCode": true,
             "sudo": true
+        },
+        {
+            "name": "viewer",
+            "type": "python",
+            "request": "launch",
+            // "preLaunchTask": "startPulse",
+            "program": "usr/share/unitotem-manager/ui.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
     ]
 }

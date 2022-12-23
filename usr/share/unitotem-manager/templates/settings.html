@@ -281,8 +281,8 @@
                     <h4>Audio output</h4>
                     <h6><small class="text-muted">After changing device, restart the system to apply.</small></h6>
                     <select class="form-select" aria-label="Default select example" onchange="sendCommand({'audio_out': this.value})">
-                        {% for key, device in audio %}
-                        <option value="{{key}}" {{ 'selected' if key == def_audio_dev else '' }}>{{device}}</option>
+                        {% for device in audio %}
+                        <option value="{{device.name}}" {{ 'selected' if device.name == def_audio_dev.name else '' }}>{{device.description}}</option>
                         {%endfor%}
                     </select>
                 </div>
