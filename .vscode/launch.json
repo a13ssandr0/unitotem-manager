@@ -15,6 +15,16 @@
             "sudo": true
         },
         {
+            "name": "manager2",
+            "type": "python",
+            "request": "launch",
+            "program": "mainmanager.py",
+            // "args": ["--no-gui"],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "sudo": true
+        },
+        {
             "name": "viewer",
             "type": "python",
             "request": "launch",

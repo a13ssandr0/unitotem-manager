@@ -204,6 +204,32 @@
         fileSelector.setAttribute('multiple', '');
         fileSelector.onchange = () => {if (fileSelector.files.length > 0){uploadFiles(fileSelector.files, true);}}
         
+        var ws = new WebSocket(`wss://localhost/ws`);
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            switch (data.endpoint) {
+                case value:
+                    
+                    break;
+            
+                default:
+                    break;
+            }
+            
+        };
+        function sendMessage(event) {
+            var input = document.getElementById("messageText")
+            ws.send(input.value)
+            input.value = ''
+            event.preventDefault()
+        }
+
+
+
+
+
+
+
         function isValidUrl(urlString){try{return Boolean(new URL(urlString));} catch(e){return false;}}
         
         function readyStateHandler(xhttp, on_success, on_error){
