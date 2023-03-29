@@ -1,0 +1,12 @@
+<!-- Settings/Network/wifi-scan -->
+Dark theme
+<!-- Images in settings breadcrumb -->
+Settings backup/restore not fully implemented
+Show last updates log if available
+Properly implement updates list tooltip!
+Create a login screen with hostname
+Create an info screen
+Properly detect display, finish backend-viewer connection
+Use python's url validator instead of javascript's one
+<!-- Make the settings button a menu-button -->
+Use an svg for wifi qr code

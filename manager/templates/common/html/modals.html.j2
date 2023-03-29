@@ -1,0 +1,163 @@
+{% macro confirmModal() %}
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="confirmModalLabel"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">No</button>
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Yes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endmacro%}
+
+
+{% macro newAssetModal() %}
+    <div class="modal fade" id="newAssetModal" tabindex="-1" aria-labelledby="newAssetModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title" id="newAssetModalLabel">New asset</h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="url" class="col-form-label"><h5>URL:</h5></label>
+                        <input type="text" class="form-control" id="modal_input_url" placeholder="https://github.com/a13ssandr0/unitotem" data-bs-container="body" data-bs-placement="bottom" data-bs-content="Invalid URL">
+                    </div>
+                    <div class="mb-3">
+                        <label for="duration" class="col-form-label"><h5>Duration (seconds):</h5></label>
+                        <p>Set this to 0 to display indefinitely</p>
+                        <input type="number" class="form-control" id="modal_input_duration" min="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" id="add_asset_btn" class="btn btn-primary" data-bs-dismiss="modal">Add asset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endmacro%}
+
+{% macro messageModal() %}
+    <div class="modal fade" id="messageModal" tabindex="-1" aria-labelledby="messageModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="messageModalLabel"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body"><h6></h6><code style="white-space: pre-wrap"></code></div>
+            </div>
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro newFileModal()%}
+    <div class="modal fade" id="newFileModal" tabindex="-1" aria-labelledby="newFileModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title" id="newFileModalLabel">New file</h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="filename" class="col-form-label"><h5>Filename:</h5></label>
+                        <input type="text" class="form-control" id="modal_input_filename">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" id="add_file_btn" class="btn btn-primary" data-bs-dismiss="modal">Add asset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro addPowerRuleModal() %}
+    <div class="modal fade" id="addPowerRuleModal" tabindex="-1" aria-labelledby="addPowerRuleModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title" id="addPowerRuleModalLabel">New rule</h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 row">
+                        <label for="hour_selector" class="col-sm-3 col-form-label">Time</label>
+                        <div class="col-sm-9">
+                            <div class="input-group mb-3">
+                                <select class="form-select" id="hour_selector">
+                                        <option value="*" selected>*</option>
+                                        {% for i in range(0, 24) %}
+                                            <option value="{{i}}">{{ '%02d' % i }}</option>
+                                        {%endfor%}
+                                    </select>
+                                <span class="input-group-text">:</span>
+                                <select class="form-select" id="minute_selector">
+                                        <option value="*" selected>*</option>
+                                        {% for i in range(0, 60) %}
+                                            <option value="{{i}}">{{ '%02d' % i }}</option>
+                                        {%endfor%}
+                                    </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3 row">
+                        <label for="weekday_selector" class="col-sm-3 col-form-label">Day of the week</label>
+                        <div class="col-sm-9">
+                            <select class="form-select" id="weekday_selector">
+                                    <option value="*" selected>*</option>
+                                    {% for num, day in [(1, 'Monday'),(2, 'Tuesday'),(3, 'Wednesday'),(4, 'Thursday'),(5, 'Friday'),(6, 'Saturday'),(0, 'Sunday')]%}
+                                    <option value="{{num}}">{{day}}</option>
+                                    {% endfor %}
+                                </select>
+                        </div>
+                    </div>
+                    <div class="mb-3 row">
+                        <label for="month_selector" class="col-sm-3 col-form-label">Month</label>
+                        <div class="col-sm-9">
+                            <select class="form-select" id="month_selector">
+                                    <option value="*" selected>*</option>
+                                    {% for num, mon in [(1, 'January'),(2, 'February'),(3, 'March'),(4, 'April'),(5, 'May'),(6, 'June'),(7, 'July'),(8, 'August'),(9, 'September'),(10, 'October'),(11, 'November'),(12, 'December')]%}
+                                    <option value="{{num}}">{{mon}}</option>
+                                    {% endfor %}
+                                </select>
+                        </div>
+                    </div>
+                    <div class="mb-3 row">
+                        <label for="monthday_selector" class="col-sm-3 col-form-label">Day of the month</label>
+                        <div class="col-sm-9">
+                            <select class="form-select" id="monthday_selector">
+                                    <option value="*" selected>*</option>
+                                    {% for i in range(1, 32) %}
+                                        <option value="{{i}}">{{ '%02d' % i }}</option>
+                                    {%endfor%}
+                                </select>
+                        </div>
+                    </div>
+                    <div class="mb-3 row">
+                        <label for="action_selector" class="col-sm-3 col-form-label">Action</label>
+                        <div class="col-sm-9">
+                            <select class="form-select" id="action_selector">
+                                    <option value="pwr" selected>Shutdown</option>
+                                    <option value="reb">Reboot</option>
+                                </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" id="add_schedule" class="btn btn-primary" data-bs-dismiss="modal">Add schedule</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endmacro %}

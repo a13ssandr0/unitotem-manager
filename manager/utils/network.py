@@ -2,19 +2,37 @@ from base64 import b64encode
 from io import BytesIO
 from os import listdir
 from os import remove as removefile
-from os.path import exists
-from re import compile, match, sub
+from os.path import exists, isdir, join
+from re import compile, sub
 from socket import inet_aton, inet_ntoa
+import string
 from struct import pack
 from subprocess import PIPE, Popen, check_output, run
 from typing import Union
 
-from apt import Cache
 from qrcode import make as make_qr
 from ruamel.yaml import YAML
 
+
+
+ETC_HOSTNAME     = '/etc/hostname'
+ETC_HOSTS        = '/etc/hosts'
+ETC_RESOLV_CONF  = '/etc/resolv.conf'
+NETPLAN_DIR      = '/etc/netplan/'
+FALLBACK_AP_FILE = '/lib/netplan/99-unitotem-fb-ap.yaml'
+
+IF_WIRED = 1
+IF_WIRELESS = 2
+IF_ALL = IF_WIRED | IF_WIRELESS
+
+_YAML = YAML()
+
+
 # from https://github.com/iancoleman/python-iwlist
 # NO license provided
+
+hostnameRe = compile(r'^[a-zA-Z][a-zA-Z0-9]*(-*[a-zA-Z0-9]+)*$')
+
 
 cellNumberRe = compile(r"^Cell\s+(?P<cellnumber>.+)\s+-\s+Address:\s(?P<mac>.+)$")
 regexps = [
@@ -31,34 +49,13 @@ regexps = [
 wpaRe = compile(r"IE:\ WPA\ Version\ 1$")
 wpa2Re = compile(r"IE:\ IEEE\ 802\.11i/WPA2\ Version\ 1$")
 
-ETC_HOSTNAME     = '/etc/hostname'
-ETC_HOSTS        = '/etc/hosts'
-ETC_RESOLV_CONF  = '/etc/resolv.conf'
-ASOUND_CONF      = '/etc/asound.conf'
-NETPLAN_DIR      = '/etc/netplan/'
-FALLBACK_AP_FILE = '/lib/netplan/99-unitotem-fb-ap.yaml'
-REBOOT_REQ       = '/var/run/reboot-required'
-REBOOT_REQ_PKGS  = '/var/run/reboot-required.pkgs'
-SCREEN_SIZE_FILE = '/sys/class/graphics/fb0/virtual_size'
-
-IF_ALL = 0
-IF_WIRED = 1
-IF_WIRELESS = 2
-
-APT_CACHE=Cache()
-APT_UPD_COUNT = 0
-
-_YAML = YAML()
-
-def get_upd_count():
-    return APT_UPD_COUNT
 
 def get_hostname():
-    return check_output('hostname').strip().decode('utf-8')
+    return check_output('hostname').strip().decode()
 
 def set_hostname(to_h: str, from_h: str = get_hostname()):
     to_h = to_h.strip()
-    if match(r'^[a-zA-Z][a-zA-Z0-9]*(-*[a-zA-Z0-9]+)*$', to_h):
+    if hostnameRe.match(to_h):
         with open(ETC_HOSTNAME, 'w') as etc_hostname:
             etc_hostname.write(to_h)
         with open(ETC_HOSTS, 'r') as etc_hosts:
@@ -66,56 +63,14 @@ def set_hostname(to_h: str, from_h: str = get_hostname()):
         with open(ETC_HOSTS, 'w') as etc_hosts:
             etc_hosts.write(sub(f'127.0.1.1.*{from_h}', f'127.0.1.1\t{to_h}', hosts))
 
-def get_display_size():
-    if exists(SCREEN_SIZE_FILE):
-        with open(SCREEN_SIZE_FILE, 'r') as scr_s:
-            return scr_s.read().strip().replace(',', 'x')
-    else:
-        return 'Not connected'
-
-
-# Taken from raspi-config, not needed as of now, maybe in the future...
-
-# def set_config_var(key:str, value:str, filename:str):
-#     if key and value and filename:
-#         made_change = False
-#         out = []
-#         with open(filename, 'r') as file:
-#             for line in file.readlines():
-#                 if match(r'^#?\s*'+key+r'=.*$', line.strip()):
-#                     line=key+"="+value
-#                     made_change=True
-#                 out.append(line)
-        
-#         if not made_change:
-#             out.append(line)
-
-#         with open(filename, 'w') as file:
-#             file.writelines(out)
-
-
-# def get_config_var(key:str, filename:str):
-#     if key and filename:
-#         with open(filename, 'r') as file:
-#             for line in file.readlines():
-#                 out = match(r'^\s*'+key+r'=(.*)$', line.strip())
-#                 if out:
-#                     return out.group()
-
 
 def get_ifaces(filter=IF_ALL, exclude=['lo']):
-    def _get_ifaces(filter=IF_ALL):
-        ifaces = [iface[len('/sys/class/net/'):] for iface in check_output('for iface in /sys/class/net/*; do echo $iface; done', shell=True).decode('utf-8').split('\n') if iface]
-        if filter == IF_ALL: return ifaces
-        w_ifaces = [iface[len('/sys/class/net/'):-len('/wireless')] for iface in check_output('for iface in /sys/class/net/*/wireless; do echo $iface; done', shell=True).decode('utf-8').split('\n') if iface]
-        if filter == IF_WIRELESS: return w_ifaces
-        if filter == IF_WIRED:
-            for w in w_ifaces:
-                ifaces.remove(w)
-            return ifaces
-
-    return [ifc for ifc in _get_ifaces(filter) if ifc not in exclude] if exclude else _get_ifaces(filter)
-
+    wired = []
+    wireless = []
+    for i in listdir('/sys/class/net/'):
+        if i not in exclude and isdir(join('/sys/class/net/', i)):
+            (wireless if exists(join('/sys/class/net/', i, 'wireless')) else wired).append(i)
+    return (wired if filter&IF_WIRED else []) + (wireless if filter&IF_WIRELESS else [])
 
 def get_dns_list():
     with open(ETC_RESOLV_CONF, 'r') as resolv_conf:
@@ -126,27 +81,27 @@ def set_netplan(filename: Union[str, None], file_content: Union[str, dict], appl
     if isinstance(file_content, str):
         file_content = {filename: file_content}
     for name, content in file_content.items():
-        with open(NETPLAN_DIR + name, 'w') as netp:
+        with open(join(NETPLAN_DIR, name), 'w') as netp:
             netp.write(content)
     return generate_netplan(apply)
 
 def generate_netplan(apply = True):
-    gen_out = run(['netplan', 'generate'], stderr=PIPE, check=False).stderr.decode('utf-8').strip()
+    gen_out = run(['netplan', 'generate'], stderr=PIPE).stderr.decode().strip()
     if gen_out:
         return gen_out
     if apply: run(['netplan', 'apply'])
     return apply
 
 def create_netplan(filename):
-    with open(NETPLAN_DIR + filename, 'w') as netp: netp.write('network:\n')
+    with open(join(NETPLAN_DIR, filename), 'w') as netp: netp.write('network:\n')
 
 def del_netplan_file(filename, apply = True):
-    removefile(NETPLAN_DIR + filename)
+    removefile(join(NETPLAN_DIR, filename))
     return generate_netplan(apply)
 
 def get_netplan_file(filename):
-    if not exists(NETPLAN_DIR + filename): return ''
-    with open(NETPLAN_DIR + filename, 'r') as netp:
+    if not exists(join(NETPLAN_DIR, filename)): return ''
+    with open(join(NETPLAN_DIR, filename), 'r') as netp:
         return netp.read()
     
 def get_netplan_file_list():
@@ -189,14 +144,15 @@ def stop_hostpot():
 def wifi_qr(ssid, passwd):
     buffered = BytesIO()
     make_qr(f'WIFI:S:{ssid};T:WPA;P:{passwd};;').save(buffered, format="PNG")
-    return b64encode(buffered.getvalue()).decode('utf-8')
+    return b64encode(buffered.getvalue()).decode()
 
 # from https://github.com/iancoleman/python-iwlist
 # NO license provided
 def get_wifis(interface=get_ifaces(IF_WIRELESS)[0]):
-    cmd = ["iwlist", interface, "scan"]
-    proc = Popen(cmd, stdout=PIPE, stderr=PIPE)
-    lines = proc.stdout.read().decode('utf-8').split('\n')
+    #TODO sanity check on `interface`
+
+    lines = run(["/usr/sbin/iwlist", interface, "scan"],
+            stdout=PIPE, stderr=PIPE, check=False).stdout.decode().splitlines()
     cells = []
     for line in lines:
         line = line.strip()
@@ -221,15 +177,25 @@ def get_wifis(interface=get_ifaces(IF_WIRELESS)[0]):
                 else :
                     cells[-1].update(result.groupdict())
                 continue
-    wifis = sorted(cells, key = lambda x: int(x['signal_quality']), reverse=True)
-    for w in wifis:
-        w['essid'] = w['essid'].replace(r'\x00', '')
-    return wifis
+    for cell in cells:
+        if 'frequency' in cell:
+            cell['frequency'] = float(cell['frequency'])
+        for attr in ['cellnumber', 'channel', 'signal_quality', 'signal_total', 'signal_level_dBm']:
+            if attr in cell:
+                try:
+                    cell[attr] = int(cell[attr])
+                except ValueError:
+                    pass
+        if 'essid' in cell:
+            cell['essid'] = cell['essid'].replace(r'\x00', '')
+    cells = sorted(cells, key = lambda x: int(x['signal_quality']), reverse=True)
+    return cells
 
 # from https://github.com/RedHatInsights/insights-core
 # Licensed under Apache License 2.0
 def do_ip_addr(get_default=False):
-    ip_addr = check_output(['ip', 'addr']).decode('utf-8').splitlines()
+    ip_addr = run(['/usr/sbin/ip', 'addr'],
+            stdout=PIPE, stderr=PIPE, check=False).stdout.decode().splitlines()
     r = {}
     current = {}
     rx_next_line = False
@@ -254,7 +220,10 @@ def do_ip_addr(get_default=False):
             if iface not in ifaces_out: ifaces_out[iface] = {}
             for net in prop['nets']:
                 subnet = inet_ntoa(pack("<L", int(net['dst'], 16)))
-                ifaces_out[iface][subnet] = {'gateway': None, 'mask': inet_ntoa(pack("<L", int(net['mask'], 16)))}
+                ifaces_out[iface][subnet] = {
+                    'gateway': None, 
+                    'mask': inet_ntoa(pack("<L", int(net['mask'], 16)))
+                }
                 for gtw in prop['gtws']:
                     if (int(net['mask'], 16) & int(gtw, 16)) == int(net['dst'], 16):
                         ifaces_out[iface][subnet]['gateway'] = inet_ntoa(pack("<L", int(gtw, 16)))
@@ -328,7 +297,10 @@ def do_ip_addr(get_default=False):
             if current['name'] in ifaces_out:
                 for subn, propts in ifaces_out[current['name']].items():
                     try:
-                        if (int(''.join('{:02X}'.format(a) for a in inet_aton(addr)), 16) & int('0b'+('1'*int(mask))+('0'*(32-int(mask))),2)) == int(''.join('{:02X}'.format(a) for a in inet_aton(subn)), 16):
+                        _addr = int.from_bytes(inet_aton(addr), 'big')
+                        _mask = 0xffffffff << (32-int(mask)) & 0xffffffff
+                        _subn = int.from_bytes(inet_aton(subn), 'big')
+                        if _addr & _mask == _subn:
                             gateway = propts['gateway']
                             break
                     except OSError:
@@ -348,31 +320,7 @@ def do_ip_addr(get_default=False):
 
 
 
-def apt_update():
-    global APT_UPD_COUNT
-    APT_CACHE.update(raise_on_error=False)
-    APT_CACHE.open(None)
-    APT_CACHE.upgrade(True)
-    changes = APT_CACHE.get_changes()
-    APT_UPD_COUNT = len(changes)
-    return changes
 
-def apt_upgrade():
-    apt_update()
-    APT_CACHE.commit()
-    apt_update()
-
-def reboot_required():
-    if exists(REBOOT_REQ_PKGS):
-        with open(REBOOT_REQ_PKGS, 'r') as file:
-            return len([line.strip("\n") for line in file if line != "\n"])
-    elif exists(REBOOT_REQ):
-        return True
-    return False
-
-def os_version():
-    with open('/etc/os-release', 'r') as f:
-        for line in f.readlines():
-            line = line.strip()
-            if 'PRETTY_NAME' in line:
-                return line.split('=')[1].strip('"')
+# if __name__ == '__main__':
+#     from pprint import pprint
+#     pprint(get_wifis())

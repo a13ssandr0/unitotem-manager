@@ -1,0 +1,67 @@
+{% extends "settings.html.j2" %}
+{% block content %}
+    <div class="hstack gap-2">
+        <h4>Power scheduling</h4>
+        <button class="btn btn-sm btn-primary ms-auto" type="button" data-bs-toggle="modal" data-bs-target="#addPowerRuleModal"><i class="bi bi-plus-circle"></i> Add rule</button>
+    </div>
+    <div class="m-3 mt-1 row">
+        <table>
+            <thead>
+                <tr>
+                    {% for name in ['Action', 'Hour', 'Minute', 'Day of the month', 'Month', 'Day of the week', '', '']%}
+                    <th scope="col">{{name}}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody id="asset_table">
+                {%for job in crontab%}
+                
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+{% endblock content %}
+
+{% block init_cmds %}'settings/cron/job'{% endblock init_cmds %}
+
+
+<script type="text/javascript" charset="utf-8">
+{% block recv_cmds %}
+case 'settings/cron/job':
+    var table = byId('asset_table');
+    table.innerHTML='';
+    data.jobs.forEach(job => {
+        table.innerHTML+=`
+        <tr>
+            <td class="my-auto" scope="row">${job.command}</td>
+            <td class="my-auto">${job.h}</td>
+            <td class="my-auto">${job.m}</td>
+            <td class="my-auto">${job.dom}</td>
+            <td class="my-auto">${job.mon}</td>
+            <td class="my-auto">${job.dow}</td>
+            <td class="my-auto">
+                <div class="form-check form-switch">
+                    <input title="${(job.enabled)?'Dis':'En'}able job" onChange="sendCommand('settings/cron/job/set_state', {job: '${job.comment}', state: ${!job.enabled}});" class="form-check-input" type="checkbox" role="switch" ${(job.enabled)?'checked':''}>
+                </div>
+            </td>
+            <td>
+                <div class="btn-group my-2" role="group">
+                    <button type="button" title="Remove job" onclick="sendCommand('settings/cron/job/delete', {job: '${job.comment}'});" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </div>
+            </td>
+        </tr>`;
+    });
+    break;
+{% endblock recv_cmds %}
+
+{% block js %}
+byId('add_schedule').onclick = () => sendCommand('settings/cron/job/add', {
+    action: byId('action_selector').value,
+    m: byId('minute_selector').value,
+    h: byId('hour_selector').value,
+    dom: byId('monthday_selector').value,
+    mon: byId('month_selector').value,
+    dow: byId('weekday_selector').value
+});
+{% endblock js %}
+</script>

@@ -1,0 +1,35 @@
+{% extends "settings.html.j2" %}
+{% block content %}
+<h4>Playback</h4>
+<div class="mb-3 row">
+    <label for="default_duration" class="my-auto col-sm-5 col-form-label">Default asset duration</label>
+    <div class="my-auto col-sm-7">
+        <div class="input-group">
+            <input type="number" class="form-control" id="default_duration" min="1">
+            <span class="input-group-text">seconds</span>
+            <button type="button" class="btn btn-sm btn-outline-success ms-auto" id="set_def_duration" onclick="sendCommand('settings/default_duration', {duration: byId('default_duration').value})"><i class="bi bi-check2"></i> Apply</button>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block init_cmds %}'settings/default_duration'{% endblock init_cmds %}
+
+<script type="text/javascript" charset="utf-8">
+{% block recv_cmds %}
+case 'settings/default_duration':
+    byId('default_duration').value = data.duration;
+    byId('default_duration').setAttribute('def-val', data.duration);
+    break;
+{% endblock recv_cmds %}
+
+{% block js %}
+byId('default_duration').onchange = () => {
+    if (byId('default_duration').value != byId('default_duration').getAttribute('def-val')) {
+        byId('set_def_duration').classList.replace('btn-outline-success', 'btn-success');
+    } else {
+        byId('set_def_duration').classList.replace('btn-success', 'btn-outline-success');
+    }
+};
+{% endblock js %}
+</script>

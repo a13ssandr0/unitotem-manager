@@ -1,0 +1,39 @@
+{% extends "settings.html.j2" %}
+{% block content %}
+    <h4>Change password</h4>
+    <div class="mb-2 row">
+        <label for="loggedUser" class="my-auto col-sm-5 col-form-label">User</label>
+        <div class="my-auto col-sm-7">
+            <input type="text" class="form-control" id="loggedUser" value="{{logged_user}}" disabled>
+        </div>
+    </div>
+    <div class="mb-2 row">
+        <label for="inputNewPassword" class="my-auto col-sm-5 col-form-label">New password</label>
+        <div class="my-auto col-sm-7">
+            <input type="password" class="form-control" id="inputNewPassword">
+        </div>
+    </div>
+    <form action="/api/settings/set_passwd" method="post">
+        <div class="mb-2 row">
+            <label for="inputNewPassword2" class="my-auto col-sm-5 col-form-label">Repeat new password</label>
+            <div class="my-auto col-sm-7">
+                <input type="password" name="password" class="form-control" id="inputNewPassword2">
+            </div>
+        </div>
+        <div class="hstack gap-2">
+            <button type="submit" class="btn btn-sm btn-success ms-auto" id="set_passwd" disabled><i class="bi bi-check2"></i> Change password</button>
+        </div>
+    </form>
+{% endblock content %}
+
+<script type="text/javascript" charset="utf-8">
+{% block js %}
+const pwd1 = byId('inputNewPassword');
+const pwd2 = byId('inputNewPassword2');
+const sub = byId('set_passwd');
+pwd1.oninput = pwd2.oninput = () => {
+    if (pwd1.value == pwd2.value) sub.removeAttribute('disabled');
+    else sub.setAttribute('disabled', '');
+};
+{% endblock js %}
+</script>

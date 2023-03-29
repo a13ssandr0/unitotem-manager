@@ -5,33 +5,25 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "manager",
+            "name": "Manager",
             "type": "python",
             "request": "launch",
-            "program": "usr/share/unitotem-manager/manager.py",
+            "program": "${workspaceFolder}/manager/main.py",
             // "args": ["--no-gui"],
             "console": "integratedTerminal",
+            "preLaunchTask": "userProc",
             "justMyCode": true,
             "sudo": true
         },
         {
-            "name": "manager2",
-            "type": "python",
+            "name": "Electron",
+            "program": "${workspaceFolder}/webview/main.js",
             "request": "launch",
-            "program": "mainmanager.py",
-            // "args": ["--no-gui"],
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "sudo": true
-        },
-        {
-            "name": "viewer",
-            "type": "python",
-            "request": "launch",
-            // "preLaunchTask": "startPulse",
-            "program": "usr/share/unitotem-manager/ui.py",
-            "console": "integratedTerminal",
-            "justMyCode": false
+            "runtimeExecutable": "${workspaceFolder}/webview/node_modules/.bin/electron",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "type": "node"
         }
     ]
 }

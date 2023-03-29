@@ -1,0 +1,151 @@
+{% extends "settings.html.j2" %}
+{% block content %}
+    <h4>Network</h4>
+    <div class="mb-3 row">
+        <label for="inputHostname" class="col-sm-5 col-form-label">Hostname</label>
+        <div class="col-sm-7">
+            <div class="input-group">
+                <input type="text" class="form-control" id="inputHostname" ws-edit-needs-reboot>
+                <button type="button" class="btn btn-sm btn-outline-success ms-auto" id="set_hostname"><i class="bi bi-check2"></i> Apply</button>
+            </div>
+        </div>
+    </div>
+    <div class="mt-3 row">
+        <p class="mb-1"><a href="https://netplan.io/reference/">Netplan</a> config files:</p>
+        <ul class="nav nav-tabs" id="netplan_tabs" role="tablist" hidden>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" title="New file" id="add-file" data-bs-toggle="modal" data-bs-target="#newFileModal" type="button" role="tab"><i class="bi bi-plus-square"></i></button>
+            </li>
+        </ul>
+        <div class="btn-group mb-2" role="group">
+            <div class="dropdown">
+                <button type="button" id="file-selector-btn" class="btn btn-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="true">Netplan configuration file</button>
+                <ul class="dropdown-menu" style="min-width: 30rem;">
+                    <span id="files-list"></span>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <div class="input-group input-group-sm px-2">
+                            <input type="text" class="form-control" id="new-file-text" placeholder="New configuration file" aria-describedby="file-ext">
+                            <span class="input-group-text" id="file-ext">.yaml</span>
+                            <button class="btn btn-outline-secondary" type="button" id="button-addon2">Create</button>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+            <div class="dropdown ms-auto my-auto">
+                <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" id="wifiDropBtn" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="inside"><i class="bi bi-wifi"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="wifiDropBtn" id="wifi-menu" style="min-width: 20rem;">
+                    <li class="dropdown-item disabled">Scanning...</li>
+                </ul>
+            </div>
+        </div>
+        <div id="editor" style="width:95%; height:30em; margin-left:auto; margin-right:auto;"></div>
+        <div class="mt-2 hstack gap-2">
+            <button type="button" id="del-btn" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete ?" data-bs-positive-btn="Delete" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
+            <button type="button" id="set-btn" class="btn btn-sm btn-outline-success ms-auto"><i class="bi bi-check2"></i> Save</button>
+            <button type="button" id="apply-btn" class="btn btn-sm btn-warning" onclick="sendCommand('settings/netplan/file/set', {apply: true});"><i class="bi bi-gear"></i> Apply</button>
+        </div>
+    </div>
+{% endblock content %}
+
+{% block init_cmds %}'settings/hostname', 'settings/netplan/file/get'{% endblock init_cmds %}
+
+<script type="text/javascript" charset="utf-8">
+{% block recv_cmds %}
+case 'settings/hostname':
+    byId('inputHostname').value = data.hostname;
+    byId('inputHostname').setAttribute('def-val', data.hostname);
+    break;
+
+case 'settings/netplan/file/get':
+    filesList.innerHTML = '';
+    netplan.original = data.files;
+    Object.entries(data.files).forEach((pair, i) => {
+        const [filename, content] = pair;
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.className = 'dropdown-item';
+        btn.type = 'button';
+        btn.innerHTML = filename;
+        btn.onclick = ()=>{
+            file_selector_btn.innerHTML = filename;
+            cur_file = filename;
+            aceEditor.setValue(content, -1);
+            del_btn.setAttribute('data-bs-title', `Do you want to delete ${filename}?`);
+            del_btn.setAttribute('data-bs-positive-action',
+                `sendCommand('settings/netplan/file/del', {filename: '${filename}'})`);
+        };
+        if (i==0) btn.onclick();
+        li.appendChild(btn);
+        filesList.appendChild(li);
+    });
+    break;
+case 'settings/get_wifis':
+    let wifi_low = data.wifis[0].signal_total/3;
+    let wifi_high = data.wifis[0].signal_total*2/3;
+    byId('wifi-menu').innerHTML = "";
+    for (let network of data.wifis){
+        if (network.essid == '') network.essid = null;
+        byId('wifi-menu').innerHTML += 
+        `<li class="dropdown-item" onclick="sendCommand('settings/netplan/file/set', {filename: '10-${network.essid ?? ('hidden' + network.mac.slice(-5))}.yaml', content: wifi_yaml('${network.essid}', ${network.encryption != 'off'}), apply: false});">
+            <span><i class="bi bi-${(network.signal_quality >= wifi_high) ? 'wifi' : ((network.signal_quality >= wifi_low) ? 'wifi-2' : 'wifi-1')}"></i> ${ network.essid ?? '<i><small class="text-muted">hidden</small></i>' }</span>
+            <h6>
+                <small class="text-muted">${network.mac}</small>
+                <span class="float-end line-height-1 ps-2">
+                    <span class="badge text-bg-info">${(network.frequency>=5)?'5':'2.4'}GHz</span>
+                    <span class="badge text-bg-warning"><i class="bi bi-${ network.encryption != 'off' ? 'lock' : 'unlock' }"></i> ${ network.encryption != 'off' ? network.encryption : 'open' }</span>
+                </span>
+            </h6>
+        </li>`;
+    }
+    break;
+{% endblock recv_cmds %}
+
+{% block js %}
+const file_selector_btn = byId('file-selector-btn');
+const filesList = byId('files-list');
+const aceEditor = ace.edit('editor', {theme: "ace/theme/xcode", mode: "ace/mode/yaml"});
+const set_btn = byId('set-btn');
+const del_btn = byId('del-btn');
+var netplan = { original: {}, modified: {} };
+var cur_file = null;
+
+aceEditor.session.on('change', (delta) => {
+    netplan.modified[cur_file] = aceEditor.getValue();
+    if (aceEditor.getValue() != netplan.original[cur_file]){
+        set_btn.classList.replace('btn-outline-success', 'btn-success');
+    } else {
+        set_btn.classList.replace('btn-success', 'btn-outline-success');
+    }
+});
+set_btn.onclick = () => {
+    sendCommand('settings/netplan/file/set', {filename: cur_file, content: aceEditor.getValue(), apply: false});
+    netplan.original[cur_file] = aceEditor.getValue();
+    delete netplan.modified[cur_file];
+    set_btn.classList.replace('btn-success', 'btn-outline-success');
+};
+
+
+function wifi_yaml(wifi_name, password=true) {
+    var net = `network:\n  wifis:\n    {{def_wifi}}:\n      dhcp4: true\n      # addresses: [192.168.1.100/24]\n      # routes:\n      #   - to: 0.0.0.0/0\n      #     via: 192.168.1.1\n      # nameservers:\n      #   addresses: [192.168.1.1, 1.1.1.1, 8.8.8.8]\n      access-points:\n        "${wifi_name}":`;
+    if (password)
+        net += `\n          password: "<super-secure>"\n`;
+    return net;
+}
+
+byId('inputHostname').oninput = () => {
+    if (byId('inputHostname').value != byId('inputHostname').getAttribute('def-val')) {
+        byId('set_hostname').classList.replace('btn-outline-success', 'btn-success');
+    } else {
+        byId('set_hostname').classList.replace('btn-success', 'btn-outline-success');
+    }
+};
+
+byId('add_file_btn').onclick = () => sendCommand('settings/netplan/file/new', {filename: byId('modal_input_filename').value});
+byId('set_hostname').onclick = () => sendCommand('settings/hostname', {hostname: byId('inputHostname').value});
+var wifi_upd_timer = Number();
+byId('wifiDropBtn').addEventListener('show.bs.dropdown', event => {wifi_upd_timer=setInterval(sendCommand, 5000, 'settings/get_wifis');});
+byId('wifiDropBtn').addEventListener('hide.bs.dropdown', event => {clearInterval(wifi_upd_timer);});
+
+{% endblock js %}
+</script>

@@ -13,4 +13,4 @@ debhelper-build-stamp
 debian/unitotem-manager
 debian/files
 __pycache__
-usr/share/unitotem-manager/static/uploaded
+manager/uploaded
