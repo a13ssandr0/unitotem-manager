@@ -1,0 +1,22 @@
+{% extends "settings.html.j2" %}
+{% block main_content %}
+<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4">
+    {% for name, tab, desc, icon in tabs%}
+    <div class="col">
+        <div class="card mb-3" style="height: 90%!important;">
+            <div class="row g-0">
+                <div class="col-2 col-xl-3 ps-2 pt-2 text-center">
+                    <i class="bi bi-{{icon}}" style="font-size: 2.75em; color: #7431F9;"></i>
+                </div>
+                <div class="col-10 col-xl-9">
+                    <div class="card-body">
+                        <h5 class="card-title">{{name}}</h5>
+                        <p class="card-text"><small class="text-muted"><a href="/settings/{{tab}}" class="text-reset text-decoration-none stretched-link">{{desc}}</a></small></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock main_content %}

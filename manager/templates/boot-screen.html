@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>UniTotem</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            background: black; 
+            height: 100vh;
+            color: white;
+            margin: 0px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .center{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .welcome {
+            transform: scale(0.75);
+            opacity: 0;
+            filter: blur(4px);
+            animation: scale 3s forwards cubic-bezier(0.5, 1, 0.89, 1), fade-in 0.8s 0.1s forwards cubic-bezier(0.11, 0, 0.5, 0);
+        }
+        @keyframes scale {100% {transform: scale(2);}}
+        @keyframes fade-in {100% {opacity: 1; filter: blur(0);}}
+
+        .loader {
+            display: inline-block;
+            font-size: 120px;
+            font-family: "Noto Sans", Arial, sans-serif, system-ui, -apple-system;
+            font-weight: bold;
+            color: #FFF;
+            position: relative;
+        }
+        .loader::before {
+            content: '';  
+            position: absolute;
+            left: 269px;
+            bottom: 32px;
+            width: 69px;
+            height: 69px;
+            border-radius: 50%;
+            border: 15px solid #FFF;
+            border-bottom-color: #FF3D00;
+            box-sizing: border-box;
+            animation: rotation 3s linear infinite;
+        }
+        @keyframes rotation {
+            0% {transform: rotate(0deg); box-shadow: 0 0 5px #000000;}
+            33% {transform: rotate(360deg);}
+            50% {box-shadow: 0 0 10px #ffffff;}
+            67% {transform: rotate(720deg);}
+            100% {transform: rotate(1080deg); box-shadow: 0 0 5px #000000;}
+        } 
+
+        .glow {
+            -webkit-animation: glow 1.5s linear infinite alternate;
+            -moz-animation: glow 1.5s linear infinite alternate;
+            animation: glow 1.5s linear infinite alternate;
+        }
+        @keyframes glow {
+            from {text-shadow: 0 0 5px #000000;}
+            to {text-shadow: 0 0 10px #ffffff;}
+        }
+        
+
+        .media-viewer{
+            display: none;
+            background-color: black;
+            position: absolute;
+            height: 100%;
+            width: 100%;
+            margin: auto;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            object-fit: contain;
+            user-select: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="boot_screen" class="center"><div class="welcome"><div class="glow">
+        <span class="loader">UniT&nbsp;&nbsp;tem</span> <!-- https://github.com/vineethtrv/css-loader -->
+    </div></div></div>
+    <webview id="webview" class="media-viewer"></webview>
+    <img    id="imageview" class="media-viewer">
+    <video  id="videoview" class="media-viewer"></video>
+</body>
+
+<script type="text/javascript" charset="utf-8">
+    var lastCont      = 'boot';
+    const boot_screen = document.getElementById('boot_screen');
+    const webview     = document.getElementById('webview');
+    const imageview   = document.getElementById('imageview');
+    const videoview   = document.getElementById('videoview');
+    const containers  = [boot_screen, webview, imageview, videoview];
+    function connect() {
+        const loc = window.location;
+        var _ws = new WebSocket(`wss://localhost/ui_ws`);
+        _ws.onopen = async event => {
+            console.log('Connected');
+            // PAGE INIT
+            //[... new Set(['settings/hostname', ])].forEach(cmd => sendCommand(cmd));
+            sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
+            sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
+        }
+        _ws.onmessage = async event => {
+            const data = JSON.parse(event.data);
+            switch (data.target) {
+                
+                case 'Show':
+                    if (!data.container){
+                        var xhttp = new XMLHttpRequest();
+                        xhttp.open('HEAD', data.src, false);
+                        try {
+                            xhttp.send();
+                            var mime = xhttp.getResponseHeader('Content-Type') || '';
+                            if (mime.startsWith('audio')){
+                                data.container = 'audio';
+                            } else if (mime.startsWith('video')){
+                                data.container = 'video';
+                            } else {
+                                data.container = 'web';
+                            }
+                        } catch (error) {
+                            console.log(error);
+                            data.container = 'web';
+                        }
+                    }
+                    console.log(data);
+                    if (data.container != lastCont){
+                        containers.forEach(container => container.style.display = 'none');
+                        webview.src = '';
+                        videoview.src = '';
+                        imageview.src = '';
+                    }
+                    switch (data.container){
+                        case 'image':
+                            imageview.src = data.src;
+                            imageview.style.display = 'flex';
+                            lastCont = data.container;
+                            break;
+                        case 'video':
+                            videoview.src = data.src;
+                            videoview.style.display = 'flex';
+                            videoview.play();
+                            lastCont = data.container;
+                            break;
+                        case 'boot':
+                            boot_screen.style.display = 'flex';
+                            lastCont = data.container;
+                            break;
+                        case 'web':
+                        default:
+                            webview.src = data.src;
+                            webview.style.display = 'flex';
+                            lastCont = 'web';
+                            break;
+                    }
+                    break;
+
+                case 'getAllDisplays':
+                    sendCommand('getAllDisplays', await window.electronAPI.getAllDisplays());
+                    break;
+                
+                case 'getBounds':
+                    sendCommand('getBounds', await window.electronAPI.getBounds());
+                    break;
+                
+                case 'setBounds':
+                    await window.electronAPI.setBounds(data.x, data.y, data.width, data.height);
+                    break;
+
+                default:
+                    // messageModal.querySelector('.modal-title').textContent = 'Unhandled command';
+                    // messageModal.querySelector('.modal-body h6').textContent = '';
+                    // messageModal.querySelector('.modal-body code').textContent = JSON.stringify(data, null, 4);
+                    // new bootstrap.Modal(messageModal).show();
+                    break;
+            }
+            
+        };
+
+        _ws.onclose = err => setTimeout(() => ws=connect(), 1000);
+        _ws.onerror = err => _ws.close();
+
+        return _ws;
+    }
+
+    var ws = connect();
+
+    function sendCommand(target, args) {
+        if(args === undefined) args = {};
+        args.target = target
+        ws.send(JSON.stringify(args));
+    }
+</script>
+
+</html>

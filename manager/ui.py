@@ -1,3 +1,10 @@
+'''
+Test, not ready for production
+QtWebEngine not working on Raspberry Pi OS, using Electron instead
+'''
+
+
+
 import sys
 from mimetypes import MimeTypes
 from os.path import abspath, dirname, join

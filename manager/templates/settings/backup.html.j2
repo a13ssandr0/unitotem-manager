@@ -1,0 +1,132 @@
+{% extends "settings.html.j2" %}
+{% block content %}
+<h4>Backup</h4>
+<a type="button" class="btn btn-sm btn-primary" href="/backup"><i class="bi bi-journal-arrow-down"></i> Configuration only</a>
+<a type="button" class="btn btn-sm btn-primary" href="/backup?include_uploaded"><i class="bi bi-database-down"></i> Configuration and files</a>
+
+
+<h4 class="mt-5">Restore</h4>
+<div class="progress" id="upload-progress" hidden>
+    <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+</div>
+<input class="form-control form-control-sm" type="file" accept="application/zip" id="formFile">
+<div id="uploadSettings" hidden>
+    <div class="p-3">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="mainConfCheck" disabled>
+            <label class="form-check-label" for="mainConfCheck">Main configuration</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="alsaCheck" disabled>
+            <label class="form-check-label" for="alsaCheck">Alsa default audio device</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="hostnameCheck" disabled>
+            <label class="form-check-label" for="hostnameCheck">Device hostname</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="netplanCheck" disabled>
+            <label class="form-check-label" for="netplanCheck">Netplan configuration files</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="fileCheck" disabled>
+            <label class="form-check-label" for="fileCheck">Uploaded files</label>
+        </div>
+    </div>
+    <button type="button" id="restore_confirm" class="btn btn-sm btn-warning" data-bs-dismiss="modal"><i class="bi bi-upload"></i> Restore</button>
+</div>
+
+
+<h4 class="mt-5">Reset</h4>
+<button type="button" class="btn btn-sm btn-danger" data-bs-title="Do you want to reset UniTotem configuration?" data-bs-positive-btn="Reset" data-bs-positive-action="resetConfig()" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Reset</button>
+{% endblock content %}
+
+
+<script type="text/javascript" charset="utf-8">
+{% block js %}
+var fileSelector = byId('formFile');
+var checks = [
+    ["CONFIG", byId("mainConfCheck")],
+    ["hostname", byId("hostnameCheck")],
+    ["def_audio_dev", byId("alsaCheck")],
+    ["netplan", byId("netplanCheck")]
+];
+var fileCheck = byId("fileCheck");
+fileSelector.onchange = () => {
+    if (fileSelector.files.length > 0){
+        JSZip.loadAsync(fileSelector.files[0]).then((zip) => {
+            zip.file("config.json").async("string").then((content) =>{
+                var json = JSON.parse(content);
+                checks.forEach(check => {
+                    if (json.hasOwnProperty(check[0])){
+                        check[1].removeAttribute('disabled');
+                        check[1].setAttribute('checked', '');
+                    } else {
+                        check[1].removeAttribute('checked');
+                        check[1].setAttribute('disabled', '');
+                    }
+                })
+                if (zip.folder("uploaded").filter((relativePath, file)=>{return true}).length){
+                    fileCheck.removeAttribute('disabled');
+                    fileCheck.setAttribute('checked', '');
+                } else {
+                    fileCheck.removeAttribute('checked');
+                    fileCheck.setAttribute('disabled', '');
+                }
+            }).then(()=>{
+                byId('uploadSettings').removeAttribute('hidden');
+                byId('restore_confirm').onclick = () => {
+                    var cfg_options = {
+                        CONFIG: byId("mainConfCheck").checked,
+                        hostname: byId("alsaCheck").checked,
+                        def_audio_dev: byId("hostnameCheck").checked,
+                        netplan: byId("netplanCheck").checked,
+                        uploaded: byId("fileCheck").checked
+                    }
+                    uploadConfig(fileSelector.files[0], cfg_options, true);
+                }
+            });
+        }, () => {alert("Not a valid zip file")}); 
+    } else byId('uploadSettings').setAttribute('hidden', '');
+}
+
+function readyStateHandler(xhttp, on_success, on_error){
+    if (xhttp.readyState == 4){
+        if (xhttp.status >= 200 && xhttp.status < 300) {
+            if (on_success == true) location.reload();
+            else if (on_success instanceof Function) on_success(xhttp.response);
+        } else if (!(on_error && on_error(xhttp.response, xhttp.status))) {
+            messageModal.querySelector('.modal-title').textContent = "Error";
+            messageModal.querySelector('.modal-body h6').textContent = `Request returned ${xhttp.status} (${xhttp.statusText})`;
+            messageModal.querySelector('.modal-body code').textContent = xhttp.response;
+            new bootstrap.Modal(messageModal).show();
+        }
+    }
+};
+
+function uploadConfig(cfg_file, cfg_options, on_success, on_error) {
+    let xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = () => readyStateHandler(xhttp, on_success, on_error);
+    let formData = new FormData();
+    formData.append('data_zip_file', cfg_file);
+    formData.append('options', JSON.stringify(cfg_options));
+    byId("upload-progress").removeAttribute("hidden");
+    let progressbar = byId("upload-progress-bar");
+    xhttp.upload.addEventListener('progress', (event) => {
+        var perc = Math.round(event.loaded / event.total * 100);
+        progressbar.style = `width: ${perc}%`;
+        progressbar.innerHTML = perc + "%";
+        progressbar.ariaValueNow = perc;
+    });
+    xhttp.open("POST", "./backup", true);
+    xhttp.send(formData);
+}
+
+function resetConfig(on_success, on_error) {
+    let xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = () => readyStateHandler(xhttp, on_success, on_error);
+    xhttp.open("DELETE", "./backup", true);
+    xhttp.send();
+}
+{% endblock js %}
+</script>

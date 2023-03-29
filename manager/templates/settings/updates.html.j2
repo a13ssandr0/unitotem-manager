@@ -1,0 +1,73 @@
+{% extends "settings.html.j2" %}
+{% block content %}
+<h4>Updates</h4>
+<div class="mb-3 hstack gap-2">
+    <p class="my-auto" id="updateCount" data-bs-toggle="tooltip" data-bs-title="Default tooltip<br>aaa" data-bs-html="true" data-bs-placement="bottom"></p>
+    <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="apt_update" onclick="sendCommand('settings/update')"></button>
+    <button type="button" class="btn btn-sm btn-outline-danger" id="apt_upgrade" onclick="sendCommand('settings/update', {do_upgrade: true})"></button>
+</div>
+<div class="border rounded p-2" style="max-height: 20em; overflow-y: auto;" id="log_container"><small><code style="white-space: pre-wrap; color: grey;" id="log">No logs available</code></small></div>
+{% endblock content %}
+
+{% block init_cmds %}'settings/update/list', 'settings/update/status'{% endblock init_cmds %}
+
+<script type="text/javascript" charset="utf-8">
+{% block recv_cmds %}
+case 'settings/update/start':
+    log_view.innerHTML='';
+    break;
+
+case 'settings/update/progress':
+    log_view.innerHTML+=(data.is_stdout)?data.data:`<span style="color: red;">${data.data}</span>`;
+    log_container.scrollTop = log_container.scrollHeight;
+    break;
+
+case 'settings/update/end':
+    var updateBtn = byId('apt_update');
+    var upgradeBtn = byId('apt_upgrade');
+    updateBtn.removeAttribute('disabled');
+    updateBtn.innerHTML='<i class="bi bi-arrow-clockwise"></i> Check updates';
+    upgradeBtn.removeAttribute('disabled');
+    upgradeBtn.innerHTML='<i class="bi bi-arrow-bar-up"></i> Do updates';
+    break;
+
+case 'settings/update/list':
+    var cnt = data.updates.length;
+    byId('updateCount').innerHTML = `${cnt==0?'No':cnt} update${cnt==1?'':'s'} available`;
+    break;
+
+case 'settings/update/status':
+    var updateBtn = byId('apt_update');
+    var upgradeBtn = byId('apt_upgrade');
+    if (data.status == 'update'){
+        updateBtn.setAttribute('disabled', '');
+        updateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
+    }
+    else {
+        updateBtn.removeAttribute('disabled');
+        updateBtn.innerHTML='<i class="bi bi-arrow-clockwise"></i> Check updates';
+    }
+    
+    if (data.status == 'upgrade'){
+        upgradeBtn.setAttribute('disabled', '');
+        upgradeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...';
+    } else {
+        upgradeBtn.removeAttribute('disabled');
+        upgradeBtn.innerHTML='<i class="bi bi-arrow-bar-up"></i> Do updates';
+    }
+    if (data.log.length){
+        log_view.innerHTML='';
+        data.log.forEach(line => log_view.innerHTML+=(line[0])?line[1]:`<span style="color: red;">${line[1]}</span>`);
+        {# data.log.forEach(l => console.log(l)); #}
+        log_container.scrollTop = log_container.scrollHeight;
+    }
+    break;
+{% endblock recv_cmds %}
+
+{% block js %}
+const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+const log_view = byId('log');
+const log_container = byId('log_container');
+{% endblock js %}
+</script>
