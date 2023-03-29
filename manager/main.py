@@ -22,9 +22,12 @@ from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.routing import Mount
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.security import HTTPBasic, HTTPBasicCredentials, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi_login import LoginManager
+from fastapi_login.exceptions import InvalidCredentialsException
+
 from utils import *
 from uvicorn import Config as uvConfig
 from uvicorn import Server as uvServer
@@ -55,7 +58,7 @@ WWW = FastAPI(
         Mount('/uploaded', StaticFiles(directory=UPLOAD_FOLDER), name='uploaded')
     ]
 )
-
+l_manager = LoginManager('prova-prova-prova', token_url='/auth/token', use_cookie=True, use_header=False)
 
 
 def list_resources():
@@ -65,6 +68,22 @@ def get_resources():
     return list(map(get_file_info, map(join, repeat(UPLOAD_FOLDER), listdir(UPLOAD_FOLDER))))
 
 
+@WWW.post('/auth/token')
+def login(response: Response, data: OAuth2PasswordRequestForm = Depends()):
+    if not Config.authenticate(data.username, data.password):
+        raise InvalidCredentialsException
+    
+    access_token = l_manager.create_access_token(data={'sub':data.username})
+    l_manager.set_cookie(response, access_token)
+    return {'access_token': access_token, 'token_type': 'bearer'}
+
+@WWW.get('/auth')
+def auth(response: Response, user=Depends(l_manager)):
+    # token = l_manager.create_access_token(data={'sub':user})
+    # l_manager.set_cookie(response, token)
+    # return response
+    print(user)
+    return response
 
 def get_current_username(credentials: HTTPBasicCredentials = Depends(AUTH)):
     if not Config.authenticate(credentials.username, credentials.password):
@@ -100,12 +119,12 @@ async def ui_websocket(websocket: WebSocket):
             break
 
 @WWW.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, username=Depends(l_manager)):
     global NEXT_CHANGE_TIME, CURRENT_ASSET, APT_THREAD
     # try:
-    credentials = await AUTH(websocket)
-    if credentials:
-        _ = get_current_username(credentials)
+    # credentials = await AUTH(websocket)
+    # if credentials:
+    #     _ = get_current_username(credentials)
     # except HTTPException as e:
     #     if e.status_code in [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN]:
     #         raise WebSocketException(status.WS_1008_POLICY_VIOLATION, e.detail)
@@ -509,6 +528,13 @@ def scheduler(request: Request, username: str = Depends(get_current_username)):
         # disp_size=get_display_size(),
         disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
+    ))
+
+@WWW.get('/login')
+def login_page(request: Request):
+    return TEMPLATES.TemplateResponse('login.html.j2', dict(
+        request=request,
+        hostname=get_hostname()
     ))
 
 @WWW.get("/settings", response_class=HTMLResponse)
