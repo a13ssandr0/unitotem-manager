@@ -112,6 +112,8 @@
         fileSelector.setAttribute('multiple', '');
         fileSelector.onchange = () => {if (fileSelector.files.length > 0)uploadFiles(Array.from(fileSelector.files), true)};
         
+        var connect_retry = 0;
+
         function connect() {
             const loc = window.location;
             var _ws = new WebSocket(`w${(loc.protocol === 'https:')?'s':''}s://${loc.host}/ws`);
@@ -197,23 +199,25 @@
                         new bootstrap.Modal(messageModal).show();
                         break;
 
+                    case 'connected':
+                        connect_retry = 0; // reset counter on successful connection
+                        break
+
                     default:
-                        // messageModal.querySelector('.modal-title').textContent = 'Unhandled command';
-                        // messageModal.querySelector('.modal-body h6').textContent = '';
-                        // messageModal.querySelector('.modal-body code').textContent = JSON.stringify(data, null, 4);
-                        // new bootstrap.Modal(messageModal).show();
                         break;
                 }
                 
             };
 
             _ws.onclose = e => {
-                console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
-                setTimeout(() => ws=connect(), 1000);
+                connect_retry++;
+                console.log('Socket is closed. Reconnect will be attempted in', connect_retry, 'second(s).', e.reason);
+                if (e.reason == 'Not Authenticated') location.reload();
+                setTimeout(() => ws=connect(), connect_retry*1000);
             };
 
             _ws.onerror = err => {
-                console.error('Socket encountered error: ', err.message, 'Closing socket');
+                console.error('Socket encountered error. Closing socket');
                 _ws.close();
             };
 

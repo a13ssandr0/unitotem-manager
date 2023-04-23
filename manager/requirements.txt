@@ -1,0 +1,17 @@
+fastapi
+fastapi_login
+natsort
+Pillow
+psutil
+pydantic
+PyJWT
+pymediainfo
+python_crontab
+python-multipart
+qrcode
+rpyc
+ruamel.yaml
+uvicorn[standard]
+validators
+jinja2
+Werkzeug

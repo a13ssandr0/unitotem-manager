@@ -5,8 +5,8 @@
 		}
 	],
 	"settings": {
-		"java.compile.nullAnalysis.mode": "automatic",
-		"java.configuration.updateBuildConfiguration": "interactive",
-		"git.terminalAuthentication": false
+		"git.terminalAuthentication": false,
+		"python.analysis.typeCheckingMode": "basic",
+    	"task.autoDetect": "off"
 	}
 }

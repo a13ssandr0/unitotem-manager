@@ -4,8 +4,9 @@ Dark theme
 Settings backup/restore not fully implemented
 Show last updates log if available
 Properly implement updates list tooltip!
-Create a login screen with hostname
-Create an info screen
+<!-- Create a login screen with hostname -->
+Redirect to home page if accessing login page from authenticated session
+<!-- Create an info screen -->
 Properly detect display, finish backend-viewer connection
 Use python's url validator instead of javascript's one
 <!-- Make the settings button a menu-button -->

@@ -14,4 +14,5 @@ debian/unitotem-manager
 debian/files
 __pycache__
 manager/uploaded
+.venv
 webview/node_modules

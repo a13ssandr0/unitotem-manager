@@ -3,6 +3,9 @@ from os.path import exists
 from re import compile
 from select import select
 from subprocess import PIPE, Popen, run
+from uuid import uuid4
+
+from crontab import CronTab
 
 upgradableRe = compile(r"(?P<package>.*)/(?P<origin>.*?) (?P<new_version>.*?) (?P<architecture>.*?) \[upgradable from: (?P<old_version>.*?)]")
 os_name_Re = compile(r'PRETTY_NAME="(.*?)"')
@@ -10,6 +13,42 @@ os_name_Re = compile(r'PRETTY_NAME="(.*?)"')
 _last_log = []
 REBOOT_REQ       = '/var/run/reboot-required'
 REBOOT_REQ_PKGS  = '/var/run/reboot-required.pkgs'
+
+class UniCron(CronTab):
+
+    _cron_re = compile(r'unitotem:-\)')
+
+    def new(self, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None, **_):
+        if cmd:
+            item = super().new(
+                '/usr/sbin/' + ('poweroff' if cmd == 'pwr' else 'reboot'),  #command
+                'unitotem:-)' + str(uuid4())                                #comment
+            )
+            if None not in [m, h, dom, mon, dow]:
+                item.setall(m,h,dom,mon,dow) #time
+            return True
+        else:
+            return False
+                            
+
+    def serialize(self):
+        return [{
+            'command': job.command,
+            'm': job.minute,
+            'h': job.hour,
+            'dom': job.dom,
+            'mon': job.month,
+            'dow': job.dow,
+            'enabled': job.enabled,
+            'comment': job.comment
+        } for job in self.find_comment(self._cron_re)]
+
+
+
+CRONTAB  = UniCron(user='root')
+
+
+#https://serverfault.com/questions/300749/apt-get-update-upgrade-list-without-changing-anything
 
 
 def apt_update(upgrade=False):
