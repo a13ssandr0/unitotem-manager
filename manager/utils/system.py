@@ -65,11 +65,11 @@ def apt_update(upgrade=False):
             for d in descriptors:
                 if d is sout and sout != None:
                     line = (True, sout.readline().decode())
-                    _last_log += line
+                    _last_log.append(line)
                     yield line
                 elif d is serr and serr != None:
                     line = (False, serr.readline().decode())
-                    _last_log += line
+                    _last_log.append(line)
                     yield line
     yield False
 

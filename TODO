@@ -1,13 +1,13 @@
 <!-- Settings/Network/wifi-scan -->
-Dark theme
 <!-- Images in settings breadcrumb -->
-Settings backup/restore not fully implemented
-Show last updates log if available
-Properly implement updates list tooltip!
+<!-- Show last updates log if available -->
 <!-- Create a login screen with hostname -->
-Redirect to home page if accessing login page from authenticated session
 <!-- Create an info screen -->
+<!-- Make the settings button a menu-button -->
+<!-- Properly implement updates list tooltip! -->
+Dark theme
+Settings backup/restore not fully implemented
+Redirect to home page if accessing login page from authenticated session
 Properly detect display, finish backend-viewer connection
 Use python's url validator instead of javascript's one
-<!-- Make the settings button a menu-button -->
 Use an svg for wifi qr code

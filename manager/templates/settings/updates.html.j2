@@ -2,11 +2,30 @@
 {% block content %}
 <h4>Updates</h4>
 <div class="mb-3 hstack gap-2">
-    <p class="my-auto" id="updateCount" data-bs-toggle="tooltip" data-bs-title="Default tooltip<br>aaa" data-bs-html="true" data-bs-placement="bottom"></p>
+    <p class="my-auto" id="updateCount"></p>
+    <div class="dropdown">
+        <button type="button" class="btn" data-bs-toggle="dropdown" aria-expanded="false" data-bs-reference="parent">
+            <i class="bi bi-info-circle"></i>
+        </button>
+        <div class="dropdown-menu" style="min-width: 30rem;">
+            <small>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Package</th>
+                            <th scope="col">Installed</th>
+                            <th scope="col">Available</th>
+                        </tr>
+                    </thead>
+                    <tbody id="upd-table"></tbody>
+                </table>
+            </small>
+        </div>
+    </div>
     <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="apt_update" onclick="sendCommand('settings/update')"></button>
     <button type="button" class="btn btn-sm btn-outline-danger" id="apt_upgrade" onclick="sendCommand('settings/update', {do_upgrade: true})"></button>
 </div>
-<div class="border rounded p-2" style="max-height: 20em; overflow-y: auto;" id="log_container"><small><code style="white-space: pre-wrap; color: grey;" id="log">No logs available</code></small></div>
+<div class="border rounded p-2" style="max-height: 30em; overflow-y: auto;" id="log_container"><small><code style="white-space: pre-wrap; color: grey;" id="log">No logs available</code></small></div>
 {% endblock content %}
 
 {% block init_cmds %}'settings/update/list', 'settings/update/status'{% endblock init_cmds %}
@@ -33,7 +52,16 @@ case 'settings/update/end':
 
 case 'settings/update/list':
     var cnt = data.updates.length;
-    byId('updateCount').innerHTML = `${cnt==0?'No':cnt} update${cnt==1?'':'s'} available`;
+    tooltip.innerHTML = `${cnt==0?'No':cnt} update${cnt==1?'':'s'} available`;
+    upd_table.innerHTML = '';
+    data.updates.forEach(pkg=>{
+        upd_table.innerHTML += `
+                <tr>
+                    <th scope="row">${pkg.package}</th>
+                    <td>${pkg.old_version}</td>
+                    <td>${pkg.new_version}</td>
+                </tr>`;
+    });
     break;
 
 case 'settings/update/status':
@@ -58,15 +86,14 @@ case 'settings/update/status':
     if (data.log.length){
         log_view.innerHTML='';
         data.log.forEach(line => log_view.innerHTML+=(line[0])?line[1]:`<span style="color: red;">${line[1]}</span>`);
-        {# data.log.forEach(l => console.log(l)); #}
         log_container.scrollTop = log_container.scrollHeight;
     }
     break;
 {% endblock recv_cmds %}
 
 {% block js %}
-const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+const tooltip = byId('updateCount');
+const upd_table = byId('upd-table');
 const log_view = byId('log');
 const log_container = byId('log_container');
 {% endblock js %}
