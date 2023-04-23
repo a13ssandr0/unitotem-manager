@@ -1,9 +1,11 @@
 {
     "version": "2.0.0",
-    "tasks": [{
-        "label": "userProc",
-        "command": "rpyc_classic", // Could be any other shell command
-        "type": "process",
-        "isBackground": true
-    }]
+    "tasks": [
+        {
+            "label": "userProc",
+            "command": "${workspaceFolder}/.venv/bin/rpyc_classic",
+            "type": "process",
+            "isBackground": true
+        }
+    ]
 }

@@ -22,7 +22,7 @@
     {{newFileModal() if cur_tab=='network'}}
     {{addPowerRuleModal() if cur_tab=='cron'}}
 
-    <main class="container-fluid col col-lg-10 mt-md-3 mt-1 mb-3">
+    <main class="container-fluid col mt-md-3 mt-1 mb-3">
         {% block main_content %}
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
@@ -31,14 +31,14 @@
             </ol>
         </nav>
         <div class="row">
-            <div class="col-3">
+            <div class="col-3 col-lg-2">
                 <div class="list-group list-group-flush border border-end-0 rounded pe-0">
                     {% for name, tab, _, icon in tabs%}
                     <a href="/settings/{{tab}}" class="list-group-item list-group-item-action{{' border-end' if cur_tab!=tab else ' disabled'}}"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a>
                     {% endfor %}
                 </div>
             </div>
-            <div class="col-9 ps-5">
+            <div class="col-9 col-lg-10 px-3">
                 {% block content %}{% endblock content %}
             </div>
         </div>
@@ -49,6 +49,7 @@
 
     <script src="/static/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
     <script src="/static/ace.js" type="text/javascript" charset="utf-8"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.2.1/chart.umd.min.js" integrity="sha512-GCiwmzA0bNGVsp1otzTJ4LWQT2jjGJENLGyLlerlzckNI30moi2EQT0AfRI7fLYYYDKR+7hnuh35r3y1uJzugw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script type="text/javascript" src="/static/jszip.min.js"></script>
     <script type="text/javascript" src="/static/jszip-utils.min.js"></script>
     <script type="text/javascript" charset="utf-8">
@@ -71,6 +72,8 @@
 
         {% block js %}{% endblock js %}
 
+        var connect_retry = 0;
+
         function connect() {
             const loc = window.location;
             var _ws = new WebSocket(`w${(loc.protocol === 'https:')?'s':''}s://${loc.host}/ws`);
@@ -87,6 +90,10 @@
                     
                     {% block recv_cmds %}{% endblock recv_cmds %}
 
+                    case 'settings/info':
+                        console.log(data)
+                        break;
+
                     case 'error':
                         messageModal.querySelector('.modal-title').textContent = 'Error';
                         messageModal.querySelector('.modal-body h6').textContent = 'Request returned ' + data.error;
@@ -95,22 +102,20 @@
                         break;
 
                     default:
-                        // messageModal.querySelector('.modal-title').textContent = 'Unhandled command';
-                        // messageModal.querySelector('.modal-body h6').textContent = '';
-                        // messageModal.querySelector('.modal-body code').textContent = JSON.stringify(data, null, 4);
-                        // new bootstrap.Modal(messageModal).show();
                         break;
                 }
                 
             };
 
             _ws.onclose = e => {
-                console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
-                setTimeout(() => ws=connect(), 1000);
+                connect_retry++;
+                console.log('Socket is closed. Reconnect will be attempted in', connect_retry, 'second(s).', e.reason);
+                if (e.reason == 'Not Authenticated') location.reload();
+                setTimeout(() => ws=connect(), connect_retry*1000);
             };
 
             _ws.onerror = err => {
-                console.error('Socket encountered error: ', err.message, 'Closing socket');
+                console.error('Socket encountered error. Closing socket');
                 _ws.close();
             };
 

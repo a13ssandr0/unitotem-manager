@@ -1,11 +1,14 @@
 from json import dumps
-from os.path import isfile, getsize, basename
+from os.path import basename, getsize, isfile
 
-from pymediainfo import MediaInfo
 from fastapi import WebSocket
 from PIL import Image
+from pymediainfo import MediaInfo
 from utils.audio import *
 from utils.configuration import *
+from utils.cpu import *
+from utils.lsblk import lsblk
+from utils.login import *
 from utils.network import *
 from utils.system import *
 
@@ -32,7 +35,10 @@ class ConnectionManager:
             await websocket.send_text(self.last)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        try:
+            self.active_connections.remove(websocket)
+        except ValueError:
+            pass #it's not necessary to crash if not present
 
     async def send(self, websocket: WebSocket, **kwargs):
         text = dumps(kwargs)
@@ -46,6 +52,8 @@ class ConnectionManager:
             await connection.send_text(text)
         if self.last != None:
             self.last = text
+
+
 
 
 

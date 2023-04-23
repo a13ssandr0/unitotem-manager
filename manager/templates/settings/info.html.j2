@@ -1,0 +1,325 @@
+{% extends "settings.html.j2" %}
+
+{% macro print_disks(blks, depth=0) %}
+    {% for disk in blks %}
+    <div class="row m-0 mb-1">
+        <div class="col-3" style="padding-left: {{depth * 0.5}}em !important"><small>
+            <span>{{disk.name}}</span>
+            {% if disk.fstype %}
+            <span class="badge rounded-pill text-bg-secondary">{{disk.fstype}}</span>
+            {% endif %}
+        </small></div>
+        <div class="col-9">
+        {% if disk.fsuse_perc != None %}
+            <div class="progress">
+                <div class="progress-bar" role="progressbar" aria-label="Buffer pages" style="width: {{disk.fsuse_perc}}%" aria-valuenow="{{disk.fsuse_perc}}" aria-valuemin="0" aria-valuemax="100">
+                    {{disk.fsused|filesizeformat(True)}}/{{disk.size|filesizeformat(True)}}
+                </div>
+            </div>
+            <small>{{disk.mountpoint}}</small>
+        {% else %}
+            <div class="text-end"><small>{{disk.size|filesizeformat(True)}}</small></div>
+        {% endif %}
+        </div>
+    </div>
+    {% if disk.children != None %}{{print_disks(disk.children, depth+1)}}{% endif %}
+    {% endfor %}
+{% endmacro %}
+
+
+{% block content %}
+<h4>System Info <small class="text-muted" id="uptime">()</small></h4>
+
+<div class="row">
+    <div class="col-12 col-lg-6 mb-2">
+        <p class="fw-bold mt-3 mb-1">CPU</p>
+        <canvas id="cpu-canvas"></canvas>
+        
+        
+        <p class="fw-bold mt-3 mb-1">Temperatures</p>
+        <small>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">Zone</th>
+                        <th scope="col">Sensor</th>
+                        <th scope="col" class="text-end">Temperature</th>
+                        <th scope="col" class="text-end">High</th>
+                        <th scope="col" class="text-end">Critical</th>
+                    </tr>
+                </thead>
+                <tbody id="temp-table">
+                    <tr>
+                        <th scope="row">1</th>
+                        <td>Mark</td>
+                        <td>Otto</td>
+                        <td>@mdo</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">2</th>
+                        <td>Jacob</td>
+                        <td>Thornton</td>
+                        <td>@fat</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">3</th>
+                        <td colspan="2">Larry the Bird</td>
+                        <td>@twitter</td>
+                    </tr>
+                </tbody>
+            </table>
+        </small>
+    </div>
+    <div class="col-12 col-lg-6 mb-2">
+        <p class="fw-bold mt-3 mb-1">RAM</p>
+        <div class="progress">
+            <div id="progress-used" class="progress-bar bg-success" role="progressbar" aria-label="Used memory pages" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            <div id="progress-buffer" class="progress-bar" role="progressbar" aria-label="Buffer pages" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            <div id="progress-cache" class="progress-bar bg-warning" role="progressbar" aria-label="Cache pages" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div class="row">
+            <div class="col-3"><span><span id="pill-used" class="badge rounded-pill text-bg-success"></span><small> Used</small></span></div>
+            <div class="col-3"><span><span id="pill-buffer" class="badge rounded-pill text-bg-primary"></span><small> Buffer</small></span></div>
+            <div class="col-3"><span><span id="pill-cache" class="badge rounded-pill text-bg-warning"></span><small> Cache</small></span></div>
+            <div class="col-3"><span><span id="pill-total" class="badge rounded-pill text-bg-light"></span><small> Total</small></span></div>
+        </div>
+
+
+        <p class="fw-bold mt-3 mb-1">Disks</p>
+        {{print_disks(disks)}}
+        
+        
+        {% if has_fans %}    
+        <p class="fw-bold mt-3 mb-1">Fans</p>
+        <ul id="fans-list" class="list-group list-group-flush"></ul>
+        {% endif %}
+        
+        
+        {% if has_battery %}    
+        <p class="fw-bold mt-3 mb-1">Battery</p>
+        <div class="progress">
+            <div id="bat-perc" class="progress-bar" role="progressbar" aria-label="Buffer pages" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <small>Time left: <span id="bat-time"></span> | <span id="bat-chg"></span></small>
+        {% endif %}
+
+        {# <p class="fw-bold mt-3 mb-1">Network</p> #}
+
+
+    </div>
+</div>
+
+
+{% endblock content %}
+
+{% block init_cmds %}'settings/info'{% endblock init_cmds %}
+
+<script type="text/javascript" charset="utf-8">
+{% block recv_cmds %}
+case 'settings/info':
+    console.log(data);
+
+    uptime.innerHTML = `(Uptime: ${data.uptime})`;
+
+    if (barChartData.labels.length == 0){
+        barChartData.labels = ['CPU'];
+        for(var i = 1; i<data.cpu.length; i++){
+            barChartData.labels.push('Core' + i);
+        }
+    }
+    barChartData.datasets.forEach(dataset => {dataset.data = []});
+    data.cpu.forEach((val, i) =>{
+        barChartData.datasets[0].data.push(val.nice);
+        barChartData.datasets[1].data.push(val.user);
+        barChartData.datasets[2].data.push(val.system);
+        barChartData.datasets[3].data.push(val.irq);
+        barChartData.datasets[4].data.push(val.softirq);
+        barChartData.datasets[5].data.push(val.iowait);
+    })
+    window.myBar.update();
+
+    prog_used.style = `width: ${data.vmem.used/data.vmem.total*100}%`;
+    prog_used.setAttribute('aria-valuenow', data.vmem.used/data.vmem.total*100);
+    pill_used.innerHTML = `<small>${human_readable_size(data.vmem.used)}</small>`;
+
+    prog_buffer.style = `width: ${data.vmem.buffers/data.vmem.total*100}%`;
+    prog_buffer.setAttribute('aria-valuenow', data.vmem.buffers/data.vmem.total*100);
+    pill_buffer.innerHTML = `<small>${human_readable_size(data.vmem.buffers)}</small>`;
+
+    prog_cache.style = `width: ${data.vmem.cached/data.vmem.total*100}%`;
+    prog_cache.setAttribute('aria-valuenow', data.vmem.cached/data.vmem.total*100);
+    pill_cache.innerHTML = `<small>${human_readable_size(data.vmem.cached)}</small>`;
+    
+    pill_total.innerHTML = `<small>${human_readable_size(data.vmem.total)}</small>`;
+
+    {% if has_battery %}    
+    bat_perc.style = `width: ${data.battery.percent}%`;
+    bat_perc.setAttribute('aria-valuenow', data.battery.percent);
+    bat_perc.innerHTML = `<small>${data.battery.percent}%</small>`;
+
+    var time = new Date(0);
+    time.setSeconds(data.battery.secsleft); // specify value for SECONDS here
+    bat_time.innerHTML = time.toISOString().substring(11, 19);
+
+    bat_chg.innerHTML = data.battery.power_plugged?'Charging':'Discharging';
+    {% endif %}
+
+    {% if has_fans %}
+    fans_list.innerHTML = '';
+    data.fans.forEach((fan, i) => {
+        fans_list.innerHTML += `
+            <li class="list-group-item d-flex justify-content-between align-items-center"><small>${fan.label || ('fan' + (i+1))}</small><small>${fan.current} rpm</small></li>`;
+    })
+    {% endif %}
+
+    temp_table.innerHTML = '';
+    Object.entries(data.temperatures).forEach((pair, i) => {
+        pair[1].forEach((temp, j)=>{
+            /* I don't think we need to display threshold values higher than
+             * solder reflow temperature, let alone temperatures hotter than
+             * THE SUN!
+             * Samsung nvme ssds report a high/critical temperature of 65261.85 °C
+             * Considering the Sun is at 5500 °C, we would have a problem if we
+             * reached this temperature, actually 59761.85 problems.
+            */
+            if (temp.high > 300) temp.high = null;
+            if (temp.critical > 300) temp.critical = null;
+            temp_table.innerHTML += `
+                <tr>
+                    <th scope="row">${(!j)?pair[0]:''}</th>
+                    <td>${temp.label}</td>
+                    <td class="text-end${(temp.high!=null && temp.current>temp.high)?' text-danger':''}">${temp.current} °C</td>
+                    <td class="text-end">${(temp.high!=null)?temp.high+' °C':''}</td>
+                    <td class="text-end">${(temp.critical!=null)?temp.critical+' °C':''}</td>
+                </tr>`;
+        })
+    })
+
+    break;
+{% endblock recv_cmds %}
+
+{% block js %}
+
+const uptime = byId('uptime');
+const temp_table = byId('temp-table');
+const prog_used = byId('progress-used');
+const prog_buffer = byId('progress-buffer');
+const prog_cache = byId('progress-cache');
+const pill_used = byId('pill-used');
+const pill_buffer = byId('pill-buffer');
+const pill_cache = byId('pill-cache');
+const pill_total = byId('pill-total');
+
+{% if has_battery %}    
+const bat_perc = byId('bat-perc');
+const bat_time = byId('bat-time');
+const bat_chg = byId('bat-chg');
+{% endif %}
+
+{% if has_fans %}
+const fans_list = byId('fans-list');
+{% endif %}
+
+const chartColors = {
+    red: 'rgb(255, 99, 132)',
+    orange: 'rgb(255, 159, 64)',
+    yellow: 'rgb(255, 205, 86)',
+    green: 'rgb(75, 192, 192)',
+    blue: 'rgb(54, 162, 235)',
+    purple: 'rgb(153, 102, 255)',
+    grey: 'rgb(201, 203, 207)'
+};
+const chartColors_transparent = {
+    red: 'rgba(255, 99, 132, 0.5)',
+    orange: 'rgba(255, 159, 64, 0.5)',
+    yellow: 'rgba(255, 205, 86, 0.5)',
+    green: 'rgba(75, 192, 192, 0.5)',
+    blue: 'rgba(54, 162, 235, 0.5)',
+    purple: 'rgba(153, 102, 255, 0.5)',
+    grey: 'rgba(201, 203, 207, 0.5)'
+};
+
+
+const barChartData = {
+    labels: [],
+    datasets: [{
+        label: 'Low (Nice)',
+        backgroundColor: chartColors_transparent.blue,
+        borderColor: chartColors.blue,
+        borderWidth: 1,
+        stack: 'stack0',
+        data: []
+    }, {
+        label: 'Normal (User)',
+        backgroundColor: chartColors_transparent.green,
+        borderColor: chartColors.green,
+        borderWidth: 1,
+        stack: 'stack0',
+        data: []
+    }, {
+        label: 'Kernel',
+        backgroundColor: chartColors_transparent.red,
+        borderColor: chartColors.red,
+        borderWidth: 1,
+        stack: 'stack0',
+        data: []
+    }, {
+        label: 'IRQ',
+        backgroundColor: chartColors_transparent.yellow,
+        borderColor: chartColors.yellow,
+        borderWidth: 1,
+        stack: 'stack0',
+        data: []
+    }, {
+        label: 'Soft IRQ',
+        backgroundColor: chartColors_transparent.purple,
+        borderColor: chartColors.purple,
+        borderWidth: 1,
+        stack: 'stack0',
+        data: []
+    }, {
+        label: 'IO Wait',
+        backgroundColor: chartColors_transparent.grey,
+        borderColor: chartColors.grey,
+        borderWidth: 1,
+        stack: 'stack0',
+        data: []
+    }]
+};
+
+window.onload = function() {
+    window.myBar = new Chart(byId("cpu-canvas").getContext("2d"), {
+        type: 'bar',
+        data: barChartData,
+        options: {
+            responsive: true,
+            legend: {
+                position: 'top',
+            },
+            {# scales: {
+                y: {
+                    min: 0,
+                    max: 100,
+                }
+            }, #}
+            title: {
+                display: true,
+                text: 'CPU Bar Chart'
+            }
+        }
+    });
+    setInterval(sendCommand, 3000, 'settings/info');
+};
+
+function human_readable_size(size, precision=3){
+    var unit;
+    for(unit of ['B','KiB','MiB','GiB','TiB']){
+        if (size < 1024.0)
+            break;
+        size /= 1024.0;
+    }
+    return size.toPrecision(precision) + unit;
+}
+
+{% endblock js %}
+</script>

@@ -1,13 +1,13 @@
 import asyncio
 from argparse import ArgumentParser
+from datetime import datetime, timedelta
 from io import BytesIO
 from itertools import repeat
 from json import dumps, loads
 from math import inf
-from os import listdir, makedirs, remove
+from os import cpu_count, listdir, makedirs, remove, urandom
 from os.path import dirname, exists, isfile, join, normpath
 from pathlib import Path
-from shutil import disk_usage
 from subprocess import run
 from threading import Thread
 from time import strftime, time
@@ -15,19 +15,21 @@ from traceback import format_exc, print_exc
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from crontab import CronTab
 from fastapi import (Depends, FastAPI, HTTPException, Request, Response,
-                     UploadFile, WebSocket, WebSocketDisconnect, WebSocketException, status)
+                     UploadFile, WebSocket, WebSocketDisconnect, status)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.routing import Mount
-from fastapi.security import HTTPBasic, HTTPBasicCredentials, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
-
+from jwt import InvalidSignatureError
+from natsort import natsorted
+from psutil import (boot_time, disk_partitions, disk_usage, net_if_stats,
+                    sensors_battery, sensors_fans, sensors_temperatures,
+                    virtual_memory)
 from utils import *
 from uvicorn import Config as uvConfig
 from uvicorn import Server as uvServer
@@ -39,26 +41,30 @@ VERSION = '2.3.0'
 
 
 APT_THREAD        = Thread(target=apt_update, name='update')
-AUTH              = HTTPBasic(realm='Unitotem@' + get_hostname())
 CFG_FILE          = Path('/etc/unitotem/unitotem.conf')
 CURRENT_ASSET     = -1
 DEF_WIFI_CARD     = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP        = None
-WS                = ConnectionManager()
+LOGMAN            = LoginManager(urandom(24).hex(), custom_exception=NotAuthenticatedException,
+                        token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(hours=5))
 NEXT_CHANGE_TIME  = 0
 OS_VERSION        = os_version()
 TEMPLATES         = Jinja2Templates(directory=join(dirname(__file__), 'templates'))
 
 UI_WS             = ConnectionManager(True)
 UPLOAD_FOLDER     = join(dirname(__file__), 'uploaded')
+WS                = ConnectionManager()
 WWW = FastAPI(
     title='UniTotem', version=VERSION,
     routes=[
         Mount('/static', StaticFiles(directory=join(dirname(__file__), 'static')), name='static'),
         Mount('/uploaded', StaticFiles(directory=UPLOAD_FOLDER), name='uploaded')
-    ]
+    ],
+    exception_handlers={
+        InvalidSignatureError: login_redir,
+        NotAuthenticatedException: login_redir
+    }
 )
-l_manager = LoginManager('prova-prova-prova', token_url='/auth/token', use_cookie=True, use_header=False)
 
 
 def list_resources():
@@ -68,37 +74,23 @@ def get_resources():
     return list(map(get_file_info, map(join, repeat(UPLOAD_FOLDER), listdir(UPLOAD_FOLDER))))
 
 
-@WWW.post('/auth/token')
-def login(response: Response, data: OAuth2PasswordRequestForm = Depends()):
+@LOGMAN.user_loader() # type: ignore
+async def load_user(username:str):
+    return username if username in Config.users else None
+
+
+
+
+@WWW.post(LOGMAN.tokenUrl)
+async def login(data: LoginForm = Depends()):
     if not Config.authenticate(data.username, data.password):
         raise InvalidCredentialsException
-    
-    access_token = l_manager.create_access_token(data={'sub':data.username})
-    l_manager.set_cookie(response, access_token)
-    return {'access_token': access_token, 'token_type': 'bearer'}
-
-@WWW.get('/auth')
-def auth(response: Response, user=Depends(l_manager)):
-    # token = l_manager.create_access_token(data={'sub':user})
-    # l_manager.set_cookie(response, token)
-    # return response
-    print(user)
-    return response
-
-def get_current_username(credentials: HTTPBasicCredentials = Depends(AUTH)):
-    if not Config.authenticate(credentials.username, credentials.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
-
-
-
-
-
-
+    expires_delta = timedelta(hours=1)
+    access_token = LOGMAN.create_access_token(data={'sub':data.username}, expires=expires_delta)
+    resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
+    resp.set_cookie(key=LOGMAN.cookie_name, value=access_token, httponly=False,
+                    samesite='strict', max_age=int(expires_delta.total_seconds()))
+    return resp
 
 
 @WWW.websocket("/ui_ws")
@@ -119,17 +111,21 @@ async def ui_websocket(websocket: WebSocket):
             break
 
 @WWW.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, username=Depends(l_manager)):
+async def websocket_endpoint(websocket: WebSocket):
     global NEXT_CHANGE_TIME, CURRENT_ASSET, APT_THREAD
-    # try:
-    # credentials = await AUTH(websocket)
-    # if credentials:
-    #     _ = get_current_username(credentials)
-    # except HTTPException as e:
-    #     if e.status_code in [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN]:
-    #         raise WebSocketException(status.WS_1008_POLICY_VIOLATION, e.detail)
+    
+    request = Request({'type': 'http'})
+    request._cookies = websocket.cookies
+    try:
+        await LOGMAN(request)
+    except NotAuthenticatedException:
+        await websocket.accept()
+        await websocket.close(1008, 'Not Authenticated')
+        return
+
     
     await WS.connect(websocket)
+    await WS.send(websocket, target='connected')
     while True:
         try:
             data = await websocket.receive_json()
@@ -183,7 +179,7 @@ async def websocket_endpoint(websocket: WebSocket, username=Depends(l_manager)):
                     await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
                     Config.save()
                     if index == CURRENT_ASSET:
-                        NEXT_CHANGE_TIME += (asset.duration or inf) - old_dur
+                        NEXT_CHANGE_TIME += (asset.duration or inf) - old_dur # type: ignore
 
                 case 'scheduler/delete':
                     index, asset = Config.get_asset(data['uuid'])
@@ -313,88 +309,62 @@ async def websocket_endpoint(websocket: WebSocket, username=Depends(l_manager)):
                     await WS.broadcast(target='settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
                 case 'settings/cron/job':
-                    with CronTab(user='root') as crontab:
-                        await WS.broadcast(target='settings/cron/job', jobs=[{
-                                'command': job.command,
-                                'm': str(job.minute),
-                                'h': str(job.hour),
-                                'dom': str(job.dom),
-                                'mon': str(job.month),
-                                'dow': str(job.dow),
-                                'enabled': job.enabled,
-                                'comment': job.comment
-                            } for job in filter(lambda j: j.comment.startswith('unitotem:-)'), crontab.crons)])
+                    CRONTAB.read()
+                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/cron/job/add':
-                    with CronTab(user='root') as crontab:
-                        if data['cmd'] in ['pwr', 'reb'] \
-                            and 'm' in data and 'h' in data \
-                            and 'dom' in data and 'mon' in data and 'dow' in data:
-                            crontab.new(
-                                '/usr/sbin/' + ('poweroff' if data['cmd'] == 'pwr' else 'reboot'),          #command
-                                'unitotem:-)' + str(uuid4())).setall(                                       #comment
-                                    data['m'],data['h'],data['dom'],data['mon'],data['dow'])                #time
-                        await WS.broadcast(target='settings/cron/job', jobs=[{
-                                'command': job.command,
-                                'm': str(job.minute),
-                                'h': str(job.hour),
-                                'dom': str(job.dom),
-                                'mon': str(job.month),
-                                'dow': str(job.dow),
-                                'enabled': job.enabled,
-                                'comment': job.comment
-                            } for job in filter(lambda j: j.comment.startswith('unitotem:-)'), crontab.crons)])
+                    CRONTAB.read()
+                    if CRONTAB.new(**data):
+                        CRONTAB.write()
+                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/cron/job/set_state':
-                    with CronTab(user='root') as crontab:
-                        try:
-                            next(crontab.find_comment(data['job'])).enable(data['state'])
-                        except StopIteration:
-                            await WS.send(websocket, target='error', error='Not found', extra='Requested job does not exist')
-                        await WS.broadcast(target='settings/cron/job', jobs=[{
-                                'command': job.command,
-                                'm': str(job.minute),
-                                'h': str(job.hour),
-                                'dom': str(job.dom),
-                                'mon': str(job.month),
-                                'dow': str(job.dow),
-                                'enabled': job.enabled,
-                                'comment': job.comment
-                            } for job in filter(lambda j: j.comment.startswith('unitotem:-)'), crontab.crons)])
+                    CRONTAB.read()
+                    try:
+                        next(CRONTAB.find_comment(data['job'])).enable(data['state'])
+                        CRONTAB.write()
+                    except StopIteration:
+                        await WS.send(websocket, target='error', error='Not found', extra='Requested job does not exist')
+                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/cron/job/delete':
-                    with CronTab(user='root') as crontab:
-                        crontab.remove_all(comment=data['job'])
-                        await WS.broadcast(target='settings/cron/job', jobs=[{
-                                'command': job.command,
-                                'm': str(job.minute),
-                                'h': str(job.hour),
-                                'dom': str(job.dom),
-                                'mon': str(job.month),
-                                'dow': str(job.dow),
-                                'enabled': job.enabled,
-                                'comment': job.comment
-                            } for job in filter(lambda j: j.comment.startswith('unitotem:-)'), crontab.crons)])
+                    CRONTAB.read()
+                    CRONTAB.remove_all(comment=data['job'])
+                    CRONTAB.write()
+                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/cron/job/edit':
-                    with CronTab(user='root') as crontab:
-                        job = next(crontab.find_comment(data['job'])) #handle job not found
-                        if 'm' in data and 'h' in data and 'dom' in data and 'mon' in data and 'dow' in data:
+                    CRONTAB.read()
+                    try:
+                        job = next(CRONTAB.find_comment(data['job']))
+                        if all([x in data and data[x] != None for x in ['m', 'h', 'dom', 'mon', 'dow']]):
                             job.setall(data['m'],data['h'],data['dom'],data['mon'],data['dow'])
                         if data.get('cmd') == 'pwr':
                             job.set_command('/usr/sbin/poweroff')
                         elif data.get('cmd') == 'reb':
                             job.set_command('/usr/sbin/reboot')
-                        await WS.broadcast(target='settings/cron/job', jobs=[{
-                                'command': job.command,
-                                'm': str(job.minute),
-                                'h': str(job.hour),
-                                'dom': str(job.dom),
-                                'mon': str(job.month),
-                                'dow': str(job.dow),
-                                'enabled': job.enabled,
-                                'comment': job.comment
-                            } for job in filter(lambda j: j.comment.startswith('unitotem:-)'), crontab.crons)])
+                        CRONTAB.write()
+                    except StopIteration:
+                        await WS.send(websocket, target='error', error='Not found', extra='Requested job does not exist')
+                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
+
+                case 'settings/info':
+                    cpu_percent = []
+                    for x in cpu_times_percent(None):
+                        y = x._asdict()
+                        y['total'] = round(sum(x)-x.idle-x.guest-x.guest_nice-x.iowait,1)
+                        cpu_percent.append(y)
+                    # cpu_count()
+                    await WS.send(
+                        websocket=websocket,
+                        target='settings/info',
+                        uptime = str(datetime.fromtimestamp(time()) - datetime.fromtimestamp(boot_time())).split('.')[0],
+                        cpu = cpu_percent,
+                        battery = sensors_battery()._asdict() if sensors_battery() else None,
+                        fans = [x._asdict() for v in sensors_fans().values() for x in v],
+                        temperatures = {k:[x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k,v in sensors_temperatures().items()},
+                        vmem = virtual_memory()._asdict(),
+                    )
 
                 case _:
                     await WS.send(websocket, target='error', error='Invalid command', extra=dumps(data, indent=4))
@@ -405,6 +375,7 @@ async def websocket_endpoint(websocket: WebSocket, username=Depends(l_manager)):
         except Exception:
             await WS.send(websocket, target='error', error='Exception', extra=format_exc())
             print_exc()
+    WS.disconnect(websocket)
 
 
 # def check_attrs(d: dict, attr: list[tuple[str, type | tuple[type]]]):
@@ -418,7 +389,7 @@ async def websocket_endpoint(websocket: WebSocket, username=Depends(l_manager)):
 #     return missing, mistyped
 
 @WWW.post("/api/settings/set_passwd")
-async def set_pass(request: Request, response: Response, password:str, username: str = Depends(get_current_username)):
+async def set_pass(request: Request, response: Response, password:str, username: str = Depends(LOGMAN)):
     Config.change_password(username, password)
     Config.save()
     if 'Referer' in request.headers:
@@ -426,7 +397,7 @@ async def set_pass(request: Request, response: Response, password:str, username:
 
 
 @WWW.post("/api/scheduler/upload")
-async def media_upload(response: Response, files: list[UploadFile], username: str = Depends(get_current_username)):
+async def media_upload(response: Response, files: list[UploadFile], username: str = Depends(LOGMAN)):
     makedirs(UPLOAD_FOLDER, exist_ok=True)
     for infile in files:
         if infile and infile.filename:
@@ -447,7 +418,7 @@ async def media_upload(response: Response, files: list[UploadFile], username: st
     response.status_code = status.HTTP_201_CREATED
 
 @WWW.get("/backup")
-def create_backup(include_uploaded: bool = False, username: str = Depends(get_current_username)):
+async def create_backup(include_uploaded: bool = False, username: str = Depends(LOGMAN)):
     global VERSION, UPLOAD_FOLDER
     config_backup = {
         "version": VERSION,
@@ -469,7 +440,7 @@ def create_backup(include_uploaded: bool = False, username: str = Depends(get_cu
         headers={'Content-Disposition': 'attachment; filename="' + strftime('unitotem-manager-%Y%m%d-%H%M%S.zip') + '"'})
 
 @WWW.post("/backup", status_code=status.HTTP_204_NO_CONTENT)
-def load_backup(backup_file: UploadFile, options: dict[str, bool], username: str = Depends(get_current_username)):
+async def load_backup(backup_file: UploadFile, options: dict[str, bool], username: str = Depends(LOGMAN)):
     global CURRENT_ASSET, NEXT_CHANGE_TIME, UPLOAD_FOLDER
     if backup_file.content_type not in ['application/octet-stream', 'application/zip']:
         with ZipFile(backup_file.stream._file) as zip_file:
@@ -498,7 +469,7 @@ def load_backup(backup_file: UploadFile, options: dict[str, bool], username: str
         raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail='Wrong mimetype: ' + backup_file.content_type)
             
 @WWW.delete('/backup', status_code=status.HTTP_204_NO_CONTENT)
-def factory_reset(username: str = Depends(get_current_username)):
+async def factory_reset(username: str = Depends(LOGMAN)):
     global CURRENT_ASSET, NEXT_CHANGE_TIME
     Config.reset()
     # if isfile(ASOUND_CONF): remove(ASOUND_CONF)
@@ -507,7 +478,7 @@ def factory_reset(username: str = Depends(get_current_username)):
     NEXT_CHANGE_TIME = 0
 
 @WWW.get("/", response_class=HTMLResponse)
-def scheduler(request: Request, username: str = Depends(get_current_username)):
+async def scheduler(request: Request, username:str = Depends(LOGMAN)):
     return TEMPLATES.TemplateResponse('index.html.j2', dict(
         request=request,
         ut_vers=VERSION,
@@ -518,29 +489,41 @@ def scheduler(request: Request, username: str = Depends(get_current_username)):
         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
     ))
 
-@WWW.get("/2", response_class=HTMLResponse)
-def scheduler(request: Request, username: str = Depends(get_current_username)):
-    return TEMPLATES.TemplateResponse('index2.html.j2', dict(
-        request=request,
-        ut_vers=VERSION,
-        logged_user=username,
-        hostname=get_hostname(),
-        # disp_size=get_display_size(),
-        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
-        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
-    ))
+# @WWW.get("/2", response_class=HTMLResponse)
+# def scheduler(request: Request, username: str = Depends(l_manager)):
+#     return TEMPLATES.TemplateResponse('index2.html.j2', dict(
+#         request=request,
+#         ut_vers=VERSION,
+#         logged_user=username,
+#         hostname=get_hostname(),
+#         # disp_size=get_display_size(),
+#         disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
+#         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
+#     ))
 
 @WWW.get('/login')
-def login_page(request: Request):
+async def login_page(request: Request, src:str|None = '/'):
+    try:
+        await LOGMAN(request)
+        # why are you trying to access login page from an authenticated session?
+        return RedirectResponse(src or '/')
+    except NotAuthenticatedException:
+        pass
+
+    ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse('login.html.j2', dict(
         request=request,
+        src=src,
+        ut_vers=VERSION,
+        os_vers=OS_VERSION,
+        ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname()
     ))
 
 @WWW.get("/settings", response_class=HTMLResponse)
 @WWW.get("/settings/{tab}", response_class=HTMLResponse)
-def settings(request: Request, tab: str = 'main_menu', username: str = Depends(get_current_username)):
-    return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', dict(
+async def settings(request: Request, tab: str = 'main_menu', username: str = Depends(LOGMAN)):
+    data = dict(
         request=request,
         ut_vers=VERSION,
         logged_user=username,
@@ -549,10 +532,17 @@ def settings(request: Request, tab: str = 'main_menu', username: str = Depends(g
         disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total),
         def_wifi=DEF_WIFI_CARD
-    ))
+    )
+    if tab == 'info':
+        data['disks'] = [blk.dict() for blk in lsblk()] # type: ignore
+        # data['net_addrs'] = do_ip_addr() # type: ignore
+        data['has_battery'] = sensors_battery() != None
+        data['has_fans'] = bool(sensors_fans()) # type: ignore
+    
+    return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
 
 @WWW.get("/unitotem-no-assets", response_class=HTMLResponse)
-def no_assets_page(request: Request):
+async def no_assets_page(request: Request):
     ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse('no-assets.html.j2', dict(
         request=request,
@@ -563,7 +553,7 @@ def no_assets_page(request: Request):
     ))
 
 @WWW.get("/unitotem-first-boot", response_class=HTMLResponse)
-def first_boot_page(request: Request):
+async def first_boot_page(request: Request):
     ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse('first-boot.html.j2', dict(
         request=request,

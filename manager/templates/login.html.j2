@@ -10,31 +10,32 @@
     <link rel="stylesheet" href="/static/bootstrap-icons.css">
 </head>
 <body style="height: 100%;">
-    <div class="d-flex align-items-center justify-content-center mt-5">
-        <div class="card">
+    <div class="container-fluid col col-sm-5 mt-5 pt-5">
+        <div class="card shadow">
             <div class="card-header text-center">
-                Login
+                UniTotem {{ut_vers}} - {{ hostname }}
             </div>
             <div class="card-body">
-                <h5 class="card-title text-center">{{ hostname }}</h5>
+                <h5 class="card-title text-center mb-4">Login</h5>
                 <form action="/auth/token" method="post">
                     <div class="mb-3">
                         <label for="exampleInputEmail1" class="form-label">Username</label>
-                        <input name="username" type="text" class="form-control" id="exampleInputEmail1" aria-describedby="emailHelp">
+                        <input name="username" type="text" class="form-control" id="inputUsername">
                     </div>
                     <div class="mb-3">
                         <label for="exampleInputPassword1" class="form-label">Password</label>
-                        <input name="password" type="password" class="form-control" id="exampleInputPassword1">
+                        <input name="password" type="password" class="form-control" id="inputPassword">
                     </div>
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="exampleCheck1">
                         <label class="form-check-label" for="exampleCheck1">Remember me</label>
                     </div>
-                    <button type="submit" class="btn btn-primary float-end">Submit</button>
+                    <input type="hidden" name="src" value="{{src}}">
+                    <button type="submit" class="btn btn-primary float-end">Login</button>
                 </form>
             </div>
             <div class="card-footer text-muted text-center">
-                2 days ago
+                {{ ip_addr }} | {{os_vers}}
             </div>
         </div>
     </div>
