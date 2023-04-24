@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/manager/main.py",
             // "args": ["--no-gui"],
             "console": "integratedTerminal",
-            "preLaunchTask": "userProc",
+            // "preLaunchTask": "userProc",
             "justMyCode": true,
             "sudo": true
         },

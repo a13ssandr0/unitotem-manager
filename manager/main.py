@@ -157,6 +157,9 @@ async def websocket_endpoint(websocket: WebSocket):
                             await WS.send(websocket, target='scheduler/asset', error='Invalid elements', extra=invalid)
                     await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
 
+                case 'scheduler/validate_url':
+                    await WS.send(websocket, target='scheduler/validate_url', valid=bool(is_valid_url(data['url'])))
+
                 case 'scheduler/asset/current':
                     if CURRENT_ASSET >= 0:
                         await WS.broadcast(target='scheduler/asset/current', uuid=Config.assets[CURRENT_ASSET].uuid)

@@ -11,6 +11,8 @@ from subprocess import PIPE, Popen, check_output, run
 from typing import Union
 
 from qrcode import make as make_qr
+from qrcode.constants import ERROR_CORRECT_Q
+from qrcode.image.svg import SvgPathFillImage
 from ruamel.yaml import YAML
 
 
@@ -142,9 +144,10 @@ def stop_hostpot():
         run(['netplan', 'apply'])
 
 def wifi_qr(ssid, passwd):
-    buffered = BytesIO()
-    make_qr(f'WIFI:S:{ssid};T:WPA;P:{passwd};;').save(buffered, format="PNG")
-    return b64encode(buffered.getvalue()).decode()
+    return sub(r'(?:(?:width)|(?:height))=\".*?mm"', '',
+        make_qr(f'WIFI:S:{ssid};T:WPA;P:{passwd};;',
+            error_correction=ERROR_CORRECT_Q,
+            image_factory=SvgPathFillImage).to_string().decode())
 
 # from https://github.com/iancoleman/python-iwlist
 # NO license provided

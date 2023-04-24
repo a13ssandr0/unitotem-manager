@@ -5,9 +5,9 @@
 <!-- Create an info screen -->
 <!-- Make the settings button a menu-button -->
 <!-- Properly implement updates list tooltip! -->
+<!-- Redirect to home page if accessing login page from authenticated session -->
+<!-- Use python's url validator instead of javascript's one -->
+<!-- Use an svg for wifi qr code -->
 Dark theme
 Settings backup/restore not fully implemented
-Redirect to home page if accessing login page from authenticated session
 Properly detect display, finish backend-viewer connection
-Use python's url validator instead of javascript's one
-Use an svg for wifi qr code

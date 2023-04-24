@@ -106,6 +106,7 @@
         });
 
         const asset_table = byId('asset_table');
+        const modal_input_url = byId('modal_input_url');
 
         var fileSelector = document.createElement('input');
         fileSelector.setAttribute('type', 'file');
@@ -155,6 +156,16 @@
                             `;
                         }
                         break;
+
+                    case 'scheduler/validate_url':
+                        if (modal_input_url.value.length && !data.valid){
+                            bootstrap.Popover.getOrCreateInstance(modal_input_url, {container: 'body', content: 'Invalid url', placement: 'bottom'}).show();
+                            modal_input_url.className = "border border-danger border-2 form-control";
+                        } else {
+                            bootstrap.Popover.getOrCreateInstance(modal_input_url).dispose();
+                            modal_input_url.className = "form-control";
+                        }
+                        break;
                     
                     case 'scheduler/asset/current':
                         [... asset_table.children].forEach((element) => {
@@ -188,7 +199,7 @@
 
                     case 'scheduler/asset/current':
                         document.getElementsByName('asset-row').forEach(element => 
-                            element.classList.toggle('table-active', element.id == 'icon-' + data.uuid)
+                            element.classList.toggle('table-active', element.id == ('icon-' + data.uuid))
                         );
                         break;
 
@@ -227,19 +238,6 @@
         var ws = connect();
 
 
-
-
-
-
-        
-
-
-
-
-
-
-
-        function isValidUrl(urlString){try{return Boolean(new URL(urlString));} catch(e){return false;}}
         
         function readyStateHandler(xhttp, on_success, on_error){
             if (xhttp.readyState == 4){
@@ -312,18 +310,10 @@
             checkedfiles = {};
         }
 
-        byId('modal_input_url').oninput  = (event) => {
-            if (byId('modal_input_url').value.length && !isValidUrl(byId('modal_input_url').value)){
-                bootstrap.Popover.getOrCreateInstance(byId('modal_input_url'), {container: 'body', content: 'Invalid url', placement: 'bottom'}).show();
-                byId('modal_input_url').className = "border border-danger border-2 form-control";
-            } else {
-                bootstrap.Popover.getOrCreateInstance(byId('modal_input_url')).hide();
-                byId('modal_input_url').className = "form-control";
-            }
-        }
-        byId('add_asset_btn').onclick    = () => {
+        modal_input_url.oninput = () => sendCommand('scheduler/validate_url', {url: modal_input_url.value});
+        byId('add_asset_btn').onclick = () => {
             var tmp = {items: {}};
-            tmp.items[byId('modal_input_url').value] = {duration: byId('modal_input_duration').value};
+            tmp.items[modal_input_url.value] = {duration: byId('modal_input_duration').value};
             sendCommand('scheduler/asset', tmp);
         }
 
