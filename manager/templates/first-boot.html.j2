@@ -5,32 +5,112 @@
     <title>UniTotem Manager</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="/static/bootstrap.min.css" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
     <style>
-        body {background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);background-size: 400% 400%;animation: gradient 5s ease infinite;height: 100vh;color: white;}
-        @keyframes gradient {0% {background-position: 0% 50%;}50% {background-position: 100% 50%;}100% {background-position: 0% 50%;}}
-        .welcome {transform: scale(0.75);animation: scale 3s forwards cubic-bezier(0.5, 1, 0.89, 1);}
-        @keyframes scale {100% {transform: scale(1);}}
-        span {opacity: 0;filter: blur(4px);}
-        span:nth-child(1) {animation: fade-in 0.8s 0.1s forwards cubic-bezier(0.11, 0, 0.5, 0);}
-        span:nth-child(2) {animation: fade-in 0.8s 1s forwards cubic-bezier(0.11, 0, 0.5, 0);}
-        span:nth-child(3) {animation: fade-in 0.8s 2s forwards cubic-bezier(0.11, 0, 0.5, 0);}
-        @keyframes fade-in {100% {opacity: 1;filter: blur(0);}}
-        code {background: #f2f1f1;border-radius: 0.25rem;padding: .125rem .25rem;width: -webkit-fit-content;width: -moz-fit-content;width: fit-content;}
+        body {
+            background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+            background-size: 400% 400%;
+            animation: gradient 5s ease infinite;
+            height: 100vh;
+            color: white;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+        }
+        @keyframes gradient {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+        .welcome {
+            transform: scale(0.75);
+            animation: scale 3s forwards cubic-bezier(0.5, 1, 0.89, 1);
+        }
+        @keyframes scale {
+            100% {
+                transform: scale(1);
+            }
+        }
+        span {
+            opacity: 0;
+            filter: blur(4px);
+        }
+        span:nth-child(1) {
+            animation: fade-in 0.8s 0.1s forwards cubic-bezier(0.11, 0, 0.5, 0);
+        }
+        span:nth-child(2) {
+            animation: fade-in 0.8s 1s forwards cubic-bezier(0.11, 0, 0.5, 0);
+        }
+        span:nth-child(3) {
+            animation: fade-in 0.8s 2s forwards cubic-bezier(0.11, 0, 0.5, 0);
+        }
+        @keyframes fade-in {
+            100% {
+                opacity: 1;
+                filter: blur(0);
+            }
+        }
+        code {
+            background: #f2f1f1;
+            color: #d63384;
+            border-radius: 0.25vw;
+            padding: .125vw .25vw;
+            width: -webkit-fit-content;
+            width: -moz-fit-content;
+            width: fit-content;
+        }
+        svg {
+            width: 20vw;
+        }
+        h1 {
+            font-size: 3.5vw;
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            font-weight: 500;
+            line-height: 1.2;
+        }
+        h5 {
+            font-size: 1.5vw;
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            font-weight: 500;
+            line-height: 1.2;
+        }
+        .qr {
+            margin-top: 3.5rem;
+            text-align: center;
+        }
+        main {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+        }
+        .sysinfo {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            margin: 1vw;
+        }
     </style>
 </head>
 
 <body>
-    <main class="position-absolute top-50 start-50 translate-middle">
-        <span><h1 class="mx-auto text-center welcome"><b>Welcome to UniTotem</b></h1></span>
+    <main>
+        <span><h1 class="welcome"><b>Welcome to UniTotem</b></h1></span>
         {% if wifi %}
-        <span><h5 class="mx-auto text-center welcome">Connect to <code>{{wifi.ssid}}</code> wifi with password <code>{{wifi.password}}</code> to begin.</h5></span>
-        <span><div class="mx-auto text-center welcome"><img src="data:image/png;base64,{{wifi.qrcode}}" /></div></span>
+        <span><h5 class="welcome">Connect to <code>{{wifi.ssid}}</code> wifi with password <code>{{wifi.password}}</code> to begin.</h5></span>
+        <span><div class="qr welcome">{{wifi.qrcode|safe}}</div></span>
         {% endif %}
     </main>
 
-    <div class="position-absolute bottom-0 start-0 ms-3">
-        <p>UniTotem {{ut_vers}}<br>Running on {{os_vers}}<br>IP address: {{ip_addr}}<br>Hostname: {{hostname}}</p>
+    <div class="sysinfo">
+        <p style="font-size: 1vw; margin-block:0;">UniTotem {{ut_vers}}<br>Running on {{os_vers}}<br>IP address: {{ip_addr}}<br>Hostname: {{hostname}}</p>
     </div>
 </body>
 
