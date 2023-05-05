@@ -12,17 +12,18 @@
     <link id="favicon" rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/bootstrap.min.css" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
     <link rel="stylesheet" href="/static/bootstrap-icons.css">
-    <style> .hdr { background-color: #7431F9; color: white; } </style>
+    <style> html {font-size: 14px} .hdr { background-color: #7431F9; color: white; } </style>
 </head>
 
 <body>
-    {{header(isindex=false)}}
     {{confirmModal()}}
     {{messageModal()}}
     {{newFileModal() if cur_tab=='network'}}
     {{addPowerRuleModal() if cur_tab=='cron'}}
 
-    <main class="container-fluid col mt-md-3 mt-1 mb-3">
+    {{header(request, isindex=false)}}
+
+    <main class="col-8 mt-md-3 mt-1 mb-3">
         {% block main_content %}
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
@@ -31,14 +32,8 @@
             </ol>
         </nav>
         <div class="row">
-            <div class="col-3 col-lg-2">
-                <div class="list-group list-group-flush border border-end-0 rounded pe-0">
-                    {% for name, tab, _, icon in tabs%}
-                    <a href="/settings/{{tab}}" class="list-group-item list-group-item-action{{' border-end' if cur_tab!=tab else ' disabled'}}"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="col-9 col-lg-10 px-3">
+            
+            <div class="px-3">
                 {% block content %}{% endblock content %}
             </div>
         </div>

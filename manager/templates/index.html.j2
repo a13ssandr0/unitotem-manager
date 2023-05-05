@@ -39,7 +39,7 @@
     </div> -->
 
     
-    {{header(true)}}
+    {{header(request, true)}}
     {{confirmModal()}}
     {{newAssetModal()}}
     {{messageModal()}}
@@ -191,6 +191,13 @@
 
                     case 'settings/default_duration':
                         byId('modal_input_duration').value = data.duration;
+                        break;
+
+                    case 'settings/display/bounds':
+                        byId('display_bounds').innerHTML = 
+                            (data.bounds.width && data.bounds.height)?
+                                `${data.bounds.width}x${data.bounds.height}`:
+                                'Not connected';
                         break;
                     
                     case 'settings/hostname':

@@ -1,9 +1,7 @@
 from json import dumps
-from os.path import basename, getsize, isfile
 
 from fastapi import WebSocket
 from PIL import Image
-from pymediainfo import MediaInfo
 from utils.audio import *
 from utils.configuration import *
 from utils.cpu import *
@@ -11,6 +9,8 @@ from utils.lsblk import lsblk
 from utils.login import *
 from utils.network import *
 from utils.system import *
+from utils.objs import *
+from utils.files import *
 
 
 class ConnectionManager:
@@ -40,14 +40,14 @@ class ConnectionManager:
         except ValueError:
             pass #it's not necessary to crash if not present
 
-    async def send(self, websocket: WebSocket, **kwargs):
-        text = dumps(kwargs)
+    async def send(self, websocket: WebSocket, target: str, **kwargs):
+        text = dumps({'target': target, **kwargs})
         await websocket.send_text(text)
         if self.last != None:
             self.last = text
 
-    async def broadcast(self, **kwargs):
-        text = dumps(kwargs)
+    async def broadcast(self, target: str, **kwargs):
+        text = dumps({'target': target, **kwargs})
         for connection in self.active_connections:
             await connection.send_text(text)
         if self.last != None:
@@ -70,37 +70,6 @@ def get_dominant_color(pil_img, palette_size=16): # https://stackoverflow.com/a/
     dominant_color = palette[palette_index*3:palette_index*3+3]
     return hex((dominant_color[0]<<16) + (dominant_color[1]<<8) + dominant_color[2])
 
-def human_readable_size(size, decimal_places=2):
-    for unit in ['B','KiB','MiB','GiB','TiB']:
-        if size < 1024.0:
-            break
-        size /= 1024.0
-    return f"{size:.{decimal_places}f}{unit}"
-
-def find_by_attribute(l:list, key, value, default:int=None):
-    for index, elem in enumerate(l):
-        if key in elem and elem[key] == value:
-            return index
-    else:
-        if default == None:
-            raise ValueError(f'No element with {repr(key)}: {repr(value)} in list')
-        else:
-            return default
-
-def get_file_info(b, *f):
-    dur = None
-    dur_s = Config.def_duration
-    if isfile(f := join(b, *f)):
-        for track in MediaInfo.parse(f).tracks:
-            track_data = track.to_data()
-            if 'duration' in track_data:
-                dur = track_data.get('other_duration', [None])[0]
-                dur_s = round(int(track_data['duration'])/1000)
-                break
-    return {
-        'filename': basename(f), 'duration': dur, 'duration_s': dur_s,
-        'size': human_readable_size(getsize(f))
-    }
 
 # Taken from raspi-config, not needed as of now, maybe in the future...
 
