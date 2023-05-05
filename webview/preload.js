@@ -5,5 +5,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getBounds: () => ipcRenderer.invoke('mainWindow:getBounds'),
     setBounds: (x, y, w, h) => ipcRenderer.invoke('mainWindow:setBounds', x, y, w, h),
     getAllowInsecureCerts: () => ipcRenderer.invoke('config:getAllowInsecureCerts'),
-    setAllowInsecureCerts: (allow) => ipcRenderer.invoke('config:setAllowInsecureCerts'),
+    setAllowInsecureCerts: (allow) => ipcRenderer.invoke('config:setAllowInsecureCerts', allow),
 })

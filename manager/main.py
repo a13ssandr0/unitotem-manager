@@ -2,19 +2,18 @@ import asyncio
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
 from io import BytesIO
-from itertools import repeat
 from json import dumps, loads
 from math import inf
-from os import cpu_count, listdir, makedirs, remove, urandom
+from os import environ, listdir, makedirs, remove, urandom
 from os.path import dirname, exists, isfile, join, normpath
 from pathlib import Path
 from subprocess import run
 from threading import Thread
 from time import strftime, time
 from traceback import format_exc, print_exc
-from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from dotenv import load_dotenv, set_key
 from fastapi import (Depends, FastAPI, HTTPException, Request, Response,
                      UploadFile, WebSocket, WebSocketDisconnect, status)
 from fastapi.middleware import Middleware
@@ -27,9 +26,8 @@ from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
 from jwt import InvalidSignatureError
 from natsort import natsorted
-from psutil import (boot_time, disk_partitions, disk_usage, net_if_stats,
-                    sensors_battery, sensors_fans, sensors_temperatures,
-                    virtual_memory)
+from psutil import (boot_time, disk_usage, sensors_battery, sensors_fans,
+                    sensors_temperatures, virtual_memory)
 from utils import *
 from uvicorn import Config as uvConfig
 from uvicorn import Server as uvServer
@@ -45,7 +43,13 @@ CFG_FILE          = Path('/etc/unitotem/unitotem.conf')
 CURRENT_ASSET     = -1
 DEF_WIFI_CARD     = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP        = None
-LOGMAN            = LoginManager(urandom(24).hex(), custom_exception=NotAuthenticatedException,
+DISPLAY           = None
+load_dotenv('/etc/unitotem/unitotem.env')
+if 'auth_token' not in environ:
+    environ['auth_token'] = urandom(24).hex()
+    Path('/etc/unitotem/unitotem.env').touch(mode=0o600)
+    set_key('/etc/unitotem/unitotem.env', 'auth_token', environ['auth_token'])
+LOGMAN            = LoginManager(environ['auth_token'], custom_exception=NotAuthenticatedException,
                         token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(hours=5))
 NEXT_CHANGE_TIME  = 0
 OS_VERSION        = os_version()
@@ -71,7 +75,10 @@ def list_resources():
     return list(filter(lambda f: isfile(join(UPLOAD_FOLDER, f)), listdir(UPLOAD_FOLDER)))
 
 def get_resources():
-    return list(map(get_file_info, map(join, repeat(UPLOAD_FOLDER), listdir(UPLOAD_FOLDER))))
+    infos = []
+    for f in list_resources():
+        infos.append(get_file_info(UPLOAD_FOLDER, f, def_dur=Config.def_duration))
+    return infos
 
 
 @LOGMAN.user_loader() # type: ignore
@@ -95,17 +102,19 @@ async def login(data: LoginForm = Depends()):
 
 @WWW.websocket("/ui_ws")
 async def ui_websocket(websocket: WebSocket):
+    global DISPLAY
     await UI_WS.connect(websocket)
-    # await 
     while True:
         try:
             data = await websocket.receive_json()
             match data['target']:
                 case 'getAllDisplays':
-                    pass
+                    await WS.broadcast('settings/display/all', bounds=data['displays'])
                 case 'getBounds':
-                    pass
-            # print(data)
+                    DISPLAY = data['bounds']
+                    await WS.broadcast('settings/display/bounds', bounds=DISPLAY)
+                case 'getAllowInsecureCerts':
+                    await WS.broadcast('settings/display/allowInsecureCerts', bounds=data['allow'])
         except WebSocketDisconnect:
             UI_WS.disconnect(websocket)
             break
@@ -125,7 +134,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     
     await WS.connect(websocket)
-    await WS.send(websocket, target='connected')
+    await WS.send(websocket, 'connected')
     while True:
         try:
             data = await websocket.receive_json()
@@ -154,21 +163,21 @@ async def websocket_endpoint(websocket: WebSocket):
                         if save: 
                             Config.save()
                         if invalid:
-                            await WS.send(websocket, target='scheduler/asset', error='Invalid elements', extra=invalid)
-                    await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+                            await WS.send(websocket, 'scheduler/asset', error='Invalid elements', extra=invalid)
+                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
 
                 case 'scheduler/validate_url':
-                    await WS.send(websocket, target='scheduler/validate_url', valid=bool(is_valid_url(data['url'])))
+                    await WS.send(websocket, 'scheduler/validate_url', valid=bool(is_valid_url(data['url'])))
 
                 case 'scheduler/asset/current':
                     if CURRENT_ASSET >= 0:
-                        await WS.broadcast(target='scheduler/asset/current', uuid=Config.assets[CURRENT_ASSET].uuid)
+                        await WS.broadcast('scheduler/asset/current', uuid=Config.assets[CURRENT_ASSET].uuid)
 
                 case 'scheduler/set_state':
                     index, asset = Config.get_asset(data['uuid'])
                     start_rotation = not Config.enabled_asset_count
                     asset.enabled = data['state']
-                    await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
                     Config.save()
                     if start_rotation:
                         await webview_goto(0)
@@ -179,7 +188,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     index, asset = Config.get_asset(data['uuid'])
                     old_dur = asset.duration
                     asset.duration = data['duration']
-                    await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
                     Config.save()
                     if index == CURRENT_ASSET:
                         NEXT_CHANGE_TIME += (asset.duration or inf) - old_dur # type: ignore
@@ -189,11 +198,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     if index == CURRENT_ASSET:
                         NEXT_CHANGE_TIME = 0
                     Config.remove_asset(asset)
-                    await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
                     Config.save()
 
                 case 'scheduler/file':
-                    await WS.broadcast(target='scheduler/file', files=get_resources())
+                    await WS.broadcast('scheduler/file', files=get_resources())
 
                 case 'scheduler/delete_file':
                     for file in data['files']:
@@ -206,8 +215,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                 except ValueError:
                                     pass #element to delete is not in schedule
                             remove(join(UPLOAD_FOLDER, file))
-                    await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-                    await WS.broadcast(target='scheduler/file', files=get_resources())
+                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+                    await WS.broadcast('scheduler/file', files=get_resources())
                     Config.save()
 
                 case 'scheduler/goto':
@@ -221,7 +230,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 case 'scheduler/reorder':
                     Config.move_asset(data['from'], data['to'])
-                    await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
                     Config.save()
                     if CURRENT_ASSET in [data['to'], data['from']]:
                         await webview_goto()  #show new asset
@@ -230,7 +239,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if 'duration' in data:
                         Config.def_duration = data['duration']
                         Config.save()
-                    await WS.broadcast(target='settings/default_duration', duration=Config.def_duration)
+                    await WS.broadcast('settings/default_duration', duration=Config.def_duration)
 
                 case 'settings/update':
                     if not APT_THREAD.is_alive():
@@ -238,51 +247,51 @@ async def websocket_endpoint(websocket: WebSocket):
                         def apt():
                             for line in apt_update(data.get('do_upgrade', False)):
                                 if line == True:
-                                    asyncio.run_coroutine_threadsafe(WS.broadcast(target='settings/update/start', upgrading=data.get('do_upgrade', False)), loop)
+                                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/start', upgrading=data.get('do_upgrade', False)), loop)
                                 elif line == False:
-                                    asyncio.run_coroutine_threadsafe(WS.broadcast(target='settings/update/end', upgrading=data.get('do_upgrade', False)), loop)
+                                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/end', upgrading=data.get('do_upgrade', False)), loop)
                                 elif isinstance(line, tuple):
-                                    asyncio.run_coroutine_threadsafe(WS.broadcast(target='settings/update/progress', upgrading=data.get('do_upgrade', False), is_stdout=line[0], data=line[1]), loop)
+                                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/progress', upgrading=data.get('do_upgrade', False), is_stdout=line[0], data=line[1]), loop)
 
                         APT_THREAD = Thread(target=apt, name=('upgrade' if data.get('do_upgrade', False) else 'update'))
                         APT_THREAD.start()
-                        await WS.broadcast(target='settings/update/status', status=APT_THREAD.name)
+                        await WS.broadcast('settings/update/status', status=APT_THREAD.name)
 
                 case 'settings/update/list':
-                    await WS.broadcast(target='settings/update/list', updates=apt_list_upgrades())
+                    await WS.broadcast('settings/update/list', updates=apt_list_upgrades())
                         
                 case 'settings/update/status':
-                    await WS.broadcast(target='settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
+                    await WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
 
                 case 'settings/audio/default':
                     if 'device' in data:
                         setDefaultAudioDevice(data['device'])
-                    await WS.broadcast(target='settings/audio/devices', devices=getAudioDevices())
+                    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
                 case 'settings/audio/devices':
-                    await WS.broadcast(target='settings/audio/devices', devices=getAudioDevices())
+                    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
                 case 'settings/audio/volume':
                     if 'volume' in data:
                         setVolume(data.get('device'), data['volume'])
-                    await WS.broadcast(target='settings/audio/devices', devices=getAudioDevices())
+                    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
                 case 'settings/audio/mute':
                     if 'mute' in data:
                         setMute(data.get('device'), data['mute'])
-                    await WS.broadcast(target='settings/audio/devices', devices=getAudioDevices())
+                    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
                 case 'settings/hostname':
                     if 'hostname' in data:
                         set_hostname(data['hostname'])
-                    await WS.broadcast(target='settings/hostname', hostname=get_hostname())
+                    await WS.broadcast('settings/hostname', hostname=get_hostname())
 
                 case 'settings/get_wifis':
-                    await WS.broadcast(target='settings/get_wifis', wifis=get_wifis())
+                    await WS.broadcast('settings/get_wifis', wifis=get_wifis())
 
                 case 'settings/netplan/file/new':
                     create_netplan(data['filename'])
-                    await WS.broadcast(target='settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+                    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
                 case 'settings/netplan/file/set':
                     if 'filename' in data:
@@ -295,31 +304,31 @@ async def websocket_endpoint(websocket: WebSocket):
                             NEXT_CHANGE_TIME = 0
                             await webview_goto(0)
                     elif isinstance(res, str):
-                        await WS.send(websocket, error='Netplan error', extra=res)
-                    await WS.broadcast(target='settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+                        await WS.send(websocket, 'error', error='Netplan error', extra=res)
+                    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
                 case 'settings/netplan/file/get':
                     netplan_files = get_netplan_file_list()
                     if 'filename' in data:
                         if data['filename'] in netplan_files:
-                            await WS.broadcast(target='settings/netplan/file/get', files={data['filename']: get_netplan_file(data['filename'])})
-                    await WS.broadcast(target='settings/netplan/file/get', files={f: get_netplan_file(f) for f in netplan_files})
+                            await WS.broadcast('settings/netplan/file/get', files={data['filename']: get_netplan_file(data['filename'])})
+                    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in netplan_files})
 
                 case 'settings/netplan/file/del':
                     res = del_netplan_file(data['filename'], data.get('apply', True))
                     if isinstance(res, str):
-                        await WS.send(websocket, error='Netplan error', extra=res)
-                    await WS.broadcast(target='settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+                        await WS.send(websocket, 'error', error='Netplan error', extra=res)
+                    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
                 case 'settings/cron/job':
                     CRONTAB.read()
-                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
+                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/cron/job/add':
                     CRONTAB.read()
                     if CRONTAB.new(**data):
                         CRONTAB.write()
-                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
+                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/cron/job/set_state':
                     CRONTAB.read()
@@ -327,14 +336,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         next(CRONTAB.find_comment(data['job'])).enable(data['state'])
                         CRONTAB.write()
                     except StopIteration:
-                        await WS.send(websocket, target='error', error='Not found', extra='Requested job does not exist')
-                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
+                        await WS.send(websocket, 'error', error='Not found', extra='Requested job does not exist')
+                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/cron/job/delete':
                     CRONTAB.read()
                     CRONTAB.remove_all(comment=data['job'])
                     CRONTAB.write()
-                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
+                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/cron/job/edit':
                     CRONTAB.read()
@@ -348,8 +357,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             job.set_command('/usr/sbin/reboot')
                         CRONTAB.write()
                     except StopIteration:
-                        await WS.send(websocket, target='error', error='Not found', extra='Requested job does not exist')
-                    await WS.broadcast(target='settings/cron/job', jobs=CRONTAB.serialize())
+                        await WS.send(websocket, 'error', error='Not found', extra='Requested job does not exist')
+                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
                 case 'settings/info':
                     cpu_percent = []
@@ -359,8 +368,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         cpu_percent.append(y)
                     # cpu_count()
                     await WS.send(
-                        websocket=websocket,
-                        target='settings/info',
+                        websocket, 'settings/info',
                         uptime = str(datetime.fromtimestamp(time()) - datetime.fromtimestamp(boot_time())).split('.')[0],
                         cpu = cpu_percent,
                         battery = sensors_battery()._asdict() if sensors_battery() else None,
@@ -370,13 +378,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
 
                 case _:
-                    await WS.send(websocket, target='error', error='Invalid command', extra=dumps(data, indent=4))
+                    await WS.send(websocket, 'error', error='Invalid command', extra=dumps(data, indent=4))
 
         except WebSocketDisconnect:
             WS.disconnect(websocket)
             break
         except Exception:
-            await WS.send(websocket, target='error', error='Exception', extra=format_exc())
+            await WS.send(websocket, 'error', error='Exception', extra=format_exc())
             print_exc()
     WS.disconnect(websocket)
 
@@ -410,7 +418,7 @@ async def media_upload(response: Response, files: list[UploadFile], username: st
                     if not buf: break
                     out.write(buf)
 
-            file_data = get_file_info(UPLOAD_FOLDER, secure_filename(infile.filename))
+            file_data = get_file_info(UPLOAD_FOLDER, secure_filename(infile.filename), def_dur=Config.def_duration)
             Config.add_asset(
                 url= 'file:' + file_data['filename'],
                 duration= file_data.get('duration_s'),
@@ -487,22 +495,10 @@ async def scheduler(request: Request, username:str = Depends(LOGMAN)):
         ut_vers=VERSION,
         logged_user=username,
         hostname=get_hostname(),
-        # disp_size=get_display_size(),
+        disp_size=DISPLAY,
         disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
     ))
-
-# @WWW.get("/2", response_class=HTMLResponse)
-# def scheduler(request: Request, username: str = Depends(l_manager)):
-#     return TEMPLATES.TemplateResponse('index2.html.j2', dict(
-#         request=request,
-#         ut_vers=VERSION,
-#         logged_user=username,
-#         hostname=get_hostname(),
-#         # disp_size=get_display_size(),
-#         disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
-#         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
-#     ))
 
 @WWW.get('/login')
 async def login_page(request: Request, src:str|None = '/'):
@@ -531,7 +527,7 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
         ut_vers=VERSION,
         logged_user=username,
         cur_tab=tab,
-        # disp_size=get_display_size(),
+        disp_size=DISPLAY,
         disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total),
         def_wifi=DEF_WIFI_CARD
@@ -567,8 +563,8 @@ async def first_boot_page(request: Request):
         wifi=DEFAULT_AP
     ))
 
-async def sock_send(**kwargs):
-    await UI_WS.broadcast(**kwargs)
+async def sock_send(target, **kwargs):
+    await UI_WS.broadcast(target, **kwargs)
     print(kwargs)
 
 async def webview_goto(asset: int = CURRENT_ASSET, force: bool = False, backwards: bool = False):
@@ -578,9 +574,9 @@ async def webview_goto(asset: int = CURRENT_ASSET, force: bool = False, backward
             url = Config.assets[CURRENT_ASSET := asset].url
             if url.startswith('file:'):
                 url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-            await sock_send(target='Show', src=url)
+            await sock_send('Show', src=url)
             NEXT_CHANGE_TIME = int(time()) + (Config.assets[CURRENT_ASSET].duration or inf)
-            await WS.broadcast(target='scheduler/asset/current', uuid=Config.assets[CURRENT_ASSET].uuid)
+            await WS.broadcast('scheduler/asset/current', uuid=Config.assets[CURRENT_ASSET].uuid)
         else:
             await webview_goto(asset + (-1 if backwards else 1))
 
@@ -591,13 +587,13 @@ async def webview_control_main():
             if Config.first_boot:
                 NEXT_CHANGE_TIME = inf
                 CURRENT_ASSET = -1
-                await WS.broadcast(target='scheduler/asset/current', uuid=None)
-                await sock_send(target='Show', src='https://localhost/unitotem-first-boot', container='web')
+                await WS.broadcast('scheduler/asset/current', uuid=None)
+                await sock_send('Show', src='https://localhost/unitotem-first-boot', container='web')
             elif not Config.enabled_asset_count:
                 NEXT_CHANGE_TIME = inf
                 CURRENT_ASSET = -1
-                await WS.broadcast(target='scheduler/asset/current', uuid=None)
-                await sock_send(target='Show', src='https://localhost/unitotem-no-assets', container='web')
+                await WS.broadcast('scheduler/asset/current', uuid=None)
+                await sock_send('Show', src='https://localhost/unitotem-no-assets', container='web')
             else:
                 CURRENT_ASSET += 1
                 if CURRENT_ASSET >= len(Config.assets): CURRENT_ASSET = 0
@@ -633,11 +629,11 @@ if __name__ == "__main__":
     if not cmdargs.get('no_gui', False):
         loop.create_task(webview_control_main(), name='page_controller')
 
-    loop.create_task(uvServer(uvConfig(app=FastAPI(middleware=[Middleware(HTTPSRedirectMiddleware)]), port=80)).serve(), name='http_server')
+    loop.create_task(uvServer(uvConfig(FastAPI(middleware=[Middleware(HTTPSRedirectMiddleware)]), port=80)).serve(), name='http_server')
 
     Thread(target=loop.run_forever, daemon=True).start()
 
-    run(WWW, port=443, ssl_keyfile="/etc/ssl/unitotem_key.pem", ssl_certfile="/etc/ssl/unitotem_crt.pem")
+    run(WWW, port=443, ssl_certfile="/etc/ssl/unitotem.pem")
     
 
     stop_hostpot()

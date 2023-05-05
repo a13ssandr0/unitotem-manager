@@ -58,13 +58,15 @@ app.whenReady().then(() => {
         config.allowInsecureCerts = allow;
         writeFileSync(path.join(homedir(), '.unitotem-viewer.conf'), JSON.stringify(config));
     });
-});
 
-app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
-    if (config.allowInsecureCerts || url.match('(?:http|ws)s?://localhost')) {
-        event.preventDefault();
-        callback(true);
-    } else {
-        callback(false);
-    }
+
+    
+    app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+        if (config.allowInsecureCerts || url.match('(?:http|ws)s?://localhost')) {
+            event.preventDefault();
+            callback(true);
+        } else {
+            callback(false);
+        }
+    });
 });

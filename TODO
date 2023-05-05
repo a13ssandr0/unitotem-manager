@@ -8,6 +8,14 @@
 <!-- Redirect to home page if accessing login page from authenticated session -->
 <!-- Use python's url validator instead of javascript's one -->
 <!-- Use an svg for wifi qr code -->
-Dark theme
-Settings backup/restore not fully implemented
 Properly detect display, finish backend-viewer connection
+Settings backup/restore not fully implemented
+Allow drag-n-drop files
+Change page selector (scheduler/settings/sub-settings) to side collapsible menu
+# https://mdbootstrap.com/docs/standard/extended/sidebar/
+Reduce font size in scheduler page
+Show confirmation on command execution (success popup/notification)
+Allow changing resolution, viewer bounds and screen orientation
+# xrandr --output DVI-D-0 --rotate normal
+Make info screen update on timer, not on requests
+Dark theme

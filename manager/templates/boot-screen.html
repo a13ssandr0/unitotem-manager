@@ -104,7 +104,6 @@
     const videoview   = document.getElementById('videoview');
     const containers  = [boot_screen, webview, imageview, videoview];
     function connect() {
-        const loc = window.location;
         var _ws = new WebSocket(`wss://localhost/ui_ws`);
         _ws.onopen = async event => {
             console.log('Connected');
@@ -169,22 +168,24 @@
                     break;
 
                 case 'getAllDisplays':
-                    sendCommand('getAllDisplays', await window.electronAPI.getAllDisplays());
+                    sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
                     break;
-                
-                case 'getBounds':
-                    sendCommand('getBounds', await window.electronAPI.getBounds());
+                    
+                    case 'getBounds':
+                    sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
                     break;
                 
                 case 'setBounds':
                     await window.electronAPI.setBounds(data.x, data.y, data.width, data.height);
                     break;
 
+                case 'getAllowInsecureCerts':
+                    sendCommand('getAllowInsecureCerts', {allow: await window.electronAPI.getAllowInsecureCerts()});
+
+                case 'setAllowInsecureCerts':
+                    await window.electronAPI.setAllowInsecureCerts(data.allow);
+
                 default:
-                    // messageModal.querySelector('.modal-title').textContent = 'Unhandled command';
-                    // messageModal.querySelector('.modal-body h6').textContent = '';
-                    // messageModal.querySelector('.modal-body code').textContent = JSON.stringify(data, null, 4);
-                    // new bootstrap.Modal(messageModal).show();
                     break;
             }
             

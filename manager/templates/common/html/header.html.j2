@@ -1,6 +1,7 @@
 {% set tabs = [
     ('Playback', 'playback', 'Default asset duration', 'play'),
     ('Audio', 'audio', 'Default output device, Volume, Mute', 'speaker'),
+    ('Display', 'display', 'Resolution, Orientation, Window positioning', 'display'),
     ('Network', 'network', 'Hostname, Netplan', 'ethernet'),
     ('Updates', 'updates', 'APT', 'arrow-repeat'),
     ('Security', 'security', 'Password', 'shield-lock'),
@@ -9,9 +10,12 @@
     ('Info', 'info', 'System info', 'info-circle')
 ]%}
 
-{% macro header(isindex=true) %}
-    <header class="page-header hdr container-fluid">
+{% macro header(request, isindex=true) %}
+    <nav class="navbar navbar-dark navbar-expand-lg hdr">
         <div class="container-fluid col p-2 hstack gap-2">
+            <button class="navbar-toggler border-0 d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarToggleExternalContent" aria-controls="navbarToggleExternalContent" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
             <a class="navbar-brand" href="/"><h1 class="my-auto"><b>U</b></h1></a>
             <div class="ms-auto"><!--spacer--></div>
             <div class="btn-group" role="group">
@@ -43,11 +47,25 @@
                 <i class="bi bi-door-open"></i><span class="d-none d-sm-inline"> Logout</span>
             </button>
         </div>
-    </header>
+    </nav>
+    <aside class="collapse collapse-horizontal" id="navbarToggleExternalContent">
+        <div class="list-group list-group-flush border border-end-0 rounded pe-0" style="width: 15rem;">
+            {% for name, tab, _, icon in tabs%}
+            <a href="/settings/{{tab}}" class="list-group-item list-group-item-action{{' border-end' if cur_tab!=tab else ' disabled'}}"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a>
+            {% endfor %}
+        </div>
+    </aside>
 {% endmacro %}
 
+
 {% macro footer(ut_vers, logged_user, disp_size, disk_used, disk_total) -%}
+{% set display = (disp_size.width|string + 'x' + disp_size.height|string) if disp_size else 'Not connected' -%}
     <footer class="fixed-bottom text-center border-top bg-white" style="width:100vw; z-index:1000;">
-        <h6 class="my-1" width="100%"><small class="text-muted"><a href="https://github.com/a13ssandr0/unitotem"><i class="bi bi-github"></i> Unitotem</a> {{ ut_vers }} by a13ssandro | Logged in as {{ logged_user }} | Display size: {{ disp_size }} | Used {{disk_used}} of {{disk_total}}</small></h6>
+        <h6 class="my-1" width="100%">
+            <small class="text-muted">
+                <a href="https://github.com/a13ssandr0/unitotem">
+                <i class="bi bi-github"></i> Unitotem</a> {{ ut_vers }} by a13ssandr0 | Logged in as {{ logged_user }} | Display: <span id="display_bounds">{# {{ display }} #}</span> | Used {{disk_used}} of {{disk_total}}
+            </small>
+        </h6>
     </footer>
 {% endmacro %}

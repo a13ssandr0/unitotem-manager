@@ -14,25 +14,25 @@ if [ "$1" == "configure" ] && [ -z "$2" ]; then
 	rm /etc/ssl/unitotem_{crt,key}.pem
 	chmod 0600 "/etc/ssl/unitotem.pem"
 
-	if [ -f /etc/haproxy/haproxy.cfg ]; then
-	echo "Adding UniTotem haproxy configuration"
-	cat >> /etc/haproxy/haproxy.cfg << EOF
-### UniTotem section, DO NOT EDIT ###
+# 	if [ -f /etc/haproxy/haproxy.cfg ]; then
+# 	echo "Adding UniTotem haproxy configuration"
+# 	cat >> /etc/haproxy/haproxy.cfg << EOF
+# ### UniTotem section, DO NOT EDIT ###
 
-frontend unitotem-frontend
-	mode http
-	bind :80
-	bind :443 ssl crt /etc/ssl/unitotem.pem
-	http-request redirect scheme https code 301 unless { ssl_fc }
-	default_backend unitotem
+# frontend unitotem-frontend
+# 	mode http
+# 	bind :80
+# 	bind :443 ssl crt /etc/ssl/unitotem.pem
+# 	http-request redirect scheme https code 301 unless { ssl_fc }
+# 	default_backend unitotem
 
-backend unitotem
-	option forwardfor
-	server unitotem1 127.0.0.1:5000
+# backend unitotem
+# 	option forwardfor
+# 	server unitotem1 127.0.0.1:5000
 
-### End UniTotem section
-EOF
-	fi
+# ### End UniTotem section
+# EOF
+# 	fi
 
 fi
 
