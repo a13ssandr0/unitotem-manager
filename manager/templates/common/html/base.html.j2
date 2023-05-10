@@ -1,0 +1,115 @@
+{% set tabs = [
+    ('Playback', 'playback', 'Default asset duration', 'play'),
+    ('Audio', 'audio', 'Default output device, Volume, Mute', 'speaker'),
+    ('Display', 'display', 'Resolution, Orientation, Window positioning', 'display'),
+    ('Network', 'network', 'Hostname, Netplan', 'ethernet'),
+    ('Updates', 'updates', 'APT', 'arrow-repeat'),
+    ('Security', 'security', 'Password', 'shield-lock'),
+    ('Scheduled actions', 'cron', 'Cron-based power scheduler', 'alarm'),
+    ('Backup and restore', 'backup', 'Backup, restore, reset system', 'clock-history'),
+    ('Info', 'info', 'System info', 'info-circle')
+]%}
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>UniTotem Manager</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link id="favicon" rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" /> <!-- Font Awesome -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" /> <!-- Google Fonts -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.3.0/mdb.min.css" rel="stylesheet" /> <!-- MDB -->
+    {# <style>html {font-size: 14px}</style> #}
+</head>
+
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg bg-light navbar-light fixed-top">
+        <!-- Container wrapper -->
+        <div class="container-fluid">
+            
+            <!-- Navbar brand -->
+            <a class="navbar-brand" href="#">UniTotem</a>
+
+            <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                <!-- Dropdown -->
+                <li class="nav-item dropdown">
+                    <a
+                        class="nav-link dropdown-toggle"
+                        href="#"
+                        id="navbarDropdown"
+                        role="button"
+                        data-mdb-toggle="dropdown"
+                        aria-expanded="false"
+                    >
+                        <i class="fas fa-power-off"></i>
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                        <li><a class="dropdown-item" href="#">Reboot</a></li>
+                        <li><a class="dropdown-item" href="#">Shutdown</a></li>
+                    </ul>
+                </li>
+                <button type="button" class="btn btn-secondary btn-rounded"><i class="fas fa-door-open"></i> Logout</button>
+            </ul>
+
+        </div>
+        <!-- Container wrapper -->
+    </nav>
+    <!-- Navbar -->
+
+    {# <nav class="page-header hdr p-0">
+        <div class="container-fluid col p-2 hstack gap-2">
+            <button class="navbar-toggler border-0 d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarToggleExternalContent" aria-controls="navbarToggleExternalContent" aria-expanded="false" aria-label="Toggle navigation">
+                <md-i>menu</span>
+            </button>
+            <a class="navbar-brand p-0" href="/"><h1 class="my-auto"><b>U</b></h1></a>
+            <div class="ms-auto"><!--spacer--></div>
+            <div class="btn-group" role="group">
+                <a class="btn btn{{'-outline' if not isindex}}-light" type="button" href="/">
+                    <md-i>playlist_play</md-i><span class="d-none d-sm-inline"> Scheduler</span>
+                </a>
+                <div class="btn-group" role="group" onmouseover="new bootstrap.Dropdown(document.querySelector('.dropdown-toggle')).show()"
+                    onmouseleave="new bootstrap.Dropdown(document.querySelector('.dropdown-toggle')).hide()">
+                    <a class="btn btn{{'-outline' if isindex}}-light" type="button" href="/settings">
+                        <i class="bi bi-sliders"></i><span class="d-none d-sm-inline"> Settings</span>
+                    </a>
+                    <button type="button" class="btn btn{{'-outline' if isindex}}-light dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" data-bs-reference="parent">
+                        <span class="visually-hidden">Toggle Dropdown</span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        {% for name, tab, _, icon in tabs%}
+                        <li><a href="/settings/{{tab}}" class="dropdown-item"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <button class="ms-5 ms-sm-4 ms-md-5 btn btn-outline-light" type="button" data-bs-title="Do you want to reboot UniTotem?" data-bs-positive-btn="Reboot" data-bs-positive-action="sendCommand('power/reboot')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
+                <i class="bi bi-bootstrap-reboot"></i><span class="d-none d-sm-inline"> Reboot</span>
+            </button>
+            <button class="btn btn-outline-light" type="button" data-bs-title="Do you want to shutdown UniTotem?" data-bs-positive-btn="Shutdown" data-bs-positive-action="sendCommand('power/shutdown')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
+                <i class="bi bi-power"></i><span class="d-none d-sm-inline"> Shutdown</span>
+            </button>
+            <button class="btn btn-outline-light" type="button" onclick="document.cookie='access-token=;max-age=0;path=/;';location.reload();">
+                <i class="bi bi-door-open"></i><span class="d-none d-sm-inline"> Logout</span>
+            </button>
+        </div>
+    </nav>
+
+    <aside class="col col-3 d-none d-lg-flex" style="width: 15rem;">
+        <a href="/" class=""></a>
+        {% for name, tab, _, icon in tabs%}
+        <a href="/settings/{{tab}}" class="list-group-item list-group-item-action{{' border-end' if cur_tab!=tab else ' disabled'}}"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a>
+        {% endfor %}
+    </aside> #}
+
+
+    <!-- MDB -->
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.3.0/mdb.min.js" ></script>
+</body>
+
+</html>
