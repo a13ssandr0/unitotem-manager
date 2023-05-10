@@ -540,6 +540,11 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
     
     return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
 
+@WWW.get('/base', response_class=HTMLResponse)
+async def base_page(request: Request):
+    return TEMPLATES.TemplateResponse('common/html/base.html.j2', {'request': request})
+
+
 @WWW.get("/unitotem-no-assets", response_class=HTMLResponse)
 async def no_assets_page(request: Request):
     ip = do_ip_addr(get_default=True)
