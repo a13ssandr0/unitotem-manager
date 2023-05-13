@@ -1,3 +1,5 @@
+{% from 'common/html/modals.html.j2' import confirmModal, newAssetModal, messageModal, newFileModal, addPowerRuleModal -%}
+
 {% set tabs = [
     ('Playback', 'playback', 'Default asset duration', 'play'),
     ('Audio', 'audio', 'Default output device, Volume, Mute', 'speaker'),
@@ -8,9 +10,23 @@
     ('Scheduled actions', 'cron', 'Cron-based power scheduler', 'alarm'),
     ('Backup and restore', 'backup', 'Backup, restore, reset system', 'clock-history'),
     ('Info', 'info', 'System info', 'info-circle')
-]%}
+] -%}
 
+{% macro _add_scripts() -%}
+    {% for path in varargs -%}
+    <script src="{{url_for('static', path=path)}}"></script>
+    {% endfor -%}
+{% endmacro -%}
 
+{% macro _add_stylesheets() -%}
+    {% for path in varargs -%}
+    <link rel="stylesheet" href="{{url_for('static', path=path)}}">
+    {% endfor -%}
+{% endmacro -%}
+
+{# {% macro _gen_init_cmds() -%}
+    {{ varargs | sum(start=[]) | unique }}
+{% endmacro -%} #}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -20,75 +36,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link id="favicon" rel="icon" type="image/x-icon" href="/static/favicon.ico">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" /> <!-- Font Awesome -->
-    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" /> <!-- Google Fonts -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.3.0/mdb.min.css" rel="stylesheet" /> <!-- MDB -->
-    {# <style>html {font-size: 14px}</style> #}
+    {# <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" /> <!-- Font Awesome --> #}
+    {{_add_stylesheets("/bootstrap.min.css", "/bootstrap-icons.css") -}}
+    <style>html {font-size: 14px} .hdr { background-color: #7431F9; color: white; }</style>
+    <style>
+        {%- block custom_style %}
+        
+        {% endblock custom_style -%}
+    </style>
 </head>
 
-<body>
+<body {# data-bs-theme="dark" #}>
 
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg bg-light navbar-light fixed-top">
-        <!-- Container wrapper -->
-        <div class="container-fluid">
-            
-            <!-- Navbar brand -->
-            <a class="navbar-brand" href="#">UniTotem</a>
+    {{confirmModal()}}
+    {{newAssetModal() if (request.url|string).endswith('/')}}
+    {{messageModal()}}
+    {{newFileModal() if (request.url|string).endswith('network')}}
+    {{addPowerRuleModal() if (request.url|string).endswith('cron')}}
 
-            <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-                <!-- Dropdown -->
-                <li class="nav-item dropdown">
-                    <a
-                        class="nav-link dropdown-toggle"
-                        href="#"
-                        id="navbarDropdown"
-                        role="button"
-                        data-mdb-toggle="dropdown"
-                        aria-expanded="false"
-                    >
-                        <i class="fas fa-power-off"></i>
-                    </a>
-                    <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
-                        <li><a class="dropdown-item" href="#">Reboot</a></li>
-                        <li><a class="dropdown-item" href="#">Shutdown</a></li>
-                    </ul>
-                </li>
-                <button type="button" class="btn btn-secondary btn-rounded"><i class="fas fa-door-open"></i> Logout</button>
-            </ul>
-
-        </div>
-        <!-- Container wrapper -->
-    </nav>
-    <!-- Navbar -->
-
-    {# <nav class="page-header hdr p-0">
-        <div class="container-fluid col p-2 hstack gap-2">
-            <button class="navbar-toggler border-0 d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarToggleExternalContent" aria-controls="navbarToggleExternalContent" aria-expanded="false" aria-label="Toggle navigation">
-                <md-i>menu</span>
-            </button>
-            <a class="navbar-brand p-0" href="/"><h1 class="my-auto"><b>U</b></h1></a>
-            <div class="ms-auto"><!--spacer--></div>
-            <div class="btn-group" role="group">
-                <a class="btn btn{{'-outline' if not isindex}}-light" type="button" href="/">
-                    <md-i>playlist_play</md-i><span class="d-none d-sm-inline"> Scheduler</span>
-                </a>
-                <div class="btn-group" role="group" onmouseover="new bootstrap.Dropdown(document.querySelector('.dropdown-toggle')).show()"
-                    onmouseleave="new bootstrap.Dropdown(document.querySelector('.dropdown-toggle')).hide()">
-                    <a class="btn btn{{'-outline' if isindex}}-light" type="button" href="/settings">
-                        <i class="bi bi-sliders"></i><span class="d-none d-sm-inline"> Settings</span>
-                    </a>
-                    <button type="button" class="btn btn{{'-outline' if isindex}}-light dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" data-bs-reference="parent">
-                        <span class="visually-hidden">Toggle Dropdown</span>
-                    </button>
-                    <ul class="dropdown-menu">
-                        {% for name, tab, _, icon in tabs%}
-                        <li><a href="/settings/{{tab}}" class="dropdown-item"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a></li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            </div>
-            <button class="ms-5 ms-sm-4 ms-md-5 btn btn-outline-light" type="button" data-bs-title="Do you want to reboot UniTotem?" data-bs-positive-btn="Reboot" data-bs-positive-action="sendCommand('power/reboot')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
+    <nav class="navbar navbar-dark hdr">
+        <div class="container-fluid gap-2">
+            <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasResponsive" aria-controls="offcanvasResponsive"><span class="navbar-toggler-icon"></span></button>
+            <a class="navbar-brand p-0" href="/"><h1 class="my-auto"><b>U<span class="d-none d-md-inline">niTotem</span></b></h1></a>
+            <button class="btn btn-outline-light ms-auto" type="button" data-bs-title="Do you want to reboot UniTotem?" data-bs-positive-btn="Reboot" data-bs-positive-action="sendCommand('power/reboot')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
                 <i class="bi bi-bootstrap-reboot"></i><span class="d-none d-sm-inline"> Reboot</span>
             </button>
             <button class="btn btn-outline-light" type="button" data-bs-title="Do you want to shutdown UniTotem?" data-bs-positive-btn="Shutdown" data-bs-positive-action="sendCommand('power/shutdown')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
@@ -100,16 +70,113 @@
         </div>
     </nav>
 
-    <aside class="col col-3 d-none d-lg-flex" style="width: 15rem;">
-        <a href="/" class=""></a>
-        {% for name, tab, _, icon in tabs%}
-        <a href="/settings/{{tab}}" class="list-group-item list-group-item-action{{' border-end' if cur_tab!=tab else ' disabled'}}"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a>
-        {% endfor %}
-    </aside> #}
+    <div class="container-fluid">
+        <div class="row">
+            <div class="offcanvas-lg offcanvas-start" tabindex="-1" id="offcanvasResponsive" aria-labelledby="offcanvasResponsiveLabel" style="width: 16rem;">
+                <div class="offcanvas-header">
+                    <h1 style="color: #7431F9;">UniTotem</h1>
+                </div>
+                <div class="offcanvas-body">
+                    <div class="col p-lg-3 mt-3 mt-lg-0" style="flex: 0 0 auto;">
+                        <a href="/" class="list-group-item list-group-item-action m-2 ms-0 mb-4"><i class="bi bi-list-task" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;Scheduler</a>
+                        <a href="/settings" class="list-group-item list-group-item-action m-2 ms-0"><i class="bi bi-sliders" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;Settings</a>
+                        {%- for name, tab, _, icon in tabs %}
+                        <a href="/settings/{{tab}}" class="list-group-item list-group-item-action m-1 mt-2 ms-3"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a>
+                        {%- endfor %}
+                    </div>
+                </div>
+            </div>
 
+            <main class="container-fluid col mt-lg-4 mt-1 mb-3">
+                {% block main_content %}{% endblock main_content %}
+            </main>
+        </div>
+    </div>
 
-    <!-- MDB -->
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.3.0/mdb.min.js" ></script>
+    {% set display = (disp_size.width|string + 'x' + disp_size.height|string) if disp_size else 'Not connected' -%}
+    <footer class="fixed-bottom text-center border-top" style="width:100vw; z-index:1000;">
+        <h6 class="my-1" width="100%">
+            <small class="text-muted">
+                <a href="https://github.com/a13ssandr0/unitotem">
+                <i class="bi bi-github"></i> Unitotem</a> {{ ut_vers }} by a13ssandr0 | Logged in as {{ logged_user }} | Display: <span id="display_bounds">{{ display }}</span> | Used {{disk_used}} of {{disk_total}}
+            </small>
+        </h6>
+    </footer>
+
+    {{_add_scripts('bootstrap.bundle.min.js', 'jquery.min.js', *ext_scripts)}}
+
+    <script>
+
+        function sendCommand(target, args) {
+            if(args === undefined) args = {};
+            args.target = target
+            ws.send(JSON.stringify(args));
+        }
+
+        {% block js %}{% endblock js %}
+
+        var connect_retry = 0;
+
+        function connect() {
+            const loc = window.location;
+            var _ws = new WebSocket(`w${(loc.protocol === 'https:')?'s':''}s://${loc.host}/ws`);
+            _ws.onopen = event => {
+                console.log('Connected');
+                // PAGE INIT
+                [{{ init_cmds | sum(start=[]) | unique }}]
+                    .forEach(cmd => sendCommand(cmd));
+            }
+            _ws.onmessage = event => {
+                const data = JSON.parse(event.data);
+                if (data.target == 'settings/hostname')
+                    document.title = data.hostname + ' - UniTotem Manager';
+                switch (data.target) {
+                    
+                    {% block recv_cmds %}{% endblock recv_cmds %}
+
+                    case 'error':
+                        messageModal.find('.modal-title').text('Error');
+                        messageModal.find('.modal-body h6').text('Request returned ' + data.error);
+                        messageModal.find('.modal-body code').text(data.extra);
+                        new bootstrap.Modal(messageModal).show();
+                        break;
+
+                    default:
+                        break;
+                }
+                
+            };
+
+            _ws.onclose = e => {
+                connect_retry++;
+                console.log('Socket is closed. Reconnect will be attempted in', connect_retry, 'second(s).', e.reason);
+                if (e.reason == 'Not Authenticated') location.reload();
+                setTimeout(() => ws=connect(), connect_retry*1000);
+            };
+
+            _ws.onerror = err => {
+                console.error('Socket encountered error. Closing socket');
+                _ws.close();
+            };
+
+            return _ws;
+        }
+
+        {# var ws = connect(); #}
+
+        const messageModal = $('#messageModal');
+        const messageModalTitle = $('#messageModal .modal-title');
+        const messageModalPosBtn = $('#messageModal .btn-danger');
+        const messageModalNegBtn = $('#messageModal .btn-outline-primary');
+        $('#confirmModal').on('show.bs.modal', event => {
+            const button = event.relatedTarget;
+            messageModalTitle.text(button.attr('data-bs-title'));
+            messageModalPosBtn.html(button.attr('data-bs-positive-btn'))
+                .attr("onclick", button.attr('data-bs-positive-action'));
+            messageModalNegBtn.html(button.attr('data-bs-negative-btn'))
+                .attr("onclick", button.attr('data-bs-negative-action'));
+        });
+    </script>
 </body>
 
 </html>

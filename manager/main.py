@@ -542,7 +542,15 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
 
 @WWW.get('/base', response_class=HTMLResponse)
 async def base_page(request: Request):
-    return TEMPLATES.TemplateResponse('common/html/base.html.j2', {'request': request})
+    return TEMPLATES.TemplateResponse('common/html/base.html.j2', dict(
+        request=request,
+        ut_vers=VERSION,
+        # logged_user=username,
+        hostname=get_hostname(),
+        disp_size=DISPLAY,
+        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
+        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
+    ))
 
 
 @WWW.get("/unitotem-no-assets", response_class=HTMLResponse)

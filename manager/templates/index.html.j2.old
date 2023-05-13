@@ -1,8 +1,18 @@
-{% extends 'common/html/base.html.j2' -%}
+{% from 'common/html/header.html.j2' import header, footer %}
+{% from 'common/html/modals.html.j2' import confirmModal, newAssetModal, messageModal %}
 
+<!DOCTYPE html>
+<html lang="en">
 
-<style>
-    {% block custom_style %}
+<head>
+    <title>UniTotem Manager</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link id="favicon" rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/bootstrap.min.css" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    <style>
+        .hdr { background-color: #7431F9; color: white; }
         table { table-layout: fixed; word-wrap: break-word; }
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; appearance: none; margin: 0; } /* Chrome, Safari, Edge, Opera */
         input[type=number] { -moz-appearance: textfield; appearance: textfield; } /* Firefox */
@@ -12,11 +22,10 @@
         .hover-shake {animation: shake 2s; animation-iteration-count: infinite; animation-direction: alternate;}
         .anim-rev {animation-direction: alternate-reverse !important;}
         @keyframes shake { 0%{ transform: translate(1px, 1px) rotate(0deg); } 10%{ transform: translate(-1px, -2px) rotate(-1deg); } 20%{ transform: translate(-3px, 0px) rotate(1deg); } 30%{ transform: translate(3px, 2px) rotate(0deg); } 40%{ transform: translate(1px, -1px) rotate(1deg); } 50%{ transform: translate(-1px, 2px) rotate(-1deg); } 60%{ transform: translate(-3px, 1px) rotate(0deg); } 70%{ transform: translate(3px, 1px) rotate(-1deg); } 80%{ transform: translate(-1px, -1px) rotate(1deg); } 90%{ transform: translate(1px, 2px) rotate(0deg); } 100%{ transform: translate(1px, -2px) rotate(-1deg); }} */
-    {% endblock custom_style %}
-</style>
+    </style>
+</head>
 
-   
-<main><!-- ondragenter="byId('overlay').removeAttribute('hidden')"> -->
+<body> <!-- ondragenter="byId('overlay').removeAttribute('hidden')"> -->
     <!-- <div id="overlay" class="overlay dim" style="z-index: 10000;" hidden>
         <div id="dnd-interceptor" class="overlay" ondragover="event.preventDefault(); event.stopPropagation();" ondragleave="byId('overlay').setAttribute('hidden', '')"></div>
         <div class="position-absolute top-50 start-50 translate-middle">
@@ -28,65 +37,66 @@
             <div class="row mt-3"><h4 class="text-center text-light"><b>Drop file(s) here to upload</b></h4></div>
         </div>
     </div> -->
-    {% block main_content %}
-    <div class="row">
-        <div class="col-lg-4 pe-lg-2">
-            <div class="hstack gap-2">
-                <h5>Files</h5>
-                <div class="ms-auto">
-                    <div class="btn-group" role="group">
-                        <button type="button" title="Delete files" onclick="sendCommand('scheduler/delete_file', {files: checkedfiles}); uncheckAll()" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                        <button type="button" title="Download files" onclick="downloadFiles(checkedfiles); uncheckAll()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></a>
-                        <button type="button" title="Add to list" onclick="sendCommand('scheduler/asset', {items: checkedfiles}); uncheckAll()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
-                    </div>
-                </div>
-                <button type="button" class="btn btn-sm btn-success" onclick="fileSelector.click()" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</button>
-            </div>
-            <div class="progress" id="upload-progress" hidden>
-                <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
-            </div>
-            <ol id="file-list" class="list-group"></ol>
-        </div>
-        <div class="col-lg-8 mt-4 mt-lg-0">
-            <div class="hstack gap-2">
-                <h5>Playlist</h5>
-                <div class="ms-auto">
-                    <div class="btn-group" role="group">
-                        <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/back')"><i class="bi bi-skip-backward"></i></button>
-                        <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto', {force: true})"><i class="bi bi-arrow-clockwise"></i></button>
-                        <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/next')"><i class="bi bi-skip-forward"></i></button>
-                    </div>
-                </div>
-                <button class="btn btn-sm btn-primary me-2" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal"><i class="bi bi-plus-circle"></i> Add URL</button>
-            </div>
-            <div class="row container-fluid justify-content-center">
-                <table class="table table-hover">
-                    <thead class="border-bottom">
-                        <tr name="asset-row">
-                            <th scope="col" style="width: 2em;"></th>
-                            <th scope="col">URL</th>
-                            <th scope="col" style="width: 6em;">Duration</th>
-                            <th scope="col" style="width: 8em;"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="asset_table"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% endblock main_content %}
-</main>
-    
-{% set ext_scripts = ['Sortable.min.js'] %}
-    
-{% set init_cmds = [
-    'scheduler/asset',
-    'scheduler/asset/current',
-    'scheduler/file',
-    'settings/hostname',
-    'settings/default_duration'
-] %}
 
+    
+    {{header(request, true)}}
+    {{confirmModal()}}
+    {{newAssetModal()}}
+    {{messageModal()}}
+    
+    
+    <main class="container-fluid col mt-md-3 mt-1 mb-3">
+        <div class="row">
+            <div class="col-lg-4 pe-lg-2">
+                <div class="hstack gap-2">
+                    <h3>File manager</h3>
+                    <div class="ms-auto">
+                        <div class="btn-group" role="group">
+                            <button type="button" title="Delete files" onclick="sendCommand('scheduler/delete_file', {files: checkedfiles}); uncheckAll()" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            <button type="button" title="Download files" onclick="downloadFiles(checkedfiles); uncheckAll()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></a>
+                            <button type="button" title="Add to list" onclick="sendCommand('scheduler/asset', {items: checkedfiles}); uncheckAll()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-success" onclick="fileSelector.click()" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</button>
+                </div>
+                <div class="progress" id="upload-progress" hidden>
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+                </div>
+                <ol id="file-list" class="list-group"></ol>
+            </div>
+            <div class="col-lg-8 mt-4 mt-lg-0">
+                <div class="hstack gap-2">
+                    <h3>Playlist</h3>
+                    <div class="ms-auto">
+                        <div class="btn-group" role="group">
+                            <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/back')"><i class="bi bi-skip-backward"></i></button>
+                            <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto', {force: true})"><i class="bi bi-arrow-clockwise"></i></button>
+                            <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/next')"><i class="bi bi-skip-forward"></i></button>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-primary me-2" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal"><i class="bi bi-plus-circle"></i> Add URL</button>
+                </div>
+                <div class="row container-fluid justify-content-center">
+                    <table class="table table-hover">
+                        <thead class="border-bottom">
+                            <tr name="asset-row">
+                                <th scope="col" style="width: 2em;"></th>
+                                <th scope="col">URL</th>
+                                <th scope="col" style="width: 6em;">Duration</th>
+                                <th scope="col" style="width: 8em;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="asset_table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    {{footer(ut_vers, logged_user, disp_size, disk_used, disk_total)}}
+    
+    <script src="/static/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
+    <script src="/static/Sortable.min.js"></script>
     <script>
         function byId(id){return document.getElementById(id)}
 
