@@ -116,7 +116,7 @@
             const loc = window.location;
             var _ws = new WebSocket(`w${(loc.protocol === 'https:')?'s':''}s://${loc.host}/ws`);
             _ws.onopen = event => {
-                console.log('Connected');
+                {# console.log('Connected'); #}
                 // PAGE INIT
                 {{ init_cmds|flatten|safe }}
                     .forEach(cmd => sendCommand(cmd));

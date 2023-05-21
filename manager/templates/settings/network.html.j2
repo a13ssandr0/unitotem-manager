@@ -73,12 +73,12 @@ aceEditor.session.on('change', (delta) => {
         set_btn.removeClass('btn-success').addClass('btn-outline-success');
     }
 });
-set_btn.onclick = () => {
+set_btn.click(() => {
     sendCommand('settings/netplan/file/set', {filename: cur_file, content: aceEditor.getValue(), apply: false});
     netplan.original[cur_file] = aceEditor.getValue();
     delete netplan.modified[cur_file];
     set_btn.removeClass('btn-success').addClass('btn-outline-success');
-};
+});
 
 
 function wifi_yaml(wifi_name, password=true) {
@@ -88,27 +88,29 @@ function wifi_yaml(wifi_name, password=true) {
     return net;
 }
 
-inputHostname.oninput = () => {
+inputHostname.on('input', () => {
     if (inputHostname.val() != inputHostname.attr('def-val')) {
         set_hostname.removeClass('btn-outline-success').addClass('btn-success');
     } else {
         set_hostname.removeClass('btn-success').addClass('btn-outline-success');
     }
-};
+});
 
 $('#add_file_btn').click(() => sendCommand('settings/netplan/file/new', {filename: $('#modal_input_filename').val()}));
 set_hostname.click(() => sendCommand('settings/hostname', {hostname: inputHostname.val()}));
 var wifi_upd_timer = Number();
-$('#wifiDropBtn').on('show.bs.dropdown', event => {wifi_upd_timer=setInterval(sendCommand, 5000, 'settings/get_wifis');});
-$('#wifiDropBtn').on('hide.bs.dropdown', event => {clearInterval(wifi_upd_timer);});
+$('#wifiDropBtn').on({
+    'show.bs.dropdown': () => {wifi_upd_timer=setInterval(sendCommand, 5000, 'settings/get_wifis')},
+    'hide.bs.dropdown': () => clearInterval(wifi_upd_timer)
+});
 
 {% endblock js %}
 
 
 {% block recv_cmds %}
 case 'settings/hostname':
-    inputHostname.val(data.hostname)
-        .attr('def-val', data.hostname);
+    inputHostname.val(data.hostname).attr('def-val', data.hostname)
+        .removeClass('btn-success').addClass('btn-outline-success');
     break;
 
 case 'settings/netplan/file/get':
@@ -116,22 +118,18 @@ case 'settings/netplan/file/get':
     netplan.original = data.files;
     Object.entries(data.files).forEach((pair, i) => {
         const [filename, content] = pair;
-        const li = document.createElement('li');
-        const btn = document.createElement('button');
-        btn.className = 'dropdown-item';
-        btn.type = 'button';
-        btn.innerHTML = filename;
-        btn.onclick = ()=>{
-            file_selector_btn.html(filename);
-            cur_file = filename;
-            aceEditor.setValue(content, -1);
-            del_btn.attr('data-bs-title', `Do you want to delete ${filename}?`);
-            del_btn.attr('data-bs-positive-action',
-                `sendCommand('settings/netplan/file/del', {filename: '${filename}'})`);
-        };
-        if (i==0) btn.onclick();
-        li.appendChild(btn);
-        filesList.append(li);
+        const btn = $('<button class="dropdown-item" type="button"></button>')
+            .html(filename)
+            .click(()=>{
+                file_selector_btn.html(filename);
+                cur_file = filename;
+                aceEditor.setValue(content, -1);
+                del_btn.attr('data-bs-title', `Do you want to delete ${filename}?`);
+                del_btn.attr('data-bs-positive-action',
+                    `sendCommand('settings/netplan/file/del', {filename: '${filename}'})`);
+            });
+        if (i==0) btn.click();
+        filesList.append($('<li></li>').append(btn));
     });
     break;
 
@@ -139,20 +137,39 @@ case 'settings/get_wifis':
     let wifi_low = data.wifis[0].signal_total/3;
     let wifi_high = data.wifis[0].signal_total*2/3;
     wifi_menu.html('');
-    for (let network of data.wifis){
+    data.wifis.forEach(network => {
         if (network.essid == '') network.essid = null;
-        wifi_menu.append( 
-        `<li class="dropdown-item" onclick="sendCommand('settings/netplan/file/set', {filename: '10-${network.essid ?? ('hidden' + network.mac.slice(-5))}.yaml', content: wifi_yaml('${network.essid}', ${network.encryption != 'off'}), apply: false});">
-            <span><i class="bi bi-${(network.signal_quality >= wifi_high) ? 'wifi' : ((network.signal_quality >= wifi_low) ? 'wifi-2' : 'wifi-1')}"></i> ${ network.essid ?? '<i><small class="text-muted">hidden</small></i>' }</span>
-            <h6>
-                <small class="text-muted">${network.mac}</small>
-                <span class="float-end line-height-1 ps-2">
-                    <span class="badge text-bg-info">${(network.frequency>=5)?'5':'2.4'}GHz</span>
-                    <span class="badge text-bg-warning"><i class="bi bi-${ network.encryption != 'off' ? 'lock' : 'unlock' }"></i> ${ network.encryption != 'off' ? network.encryption : 'open' }</span>
-                </span>
-            </h6>
-        </li>`);
-    }
+        
+        if (network.signal_quality >= wifi_high)     var wifi_icon = 'bi-wifi';
+        else if (network.signal_quality >= wifi_low) var wifi_icon = 'bi-wifi-2';
+        else                                         var wifi_icon = 'bi-wifi-1';
+
+        wifi_menu.append(
+            $('<li class="dropdown-item"></li>')
+                .click(() => sendCommand('settings/netplan/file/set', {
+                    filename: `10-${network.essid ?? ('hidden' + network.mac.slice(-5))}.yaml`,
+                    content: wifi_yaml(network.essid, network.encryption != 'off'),
+                    apply: false
+                }))
+                .append(
+                    $('<span></span>').append(
+                        $('<i class="bi"></i>').addClass(wifi_icon),
+                        ' ' + (network.essid ?? '<i><small class="text-muted">hidden</small></i>')
+                    ),
+                    $('<h6></h6>').append(
+                        $('<small class="text-muted"></small>').html(network.mac),
+                        $('<span class="float-end line-height-1 ps-2"></span>').append(
+                            $('<span class="badge text-bg-info"></span>')
+                                .html(((network.frequency>=5)?'5':'2.4') + 'GHz'),
+                            $('<span class="badge text-bg-warning"></span>').append(
+                                $('<i></i>').addClass('bi bi-' + (network.encryption != 'off' ? 'lock' : 'unlock')),
+                                ' ' + (network.encryption != 'off' ? network.encryption : 'open')
+                            )
+                        )
+                    )
+                )
+        );
+    });
     break;
 {% endblock recv_cmds %}
 </script>
