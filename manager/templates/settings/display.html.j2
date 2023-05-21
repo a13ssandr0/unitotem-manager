@@ -6,7 +6,7 @@
 
 {% endblock content%}
 
-{% block init_cmds %}'settings/info'{% endblock init_cmds %}
+{% set init_cmds = ['settings/info'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block recv_cmds %}

@@ -24,9 +24,6 @@
     {% endfor -%}
 {% endmacro -%}
 
-{# {% macro _gen_init_cmds() -%}
-    {{ varargs | sum(start=[]) | unique }}
-{% endmacro -%} #}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -40,9 +37,7 @@
     {{_add_stylesheets("/bootstrap.min.css", "/bootstrap-icons.css") -}}
     <style>html {font-size: 14px} .hdr { background-color: #7431F9; color: white; }</style>
     <style>
-        {%- block custom_style %}
-        
-        {% endblock custom_style -%}
+        {%- block custom_style %}{% endblock custom_style -%}
     </style>
 </head>
 
@@ -123,7 +118,7 @@
             _ws.onopen = event => {
                 console.log('Connected');
                 // PAGE INIT
-                [{{ init_cmds | sum(start=[]) | unique }}]
+                {{ init_cmds|flatten|safe }}
                     .forEach(cmd => sendCommand(cmd));
             }
             _ws.onmessage = event => {
@@ -162,7 +157,7 @@
             return _ws;
         }
 
-        {# var ws = connect(); #}
+        var ws = connect();
 
         const messageModal = $('#messageModal');
         const messageModalTitle = $('#messageModal .modal-title');

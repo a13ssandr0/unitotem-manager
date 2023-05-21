@@ -48,81 +48,36 @@
     </div>
 {% endblock content %}
 
-{% block init_cmds %}'settings/hostname', 'settings/netplan/file/get'{% endblock init_cmds %}
+{% set ext_scripts = ['ace.js'] %}
+{% set init_cmds = ['settings/hostname', 'settings/netplan/file/get'] %}
+
 
 <script type="text/javascript" charset="utf-8">
-{% block recv_cmds %}
-case 'settings/hostname':
-    byId('inputHostname').value = data.hostname;
-    byId('inputHostname').setAttribute('def-val', data.hostname);
-    break;
-
-case 'settings/netplan/file/get':
-    filesList.innerHTML = '';
-    netplan.original = data.files;
-    Object.entries(data.files).forEach((pair, i) => {
-        const [filename, content] = pair;
-        const li = document.createElement('li');
-        const btn = document.createElement('button');
-        btn.className = 'dropdown-item';
-        btn.type = 'button';
-        btn.innerHTML = filename;
-        btn.onclick = ()=>{
-            file_selector_btn.innerHTML = filename;
-            cur_file = filename;
-            aceEditor.setValue(content, -1);
-            del_btn.setAttribute('data-bs-title', `Do you want to delete ${filename}?`);
-            del_btn.setAttribute('data-bs-positive-action',
-                `sendCommand('settings/netplan/file/del', {filename: '${filename}'})`);
-        };
-        if (i==0) btn.onclick();
-        li.appendChild(btn);
-        filesList.appendChild(li);
-    });
-    break;
-case 'settings/get_wifis':
-    let wifi_low = data.wifis[0].signal_total/3;
-    let wifi_high = data.wifis[0].signal_total*2/3;
-    byId('wifi-menu').innerHTML = "";
-    for (let network of data.wifis){
-        if (network.essid == '') network.essid = null;
-        byId('wifi-menu').innerHTML += 
-        `<li class="dropdown-item" onclick="sendCommand('settings/netplan/file/set', {filename: '10-${network.essid ?? ('hidden' + network.mac.slice(-5))}.yaml', content: wifi_yaml('${network.essid}', ${network.encryption != 'off'}), apply: false});">
-            <span><i class="bi bi-${(network.signal_quality >= wifi_high) ? 'wifi' : ((network.signal_quality >= wifi_low) ? 'wifi-2' : 'wifi-1')}"></i> ${ network.essid ?? '<i><small class="text-muted">hidden</small></i>' }</span>
-            <h6>
-                <small class="text-muted">${network.mac}</small>
-                <span class="float-end line-height-1 ps-2">
-                    <span class="badge text-bg-info">${(network.frequency>=5)?'5':'2.4'}GHz</span>
-                    <span class="badge text-bg-warning"><i class="bi bi-${ network.encryption != 'off' ? 'lock' : 'unlock' }"></i> ${ network.encryption != 'off' ? network.encryption : 'open' }</span>
-                </span>
-            </h6>
-        </li>`;
-    }
-    break;
-{% endblock recv_cmds %}
-
 {% block js %}
-const file_selector_btn = byId('file-selector-btn');
-const filesList = byId('files-list');
+const file_selector_btn = $('#file-selector-btn');
+const filesList = $('#files-list');
 const aceEditor = ace.edit('editor', {theme: "ace/theme/xcode", mode: "ace/mode/yaml"});
-const set_btn = byId('set-btn');
-const del_btn = byId('del-btn');
+const set_btn = $('#set-btn');
+const del_btn = $('#del-btn');
+const inputHostname = $('#inputHostname');
+const set_hostname = $('#set_hostname');
+const wifi_menu = $('#wifi-menu');
 var netplan = { original: {}, modified: {} };
 var cur_file = null;
 
 aceEditor.session.on('change', (delta) => {
     netplan.modified[cur_file] = aceEditor.getValue();
     if (aceEditor.getValue() != netplan.original[cur_file]){
-        set_btn.classList.replace('btn-outline-success', 'btn-success');
+        set_btn.removeClass('btn-outline-success').addClass('btn-success');
     } else {
-        set_btn.classList.replace('btn-success', 'btn-outline-success');
+        set_btn.removeClass('btn-success').addClass('btn-outline-success');
     }
 });
 set_btn.onclick = () => {
     sendCommand('settings/netplan/file/set', {filename: cur_file, content: aceEditor.getValue(), apply: false});
     netplan.original[cur_file] = aceEditor.getValue();
     delete netplan.modified[cur_file];
-    set_btn.classList.replace('btn-success', 'btn-outline-success');
+    set_btn.removeClass('btn-success').addClass('btn-outline-success');
 };
 
 
@@ -133,19 +88,71 @@ function wifi_yaml(wifi_name, password=true) {
     return net;
 }
 
-byId('inputHostname').oninput = () => {
-    if (byId('inputHostname').value != byId('inputHostname').getAttribute('def-val')) {
-        byId('set_hostname').classList.replace('btn-outline-success', 'btn-success');
+inputHostname.oninput = () => {
+    if (inputHostname.val() != inputHostname.attr('def-val')) {
+        set_hostname.removeClass('btn-outline-success').addClass('btn-success');
     } else {
-        byId('set_hostname').classList.replace('btn-success', 'btn-outline-success');
+        set_hostname.removeClass('btn-success').addClass('btn-outline-success');
     }
 };
 
-byId('add_file_btn').onclick = () => sendCommand('settings/netplan/file/new', {filename: byId('modal_input_filename').value});
-byId('set_hostname').onclick = () => sendCommand('settings/hostname', {hostname: byId('inputHostname').value});
+$('#add_file_btn').click(() => sendCommand('settings/netplan/file/new', {filename: $('#modal_input_filename').val()}));
+set_hostname.click(() => sendCommand('settings/hostname', {hostname: inputHostname.val()}));
 var wifi_upd_timer = Number();
-byId('wifiDropBtn').addEventListener('show.bs.dropdown', event => {wifi_upd_timer=setInterval(sendCommand, 5000, 'settings/get_wifis');});
-byId('wifiDropBtn').addEventListener('hide.bs.dropdown', event => {clearInterval(wifi_upd_timer);});
+$('#wifiDropBtn').on('show.bs.dropdown', event => {wifi_upd_timer=setInterval(sendCommand, 5000, 'settings/get_wifis');});
+$('#wifiDropBtn').on('hide.bs.dropdown', event => {clearInterval(wifi_upd_timer);});
 
 {% endblock js %}
+
+
+{% block recv_cmds %}
+case 'settings/hostname':
+    inputHostname.val(data.hostname)
+        .attr('def-val', data.hostname);
+    break;
+
+case 'settings/netplan/file/get':
+    filesList.html('');
+    netplan.original = data.files;
+    Object.entries(data.files).forEach((pair, i) => {
+        const [filename, content] = pair;
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.className = 'dropdown-item';
+        btn.type = 'button';
+        btn.innerHTML = filename;
+        btn.onclick = ()=>{
+            file_selector_btn.html(filename);
+            cur_file = filename;
+            aceEditor.setValue(content, -1);
+            del_btn.attr('data-bs-title', `Do you want to delete ${filename}?`);
+            del_btn.attr('data-bs-positive-action',
+                `sendCommand('settings/netplan/file/del', {filename: '${filename}'})`);
+        };
+        if (i==0) btn.onclick();
+        li.appendChild(btn);
+        filesList.append(li);
+    });
+    break;
+
+case 'settings/get_wifis':
+    let wifi_low = data.wifis[0].signal_total/3;
+    let wifi_high = data.wifis[0].signal_total*2/3;
+    wifi_menu.html('');
+    for (let network of data.wifis){
+        if (network.essid == '') network.essid = null;
+        wifi_menu.append( 
+        `<li class="dropdown-item" onclick="sendCommand('settings/netplan/file/set', {filename: '10-${network.essid ?? ('hidden' + network.mac.slice(-5))}.yaml', content: wifi_yaml('${network.essid}', ${network.encryption != 'off'}), apply: false});">
+            <span><i class="bi bi-${(network.signal_quality >= wifi_high) ? 'wifi' : ((network.signal_quality >= wifi_low) ? 'wifi-2' : 'wifi-1')}"></i> ${ network.essid ?? '<i><small class="text-muted">hidden</small></i>' }</span>
+            <h6>
+                <small class="text-muted">${network.mac}</small>
+                <span class="float-end line-height-1 ps-2">
+                    <span class="badge text-bg-info">${(network.frequency>=5)?'5':'2.4'}GHz</span>
+                    <span class="badge text-bg-warning"><i class="bi bi-${ network.encryption != 'off' ? 'lock' : 'unlock' }"></i> ${ network.encryption != 'off' ? network.encryption : 'open' }</span>
+                </span>
+            </h6>
+        </li>`);
+    }
+    break;
+{% endblock recv_cmds %}
 </script>

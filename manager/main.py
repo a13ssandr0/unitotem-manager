@@ -54,7 +54,7 @@ LOGMAN            = LoginManager(environ['auth_token'], custom_exception=NotAuth
 NEXT_CHANGE_TIME  = 0
 OS_VERSION        = os_version()
 TEMPLATES         = Jinja2Templates(directory=join(dirname(__file__), 'templates'))
-
+TEMPLATES.env.filters['flatten'] = flatten
 UI_WS             = ConnectionManager(True)
 UPLOAD_FOLDER     = join(dirname(__file__), 'uploaded')
 WS                = ConnectionManager()
@@ -255,7 +255,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         APT_THREAD = Thread(target=apt, name=('upgrade' if data.get('do_upgrade', False) else 'update'))
                         APT_THREAD.start()
-                        await WS.broadcast('settings/update/status', status=APT_THREAD.name)
+                        await WS.broadcast('settings/update/status', status=APT_THREAD.name, log=get_apt_log())
 
                 case 'settings/update/list':
                     await WS.broadcast('settings/update/list', updates=apt_list_upgrades())

@@ -9,10 +9,9 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/manager/main.py",
-            // "python": "${workspaceFolder}/.venv/bin/mypy",
             // "args": ["--no-gui"],
             "console": "integratedTerminal",
-            // "preLaunchTask": "userProc",
+            "preLaunchTask": "userProc",
             "justMyCode": true,
             "sudo": true
         },

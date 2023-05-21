@@ -5,6 +5,7 @@ Pillow
 psutil
 pydantic
 PyJWT
+pulsectl
 pymediainfo
 python_crontab
 python-multipart

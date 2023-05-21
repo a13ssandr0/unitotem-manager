@@ -22,15 +22,25 @@
             </small>
         </div>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="apt_update" onclick="sendCommand('settings/update')"></button>
-    <button type="button" class="btn btn-sm btn-outline-danger" id="apt_upgrade" onclick="sendCommand('settings/update', {do_upgrade: true})"></button>
+    <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="apt_update" onclick="sendCommand('settings/update')"><i class="bi bi-arrow-clockwise"></i> Check updates</button>
+    <button type="button" class="btn btn-sm btn-outline-danger" id="apt_upgrade" onclick="sendCommand('settings/update', {do_upgrade: true})"><i class="bi bi-arrow-bar-up"></i> Do updates</button>
 </div>
 <div class="border rounded p-2" style="max-height: 30em; overflow-y: auto;" id="log_container"><small><code style="white-space: pre-wrap; color: grey;" id="log">No logs available</code></small></div>
 {% endblock content %}
 
-{% block init_cmds %}'settings/update/list', 'settings/update/status'{% endblock init_cmds %}
+{% set init_cmds = ['settings/update/list', 'settings/update/status'] %}
 
 <script type="text/javascript" charset="utf-8">
+{% block js %}
+const tooltip = $('#updateCount')[0];
+const upd_table = $('#upd-table')[0];
+const log_view = $('#log')[0];
+const log_container = $('#log_container')[0];
+const updateBtn = $('#apt_update');
+const upgradeBtn = $('#apt_upgrade');
+{% endblock js %}
+
+
 {% block recv_cmds %}
 case 'settings/update/start':
     log_view.innerHTML='';
@@ -42,12 +52,10 @@ case 'settings/update/progress':
     break;
 
 case 'settings/update/end':
-    var updateBtn = byId('apt_update');
-    var upgradeBtn = byId('apt_upgrade');
-    updateBtn.removeAttribute('disabled');
-    updateBtn.innerHTML='<i class="bi bi-arrow-clockwise"></i> Check updates';
-    upgradeBtn.removeAttribute('disabled');
-    upgradeBtn.innerHTML='<i class="bi bi-arrow-bar-up"></i> Do updates';
+    updateBtn.prop('disabled', false)
+        .html('<i class="bi bi-arrow-clockwise"></i> Check updates');
+    upgradeBtn.prop('disabled', false)
+        .html('<i class="bi bi-arrow-bar-up"></i> Do updates');
     break;
 
 case 'settings/update/list':
@@ -65,23 +73,21 @@ case 'settings/update/list':
     break;
 
 case 'settings/update/status':
-    var updateBtn = byId('apt_update');
-    var upgradeBtn = byId('apt_upgrade');
     if (data.status == 'update'){
-        updateBtn.setAttribute('disabled', '');
-        updateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
+        updateBtn.prop('disabled', true);
+        updateBtn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...');
     }
     else {
-        updateBtn.removeAttribute('disabled');
-        updateBtn.innerHTML='<i class="bi bi-arrow-clockwise"></i> Check updates';
+        updateBtn.prop('disabled', false);
+        updateBtn.html('<i class="bi bi-arrow-clockwise"></i> Check updates');
     }
     
     if (data.status == 'upgrade'){
-        upgradeBtn.setAttribute('disabled', '');
-        upgradeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...';
+        upgradeBtn.prop('disabled', true);
+        upgradeBtn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...');
     } else {
-        upgradeBtn.removeAttribute('disabled');
-        upgradeBtn.innerHTML='<i class="bi bi-arrow-bar-up"></i> Do updates';
+        upgradeBtn.prop('disabled', false);
+        upgradeBtn.html('<i class="bi bi-arrow-bar-up"></i> Do updates');
     }
     if (data.log.length){
         log_view.innerHTML='';
@@ -90,11 +96,4 @@ case 'settings/update/status':
     }
     break;
 {% endblock recv_cmds %}
-
-{% block js %}
-const tooltip = byId('updateCount');
-const upd_table = byId('upd-table');
-const log_view = byId('log');
-const log_container = byId('log_container');
-{% endblock js %}
 </script>
