@@ -28,7 +28,7 @@ case 'settings/default_duration':
 const default_duration = $('#default_duration');
 const set_default_duration = $('#set_def_duration');
 
-default_duration.on('change', () => {
+default_duration.change(() => {
     if (default_duration.val() != default_duration.attr('def-val')) {
        set_default_duration.removeClass('btn-outline-success').addClass('btn-success');
     } else {
@@ -36,6 +36,6 @@ default_duration.on('change', () => {
     }
 });
 
-set_default_duration.on('click', () => sendCommand('settings/default_duration', {duration: default_duration.val()}));
+set_default_duration.click(() => sendCommand('settings/default_duration', {duration: default_duration.val()}));
 {% endblock js %}
 </script>
