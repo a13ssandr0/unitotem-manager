@@ -28,12 +28,14 @@
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
-const pwd1 = byId('inputNewPassword');
-const pwd2 = byId('inputNewPassword2');
-const sub = byId('set_passwd');
-pwd1.oninput = pwd2.oninput = () => {
-    if (pwd1.value == pwd2.value) sub.removeAttribute('disabled');
-    else sub.setAttribute('disabled', '');
-};
+const pwd1 = $('#inputNewPassword');
+const pwd2 = $('#inputNewPassword2');
+const sub = $('#set_passwd');
+function checkpwd(){
+    if (pwd1.val() == pwd2.val()) sub.removeAttr('disabled');
+    else sub.attr('disabled', '');
+}
+pwd1.on('input', checkpwd);
+pwd2.on('input', checkpwd);
 {% endblock js %}
 </script>

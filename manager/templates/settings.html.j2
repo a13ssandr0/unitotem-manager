@@ -1,140 +1,17 @@
-{% from 'common/html/header.html.j2' import tabs, header, footer %}
-{% from 'common/html/modals.html.j2' import confirmModal, messageModal, newFileModal, addPowerRuleModal %}
+{% extends 'common/html/base.html.j2' -%}
 
-
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <title>UniTotem Settings</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link id="favicon" rel="icon" type="image/x-icon" href="/static/favicon.ico">
-    <link rel="stylesheet" href="/static/bootstrap.min.css" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
-    <link rel="stylesheet" href="/static/bootstrap-icons.css">
-    <style> html {font-size: 14px} .hdr { background-color: #7431F9; color: white; } </style>
-</head>
-
-<body>
-    {{confirmModal()}}
-    {{messageModal()}}
-    {{newFileModal() if cur_tab=='network'}}
-    {{addPowerRuleModal() if cur_tab=='cron'}}
-
-    {{header(request, isindex=false)}}
-
-    <main class="col-8 mt-md-3 mt-1 mb-3">
-        {% block main_content %}
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="/settings"><i class="bi bi-sliders"></i> Settings</a></li>
-                <li class="breadcrumb-item active" aria-current="page">{% for name, tab, _, icon in tabs %}{% if tab==cur_tab %}<i class="bi bi-{{icon}}"></i> {{name}}{% endif %}{% endfor %}</li>
-            </ol>
-        </nav>
-        <div class="row">
-            
-            <div class="px-3">
-                {% block content %}{% endblock content %}
-            </div>
-        </div>
-        {% endblock main_content %}
-    </main>
-
-    {{footer(ut_vers, logged_user, disp_size, disk_used, disk_total)}}
-
-    <script src="/static/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
-    <script src="/static/ace.js" type="text/javascript" charset="utf-8"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.2.1/chart.umd.min.js" integrity="sha512-GCiwmzA0bNGVsp1otzTJ4LWQT2jjGJENLGyLlerlzckNI30moi2EQT0AfRI7fLYYYDKR+7hnuh35r3y1uJzugw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script type="text/javascript" src="/static/jszip.min.js"></script>
-    <script type="text/javascript" src="/static/jszip-utils.min.js"></script>
-    <script type="text/javascript" charset="utf-8">
-        function $(query){return document.querySelector(query)}
-
-        function byId(id){return document.getElementById(id)}
-
-        function sendCommand(target, args) {
-            if(args === undefined) args = {};
-            args.target = target
-            ws.send(JSON.stringify(args));
-        }
-
-        function showHide(element, show) {
-            if (show)
-                element.removeAttribute('hidden');
-            else
-                element.setAttribute('hidden', '');
-        }
-
-        {% block js %}{% endblock js %}
-
-        var connect_retry = 0;
-
-        function connect() {
-            const loc = window.location;
-            var _ws = new WebSocket(`w${(loc.protocol === 'https:')?'s':''}s://${loc.host}/ws`);
-            _ws.onopen = event => {
-                console.log('Connected');
-                // PAGE INIT
-                [... new Set(['settings/hostname', {% block init_cmds %}{% endblock init_cmds %}])].forEach(cmd => sendCommand(cmd));
-            }
-            _ws.onmessage = event => {
-                const data = JSON.parse(event.data);
-                if (data.target == 'settings/hostname')
-                    document.title = 'UniTotem (' + data.hostname + ') - Settings';
-                switch (data.target) {
-                    
-                    {% block recv_cmds %}{% endblock recv_cmds %}
-
-                    case 'settings/info':
-                        console.log(data)
-                        break;
-
-                    case 'error':
-                        messageModal.querySelector('.modal-title').textContent = 'Error';
-                        messageModal.querySelector('.modal-body h6').textContent = 'Request returned ' + data.error;
-                        messageModal.querySelector('.modal-body code').textContent = data.extra;
-                        new bootstrap.Modal(messageModal).show();
-                        break;
-
-                    default:
-                        break;
-                }
-                
-            };
-
-            _ws.onclose = e => {
-                connect_retry++;
-                console.log('Socket is closed. Reconnect will be attempted in', connect_retry, 'second(s).', e.reason);
-                if (e.reason == 'Not Authenticated') location.reload();
-                setTimeout(() => ws=connect(), connect_retry*1000);
-            };
-
-            _ws.onerror = err => {
-                console.error('Socket encountered error. Closing socket');
-                _ws.close();
-            };
-
-            return _ws;
-        }
-
-        var ws = connect();
-
-        const messageModal = byId('messageModal');
-        const confirmModal = byId('confirmModal');
-        confirmModal.addEventListener('show.bs.modal', event => {
-            const button = event.relatedTarget;
-            
-            confirmModal.querySelector('.modal-title').textContent = button.getAttribute('data-bs-title');
-            const positive_btn = confirmModal.querySelector('.btn-danger');
-            const negative_btn = confirmModal.querySelector('.btn-outline-primary');
-
-            positive_btn.innerHTML = button.getAttribute('data-bs-positive-btn');
-            positive_btn.setAttribute("onclick", button.getAttribute('data-bs-positive-action'));
-            negative_btn.innerHTML = button.getAttribute('data-bs-negative-btn');
-            negative_btn.setAttribute("onclick", button.getAttribute('data-bs-negative-action'));
-        });
-
-    </script>
-</body>
-
-</html>
+{% block main_content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/settings"><i class="bi bi-sliders"></i> Settings</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{% for name, tab, _, icon in tabs %}{% if tab==cur_tab %}<i class="bi bi-{{icon}}"></i> {{name}}{% endif %}{% endfor %}</li>
+    </ol>
+</nav>
+<div class="row">
+    <div class="px-3">
+        {% block content %}{% endblock content %}
+    </div>
+</div>
+{% endblock main_content %}
+    
+{% set init_cmds = ['settings/hostname', init_cmds] %}

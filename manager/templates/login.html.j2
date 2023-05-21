@@ -6,38 +6,68 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link id="favicon" rel="icon" type="image/x-icon" href="/static/favicon.ico">
-    <link rel="stylesheet" href="/static/bootstrap.min.css" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
+    <link rel="stylesheet" href="/static/bootstrap.min.css">
     <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    <style>
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            padding-top: 40px;
+            padding-bottom: 40px;
+            background-color: #f5f5f5;
+        }
+
+        .form-signin {
+            max-width: 330px;
+            padding: 15px;
+        }
+
+        .form-signin .form-floating:focus-within {
+            z-index: 2;
+        }
+
+        .form-signin input[type="text"] {
+            margin-bottom: -1px;
+            border-bottom-right-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+
+        .form-signin input[type="password"] {
+            margin-bottom: 10px;
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+    </style>
 </head>
-<body style="height: 100%;">
-    <div class="container-fluid col col-sm-5 mt-5 pt-5">
-        <div class="card shadow">
-            <div class="card-header text-center">
-                UniTotem {{ut_vers}} - {{ hostname }}
+<body class="text-center">
+    <main class="form-signin w-100 m-auto">
+        <form action="/auth/token" method="post">
+            <h1 class="h2 mb-4 fw-normal">Please sign in</h1>
+            <p class="mb-3 text-body-secondary">UniTotem {{ut_vers}} @ {{ hostname }}</p>
+
+            <div class="form-floating">
+                <input type="text" name="username" class="form-control" id="floatingInput" placeholder="admin" value="admin">
+                <label for="floatingInput">Username</label>
             </div>
-            <div class="card-body">
-                <h5 class="card-title text-center mb-4">Login</h5>
-                <form action="/auth/token" method="post">
-                    <div class="mb-3">
-                        <label for="exampleInputEmail1" class="form-label">Username</label>
-                        <input name="username" type="text" class="form-control" id="inputUsername">
-                    </div>
-                    <div class="mb-3">
-                        <label for="exampleInputPassword1" class="form-label">Password</label>
-                        <input name="password" type="password" class="form-control" id="inputPassword">
-                    </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="exampleCheck1">
-                        <label class="form-check-label" for="exampleCheck1">Remember me</label>
-                    </div>
-                    <input type="hidden" name="src" value="{{src}}">
-                    <button type="submit" class="btn btn-primary float-end">Login</button>
-                </form>
+            <div class="form-floating">
+                <input type="password" name="password" class="form-control" id="floatingPassword" placeholder="Password">
+                <label for="floatingPassword">Password</label>
             </div>
-            <div class="card-footer text-muted text-center">
-                {{ ip_addr }} | {{os_vers}}
+
+            <div class="checkbox mb-3">
+                <label>
+                    <input type="checkbox" value="remember-me"> Remember me
+                </label>
             </div>
-        </div>
-    </div>
+            <input type="hidden" name="src" value="{{src}}">
+            <button class="w-100 btn btn-lg btn-primary" type="submit">Sign in</button>
+            <p class="mt-5 mb-3 text-body-secondary">{{ ip_addr }} | {{os_vers}}</p>
+        </form>
+    </main>
 </body>
 </html>

@@ -8,6 +8,7 @@
 <!-- Redirect to home page if accessing login page from authenticated session -->
 <!-- Use python's url validator instead of javascript's one -->
 <!-- Use an svg for wifi qr code -->
+Avoid recreating audio page on each update
 Properly detect display, finish backend-viewer connection
 Settings backup/restore not fully implemented
 Allow drag-n-drop files

@@ -7,29 +7,35 @@
         <div class="input-group">
             <input type="number" class="form-control" id="default_duration" min="1">
             <span class="input-group-text">seconds</span>
-            <button type="button" class="btn btn-sm btn-outline-success ms-auto" id="set_def_duration" onclick="sendCommand('settings/default_duration', {duration: byId('default_duration').value})"><i class="bi bi-check2"></i> Apply</button>
+            <button type="button" class="btn btn-sm btn-outline-success ms-auto" id="set_def_duration"><i class="bi bi-check2"></i> Apply</button>
         </div>
     </div>
 </div>
 {% endblock content %}
 
-{% block init_cmds %}'settings/default_duration'{% endblock init_cmds %}
+{% set init_cmds = ['settings/default_duration'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block recv_cmds %}
 case 'settings/default_duration':
-    byId('default_duration').value = data.duration;
-    byId('default_duration').setAttribute('def-val', data.duration);
+    default_duration.attr('def-val', data.duration);
+    default_duration.val(data.duration);
+    set_default_duration.removeClass('btn-success').addClass('btn-outline-success');
     break;
 {% endblock recv_cmds %}
 
 {% block js %}
-byId('default_duration').onchange = () => {
-    if (byId('default_duration').value != byId('default_duration').getAttribute('def-val')) {
-        byId('set_def_duration').classList.replace('btn-outline-success', 'btn-success');
+const default_duration = $('#default_duration');
+const set_default_duration = $('#set_def_duration');
+
+default_duration.on('change', () => {
+    if (default_duration.val() != default_duration.attr('def-val')) {
+       set_default_duration.removeClass('btn-outline-success').addClass('btn-success');
     } else {
-        byId('set_def_duration').classList.replace('btn-success', 'btn-outline-success');
+       set_default_duration.removeClass('btn-success').addClass('btn-outline-success');
     }
-};
+});
+
+set_default_duration.on('click', () => sendCommand('settings/default_duration', {duration: default_duration.val()}));
 {% endblock js %}
 </script>

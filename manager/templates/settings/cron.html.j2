@@ -13,22 +13,30 @@
                     {% endfor %}
                 </tr>
             </thead>
-            <tbody id="asset_table">
-                {%for job in crontab%}
-                
-                {%endfor%}
-            </tbody>
+            <tbody id="asset_table"></tbody>
         </table>
     </div>
 {% endblock content %}
 
-{% block init_cmds %}'settings/cron/job'{% endblock init_cmds %}
+{% set init_cmds = ['settings/cron/job'] %}
 
 
 <script type="text/javascript" charset="utf-8">
+{% block js %}
+    const table = $('#asset_table')[0];
+    $('#add_schedule').on('click', () => sendCommand('settings/cron/job/add', {
+        action: $('#action_selector').val(),
+        m: $('#minute_selector').val(),
+        h: $('#hour_selector').val(),
+        dom: $('#monthday_selector').val(),
+        mon: $('#month_selector').val(),
+        dow: $('#weekday_selector').val()
+    }));
+{% endblock js %}
+
+
 {% block recv_cmds %}
 case 'settings/cron/job':
-    var table = byId('asset_table');
     table.innerHTML='';
     data.jobs.forEach(job => {
         table.innerHTML+=`
@@ -53,15 +61,4 @@ case 'settings/cron/job':
     });
     break;
 {% endblock recv_cmds %}
-
-{% block js %}
-byId('add_schedule').onclick = () => sendCommand('settings/cron/job/add', {
-    action: byId('action_selector').value,
-    m: byId('minute_selector').value,
-    h: byId('hour_selector').value,
-    dom: byId('monthday_selector').value,
-    mon: byId('month_selector').value,
-    dow: byId('weekday_selector').value
-});
-{% endblock js %}
 </script>
