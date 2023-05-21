@@ -2,10 +2,11 @@
 
 <style>
 {% block custom_style %}
-    .mute-icon[mute=false]{ color:blue; }
+    .mute-icon[mute=false]{ color: var(--bs-primary); }
     .mute-icon[mute=false]::before{ content: '\f611'; } /*volume up icon*/
     .mute-icon[mute=true]{ color:red; }
     .mute-icon[mute=true]::before{ content: '\f60d'; } /*volume down icon*/
+    :root, [data-bs-theme=light] { --bs-tertiary-bg: #dddddd; }
 {% endblock custom_style %}
 </style>
 
