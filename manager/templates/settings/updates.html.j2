@@ -4,10 +4,10 @@
 <div class="mb-3 hstack gap-2">
     <p class="my-auto" id="updateCount"></p>
     <div class="dropdown">
-        <button type="button" class="btn" data-bs-toggle="dropdown" aria-expanded="false" data-bs-reference="parent">
+        <button type="button" class="btn" data-bs-toggle="dropdown" data-bs-reference="parent">
             <i class="bi bi-info-circle"></i>
         </button>
-        <div class="dropdown-menu" style="min-width: 30rem;">
+        <div class="dropdown-menu" style="min-width: 30rem; max-height: 50vh; overflow-y:auto;">
             <small>
                 <table class="table">
                     <thead>
@@ -32,9 +32,9 @@
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
-const tooltip = $('#updateCount')[0];
-const upd_table = $('#upd-table')[0];
-const log_view = $('#log')[0];
+const tooltip = $('#updateCount');
+const upd_table = $('#upd-table');
+const log_view = $('#log');
 const log_container = $('#log_container')[0];
 const updateBtn = $('#apt_update');
 const upgradeBtn = $('#apt_upgrade');
@@ -43,11 +43,11 @@ const upgradeBtn = $('#apt_upgrade');
 
 {% block recv_cmds %}
 case 'settings/update/start':
-    log_view.innerHTML='';
+    log_view.html('');
     break;
 
 case 'settings/update/progress':
-    log_view.innerHTML+=(data.is_stdout)?data.data:`<span style="color: red;">${data.data}</span>`;
+    log_view.append((data.is_stdout)?data.data:`<span style="color: red;">${data.data}</span>`);
     log_container.scrollTop = log_container.scrollHeight;
     break;
 
@@ -60,22 +60,23 @@ case 'settings/update/end':
 
 case 'settings/update/list':
     var cnt = data.updates.length;
-    tooltip.innerHTML = `${cnt==0?'No':cnt} update${cnt==1?'':'s'} available`;
-    upd_table.innerHTML = '';
+    tooltip.html(`${cnt==0?'No':cnt} update${cnt==1?'':'s'} available`);
+    upd_table.html('');
     data.updates.forEach(pkg=>{
-        upd_table.innerHTML += `
-                <tr>
-                    <th scope="row">${pkg.package}</th>
-                    <td>${pkg.old_version}</td>
-                    <td>${pkg.new_version}</td>
-                </tr>`;
+        upd_table.append(
+            $('<tr></tr>').append(
+                $('<th scope="row"></th>').html(pkg.package),
+                $('<td></td>').html(pkg.old_version),
+                $('<td></td>').html(pkg.new_version)
+            )
+        );
     });
     break;
 
 case 'settings/update/status':
     if (data.status == 'update'){
         updateBtn.prop('disabled', true);
-        updateBtn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...');
+        updateBtn.html('<span class="spinner-border spinner-border-sm" role="status"></span> Checking...');
     }
     else {
         updateBtn.prop('disabled', false);
@@ -84,14 +85,14 @@ case 'settings/update/status':
     
     if (data.status == 'upgrade'){
         upgradeBtn.prop('disabled', true);
-        upgradeBtn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...');
+        upgradeBtn.html('<span class="spinner-border spinner-border-sm" role="status"></span> Updating...');
     } else {
         upgradeBtn.prop('disabled', false);
         upgradeBtn.html('<i class="bi bi-arrow-bar-up"></i> Do updates');
     }
     if (data.log.length){
-        log_view.innerHTML='';
-        data.log.forEach(line => log_view.innerHTML+=(line[0])?line[1]:`<span style="color: red;">${line[1]}</span>`);
+        log_view.html('');
+        data.log.forEach(line => log_view.append((line[0])?line[1]:`<span style="color: red;">${line[1]}</span>`));
         log_container.scrollTop = log_container.scrollHeight;
     }
     break;

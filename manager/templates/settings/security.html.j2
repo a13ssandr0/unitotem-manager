@@ -31,11 +31,7 @@
 const pwd1 = $('#inputNewPassword');
 const pwd2 = $('#inputNewPassword2');
 const sub = $('#set_passwd');
-function checkpwd(){
-    if (pwd1.val() == pwd2.val()) sub.removeAttr('disabled');
-    else sub.attr('disabled', '');
-}
-pwd1.on('input', checkpwd);
-pwd2.on('input', checkpwd);
+pwd1.on('input', () => sub.prop('disabled', (pwd1.val() == '') || (pwd1.val() != pwd2.val())));
+pwd2.on('input', () => sub.prop('disabled', (pwd1.val() == '') || (pwd1.val() != pwd2.val())));
 {% endblock js %}
 </script>

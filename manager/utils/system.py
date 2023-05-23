@@ -34,11 +34,11 @@ class UniCron(CronTab):
     def serialize(self):
         return [{
             'command': job.command,
-            'm': job.minute,
-            'h': job.hour,
-            'dom': job.dom,
-            'mon': job.month,
-            'dow': job.dow,
+            'm': int(str(job.minute)),
+            'h': int(str(job.hour)),
+            'dom': int(str(job.dom)),
+            'mon': int(str(job.month)),
+            'dow': int(str(job.dow)),
             'enabled': job.enabled,
             'comment': job.comment
         } for job in self.find_comment(self._cron_re)]

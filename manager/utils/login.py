@@ -21,6 +21,8 @@ class LoginForm(OAuth2PasswordRequestForm):
                 scope: str = Form(default=""),
                 client_id: Optional[str] = Form(default=None),
                 client_secret: Optional[str] = Form(default=None),
-                src: Optional[str] = Form(default = None)):
+                src: Optional[str] = Form(default = None),
+                remember_me: Optional[bool] = Form(default = False)):
         super().__init__(grant_type, username, password, scope, client_id, client_secret)
         self.src = src or '/'
+        self.remember_me = remember_me

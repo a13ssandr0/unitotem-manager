@@ -41,7 +41,7 @@
     </style>
 </head>
 
-<body {# data-bs-theme="dark" #}>
+<body data-bs-theme="dark">
 
     {{confirmModal()}}
     {{newAssetModal() if (request.url|string).endswith('/')}}
@@ -51,7 +51,7 @@
 
     <nav class="navbar navbar-dark hdr">
         <div class="container-fluid gap-2">
-            <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasResponsive" aria-controls="offcanvasResponsive"><span class="navbar-toggler-icon"></span></button>
+            <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasResponsive"><span class="navbar-toggler-icon"></span></button>
             <a class="navbar-brand p-0" href="/"><h1 class="my-auto"><b>U<span class="d-none d-md-inline">niTotem</span></b></h1></a>
             <button class="btn btn-outline-light ms-auto" type="button" data-bs-title="Do you want to reboot UniTotem?" data-bs-positive-btn="Reboot" data-bs-positive-action="sendCommand('power/reboot')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
                 <i class="bi bi-bootstrap-reboot"></i><span class="d-none d-sm-inline"> Reboot</span>
@@ -67,7 +67,7 @@
 
     <div class="container-fluid">
         <div class="row">
-            <div class="offcanvas-lg offcanvas-start" tabindex="-1" id="offcanvasResponsive" aria-labelledby="offcanvasResponsiveLabel" style="width: 16rem;">
+            <div class="offcanvas-lg offcanvas-start" tabindex="-1" id="offcanvasResponsive" style="width: 16rem;">
                 <div class="offcanvas-header">
                     <h1 style="color: #7431F9;">UniTotem</h1>
                 </div>
@@ -125,6 +125,13 @@
                 const data = JSON.parse(event.data);
                 if (data.target == 'settings/hostname')
                     document.title = data.hostname + ' - UniTotem Manager';
+                if (data.hasOwnProperty('error')){
+                    messageModal.find('.modal-title').text('Error');
+                    messageModal.find('.modal-body h6').text(data.target + ' returned ' + data.error);
+                    messageModal.find('.modal-body code').text(data.extra);
+                    new bootstrap.Modal(messageModal).show();
+                    return;
+                }
                 switch (data.target) {
                     
                     {% block recv_cmds %}{% endblock recv_cmds %}
