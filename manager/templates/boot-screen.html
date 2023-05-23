@@ -6,9 +6,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+        body { /* 90deg */
+            margin: 0;
+            position: absolute;
+            transform: rotate(90deg);
+            transform-origin: bottom left;
+            width: 100vh;
+            height: 100vw;
+            object-fit: cover;
+            top: -100vw;
+            visibility: visible;
+        }
+
+        /* -90deg
         body {
+            margin: 0;
+            position: absolute;
+            transform: rotate(-90deg);
+            transform-origin: top left; 
+            width: 100vh;
+            height: 100vw;
+            object-fit: cover;
+            top: 100vh;
+            visibility: visible;
+        }*/
+
+        main {
             background: black; 
-            height: 100vh;
+            height: 100%;
             color: white;
             margin: 0px;
             overflow: hidden;
@@ -88,12 +113,18 @@
 </head>
 
 <body>
-    <div id="boot_screen" class="center"><div class="welcome"><div class="glow">
-        <span class="loader">UniT&nbsp;&nbsp;tem</span> <!-- https://github.com/vineethtrv/css-loader -->
-    </div></div></div>
-    <webview id="webview" class="media-viewer"></webview>
-    <img    id="imageview" class="media-viewer">
-    <video  id="videoview" class="media-viewer"></video>
+    <main>
+        <div id="boot_screen" class="center">
+            <div class="welcome">
+                <div class="glow">
+                    <span class="loader">UniT&nbsp;&nbsp;tem</span> <!-- https://github.com/vineethtrv/css-loader -->
+                </div>
+            </div>
+        </div>
+        <webview id="webview" class="media-viewer"></webview>
+        <img    id="imageview" class="media-viewer">
+        <video  id="videoview" class="media-viewer"></video>
+    </main>
 </body>
 
 <script type="text/javascript" charset="utf-8">
@@ -106,9 +137,7 @@
     function connect() {
         var _ws = new WebSocket(`wss://localhost/ui_ws`);
         _ws.onopen = async event => {
-            console.log('Connected');
             // PAGE INIT
-            //[... new Set(['settings/hostname', ])].forEach(cmd => sendCommand(cmd));
             sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
             sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
         }

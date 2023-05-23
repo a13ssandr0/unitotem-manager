@@ -50,7 +50,7 @@ if 'auth_token' not in environ:
     Path('/etc/unitotem/unitotem.env').touch(mode=0o600)
     set_key('/etc/unitotem/unitotem.env', 'auth_token', environ['auth_token'])
 LOGMAN            = LoginManager(environ['auth_token'], custom_exception=NotAuthenticatedException,
-                        token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(hours=5))
+                        token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(days=7))
 NEXT_CHANGE_TIME  = 0
 OS_VERSION        = os_version()
 TEMPLATES         = Jinja2Templates(directory=join(dirname(__file__), 'templates'))
@@ -92,11 +92,11 @@ async def load_user(username:str):
 async def login(data: LoginForm = Depends()):
     if not Config.authenticate(data.username, data.password):
         raise InvalidCredentialsException
-    expires_delta = timedelta(hours=1)
-    access_token = LOGMAN.create_access_token(data={'sub':data.username}, expires=expires_delta)
+    access_token = LOGMAN.create_access_token(data={'sub':data.username})
     resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
-    resp.set_cookie(key=LOGMAN.cookie_name, value=access_token, httponly=False,
-                    samesite='strict', max_age=int(expires_delta.total_seconds()))
+    resp.set_cookie(key=LOGMAN.cookie_name, value=access_token,
+                    httponly=True, samesite='strict',
+                    max_age=int(LOGMAN.default_expiry.total_seconds()) if data.remember_me else None)
     return resp
 
 
@@ -553,7 +553,7 @@ async def base_page(request: Request):
     ))
 
 
-@WWW.get("/unitotem-no-assets", response_class=HTMLResponse)
+@WWW.api_route("/unitotem-no-assets", response_class=HTMLResponse, methods=['GET', 'HEAD'])
 async def no_assets_page(request: Request):
     ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse('no-assets.html.j2', dict(
@@ -564,7 +564,7 @@ async def no_assets_page(request: Request):
         hostname=get_hostname()
     ))
 
-@WWW.get("/unitotem-first-boot", response_class=HTMLResponse)
+@WWW.api_route("/unitotem-first-boot", response_class=HTMLResponse, methods=['GET', 'HEAD'])
 async def first_boot_page(request: Request):
     ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse('first-boot.html.j2', dict(

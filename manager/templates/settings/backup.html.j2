@@ -7,7 +7,7 @@
 
 <h4 class="mt-5">Restore</h4>
 <div class="progress" id="upload-progress" hidden>
-    <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+    <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" style="width: 0%">0%</div>
 </div>
 <input class="form-control form-control-sm" type="file" accept="application/zip" id="formFile">
 <div id="uploadSettings" hidden>
@@ -45,14 +45,14 @@
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
-var fileSelector = byId('formFile');
+var fileSelector = $('#formFile')[0];
 var checks = [
-    ["CONFIG", byId("mainConfCheck")],
-    ["hostname", byId("hostnameCheck")],
-    ["def_audio_dev", byId("alsaCheck")],
-    ["netplan", byId("netplanCheck")]
+    ["CONFIG", $("#mainConfCheck")[0]],
+    ["hostname", $("#hostnameCheck")[0]],
+    ["def_audio_dev", $("#alsaCheck")[0]],
+    ["netplan", $("#netplanCheck")[0]]
 ];
-var fileCheck = byId("fileCheck");
+var fileCheck = $("#fileCheck")[0];
 fileSelector.onchange = () => {
     if (fileSelector.files.length > 0){
         JSZip.loadAsync(fileSelector.files[0]).then((zip) => {
@@ -75,20 +75,20 @@ fileSelector.onchange = () => {
                     fileCheck.setAttribute('disabled', '');
                 }
             }).then(()=>{
-                byId('uploadSettings').removeAttribute('hidden');
-                byId('restore_confirm').onclick = () => {
+                $('#uploadSettings')[0].removeAttribute('hidden');
+                $('#restore_confirm')[0].onclick = () => {
                     var cfg_options = {
-                        CONFIG: byId("mainConfCheck").checked,
-                        hostname: byId("alsaCheck").checked,
-                        def_audio_dev: byId("hostnameCheck").checked,
-                        netplan: byId("netplanCheck").checked,
-                        uploaded: byId("fileCheck").checked
+                        CONFIG: $("#mainConfCheck")[0].checked,
+                        hostname: $("#alsaCheck")[0].checked,
+                        def_audio_dev: $("#hostnameCheck")[0].checked,
+                        netplan: $("#netplanCheck")[0].checked,
+                        uploaded: $("#fileCheck")[0].checked
                     }
                     uploadConfig(fileSelector.files[0], cfg_options, true);
                 }
             });
         }, () => {alert("Not a valid zip file")}); 
-    } else byId('uploadSettings').setAttribute('hidden', '');
+    } else $('#uploadSettings')[0].setAttribute('hidden', '');
 }
 
 function readyStateHandler(xhttp, on_success, on_error){
@@ -111,13 +111,12 @@ function uploadConfig(cfg_file, cfg_options, on_success, on_error) {
     let formData = new FormData();
     formData.append('data_zip_file', cfg_file);
     formData.append('options', JSON.stringify(cfg_options));
-    byId("upload-progress").removeAttribute("hidden");
-    let progressbar = byId("upload-progress-bar");
+    $("#upload-progress")[0].removeAttribute("hidden");
+    let progressbar = $("#upload-progress-bar")[0];
     xhttp.upload.addEventListener('progress', (event) => {
         var perc = Math.round(event.loaded / event.total * 100);
         progressbar.style = `width: ${perc}%`;
         progressbar.innerHTML = perc + "%";
-        progressbar.ariaValueNow = perc;
     });
     xhttp.open("POST", "./backup", true);
     xhttp.send(formData);

@@ -12,7 +12,7 @@
         <div class="col-9">
         {% if disk.fsuse_perc != None %}
             <div class="progress">
-                <div class="progress-bar" role="progressbar" aria-label="Buffer pages" style="width: {{disk.fsuse_perc}}%" aria-valuenow="{{disk.fsuse_perc}}" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar" role="progressbar" style="width: {{disk.fsuse_perc}}%">
                     {{disk.fsused|filesizeformat(True)}}/{{disk.size|filesizeformat(True)}}
                 </div>
             </div>
@@ -55,9 +55,9 @@
     <div class="col-12 col-lg-6 mb-2">
         <p class="fw-bold mt-3 mb-1">RAM</p>
         <div class="progress">
-            <div id="progress-used" class="progress-bar bg-success" role="progressbar" aria-label="Used memory pages" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-            <div id="progress-buffer" class="progress-bar" role="progressbar" aria-label="Buffer pages" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-            <div id="progress-cache" class="progress-bar bg-warning" role="progressbar" aria-label="Cache pages" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            <div id="progress-used" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+            <div id="progress-buffer" class="progress-bar" role="progressbar" style="width: 0%"></div>
+            <div id="progress-cache" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
         </div>
         <div class="row">
             <div class="col-3"><span><span id="pill-used" class="badge rounded-pill text-bg-success"></span><small> Used</small></span></div>
@@ -80,7 +80,7 @@
         {% if has_battery %}    
         <p class="fw-bold mt-3 mb-1">Battery</p>
         <div class="progress">
-            <div id="bat-perc" class="progress-bar" role="progressbar" aria-label="Buffer pages" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            <div id="bat-perc" class="progress-bar" role="progressbar" style="width: 0%"></div>
         </div>
         <small>Time left: <span id="bat-time"></span> | <span id="bat-chg"></span></small>
         {% endif %}
@@ -99,109 +99,26 @@
 {% set init_cmds = ['settings/info'] %}
 
 <script type="text/javascript" charset="utf-8">
-{% block recv_cmds %}
-case 'settings/info':
-    console.log(data);
-
-    uptime.innerHTML = `(Uptime: ${data.uptime})`;
-
-    if (barChartData.labels.length == 0){
-        barChartData.labels = ['CPU'];
-        for(var i = 1; i<data.cpu.length; i++){
-            barChartData.labels.push('Core' + i);
-        }
-    }
-    barChartData.datasets.forEach(dataset => {dataset.data = []});
-    data.cpu.forEach((val, i) =>{
-        barChartData.datasets[0].data.push(val.nice);
-        barChartData.datasets[1].data.push(val.user);
-        barChartData.datasets[2].data.push(val.system);
-        barChartData.datasets[3].data.push(val.irq);
-        barChartData.datasets[4].data.push(val.softirq);
-        barChartData.datasets[5].data.push(val.iowait);
-    })
-    window.myBar.update();
-
-    prog_used.style = `width: ${data.vmem.used/data.vmem.total*100}%`;
-    prog_used.setAttribute('aria-valuenow', data.vmem.used/data.vmem.total*100);
-    pill_used.innerHTML = `<small>${human_readable_size(data.vmem.used)}</small>`;
-
-    prog_buffer.style = `width: ${data.vmem.buffers/data.vmem.total*100}%`;
-    prog_buffer.setAttribute('aria-valuenow', data.vmem.buffers/data.vmem.total*100);
-    pill_buffer.innerHTML = `<small>${human_readable_size(data.vmem.buffers)}</small>`;
-
-    prog_cache.style = `width: ${data.vmem.cached/data.vmem.total*100}%`;
-    prog_cache.setAttribute('aria-valuenow', data.vmem.cached/data.vmem.total*100);
-    pill_cache.innerHTML = `<small>${human_readable_size(data.vmem.cached)}</small>`;
-    
-    pill_total.innerHTML = `<small>${human_readable_size(data.vmem.total)}</small>`;
-
-    {% if has_battery %}    
-    bat_perc.style = `width: ${data.battery.percent}%`;
-    bat_perc.setAttribute('aria-valuenow', data.battery.percent);
-    bat_perc.innerHTML = `<small>${data.battery.percent}%</small>`;
-
-    var time = new Date(0);
-    time.setSeconds(data.battery.secsleft); // specify value for SECONDS here
-    bat_time.innerHTML = time.toISOString().substring(11, 19);
-
-    bat_chg.innerHTML = data.battery.power_plugged?'Charging':'Discharging';
-    {% endif %}
-
-    {% if has_fans %}
-    fans_list.innerHTML = '';
-    data.fans.forEach((fan, i) => {
-        fans_list.innerHTML += `
-            <li class="list-group-item d-flex justify-content-between align-items-center"><small>${fan.label || ('fan' + (i+1))}</small><small>${fan.current} rpm</small></li>`;
-    })
-    {% endif %}
-
-    temp_table.innerHTML = '';
-    Object.entries(data.temperatures).forEach((pair, i) => {
-        pair[1].forEach((temp, j)=>{
-            /* I don't think we need to display threshold values higher than
-             * solder reflow temperature, let alone temperatures hotter than
-             * THE SUN!
-             * Samsung nvme ssds report a high/critical temperature of 65261.85 °C
-             * Considering the Sun is at 5500 °C, we would have a problem if we
-             * reached this temperature, actually 59761.85 problems.
-            */
-            if (temp.high > 300) temp.high = null;
-            if (temp.critical > 300) temp.critical = null;
-            temp_table.innerHTML += `
-                <tr>
-                    <th scope="row">${(!j)?pair[0]:''}</th>
-                    <td>${temp.label}</td>
-                    <td class="text-end${(temp.high!=null && temp.current>temp.high)?' text-danger':''}">${temp.current} °C</td>
-                    <td class="text-end">${(temp.high!=null)?temp.high+' °C':''}</td>
-                    <td class="text-end">${(temp.critical!=null)?temp.critical+' °C':''}</td>
-                </tr>`;
-        })
-    })
-
-    break;
-{% endblock recv_cmds %}
-
 {% block js %}
 
-const uptime = byId('uptime');
-const temp_table = byId('temp-table');
-const prog_used = byId('progress-used');
-const prog_buffer = byId('progress-buffer');
-const prog_cache = byId('progress-cache');
-const pill_used = byId('pill-used');
-const pill_buffer = byId('pill-buffer');
-const pill_cache = byId('pill-cache');
-const pill_total = byId('pill-total');
+const uptime = $('#uptime');
+const temp_table = $('#temp-table');
+const prog_used = $('#progress-used');
+const prog_buffer = $('#progress-buffer');
+const prog_cache = $('#progress-cache');
+const pill_used = $('#pill-used');
+const pill_buffer = $('#pill-buffer');
+const pill_cache = $('#pill-cache');
+const pill_total = $('#pill-total');
 
 {% if has_battery %}    
-const bat_perc = byId('bat-perc');
-const bat_time = byId('bat-time');
-const bat_chg = byId('bat-chg');
+const bat_perc = $('#bat-perc');
+const bat_time = $('#bat-time');
+const bat_chg = $('#bat-chg');
 {% endif %}
 
 {% if has_fans %}
-const fans_list = byId('fans-list');
+const fans_list = $('#fans-list');
 {% endif %}
 
 const chartColors = {
@@ -271,25 +188,13 @@ const barChartData = {
     }]
 };
 
-window.onload = function() {
-    window.myBar = new Chart(byId("cpu-canvas").getContext("2d"), {
+window.onload = () => {
+    window.myBar = new Chart($("#cpu-canvas")[0].getContext("2d"), {
         type: 'bar',
         data: barChartData,
         options: {
             responsive: true,
-            legend: {
-                position: 'top',
-            },
-            {# scales: {
-                y: {
-                    min: 0,
-                    max: 100,
-                }
-            }, #}
-            title: {
-                display: true,
-                text: 'CPU Bar Chart'
-            }
+            legend: { position: 'top' }
         }
     });
     setInterval(sendCommand, 3000, 'settings/info');
@@ -306,4 +211,90 @@ function human_readable_size(size, precision=3){
 }
 
 {% endblock js %}
+
+
+{% block recv_cmds %}
+case 'settings/info':
+    uptime.html(`(Uptime: ${data.uptime})`);
+
+    if (barChartData.labels.length == 0){
+        barChartData.labels = ['CPU'];
+        for(var i = 1; i<data.cpu.length; i++){
+            barChartData.labels.push('Core' + i);
+        }
+    }
+    barChartData.datasets.forEach(dataset => {dataset.data = []});
+    data.cpu.forEach((val, i) =>{
+        barChartData.datasets[0].data.push(val.nice);
+        barChartData.datasets[1].data.push(val.user);
+        barChartData.datasets[2].data.push(val.system);
+        barChartData.datasets[3].data.push(val.irq);
+        barChartData.datasets[4].data.push(val.softirq);
+        barChartData.datasets[5].data.push(val.iowait);
+    })
+    window.myBar.update();
+
+    prog_used.css('width', data.vmem.used/data.vmem.total*100 + '%');
+    pill_used.html($('<small></small>').html(human_readable_size(data.vmem.used)));
+
+    prog_buffer.css('width', data.vmem.buffers/data.vmem.total*100 + '%');
+    pill_buffer.html($('<small></small>').html(human_readable_size(data.vmem.buffers)));
+
+    prog_cache.css('width', data.vmem.cached/data.vmem.total*100 + '%');
+    pill_cache.html($('<small></small>').html(human_readable_size(data.vmem.cached)));
+    
+    pill_total.html($('<small></small>').html(human_readable_size(data.vmem.total)));
+
+    {% if has_battery %}    
+    bat_perc.css('width', data.battery.percent + '%');
+    bat_perc.html($('<small></small>').html(data.battery.percent));
+
+    var time = new Date(0);
+    time.setSeconds(data.battery.secsleft); // specify value for SECONDS here
+    bat_time.html(time.toISOString().substring(11, 19));
+
+    bat_chg.html(data.battery.power_plugged?'Charging':'Discharging');
+    {% endif %}
+
+    {% if has_fans %}
+    fans_list.html('');
+    data.fans.forEach((fan, i) => {
+        fans_list.append(
+            $('<li class="list-group-item d-flex justify-content-between align-items-center"></li>')
+                .append(
+                    $('<small></small>').html(fan.label || ('fan' + (i+1))),
+                    $('<small></small>').html(fan.current + ' rpm')
+                )
+        );
+    })
+    {% endif %}
+
+    temp_table.html('');
+    Object.entries(data.temperatures).forEach((pair, i) => {
+        pair[1].forEach((temp, j)=>{
+            /* I don't think we need to display threshold values higher than
+             * solder reflow temperature, let alone temperatures hotter than
+             * THE SUN!
+             * Samsung nvme ssds report a high/critical temperature of 65261.85 °C
+             * Considering the Sun is at 5500 °C, we would have a problem if we
+             * reached this temperature, actually 59761.85 problems.
+            */
+            if (temp.high > 300) temp.high = null;
+            if (temp.critical > 300) temp.critical = null;
+            temp_table.append(
+                $('<tr></tr>').append(
+                    $('<th scope="row"></th>').html((!j)?pair[0]:''),
+                    $('<td></td>').html('temp.label'),
+                    $('<td class="text-end"></td>')
+                        .toggleClass('text-danger', temp.high!=null && temp.current>temp.high)
+                        .html(temp.current + ' °C'),
+                    $('<td class="text-end"></td>').html((temp.high!=null)?(temp.high+' °C'):''),
+                    $('<td class="text-end"></td>').html((temp.critical!=null)?(temp.critical+' °C'):'')
+                )
+            );
+        });
+    });
+
+    break;
+{% endblock recv_cmds %}
 </script>

@@ -30,8 +30,8 @@
     </div> -->
     {% block main_content %}
     <div class="row">
-        <div class="col-lg-4 pe-lg-2">
-            <div class="hstack gap-2">
+        <div class="col-lg-4 pe-lg-2 order-1 order-lg-12">
+            <div class="hstack gap-2 mb-1">
                 <h5>Files</h5>
                 <div class="ms-auto">
                     <div class="btn-group" role="group">
@@ -43,11 +43,11 @@
                 <button type="button" class="btn btn-sm btn-success" onclick="fileSelector.click()" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</button>
             </div>
             <div class="progress" id="upload-progress" style="display: none;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" aria-label="Animated striped example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+                <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" style="width: 0%">0%</div>
             </div>
             <ol id="file-list" class="list-group"></ol>
         </div>
-        <div class="col-lg-8 mt-4 mt-lg-0">
+        <div class="col-lg-8 mt-4 mt-lg-0 order-12 order-lg-1">
             <div class="hstack gap-2">
                 <h5>Playlist</h5>
                 <div class="ms-auto">
@@ -57,9 +57,9 @@
                         <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/next')"><i class="bi bi-skip-forward"></i></button>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-primary me-2" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal"><i class="bi bi-plus-circle"></i> Add URL</button>
+                <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal"><i class="bi bi-plus-circle"></i> Add URL</button>
             </div>
-            <div class="row container-fluid justify-content-center">
+            <div class="row">
                 <table class="table table-hover">
                     <thead class="border-bottom">
                         <tr name="asset-row">
@@ -89,16 +89,16 @@
 
 <script>
 {% block js %}
-    sortable_list = Sortable.create($('#asset_table')[0], {
+    const asset_table = $('#asset_table');
+    const modal_input_url = $('#modal_input_url');
+    const fileSelector = $('<input type="file" multiple>')
+        .on('change', () => {if (fileSelector.files.length > 0)uploadFiles(Array.from(fileSelector.files), true)});
+    
+    sortable_list = Sortable.create(asset_table[0], {
         onUpdate: (event) => {sendCommand('scheduler/reorder', {from: event.oldIndex, to: event.newIndex});},
         handle: ".asset-list-handle"
     });
 
-    const asset_table = $('asset_table');
-    const modal_input_url = $('modal_input_url');
-    const fileSelector = $('<input type="file" multiple>')
-        .on('change', () => {if (fileSelector.files.length > 0)uploadFiles(Array.from(fileSelector.files), true)});
-    
     function readyStateHandler(xhttp, on_success, on_error){
         if (xhttp.readyState == 4){
             if (xhttp.status >= 200 && xhttp.status < 300) {
@@ -119,12 +119,10 @@
         let formData = new FormData();
         files.forEach(file => formData.append("files", file));
         $("#upload-progress").show();
-        let progressbar = byId("upload-progress-bar");
+        let progressbar = $("#upload-progress-bar");
         xhttp.upload.addEventListener('progress', (event) => {
             var perc = Math.round(event.loaded / event.total * 100);
-            progressbar.style = `width: ${perc}%`;
-            progressbar.innerHTML = perc + "%";
-            progressbar.ariaValueNow = perc;
+            progressbar.css('width', perc + '%').html( perc + '%');
         });
         xhttp.open("POST", "/api/scheduler/upload", true);
         xhttp.send(formData);
@@ -137,20 +135,19 @@
     }
     
     function duration_editor(parent, uuid) {
-        let oldHTML = parent.outerHTML;
-        let cur_dur = parent.innerHTML;
-        parent.removeAttribute('onclick');
-        parent.innerHTML = `
+        let oldHTML = parent[0].outerHTML;
+        let cur_dur = parent.html();
+        parent.removeAttr('onclick');
+        parent.html(`
         <div class="input-group" style="width: 10ch; max-width: 10ch;">
-            <input type="number" class="form-control form-control-sm" id="update-duration" min="0" value="${cur_dur}" aria-describedby="duration-update-confirm-btn">
-            <button title="Save" class="btn btn-sm btn-outline-success" type="button" onclick="sendCommand('scheduler/update_duration', {uuid: '${uuid}', duration: byId('update-duration').value});" id="duration-update-confirm-btn"><i class="bi bi-check-lg"></i></button>
+            <input type="number" class="form-control form-control-sm" id="update-duration" min="0" value="${cur_dur}">
+            <button title="Save" class="btn btn-sm btn-outline-success" type="button" onclick="sendCommand('scheduler/update_duration', {uuid: '${uuid}', duration: $('#update-duration').val()});" id="duration-update-confirm-btn"><i class="bi bi-check-lg"></i></button>
         </div>
-        `;
-        byId('update-duration').onblur = (event) => {
+        `);
+        $('#update-duration').blur((event) => {
             if (event.relatedTarget && event.relatedTarget.id == "duration-update-confirm-btn") return;
             parent.outerHTML = oldHTML;
-        }
-        byId('update-duration').focus();
+        }).focus();
     };
     
     function downloadFiles(files) {
@@ -171,13 +168,13 @@
     }
 
     modal_input_url.oninput = () => sendCommand('scheduler/validate_url', {url: modal_input_url.value});
-    byId('add_asset_btn').onclick = () => {
-        var tmp = {items: {}};
-        tmp.items[modal_input_url.value] = {duration: byId('modal_input_duration').value};
+    $('#add_asset_btn').click(() => {
+        var tmp = { items: {} };
+        tmp.items[modal_input_url.val()] = {duration: $('modal_input_duration').val()};
         sendCommand('scheduler/asset', tmp);
-    }
+    });
 
-    /* byId('dnd-interceptor').ondrop = event => {
+    /* $('#dnd-interceptor').on('drop', event => {
         event.preventDefault();
         event.stopPropagation();
 
@@ -196,35 +193,49 @@
                 console.log(`… file[${i}].name = ${file.name}`);
             });
         }
-    } */
+    }); */
 
 {% endblock js %}
 
 
 {% block recv_cmds %}
 case 'scheduler/asset':
-    
-    asset_table.innerHTML = '';
-    for (var i=0; i<data.items.length; i++){
-        asset_table.innerHTML += `
-        <tr id="${data.items[i].uuid}" class="${(data.items[i].uuid == data.current)? 'table-active': ''}">
-            <td class="align-middle asset-list-handle" style="width: 2em;"><i id="icon-${data.items[i].uuid}" class="bi bi-globe" onmouseover="this.classList.replace('bi-globe', 'bi-arrow-down-up')" onmouseout="this.classList.replace('bi-arrow-down-up', 'bi-globe')" style="color: grey;"></i></td>
-            <td class="align-middle">${data.items[i].url}</td>
-            <td class="align-middle" style="width: 6em;" onclick="duration_editor(this, '${data.items[i].uuid}');" name="dur_edit">${data.items[i].duration}</td>
-            <td class="align-middle" style="width: 8em;">
-                <div class="hstack gap-2">
-                    <div class="form-check form-switch">
-                        <input title="${data.items[i].enabled?'Dis':'En'}able asset" onChange="sendCommand('scheduler/set_state', {uuid: '${data.items[i].uuid}', state: ${!data.items[i].enabled}});" class="form-check-input" type="checkbox" role="switch" ${data.items[i].enabled?'checked':''}>
-                    </div>
-                    <div class="btn-group" role="group">
-                        <button type="button" title="Delete asset" onclick="sendCommand('scheduler/delete', {uuid: '${data.items[i].uuid}'});" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                        <button type="button" title="Show asset" onclick="sendCommand('scheduler/goto', {index: ${i}});" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
-                    </div>
-                </div>
-            </td>
-        </tr>
-        `;
-    }
+    asset_table.html('');
+    data.items.forEach((item, i) => {
+        asset_table.append(
+            $('<tr></tr>').attr('id', item.uuid)
+                .toggleClass('table-active', item.uuid == data.current)
+                .append(
+                    $('<td class="align-middle asset-list-handle" style="width: 2em;"></td>')
+                    .append(
+                        $('<i class="bi bi-globe" style="color: grey;"></i>')
+                            .attr('id', 'icon-' + item.uuid)
+                            .mouseover((e) => $(e.target).removeClass('bi-globe').addClass('bi-arrow-down-up'))
+                            .mouseout((e) => $(e.target).removeClass('bi-arrow-down-up').addClass('bi-globe'))
+                    ),
+                    $('<td class="align-middle"></td>').html(item.url),
+                    $('<td class="align-middle" style="width: 6em;" name="dur_edit"></td>')
+                        .click((e) => duration_editor($(e.target), item.uuid))
+                        .html(item.duration),
+                    $('<td class="align-middle" style="width: 8em;"></td>').append(
+                        $('<div class="hstack gap-2"></div>').append(
+                            $('<div class="form-check form-switch"></div>').append(
+                                $('<input class="form-check-input" type="checkbox" role="switch">')
+                                    .attr('title', (item.enabled?'Dis':'En') + 'able asset')
+                                    .attr('checked', item.enabled)
+                                    .change(() => sendCommand('scheduler/set_state', {uuid: item.uuid, state: !item.enabled}))
+                            ),
+                            $('<div class="btn-group" role="group"></div>').append(
+                                $('<button type="button" title="Delete asset" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>')
+                                    .click(() => sendCommand('scheduler/delete', {uuid: item.uuid})),
+                                $('<button type="button" title="Show asset" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>')
+                                    .click(() => sendCommand('scheduler/goto', {index: i}))
+                            )
+                        )
+                    )
+                )
+        )
+    });
     break;
 
 case 'scheduler/validate_url':
@@ -238,36 +249,43 @@ case 'scheduler/validate_url':
     break;
 
 case 'scheduler/asset/current':
-    [... asset_table.children].forEach((element) => {
-        element.classList.toggle('table-active', element.id == data.uuid);
-    })
+    asset_table.children().each((i,element) => {
+        $(element).toggleClass('table-active', element.id == data.uuid);
+    });
     break;
 
 case 'scheduler/file':
-    const list = byId('file-list');
-    list.innerHTML = '';
+    const list = $('#file-list');
+    list.html('');
     data.files.forEach(file => {
-        list.innerHTML += `
-        <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-start">
-            <input onclick="if (this.checked){checkedfiles['${file.filename}'] = {duration: ${file.duration_s}};} else {delete checkedfiles['${file.filename}'];}" class="form-check-input" type="checkbox" name="filecheck" value="">
-            <div class="ms-2 me-auto">
-                <div class="text-break">${file.filename}</div>
-                <small class="text-muted">Duration: ${file.duration ?? (file.duration_s+'s')} | Size: ${file.size}</small>
-            </div>
-        </li>
-        `;
+        list.append(
+            $('<li class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"></li>').append(
+                $('<input class="form-check-input" type="checkbox" name="filecheck">')
+                    .click((e) => {
+                        if (e.target.checked)
+                            checkedfiles[file.filename] = {duration: file.duration_s};
+                        else
+                            delete checkedfiles[file.filename];
+                    }),
+                $('<div class="ms-2 me-auto"></div>').append(
+                    $('<p class="text-break mb-0"></p>').html(file.filename),
+                    $('<small class="text-muted"></small>')
+                        .html('Duration: ' + (file.duration ?? (file.duration_s+'s')) + ' | Size: ' + file.size)
+                )
+            )
+        );
     });
     break;
 
 case 'settings/default_duration':
-    byId('modal_input_duration').value = data.duration;
+    $('#modal_input_duration').val(data.duration);
     break;
 
 case 'settings/display/bounds':
-    byId('display_bounds').innerHTML = 
+    $('#display_bounds').html( 
         (data.bounds.width && data.bounds.height)?
             `${data.bounds.width}x${data.bounds.height}`:
-            'Not connected';
+            'Not connected');
     break;
 
 case 'settings/hostname':

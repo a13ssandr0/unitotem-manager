@@ -19,13 +19,13 @@
         </ul>
         <div class="btn-group mb-2" role="group">
             <div class="dropdown">
-                <button type="button" id="file-selector-btn" class="btn btn-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="true">Netplan configuration file</button>
+                <button type="button" id="file-selector-btn" class="btn btn-light dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="true">Netplan configuration file</button>
                 <ul class="dropdown-menu" style="min-width: 30rem;">
                     <span id="files-list"></span>
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <div class="input-group input-group-sm px-2">
-                            <input type="text" class="form-control" id="new-file-text" placeholder="New configuration file" aria-describedby="file-ext">
+                            <input type="text" class="form-control" id="new-file-text" placeholder="New configuration file">
                             <span class="input-group-text" id="file-ext">.yaml</span>
                             <button class="btn btn-outline-secondary" type="button" id="button-addon2">Create</button>
                         </div>
@@ -33,8 +33,8 @@
                 </ul>
             </div>
             <div class="dropdown ms-auto my-auto">
-                <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" id="wifiDropBtn" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="inside"><i class="bi bi-wifi"></i></button>
-                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="wifiDropBtn" id="wifi-menu" style="min-width: 20rem;">
+                <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" id="wifiDropBtn" data-bs-toggle="dropdown" data-bs-auto-close="inside"><i class="bi bi-wifi"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end" id="wifi-menu" style="min-width: 20rem;">
                     <li class="dropdown-item disabled">Scanning...</li>
                 </ul>
             </div>
