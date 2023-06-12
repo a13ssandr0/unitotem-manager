@@ -8,15 +8,26 @@
 <!-- Redirect to home page if accessing login page from authenticated session -->
 <!-- Use python's url validator instead of javascript's one -->
 <!-- Use an svg for wifi qr code -->
-Avoid recreating audio page on each update
-Properly detect display, finish backend-viewer connection
+<!-- Avoid recreating audio page on each update -->
+<!-- Change page selector (scheduler/settings/sub-settings) to side collapsible menu -->
+<!-- Reduce font size in scheduler page -->
+<!-- Dark theme -->
+<!-- Properly detect display, finish backend-viewer connection -->
+Handle electron window resize (needed?)
 Settings backup/restore not fully implemented
 Allow drag-n-drop files
-Change page selector (scheduler/settings/sub-settings) to side collapsible menu
-# https://mdbootstrap.com/docs/standard/extended/sidebar/
-Reduce font size in scheduler page
 Show confirmation on command execution (success popup/notification)
 Allow changing resolution, viewer bounds and screen orientation
 # xrandr --output DVI-D-0 --rotate normal
 Make info screen update on timer, not on requests
-Dark theme
+Switch to fontawesome
+# https://fontawesome.com/download
+
+Allow Multiuser
+Create a server that controls multiple clients
+
+
+Use custom window manager
+# https://github.com/h-ohsaki/xpywm/tree/master
+Use service workers to handle server offline
+# https://medium.com/swlh/how-to-make-your-web-apps-work-offline-be6f27dd28e

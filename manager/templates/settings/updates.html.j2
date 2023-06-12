@@ -43,7 +43,7 @@ const upgradeBtn = $('#apt_upgrade');
 
 {% block recv_cmds %}
 case 'settings/update/start':
-    log_view.html('');
+    log_view.empty();
     break;
 
 case 'settings/update/progress':
@@ -61,7 +61,7 @@ case 'settings/update/end':
 case 'settings/update/list':
     var cnt = data.updates.length;
     tooltip.html(`${cnt==0?'No':cnt} update${cnt==1?'':'s'} available`);
-    upd_table.html('');
+    upd_table.empty();
     data.updates.forEach(pkg=>{
         upd_table.append(
             $('<tr></tr>').append(
@@ -91,7 +91,7 @@ case 'settings/update/status':
         upgradeBtn.html('<i class="bi bi-arrow-bar-up"></i> Do updates');
     }
     if (data.log.length){
-        log_view.html('');
+        log_view.empty();
         data.log.forEach(line => log_view.append((line[0])?line[1]:`<span style="color: red;">${line[1]}</span>`));
         log_container.scrollTop = log_container.scrollHeight;
     }

@@ -90,9 +90,3 @@ def reboot_required():
     elif exists(REBOOT_REQ):
         return True
     return False
-
-def os_version():
-    with open('/etc/os-release', 'r') as f:
-        match = os_name_Re.search(f.read())
-        if match:
-            return match.group(1)

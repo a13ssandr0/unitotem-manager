@@ -1,19 +1,122 @@
 {% extends "settings.html.j2" %}
 
+<style>
+{% block custom_style %}
+rect {
+    rx: 50;
+}
+
+.screen_bg {
+    fill: var(--bs-primary);
+}
+.screen_fg {
+    fill: var(--bs-body-bg);
+}
+
+svg text {
+    font-size: 150px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: var(--bs-emphasis-color);
+}
+{% endblock custom_style %}
+</style>
+
+
 {% block content %}
 <h4>Display</h4>
-<small>Prova <small>Prova2 <small>Prova3</small></small></small>
+
+{%- set w, h = 0, 0 -%}
+{% set svg = namespace(content=[],w=0,h=0) -%}
+{% for disp in displays -%}
+    {% set bnd = disp.bounds -%}
+    {% set m = ([bnd.width, bnd.height]|min)*0.025 -%}
+    {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" class="screen_bg"/>'.format(bnd.x, bnd.y, bnd.width, bnd.height)) -%}
+    {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" class="screen_fg"/>'.format(bnd.x+m, bnd.y+m, bnd.width-2*m, bnd.height-5*m)) -%}
+    {% do svg.content.append('<text x="{}" y="{}">{}</text>'.format(bnd.x+bnd.width/2, bnd.y+bnd.height*2/5, disp.label)) -%}
+    {% do svg.content.append('<text x="{}" y="{}">({}x{})</text>'.format(bnd.x+bnd.width/2, bnd.y+bnd.height*3/5, bnd.width, bnd.height)) -%}
+    {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" name="screen" fill="#00000000"/>'.format(bnd.x, bnd.y, bnd.width, bnd.height)) -%}
+    {% set svg.w = [svg.w, bnd.x + bnd.width]|max-%}
+    {% set svg.h = [svg.h, bnd.y + bnd.height]|max-%}
+{% endfor -%}
+
+<label for="screen_container" class="d-flex justify-content-center">Click on a screen to change output device</label>
+<div class="row d-flex justify-content-center" id="screen_container">
+    <svg viewBox="0 0 {{svg.w}} {{svg.h}}" height="200px" xmlns="http://www.w3.org/2000/svg">
+        {{svg.content|join('\n    ')|safe}}
+        <rect id="window_bound_rect" fill="#00ff0055"/>
+    </svg>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-5 container-fluid">
+        <div class="row">
+            <label class="my-auto px-0 col-4 col-form-label d-flex justify-content-end">Orientation:</label>
+            <div class="my-auto col-8">
+                <div class="btn-group">
+                    <input type="radio" class="btn-check" name="orientation" id="orientation0" value="0" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="orientation0"><i class="bi bi-display"></i></label>
+
+                    <input type="radio" class="btn-check" name="orientation" id="orientation1" value="1" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="orientation1"><div style="transform: rotate(270deg);"><i class="bi bi-display"></i></div></label>
+
+                    <input type="radio" class="btn-check" name="orientation" id="orientation2" value="2" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="orientation2"><div style="transform: rotate(180deg);"><i class="bi bi-display"></i></div></label>
+
+                    <input type="radio" class="btn-check" name="orientation" id="orientation3" value="3" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="orientation3"><div style="transform: rotate(90deg);"><i class="bi bi-display"></i></div></label>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-2">
+            <label class="my-auto px-0 col-4 col-form-label d-flex justify-content-end">Flip:</label>
+            <div class="my-auto col-8">
+                <div class="btn-group">
+                    <input type="radio" class="btn-check" name="flip" id="flip0" value="0" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="flip0">No</label>
+
+                    <input type="radio" class="btn-check" name="flip" id="flip1" value="1" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="flip1"><i class="bi bi-symmetry-vertical"></i></label>
+
+                    <input type="radio" class="btn-check" name="flip" id="flip-1" value="-1" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="flip-1"><i class="bi bi-symmetry-horizontal"></i></label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock content%}
 
-{% set init_cmds = ['settings/info'] %}
+{% set init_cmds = ['settings/display/getBounds', 'settings/display/getOrientation', 'settings/display/getFlip'] %}
 
 <script type="text/javascript" charset="utf-8">
-{% block recv_cmds %}
-
-{% endblock recv_cmds %}
-
 {% block js %}
+const window_bound_rect = $('#window_bound_rect');
+$('[name=screen]').each((i, e)=>{
+    e = $(e);
+    e.click(() => sendCommand('settings/display/setBounds', {x:e.attr('x'), y:e.attr('y'), width:e.attr('width'), height:e.attr('height')}));
+});
 
+$('input[name="orientation"]').on('change', (e) => sendCommand('settings/display/setOrientation', {orientation: e.target.value}));
+$('input[name="flip"]').on('change', (e) => sendCommand('settings/display/setFlip', {flip: e.target.value}));
 {% endblock js %}
+
+{% block recv_cmds %}
+case 'settings/display/getBounds':
+    window_bound_rect.attr('x', data.x).attr('y', data.y)
+        .attr('width', data.width).attr('height', data.height);
+    break;
+
+case 'settings/display/getOrientation':
+    $('input[name="orientation"]:checked').removeAttr('checked');
+    $(`input[name="orientation"][value="${data.orientation}"]`).prop('checked', true);
+    break;
+
+case 'settings/display/getFlip':
+    $('input[name="flip"]:checked').removeAttr('checked');
+    $(`input[name="flip"][value="${data.flip}"]`).prop('checked', true);
+    break;
+{% endblock recv_cmds %}
 </script>

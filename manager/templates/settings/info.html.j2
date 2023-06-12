@@ -257,7 +257,7 @@ case 'settings/info':
     {% endif %}
 
     {% if has_fans %}
-    fans_list.html('');
+    fans_list.empty();
     data.fans.forEach((fan, i) => {
         fans_list.append(
             $('<li class="list-group-item d-flex justify-content-between align-items-center"></li>')
@@ -269,7 +269,7 @@ case 'settings/info':
     })
     {% endif %}
 
-    temp_table.html('');
+    temp_table.empty();
     Object.entries(data.temperatures).forEach((pair, i) => {
         pair[1].forEach((temp, j)=>{
             /* I don't think we need to display threshold values higher than

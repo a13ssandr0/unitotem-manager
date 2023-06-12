@@ -37,7 +37,7 @@
 
 {% block recv_cmds %}
 case 'settings/cron/job':
-    table.html('');
+    table.empty();
     data.jobs.forEach(job => {
         table.append(
             $('<tr></tr>').append(
