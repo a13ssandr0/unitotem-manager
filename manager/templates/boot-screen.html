@@ -18,7 +18,7 @@
         }
 
         /* 90deg */
-        body[r90] {
+        body[r="1"] {
             font-size: 1.3vh;
             transform: rotate(90deg);
             transform-origin: bottom left;
@@ -28,10 +28,10 @@
         }
 
         /* 180deg */
-        body[r180] { transform: rotate(180deg); }
+        body[r="2"] { transform: rotate(180deg); }
 
         /* 270deg */
-        body[r270] {
+        body[r="3"] {
             font-size: 1.3vh;
             transform: rotate(270deg);
             transform-origin: top left; 
@@ -49,12 +49,12 @@
             position: relative;
         }
 
-        main[fx]{
+        main[f="1"]{
             -webkit-transform: scaleX(-1);
             transform: scaleX(-1);
         }
 
-        main[fy]{
+        main[f="-1"]{
             -webkit-transform: scaleY(-1);
             transform: scaleY(-1);
         }
@@ -148,6 +148,7 @@
 
 <script type="text/javascript" charset="utf-8">
     var lastCont      = 'boot';
+    document.main     = document.getElementsByTagName('main')[0];
     const boot_screen = document.getElementById('boot_screen');
     const webview     = document.getElementById('webview');
     const imageview   = document.getElementById('imageview');
@@ -157,8 +158,8 @@
         var _ws = new WebSocket(`wss://localhost/ui_ws`);
         _ws.onopen = async event => {
             // PAGE INIT
-            sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
             sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
+            sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
         }
         _ws.onmessage = async event => {
             const data = JSON.parse(event.data);
@@ -218,13 +219,28 @@
                 case 'getAllDisplays':
                     sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
                     break;
-                    
-                    case 'getBounds':
-                    sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
-                    break;
-                
+                       
                 case 'setBounds':
                     await window.electronAPI.setBounds(data.x, data.y, data.width, data.height);
+                    // echo new bounds for confirmation
+                case 'getBounds':
+                    sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
+                    break;
+
+                case 'setOrientation':
+                    document.body.setAttribute('r', data.orientation);
+                    await window.electronAPI.saveOrientation(data.orientation);
+                    // echo new bounds for confirmation
+                case 'getOrientation':
+                    sendCommand('getOrientation', {orientation: document.body.getAttribute('r') || 0});
+                    break;
+
+                case 'setFlip':
+                    document.main.setAttribute('f', data.flip);
+                    await window.electronAPI.saveFlip(data.flip);
+                    // echo new bounds for confirmation
+                case 'getFlip':
+                    sendCommand('getFlip', {flip: document.main.getAttribute('f') || 0});
                     break;
 
                 case 'getAllowInsecureCerts':

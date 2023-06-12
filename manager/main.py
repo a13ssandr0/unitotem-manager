@@ -7,6 +7,8 @@ from math import inf
 from os import environ, listdir, makedirs, remove, urandom
 from os.path import dirname, exists, isfile, join, normpath
 from pathlib import Path
+from platform import freedesktop_os_release as os_release
+from shutil import copyfile
 from subprocess import run
 from threading import Thread
 from time import strftime, time
@@ -32,6 +34,7 @@ from utils import *
 from uvicorn import Config as uvConfig
 from uvicorn import Server as uvServer
 from uvicorn import run
+from uvicorn.config import logger
 from validators import url as is_valid_url
 from werkzeug.utils import secure_filename
 
@@ -43,7 +46,6 @@ CFG_FILE          = Path('/etc/unitotem/unitotem.conf')
 CURRENT_ASSET     = -1
 DEF_WIFI_CARD     = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP        = None
-DISPLAY           = None
 load_dotenv('/etc/unitotem/unitotem.env')
 if 'auth_token' not in environ:
     environ['auth_token'] = urandom(24).hex()
@@ -52,11 +54,12 @@ if 'auth_token' not in environ:
 LOGMAN            = LoginManager(environ['auth_token'], custom_exception=NotAuthenticatedException,
                         token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(days=7))
 NEXT_CHANGE_TIME  = 0
-OS_VERSION        = os_version()
-TEMPLATES         = Jinja2Templates(directory=join(dirname(__file__), 'templates'))
+SCREENS           = []
+TEMPLATES         = Jinja2Templates(directory=join(dirname(__file__), 'templates'), extensions=['jinja2.ext.do'])
 TEMPLATES.env.filters['flatten'] = flatten
 UI_WS             = ConnectionManager(True)
 UPLOAD_FOLDER     = join(dirname(__file__), 'uploaded')
+WINDOW            = {'bounds': {}, 'orientation':0, 'flip':0}
 WS                = ConnectionManager()
 WWW = FastAPI(
     title='UniTotem', version=VERSION,
@@ -102,17 +105,24 @@ async def login(data: LoginForm = Depends()):
 
 @WWW.websocket("/ui_ws")
 async def ui_websocket(websocket: WebSocket):
-    global DISPLAY
+    global DISPLAYS, WINDOW
     await UI_WS.connect(websocket)
     while True:
         try:
             data = await websocket.receive_json()
             match data['target']:
                 case 'getAllDisplays':
-                    await WS.broadcast('settings/display/all', bounds=data['displays'])
+                    DISPLAYS = data['displays']
+                    # await WS.broadcast('settings/display/all', bounds=data['displays'])
                 case 'getBounds':
-                    DISPLAY = data['bounds']
-                    await WS.broadcast('settings/display/bounds', bounds=DISPLAY)
+                    WINDOW['bounds'] = data['bounds']
+                    await WS.broadcast('settings/display/getBounds', **WINDOW['bounds'])
+                case 'getOrientation':
+                    WINDOW['orientation'] = data['orientation']
+                    await WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
+                case 'getFlip':
+                    WINDOW['flip'] = data['flip']
+                    await WS.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
                 case 'getAllowInsecureCerts':
                     await WS.broadcast('settings/display/allowInsecureCerts', bounds=data['allow'])
         except WebSocketDisconnect:
@@ -121,7 +131,7 @@ async def ui_websocket(websocket: WebSocket):
 
 @WWW.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    global NEXT_CHANGE_TIME, CURRENT_ASSET, APT_THREAD
+    global NEXT_CHANGE_TIME, CURRENT_ASSET, APT_THREAD, WINDOW
     
     request = Request({'type': 'http'})
     request._cookies = websocket.cookies
@@ -281,6 +291,24 @@ async def websocket_endpoint(websocket: WebSocket):
                         setMute(data.get('device'), data['mute'])
                     await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
+                case 'settings/display/getBounds':
+                    await WS.broadcast('settings/display/getBounds', **WINDOW['bounds'])
+
+                case 'settings/display/setBounds':
+                    await UI_WS.broadcast('setBounds', x=int(data['x']), y=int(data['y']), width=int(data['width']), height=int(data['height']))
+
+                case 'settings/display/getOrientation':
+                    await WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
+
+                case 'settings/display/setOrientation':
+                    await UI_WS.broadcast('setOrientation', orientation=data['orientation'])
+
+                case 'settings/display/getFlip':
+                    await WS.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
+
+                case 'settings/display/setFlip':
+                    await UI_WS.broadcast('setFlip', flip=data['flip'])
+
                 case 'settings/hostname':
                     if 'hostname' in data:
                         set_hostname(data['hostname'])
@@ -412,20 +440,25 @@ async def media_upload(response: Response, files: list[UploadFile], username: st
     makedirs(UPLOAD_FOLDER, exist_ok=True)
     for infile in files:
         if infile and infile.filename:
-            with open(join(UPLOAD_FOLDER, secure_filename(infile.filename)), 'bw') as out:
+            out_filename = join(UPLOAD_FOLDER, secure_filename(infile.filename))
+            # if exists(out_filename):
+            #     out_filename
+            # copyfile()
+            with open(out_filename, 'bw') as out:
                 while True:
                     buf = await infile.read(64 * 1024 * 1024) #64MB buffer
                     if not buf: break
                     out.write(buf)
 
-            file_data = get_file_info(UPLOAD_FOLDER, secure_filename(infile.filename), def_dur=Config.def_duration)
+            file_data = get_file_info(out_filename, def_dur=Config.def_duration)
             Config.add_asset(
                 url= 'file:' + file_data['filename'],
                 duration= file_data.get('duration_s'),
                 enabled= False,
             )
             Config.save()
-            await WS.broadcast(target='scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+            await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+            await WS.broadcast('scheduler/file', files=get_resources())
     response.status_code = status.HTTP_201_CREATED
 
 @WWW.get("/backup")
@@ -495,7 +528,7 @@ async def scheduler(request: Request, username:str = Depends(LOGMAN)):
         ut_vers=VERSION,
         logged_user=username,
         hostname=get_hostname(),
-        disp_size=DISPLAY,
+        disp_size=WINDOW['bounds'],
         disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
     ))
@@ -514,7 +547,7 @@ async def login_page(request: Request, src:str|None = '/'):
         request=request,
         src=src,
         ut_vers=VERSION,
-        os_vers=OS_VERSION,
+        os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname()
     ))
@@ -527,12 +560,14 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
         ut_vers=VERSION,
         logged_user=username,
         cur_tab=tab,
-        disp_size=DISPLAY,
+        disp_size=WINDOW['bounds'],
         disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total),
         def_wifi=DEF_WIFI_CARD
     )
-    if tab == 'info':
+    if tab == 'display':
+        data['displays'] = DISPLAYS
+    elif tab == 'info':
         data['disks'] = [blk.dict() for blk in lsblk()] # type: ignore
         # data['net_addrs'] = do_ip_addr() # type: ignore
         data['has_battery'] = sensors_battery() != None
@@ -540,26 +575,13 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
     
     return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
 
-@WWW.get('/base', response_class=HTMLResponse)
-async def base_page(request: Request):
-    return TEMPLATES.TemplateResponse('common/html/base.html.j2', dict(
-        request=request,
-        ut_vers=VERSION,
-        # logged_user=username,
-        hostname=get_hostname(),
-        disp_size=DISPLAY,
-        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
-        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
-    ))
-
-
 @WWW.api_route("/unitotem-no-assets", response_class=HTMLResponse, methods=['GET', 'HEAD'])
 async def no_assets_page(request: Request):
     ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse('no-assets.html.j2', dict(
         request=request,
         ut_vers=VERSION,
-        os_vers=OS_VERSION,
+        os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname()
     ))
@@ -570,7 +592,7 @@ async def first_boot_page(request: Request):
     return TEMPLATES.TemplateResponse('first-boot.html.j2', dict(
         request=request,
         ut_vers=VERSION,
-        os_vers=OS_VERSION,
+        os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname(),
         wifi=DEFAULT_AP
@@ -645,6 +667,7 @@ if __name__ == "__main__":
     loop.create_task(uvServer(uvConfig(FastAPI(middleware=[Middleware(HTTPSRedirectMiddleware)]), port=80)).serve(), name='http_server')
 
     Thread(target=loop.run_forever, daemon=True).start()
+    # logger.info("Starting unitotem-manager")
 
     run(WWW, port=443, ssl_certfile="/etc/ssl/unitotem.pem")
     
