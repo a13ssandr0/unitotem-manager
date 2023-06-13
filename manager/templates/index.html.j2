@@ -91,6 +91,7 @@
 {% block js %}
     const asset_table = $('#asset_table');
     const modal_input_url = $('#modal_input_url');
+    const invalid_input_popover = bootstrap.Popover.getOrCreateInstance(modal_input_url, {container: 'body', content: 'Invalid url', placement: 'bottom'});
     const upload_progress = $("#upload-progress");
     const progressbar = $("#upload-progress-bar");
     const fileSelector = $('<input type="file" name="files" multiple>')
@@ -119,7 +120,7 @@
                             messageModal.find('.modal-body code').text(JSON.stringify(xhr.responseJSON, null, 4));
                             new bootstrap.Modal(messageModal).show();
                         }
-                });
+                    });
             }
         });
     
@@ -239,12 +240,12 @@ case 'scheduler/asset':
     break;
 
 case 'scheduler/validate_url':
-    if (modal_input_url.value.length && !data.valid){
-        bootstrap.Popover.getOrCreateInstance(modal_input_url, {container: 'body', content: 'Invalid url', placement: 'bottom'}).show();
-        modal_input_url.className = "border border-danger border-2 form-control";
+    if (modal_input_url.val().length && !data.valid){
+        invalid_input_popover.show();
+        modal_input_url.addClass("border border-danger border-2");
     } else {
-        bootstrap.Popover.getOrCreateInstance(modal_input_url).dispose();
-        modal_input_url.className = "form-control";
+        invalid_input_popover.dispose();
+        modal_input_url.removeClass("border border-danger border-2");
     }
     break;
 

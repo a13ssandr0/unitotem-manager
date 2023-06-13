@@ -8,7 +8,6 @@ from uuid import uuid4
 from crontab import CronTab
 
 upgradableRe = compile(r"(?P<package>.*)/(?P<origin>.*?) (?P<new_version>.*?) (?P<architecture>.*?) \[upgradable from: (?P<old_version>.*?)]")
-os_name_Re = compile(r'PRETTY_NAME="(.*?)"')
 
 _last_log = []
 REBOOT_REQ       = '/var/run/reboot-required'
@@ -29,7 +28,7 @@ class UniCron(CronTab):
             return True
         else:
             return False
-                            
+
 
     def serialize(self):
         return [{
@@ -59,7 +58,7 @@ def apt_update(upgrade=False):
     serr = proc.stderr
     _last_log.clear()
     yield True
-    with closing(sout), closing(serr):
+    with closing(sout), closing(serr): # type: ignore
         while proc.poll() is None:
             descriptors = select([sout, serr], [], [])[0]
             for d in descriptors:
@@ -77,7 +76,7 @@ def get_apt_log():
     return _last_log
 
 def apt_list_upgrades():
-    return list(map(lambda x: upgradableRe.match(x.strip()).groupdict(),
+    return list(map(lambda x: upgradableRe.match(x.strip()).groupdict(), # type: ignore
             filter(lambda l: 'upgradable' in l,
                 run(['/usr/bin/apt', 'list', '--upgradable'],
                     stdout=PIPE, stderr=PIPE, env={'LANG':'C'}
@@ -86,7 +85,7 @@ def apt_list_upgrades():
 def reboot_required():
     if exists(REBOOT_REQ_PKGS):
         with open(REBOOT_REQ_PKGS, 'r') as file:
-            return filter(map(lambda x: x.strip(), file))
+            return filter(None, map(lambda x: x.strip(), file))
     elif exists(REBOOT_REQ):
         return True
     return False

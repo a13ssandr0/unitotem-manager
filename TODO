@@ -13,15 +13,23 @@
 <!-- Reduce font size in scheduler page -->
 <!-- Dark theme -->
 <!-- Properly detect display, finish backend-viewer connection -->
+<!-- Allow changing resolution, viewer bounds and screen orientation -->
+<!-- # xrandr --output DVI-D-0 --rotate normal -->
+Check if uploaded file exists
+Use asyncio for file uploads
 Handle electron window resize (needed?)
-Settings backup/restore not fully implemented
+<!-- Settings backup/restore not fully implemented -->
+<!-- CORRECT BACKUP VERSION CHECK -->
+Handle 'reset' command in electron
 Allow drag-n-drop files
 Show confirmation on command execution (success popup/notification)
-Allow changing resolution, viewer bounds and screen orientation
-# xrandr --output DVI-D-0 --rotate normal
 Make info screen update on timer, not on requests
 Switch to fontawesome
 # https://fontawesome.com/download
+Replace ace.js with Monaco-editor
+# https://github.com/microsoft/monaco-editor
+
+Add image fitting method for images not matching screen ration
 
 Allow Multiuser
 Create a server that controls multiple clients
@@ -31,3 +39,5 @@ Use custom window manager
 # https://github.com/h-ohsaki/xpywm/tree/master
 Use service workers to handle server offline
 # https://medium.com/swlh/how-to-make-your-web-apps-work-offline-be6f27dd28e
+Configure network with a tool like nmtui (needed?)
+# https://it.linux-console.net/?p=1813#gsc.tab=0
