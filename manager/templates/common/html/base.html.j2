@@ -116,7 +116,6 @@
             const loc = window.location;
             var _ws = new WebSocket(`w${(loc.protocol === 'https:')?'s':''}s://${loc.host}/ws`);
             _ws.onopen = event => {
-                {# console.log('Connected'); #}
                 // PAGE INIT
                 {{ init_cmds|flatten|safe }}
                     .forEach(cmd => sendCommand(cmd));
@@ -141,6 +140,10 @@
                         messageModal.find('.modal-body h6').text('Request returned ' + data.error);
                         messageModal.find('.modal-body code').text(data.extra);
                         new bootstrap.Modal(messageModal).show();
+                        break;
+
+                    case 'connected':
+                        connect_retry=0;
                         break;
 
                     default:

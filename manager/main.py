@@ -1,3 +1,7 @@
+__author__ = 'Alessandro Campolo (a13ssandr0)'
+__version__ = '3.0.0'
+
+
 import asyncio
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
@@ -13,10 +17,11 @@ from subprocess import run
 from threading import Thread
 from time import strftime, time
 from traceback import format_exc, print_exc
-from zipfile import ZIP_DEFLATED, ZipFile
+from typing import Annotated
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
 from dotenv import load_dotenv, set_key
-from fastapi import (Depends, FastAPI, HTTPException, Request, Response,
+from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
                      UploadFile, WebSocket, WebSocketDisconnect, status)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -38,7 +43,6 @@ from uvicorn.config import logger
 from validators import url as is_valid_url
 from werkzeug.utils import secure_filename
 
-VERSION = '2.3.0'
 
 
 APT_THREAD        = Thread(target=apt_update, name='update')
@@ -62,7 +66,7 @@ UPLOAD_FOLDER     = join(dirname(__file__), 'uploaded')
 WINDOW            = {'bounds': {}, 'orientation':0, 'flip':0}
 WS                = ConnectionManager()
 WWW = FastAPI(
-    title='UniTotem', version=VERSION,
+    title='UniTotem', version=__version__,
     routes=[
         Mount('/static', StaticFiles(directory=join(dirname(__file__), 'static')), name='static'),
         Mount('/uploaded', StaticFiles(directory=UPLOAD_FOLDER), name='uploaded')
@@ -435,8 +439,8 @@ async def set_pass(request: Request, response: Response, password:str, username:
         response.headers['location'] = request.headers['Referer']
 
 
-@WWW.post("/api/scheduler/upload")
-async def media_upload(response: Response, files: list[UploadFile], username: str = Depends(LOGMAN)):
+@WWW.post("/api/scheduler/upload", dependencies=[Depends(LOGMAN)])
+async def media_upload(response: Response, files: list[UploadFile]):
     makedirs(UPLOAD_FOLDER, exist_ok=True)
     for infile in files:
         if infile and infile.filename:
@@ -461,16 +465,17 @@ async def media_upload(response: Response, files: list[UploadFile], username: st
             await WS.broadcast('scheduler/file', files=get_resources())
     response.status_code = status.HTTP_201_CREATED
 
-@WWW.get("/backup")
-async def create_backup(include_uploaded: bool = False, username: str = Depends(LOGMAN)):
-    global VERSION, UPLOAD_FOLDER
+@WWW.get("/backup", dependencies=[Depends(LOGMAN)])
+async def create_backup(include_uploaded: bool = False):
+    global __version__, UPLOAD_FOLDER
+    CRONTAB.read()
     config_backup = {
-        "version": VERSION,
+        "version": __version__,
         "CONFIG": Config.json(),
         "hostname": get_hostname(),
-        # "def_audio_dev": get_default_audio_device(),
-        "netplan": {fname: get_netplan_file(fname) for fname in get_netplan_file_list()}
-        # cron
+        "def_audio_dev": getDefaultAudioDevice(),
+        "netplan": {fname: get_netplan_file(fname) for fname in get_netplan_file_list()},
+        "cron": CRONTAB.serialize()
     }
 
     zip_buffer = BytesIO()
@@ -483,40 +488,63 @@ async def create_backup(include_uploaded: bool = False, username: str = Depends(
     return Response(content=zip_buffer, media_type='application/zip',
         headers={'Content-Disposition': 'attachment; filename="' + strftime('unitotem-manager-%Y%m%d-%H%M%S.zip') + '"'})
 
-@WWW.post("/backup", status_code=status.HTTP_204_NO_CONTENT)
-async def load_backup(backup_file: UploadFile, options: dict[str, bool], username: str = Depends(LOGMAN)):
+@WWW.post("/backup", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(LOGMAN)])
+async def load_backup(backup_file: UploadFile, 
+                    CONFIG: Annotated[bool, Body()] = False,
+                    def_audio_dev: Annotated[bool, Body()] = False,
+                    hostname: Annotated[bool, Body()] = False,
+                    netplan: Annotated[bool, Body()] = False,
+                    uploaded: Annotated[bool, Body()] = False):
     global CURRENT_ASSET, NEXT_CHANGE_TIME, UPLOAD_FOLDER
-    if backup_file.content_type not in ['application/octet-stream', 'application/zip']:
-        with ZipFile(backup_file.stream._file) as zip_file:
+    try:
+        with ZipFile(backup_file.file) as zip_file:
             files = zip_file.namelist()
             if 'config.json' in files:
                 config_json = loads(zip_file.read('config.json'))
-                if 'CONFIG' in config_json and options.get('CONFIG', True):
+
+                from packaging.version import Version
+                bkp_ver = Version(config_json.get('version', '0'))
+                ver_3_0_0 = Version('3.0.0')
+
+                if 'CONFIG' in config_json and CONFIG:
                     Config.parse_obj(config_json['CONFIG'])
                     CURRENT_ASSET    = -1
                     NEXT_CHANGE_TIME = 0
                     Config.save()
-                if 'hostname' in config_json and options.get('hostname', True):
+
+                if 'hostname' in config_json and hostname:
                     set_hostname(config_json['hostname'])
-                if 'def_audio_dev' in config_json and options.get('def_audio_dev', True):
-                    # set_audio_device(config_json['def_audio_dev'])
-                    pass
-                if 'netplan' in config_json and options.get('netplan', True):
+
+                if 'def_audio_dev' in config_json and def_audio_dev:
+                    if bkp_ver >= ver_3_0_0:
+                        #with version 3.0.0 audio controls changed from alsa to pulseaudio
+                        setDefaultAudioDevice(config_json['def_audio_dev'])
+
+                if 'netplan' in config_json and netplan:
                     res = set_netplan(filename = None, file_content=config_json['netplan'])
-            if options.get('uploaded', True):
+
+            if uploaded:
                 for file in files:
                     if file.startswith('uploaded/'):
                         zip_file.extract(file, normpath(join(UPLOAD_FOLDER, '..')))
+
             if 'res' in locals():
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=res)
-    else:
-        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail='Wrong mimetype: ' + backup_file.content_type)
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=res) # type: ignore
             
-@WWW.delete('/backup', status_code=status.HTTP_204_NO_CONTENT)
-async def factory_reset(username: str = Depends(LOGMAN)):
+    except BadZipFile as e:
+        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail=str(e))
+            
+@WWW.delete('/backup', status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(LOGMAN)])
+async def factory_reset():
     global CURRENT_ASSET, NEXT_CHANGE_TIME
     Config.reset()
-    # if isfile(ASOUND_CONF): remove(ASOUND_CONF)
+
+    CRONTAB.read()
+    CRONTAB.remove_all(comment=CRONTAB._cron_re)
+    CRONTAB.write()
+
+    await UI_WS.broadcast('reset')
+    
     for res in list_resources(): remove(join(UPLOAD_FOLDER, res))
     CURRENT_ASSET    = -1
     NEXT_CHANGE_TIME = 0
@@ -525,7 +553,7 @@ async def factory_reset(username: str = Depends(LOGMAN)):
 async def scheduler(request: Request, username:str = Depends(LOGMAN)):
     return TEMPLATES.TemplateResponse('index.html.j2', dict(
         request=request,
-        ut_vers=VERSION,
+        ut_vers=__version__,
         logged_user=username,
         hostname=get_hostname(),
         disp_size=WINDOW['bounds'],
@@ -546,7 +574,7 @@ async def login_page(request: Request, src:str|None = '/'):
     return TEMPLATES.TemplateResponse('login.html.j2', dict(
         request=request,
         src=src,
-        ut_vers=VERSION,
+        ut_vers=__version__,
         os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname()
@@ -557,7 +585,7 @@ async def login_page(request: Request, src:str|None = '/'):
 async def settings(request: Request, tab: str = 'main_menu', username: str = Depends(LOGMAN)):
     data = dict(
         request=request,
-        ut_vers=VERSION,
+        ut_vers=__version__,
         logged_user=username,
         cur_tab=tab,
         disp_size=WINDOW['bounds'],
@@ -580,7 +608,7 @@ async def no_assets_page(request: Request):
     ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse('no-assets.html.j2', dict(
         request=request,
-        ut_vers=VERSION,
+        ut_vers=__version__,
         os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname()
@@ -591,7 +619,7 @@ async def first_boot_page(request: Request):
     ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse('first-boot.html.j2', dict(
         request=request,
-        ut_vers=VERSION,
+        ut_vers=__version__,
         os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname(),
@@ -642,7 +670,7 @@ async def webview_control_main():
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('--no-gui', action='store_true', help='Start UniTotem Manager without webview gui (for testing)')
-    parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
+    parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
     cmdargs = vars(parser.parse_args())
 
 
