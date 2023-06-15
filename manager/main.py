@@ -3,24 +3,26 @@ __version__ = '3.0.0'
 
 
 import asyncio
+import signal
 from argparse import ArgumentParser
-from datetime import datetime, timedelta
+from datetime import datetime
 from io import BytesIO
 from json import dumps, loads
 from math import inf
-from os import environ, listdir, makedirs, remove, urandom
+from os import listdir, makedirs, remove
 from os.path import dirname, exists, isfile, join, normpath
 from pathlib import Path
 from platform import freedesktop_os_release as os_release
-from shutil import copyfile
-from subprocess import run
+from platform import node as get_hostname
+from subprocess import run as cmd_run
 from threading import Thread
 from time import strftime, time
 from traceback import format_exc, print_exc
-from typing import Annotated
+from typing import Annotated, Any
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
-from dotenv import load_dotenv, set_key
+import uvloop
+from aiofiles import open as aopen
 from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
                      UploadFile, WebSocket, WebSocketDisconnect, status)
 from fastapi.middleware import Middleware
@@ -29,44 +31,37 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.routing import Mount
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
+from hypercorn.asyncio import serve
+from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
 from natsort import natsorted
 from psutil import (boot_time, disk_usage, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
 from utils import *
-from uvicorn import Config as uvConfig
-from uvicorn import Server as uvServer
-from uvicorn import run
-from uvicorn.config import logger
 from validators import url as is_valid_url
 from werkzeug.utils import secure_filename
 
-
-
 APT_THREAD        = Thread(target=apt_update, name='update')
-CFG_FILE          = Path('/etc/unitotem/unitotem.conf')
+
 CURRENT_ASSET     = -1
+NEXT_CHANGE_TIME  = 0
+
 DEF_WIFI_CARD     = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP        = None
-load_dotenv('/etc/unitotem/unitotem.env')
-if 'auth_token' not in environ:
-    environ['auth_token'] = urandom(24).hex()
-    Path('/etc/unitotem/unitotem.env').touch(mode=0o600)
-    set_key('/etc/unitotem/unitotem.env', 'auth_token', environ['auth_token'])
-LOGMAN            = LoginManager(environ['auth_token'], custom_exception=NotAuthenticatedException,
-                        token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(days=7))
-NEXT_CHANGE_TIME  = 0
-SCREENS           = []
+
+SCREENS:list[dict]= []
+WINDOW            = {'bounds': {}, 'orientation':-2, 'flip':-2}
+
+UI_WS             = WSManager(True)
+WS                = WSManager()
+
 TEMPLATES         = Jinja2Templates(directory=join(dirname(__file__), 'templates'), extensions=['jinja2.ext.do'])
 TEMPLATES.env.filters['flatten'] = flatten
-UI_WS             = ConnectionManager(True)
-UPLOAD_FOLDER     = join(dirname(__file__), 'uploaded')
-WINDOW            = {'bounds': {}, 'orientation':0, 'flip':0}
-WS                = ConnectionManager()
+UPLOAD_FOLDER     = Path(__file__).parent.joinpath('uploaded')
 WWW = FastAPI(
     title='UniTotem', version=__version__,
+    middleware=[Middleware(HTTPSRedirectMiddleware)],
     routes=[
         Mount('/static', StaticFiles(directory=join(dirname(__file__), 'static')), name='static'),
         Mount('/uploaded', StaticFiles(directory=UPLOAD_FOLDER), name='uploaded')
@@ -79,18 +74,14 @@ WWW = FastAPI(
 
 
 def list_resources():
+    # return list(filter(lambda x: x.is_file(), UPLOAD_FOLDER.iterdir()))
     return list(filter(lambda f: isfile(join(UPLOAD_FOLDER, f)), listdir(UPLOAD_FOLDER)))
 
 def get_resources():
-    infos = []
-    for f in list_resources():
-        infos.append(get_file_info(UPLOAD_FOLDER, f, def_dur=Config.def_duration))
-    return infos
-
-
-@LOGMAN.user_loader() # type: ignore
-async def load_user(username:str):
-    return username if username in Config.users else None
+    # infos = []
+    # for f in list_resources():
+    #     infos.append(get_file_info(UPLOAD_FOLDER, f))
+    return [get_file_info(UPLOAD_FOLDER, f) for f in list_resources()]
 
 
 
@@ -155,10 +146,10 @@ async def websocket_endpoint(websocket: WebSocket):
             match data['target']:
 
                 case 'power/reboot':
-                    run('/usr/sbin/reboot')
+                    cmd_run('/usr/sbin/reboot')
 
                 case 'power/shutdown':
-                    run('/usr/sbin/poweroff')
+                    cmd_run('/usr/sbin/poweroff')
 
                 case 'scheduler/asset':
                     # check_attrs(request_data, [('add_asset', dict[str, dict[str, Union[int, bool]]])])
@@ -444,17 +435,20 @@ async def media_upload(response: Response, files: list[UploadFile]):
     makedirs(UPLOAD_FOLDER, exist_ok=True)
     for infile in files:
         if infile and infile.filename:
-            out_filename = join(UPLOAD_FOLDER, secure_filename(infile.filename))
-            # if exists(out_filename):
-            #     out_filename
-            # copyfile()
-            with open(out_filename, 'bw') as out:
-                while True:
-                    buf = await infile.read(64 * 1024 * 1024) #64MB buffer
-                    if not buf: break
-                    out.write(buf)
+            out_filename = Path(UPLOAD_FOLDER, secure_filename(infile.filename))
+            # allow files with duplicate filenames, simply add a number at the end
+            if out_filename.exists():
+                stem = out_filename.stem + '_{}'
+                i = 1
+                while out_filename.exists():
+                    i += 1
+                    out_filename = out_filename.with_stem(stem.format(i))
 
-            file_data = get_file_info(out_filename, def_dur=Config.def_duration)
+            async with aopen(out_filename, 'wb') as out:
+                while buf := await infile.read(64 * 1024 * 1024): #64MB buffer
+                    await out.write(buf)
+
+            file_data = get_file_info(out_filename)
             Config.add_asset(
                 url= 'file:' + file_data['filename'],
                 duration= file_data.get('duration_s'),
@@ -557,8 +551,8 @@ async def scheduler(request: Request, username:str = Depends(LOGMAN)):
         logged_user=username,
         hostname=get_hostname(),
         disp_size=WINDOW['bounds'],
-        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
-        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total)
+        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),  # type: ignore
+        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total) # type: ignore
     ))
 
 @WWW.get('/login')
@@ -583,18 +577,18 @@ async def login_page(request: Request, src:str|None = '/'):
 @WWW.get("/settings", response_class=HTMLResponse)
 @WWW.get("/settings/{tab}", response_class=HTMLResponse)
 async def settings(request: Request, tab: str = 'main_menu', username: str = Depends(LOGMAN)):
-    data = dict(
+    data:dict[str, Any] = dict(
         request=request,
         ut_vers=__version__,
         logged_user=username,
         cur_tab=tab,
         disp_size=WINDOW['bounds'],
-        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),
-        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total),
+        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),   # type: ignore
+        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total), # type: ignore
         def_wifi=DEF_WIFI_CARD
     )
     if tab == 'display':
-        data['displays'] = DISPLAYS
+        data['displays'] = SCREENS
     elif tab == 'info':
         data['disks'] = [blk.dict() for blk in lsblk()] # type: ignore
         # data['net_addrs'] = do_ip_addr() # type: ignore
@@ -626,10 +620,6 @@ async def first_boot_page(request: Request):
         wifi=DEFAULT_AP
     ))
 
-async def sock_send(target, **kwargs):
-    await UI_WS.broadcast(target, **kwargs)
-    print(kwargs)
-
 async def webview_goto(asset: int = CURRENT_ASSET, force: bool = False, backwards: bool = False):
     global NEXT_CHANGE_TIME, CURRENT_ASSET, WS
     if 0 <= asset < len(Config.assets):
@@ -637,26 +627,26 @@ async def webview_goto(asset: int = CURRENT_ASSET, force: bool = False, backward
             url = Config.assets[CURRENT_ASSET := asset].url
             if url.startswith('file:'):
                 url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-            await sock_send('Show', src=url)
+            await UI_WS.broadcast('Show', src=url)
             NEXT_CHANGE_TIME = int(time()) + (Config.assets[CURRENT_ASSET].duration or inf)
             await WS.broadcast('scheduler/asset/current', uuid=Config.assets[CURRENT_ASSET].uuid)
         else:
             await webview_goto(asset + (-1 if backwards else 1))
 
-async def webview_control_main():
+async def webview_control_main(waiter: asyncio.Event):
     global NEXT_CHANGE_TIME, CURRENT_ASSET, UI_WS
-    while True:
+    while not waiter.is_set:
         if time()>=NEXT_CHANGE_TIME:
             if Config.first_boot:
                 NEXT_CHANGE_TIME = inf
                 CURRENT_ASSET = -1
                 await WS.broadcast('scheduler/asset/current', uuid=None)
-                await sock_send('Show', src='https://localhost/unitotem-first-boot', container='web')
+                await UI_WS.broadcast('Show', src='https://localhost/unitotem-first-boot', container='web')
             elif not Config.enabled_asset_count:
                 NEXT_CHANGE_TIME = inf
                 CURRENT_ASSET = -1
                 await WS.broadcast('scheduler/asset/current', uuid=None)
-                await sock_send('Show', src='https://localhost/unitotem-no-assets', container='web')
+                await UI_WS.broadcast('Show', src='https://localhost/unitotem-no-assets', container='web')
             else:
                 CURRENT_ASSET += 1
                 if CURRENT_ASSET >= len(Config.assets): CURRENT_ASSET = 0
@@ -678,26 +668,51 @@ if __name__ == "__main__":
         Config.parse_file_('/etc/unitotem/unitotem.conf')
     except FileNotFoundError:
         print('First boot or no configuration file found.')
-        if (not do_ip_addr(True) or exists(FALLBACK_AP_FILE)):
-            # config file doesn't exist and we are not connected, maybe it's first boot
-            hotspot = start_hotspot()
-            DEFAULT_AP = dict(ssid=hotspot[0], password = hotspot[1], qrcode = wifi_qr(hotspot[0], hotspot[1]))
-            print(f'Not connected to any network, started fallback hotspot {hotspot[0]} with password {hotspot[1]}.')
+        try:
+            if (not do_ip_addr(True) or exists(FALLBACK_AP_FILE)):
+                # config file doesn't exist and we are not connected, maybe it's first boot
+                hotspot = start_hotspot()
+                DEFAULT_AP = dict(ssid=hotspot[0], password = hotspot[1], qrcode = wifi_qr(hotspot[0], hotspot[1]))
+                print(f'Not connected to any network, started fallback hotspot {hotspot[0]} with password {hotspot[1]}.')
+        except:
+            print("Couldn't start wifi hotspot.")
+            print_exc()
 
 
     APT_THREAD.start()
 
-    loop = asyncio.new_event_loop()
+    uvloop.install()
+
+    shutdown_event = asyncio.Event()
+
+    loop = asyncio.get_event_loop()
+    loop.add_signal_handler(signal.SIGTERM, lambda *_: shutdown_event.set())
 
     if not cmdargs.get('no_gui', False):
-        loop.create_task(webview_control_main(), name='page_controller')
+        loop.create_task(webview_control_main(shutdown_event), name='page_controller')
 
-    loop.create_task(uvServer(uvConfig(FastAPI(middleware=[Middleware(HTTPSRedirectMiddleware)]), port=80)).serve(), name='http_server')
+    loop.create_task(serve(WWW, HyperConfig().from_mapping({ # type: ignore
+        'bind': ['0.0.0.0:443'],
+        'insecure_bind': ['0.0.0.0:80'],
+        'certfile': "/etc/ssl/unitotem.pem",
+        'keyfile': "/etc/ssl/unitotem.pem",
+    }), shutdown_trigger=shutdown_event.wait), name='server') # type: ignore
 
-    Thread(target=loop.run_forever, daemon=True).start()
-    # logger.info("Starting unitotem-manager")
+    loop.run_forever()
+    
+    # loop = asyncio.new_event_loop()
 
-    run(WWW, port=443, ssl_certfile="/etc/ssl/unitotem.pem")
+    # if not cmdargs.get('no_gui', False):
+    #     loop.create_task(webview_control_main(), name='page_controller')
+
+    # loop.create_task(uvServer(uvConfig(FastAPI(middleware=[Middleware(HTTPSRedirectMiddleware)]), port=80)).serve(), name='http_server')
+
+    # Thread(target=loop.run_forever, daemon=True).start()
+    # # logger.info("Starting unitotem-manager")
+
+    # run(WWW, port=443, ssl_certfile="/etc/ssl/unitotem.pem")
     
 
     stop_hostpot()
+
+    APT_THREAD.join()

@@ -1,3 +1,13 @@
+__all__ = [
+    "getAudioDevices",
+    "getDefaultAudioDevice",
+    "setDefaultAudioDevice",
+    "setMute",
+    "setVolume",
+]
+
+
+
 from rpyc import classic as rpyc
 
 def getAudioDevices() -> list[dict[str, str|bool|float]]:

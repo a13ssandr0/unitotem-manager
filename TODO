@@ -15,11 +15,18 @@
 <!-- Properly detect display, finish backend-viewer connection -->
 <!-- Allow changing resolution, viewer bounds and screen orientation -->
 <!-- # xrandr --output DVI-D-0 --rotate normal -->
-Check if uploaded file exists
-Use asyncio for file uploads
+<!-- Check if uploaded file exists -->
+<!-- Use asyncio for file uploads -->
+<!-- Handle exit signals -->
+Move immutable information in info page generation instead of javascript
+    (Cpu count, ram size, ecc can't change without a reboot)
+Add a websocket command to trigger page reload
 Handle electron window resize (needed?)
 <!-- Settings backup/restore not fully implemented -->
 <!-- CORRECT BACKUP VERSION CHECK -->
+Reuse code from uploadfile when restoring backup
+Split file upload in helper functions: file save, file load in assets/config
+Cache MediaInfo metadata
 Handle 'reset' command in electron
 Allow drag-n-drop files
 Show confirmation on command execution (success popup/notification)

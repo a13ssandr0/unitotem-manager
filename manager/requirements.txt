@@ -1,5 +1,7 @@
+aiofiles
 fastapi
 fastapi_login
+hypercorn
 natsort
 Pillow
 psutil
@@ -12,7 +14,7 @@ python-multipart
 qrcode
 rpyc
 ruamel.yaml
-uvicorn[standard]
+uvloop
 validators
 jinja2
 Werkzeug

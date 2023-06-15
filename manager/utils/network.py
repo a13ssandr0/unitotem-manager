@@ -1,21 +1,40 @@
-from base64 import b64encode
-from io import BytesIO
+__all__ = [
+    "IF_WIRED",
+    "IF_WIRELESS",
+    "IF_ALL",
+    "FALLBACK_AP_FILE",
+    "create_netplan",
+    "del_netplan_file",
+    "do_ip_addr",
+    "generate_netplan",
+    "get_dns_list",
+    "get_ifaces",
+    "get_netplan_file_list",
+    "get_netplan_file",
+    "get_wifis",
+    "set_hostname",
+    "set_netplan",
+    "start_hotspot",
+    "stop_hostpot",
+    "wifi_qr",
+]
+
+
+
 from os import listdir
 from os import remove as removefile
 from os.path import exists, isdir, join
+from platform import node as get_hostname
 from re import compile, sub
 from socket import inet_aton, inet_ntoa
-import string
 from struct import pack
-from subprocess import PIPE, Popen, check_output, run
+from subprocess import PIPE, run
 from typing import Union
 
 from qrcode import make as make_qr
 from qrcode.constants import ERROR_CORRECT_Q
 from qrcode.image.svg import SvgPathFillImage
 from ruamel.yaml import YAML
-
-
 
 ETC_HOSTNAME     = '/etc/hostname'
 ETC_HOSTS        = '/etc/hosts'
@@ -52,8 +71,8 @@ wpaRe = compile(r"IE:\ WPA\ Version\ 1$")
 wpa2Re = compile(r"IE:\ IEEE\ 802\.11i/WPA2\ Version\ 1$")
 
 
-def get_hostname():
-    return check_output('hostname').strip().decode()
+# def get_hostname():
+#     return check_output('hostname').strip().decode()
 
 def set_hostname(to_h: str, from_h: str = get_hostname()):
     to_h = to_h.strip()
