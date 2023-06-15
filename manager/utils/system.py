@@ -1,4 +1,13 @@
-from contextlib import closing
+__all__ = [
+    "CRONTAB",
+    "apt_list_upgrades",
+    "apt_update",
+    "get_apt_log",
+    "reboot_required",
+]
+
+
+
 from os.path import exists
 from re import compile
 from select import select
@@ -53,12 +62,11 @@ CRONTAB  = UniCron(user='root')
 def apt_update(upgrade=False):
     global _last_log
     cmd = ['/usr/bin/apt-get', 'dist-upgrade', '-y'] if upgrade else ['/usr/bin/apt-get', 'update']
-    proc = Popen(cmd, stdout=PIPE, stderr=PIPE, bufsize=0)
-    sout = proc.stdout
-    serr = proc.stderr
     _last_log.clear()
-    yield True
-    with closing(sout), closing(serr): # type: ignore
+    with Popen(cmd, stdout=PIPE, stderr=PIPE, bufsize=0) as proc:
+        yield True
+        sout = proc.stdout
+        serr = proc.stderr
         while proc.poll() is None:
             descriptors = select([sout, serr], [], [])[0]
             for d in descriptors:

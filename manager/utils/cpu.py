@@ -1,7 +1,15 @@
-from psutil._common import get_procfs_path, open_binary, LINUX
-from psutil._pslinux import set_scputimes_ntuple, scputimes, CLOCK_TICKS
-from psutil import _cpu_tot_time, _cpu_busy_time, _cpu_times_deltas # type: ignore
+__all__ = [
+    "cpu_times",
+    "cpu_times_percent",
+]
+
+
+
 from time import sleep
+
+from psutil import _cpu_times_deltas, _cpu_tot_time  # type: ignore
+from psutil._common import LINUX, get_procfs_path, open_binary
+from psutil._pslinux import CLOCK_TICKS, scputimes, set_scputimes_ntuple
 
 # reimplementation of psutil CPU related functions to get all CPU data at once
 # orginal implementation https://github.com/giampaolo/psutil

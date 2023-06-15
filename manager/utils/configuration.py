@@ -1,14 +1,22 @@
-from uuid import uuid4
-from pydantic import BaseModel, Field, validator, StrBytes, Protocol
-from itertools import cycle
-from typing import Optional, Union, ClassVar
-from pathlib import Path
-from json import loads
+__all__ = [
+    "CFG_FILE",
+    "Asset",
+    "Config",
+]
+
+
+
 from os import remove
+from pathlib import Path
+from typing import Optional, Union
+from uuid import uuid4
 
-
-
+from pydantic import BaseModel, Field, Protocol, StrBytes, validator
 from werkzeug.security import check_password_hash, generate_password_hash
+
+
+
+CFG_FILE = Path('/etc/unitotem/unitotem.conf')
 
 _def_dur = 30
 
@@ -46,7 +54,7 @@ class _Config(BaseModel):
     def_duration:int = Field(_def_dur, alias='default_duration', ge=0)
     users:dict[str, dict[str, str]] = {'admin': {'pass': 'pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c'}} #default user: name=admin; password=admin (pre-hashed)
     # _current:str = ''
-    filename:str = Field('/etc/unitotem/unitotem.conf', exclude=True)
+    filename:Union[str, Path] = Field('/etc/unitotem/unitotem.conf', exclude=True)
     first_boot:bool = Field(True, exclude=True)
     
     def self_load(self, obj, first_boot = False):
@@ -58,24 +66,47 @@ class _Config(BaseModel):
     def parse_obj_(self, obj):
         self.self_load(self.parse_obj(obj))
 
-    def parse_raw_(self, b:StrBytes, *, content_type:str = None, encoding:str = 'utf8', proto:Protocol = None, allow_pickle:bool = False):
-        self.self_load(self.parse_raw(b, content_type=content_type, encoding=encoding, proto=proto, allow_pickle=allow_pickle))
+    def parse_raw_(self,
+                b:StrBytes,
+                *,
+                content_type:str = None, # type: ignore
+                encoding:str = 'utf8',
+                proto:Protocol = None, # type: ignore
+                allow_pickle:bool = False):
         
-    def parse_file_(self, path:str = None, *, content_type:str = None, encoding:str = 'utf8', proto:Protocol = None, allow_pickle:bool = False):
-        if path == None: path = self.filename
-        self.self_load(self.parse_file(path, content_type=content_type, encoding=encoding, proto=proto, allow_pickle=allow_pickle))
+        self.self_load(self.parse_raw(b,
+                    content_type=content_type,
+                    encoding=encoding,
+                    proto=proto,
+                    allow_pickle=allow_pickle))
+        
+
+    def parse_file_(self,
+                path:Union[str, Path] = CFG_FILE,
+                *,
+                content_type:str = None, # type: ignore
+                encoding:str = 'utf8',
+                proto:Protocol = None, # type: ignore
+                allow_pickle:bool = False):
+        
+        self.self_load(self.parse_file(path,
+                    content_type=content_type,
+                    encoding=encoding,
+                    proto=proto,
+                    allow_pickle=allow_pickle))
         self.filename = path
 
-    def save(self, path:str = None):
-        if path == None: path = self.filename
+
+    def save(self, path:Union[str, Path] = CFG_FILE):
         with open(path, 'w') as conf_f:
             conf_f.write(self.json(indent=4))
         self.filename = path
         self.first_boot = False
 
+
     def reset(self):
         remove(self.filename)
-        self.self_load(_Config(), True)
+        self.self_load(_Config(), True) # type: ignore
 
     # def cycle_enabled(self):
     #     for asset in cycle(self.assets):
@@ -128,4 +159,4 @@ class _Config(BaseModel):
         allow_population_by_field_name = True
 
 
-Config = _Config()
+Config = _Config() # type: ignore
