@@ -2,78 +2,62 @@
 
 <style>
 {% block custom_style %}
-    .mute-icon[mute=false]{ color: var(--bs-primary); }
-    .mute-icon[mute=false]::before{ content: '\f611'; } /*volume up icon*/
-    .mute-icon[mute=true]{ color:red; }
-    .mute-icon[mute=true]::before{ content: '\f60d'; } /*volume down icon*/
+    .mute-icon{ color: var(--bs-primary); }
+    .mute-icon::before{ content: '\f611'; } /*volume up icon*/
+    [mute] > .mute-icon{ color:red !important; }
+    [mute] > .mute-icon::before{ content: '\f60d' !important; } /*volume down icon*/
     :root, [data-bs-theme=light] { --bs-tertiary-bg: #dddddd; }
 {% endblock custom_style %}
 </style>
 
 {% block content %}
 <h4>Audio output</h4>
-<span id="audio_devices"></span>
+{% for dev in audio -%}
+<div class="form-check" name="{{dev.name}}">
+    <input class="form-check-input" type="radio" name="audioRadio" id="{{dev.name}}">
+    <label class="form-check-label" for="{{dev.name}}">{{dev.description}}</label>
+    <div class="d-flex" style="max-width: 30em;">
+        <div class="p-2">
+            <button type="button" class="btn btn-link p-0" data-devname="{{dev.name}}"><i class="bi mute-icon"></i></button>
+        </div>
+        <div class="p-2 flex-grow-1">
+            <input type="range" class="form-range" min="0" max="1.0" step="0.01" value="0" data-devname="{{dev.name}}">
+        </div>
+        <div class="p-2">
+            <p>0</p>
+        </div>
+    </div>
+</div>
+{% endfor -%}
 {% endblock content %}
 
 {% set init_cmds = ['settings/audio/devices'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
-    const dev_select = $('#audio_devices');
+const dev_select = $('#audio_devices');
+$('[name="audioRadio"]').each((i,e) => $(e).click(function() {
+    sendCommand('settings/audio/default', {device: e.id});
+}));
+$('button.btn.btn-link.p-0').each((i,e) => $(e).click(function() {
+    sendCommand('settings/audio/mute', {device: $(e).data('devname'), mute: !e.hasAttribute('mute')});
+}));
+$('input.form-range').each((i,e) => 
+    $(e).on('input', () => { $(e.parentElement).siblings('p').html(Math.round(parseFloat(e.value)*100))})
+        .change(() => { sendCommand('settings/audio/volume', {device: $(e).data('devname'), volume: parseFloat(e.value)})})
+);
 {% endblock js %}
 
 
 {% block recv_cmds %}
 case 'settings/audio/devices':
-    if (dev_select.children().length == 0){
-        data.devices.forEach(device => {
-            dev_select.append($('<div class="form-check"></div>').attr('name', device.name)
-                .append(
-                    $('<input class="form-check-input" type="radio" name="audioRadio">')
-                        .attr('id', device.name)
-                        .prop('checked', device.default)
-                        .click(() => sendCommand('settings/audio/default', {device: device.name})),
-
-
-                    $('<label class="form-check-label"></label>')
-                        .attr('for', device.name).html(device.description),
-
-
-                    $('<div class="row"></div>')
-                        .append(
-                            $('<div class="col-1"></div>')
-                                .append(
-                                    $('<button type="button" class="btn btn-link p-0"></button>')
-                                        .click(e => sendCommand('settings/audio/mute', {device: device.name, mute: !(e.target.getAttribute('mute')=='true')}))
-                                        .append($('<i class="bi mute-icon"></i>').attr('mute', device.mute))
-                                ),
-
-                            $('<div class="col-10"></div>')
-                                .append(
-                                    $('<input type="range" class="form-range" min="0" max="1.0" step="0.01">')
-                                        .attr('id', device.name + '-volume')
-                                        .val(device.volume)
-                                        .on('input', e => $(e.target.parentElement.parentElement).find('p').html(Math.round(parseFloat(e.target.value)*100)))
-                                        .change(e => sendCommand('settings/audio/volume', {device: device.name, volume: parseFloat(e.target.value)}))
-                                ),
-
-                            $('<div class="col-1"></div>')
-                                .append(
-                                    $('<p></p>').html(Math.round(device.volume*100))
-                                )
-                        )
-                )
-            );
-        });
-    } else {
-        data.devices.forEach(device => {
-            let dev = dev_select.find(`div[name="${device.name}"]`);
-            dev.find('.form-check-input').prop('checked', device.default);
-            dev.find('.row button i').attr('mute', device.mute);
-            dev.find('.row input').val(device.volume);
-            dev.find('.row p').html(Math.round(device.volume*100));
-        })
-    }
+    data.devices.forEach(device => {
+        let dev = $(`div[name="${device.name}"]`);
+        dev.find('.form-check-input').prop('checked', device.default);
+        dev.find('.d-flex button')[0].toggleAttribute('mute', device.mute);
+        dev.find('.d-flex input').val(device.volume);
+        dev.find('.d-flex p').html(Math.round(device.volume*100));
+    })
     break;
 {% endblock recv_cmds %}
 </script>

@@ -32,11 +32,11 @@
 
 <div class="row">
     <div class="col-12 col-lg-6 mb-2">
-        <p class="fw-bold mt-3 mb-1">CPU</p>
+        <h5 class="mt-3 mb-1">CPU</h5>
         <canvas id="cpu-canvas"></canvas>
         
         
-        <p class="fw-bold mt-3 mb-1">Temperatures</p>
+        <h5 class="mt-3 mb-1">Temperatures</h5>
         <small>
             <table class="table">
                 <thead>
@@ -48,46 +48,94 @@
                         <th scope="col" class="text-end">Critical</th>
                     </tr>
                 </thead>
-                <tbody id="temp-table"></tbody>
+                <tbody id="temp-table">
+                    {% for dev, sensors in temp_devs.items() %}
+                    {% for temp in sensors %}
+                    {# I don't think we need to display threshold values higher than
+                     # solder reflow temperature, let alone temperatures hotter than
+                     # THE SUN!
+                     # Samsung nvme ssds report a high/critical temperature of 65261.85 °C
+                     # Considering the Sun is at 5500 °C, we would have a problem if we
+                     # reached this temperature, actually 59761.85 problems.
+                    #}
+                    {% set th, tc = temp.high, temp.critical %}
+                    {% if th == None or th > 300 %}{% set th = '' %}{% endif %}
+                    {% if tc == None or tc > 300 %}{% set tc = '' %}{% endif %}
+                    <tr>
+                        <th scope="row">{{dev if loop.first}}</th>
+                        <td>{{temp.label}}</td>
+                        <td class="text-end" id="temp-{{dev|replace(' ','')}}-{{temp.label|replace(' ','') or loop.index0}}" data-th="{{th or 'NaN'}}"></td>
+                        <td class="text-end">{{th~' °C' if th}}</td>
+                        <td class="text-end">{{tc~' °C' if tc}}</td>
+                    </tr>
+                    {% endfor %}
+                    {% endfor %}
+                </tbody>
             </table>
         </small>
     </div>
     <div class="col-12 col-lg-6 mb-2">
-        <p class="fw-bold mt-3 mb-1">RAM</p>
+        <h5 class="mt-3 mb-1">RAM</h5>
         <div class="progress">
             <div id="progress-used" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
             <div id="progress-buffer" class="progress-bar" role="progressbar" style="width: 0%"></div>
             <div id="progress-cache" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
         </div>
         <div class="row">
-            <div class="col-3"><span><span id="pill-used" class="badge rounded-pill text-bg-success"></span><small> Used</small></span></div>
-            <div class="col-3"><span><span id="pill-buffer" class="badge rounded-pill text-bg-primary"></span><small> Buffer</small></span></div>
-            <div class="col-3"><span><span id="pill-cache" class="badge rounded-pill text-bg-warning"></span><small> Cache</small></span></div>
-            <div class="col-3"><span><span id="pill-total" class="badge rounded-pill text-bg-light"></span><small> Total</small></span></div>
+            <div class="col-3">
+                <span class="badge rounded-pill text-bg-success">
+                    <small id="pill-used"></small>
+                </span>
+                <small> Used</small>
+            </div>
+            <div class="col-3">
+                <span class="badge rounded-pill text-bg-primary">
+                    <small id="pill-buffer"></small>
+                </span>
+                <small> Buffer</small>
+            </div>
+            <div class="col-3">
+                <span class="badge rounded-pill text-bg-warning">
+                    <small id="pill-cache"></small>
+                </span>
+                <small> Cache</small>
+            </div>
+            <div class="col-3">
+                <span class="badge rounded-pill text-body-emphasis bg-body-secondary">
+                    <small>{{ram_tot}}</small>
+                </span>
+                <small> Total</small>
+            </div>
         </div>
 
 
-        <p class="fw-bold mt-3 mb-1">Disks</p>
+        <h5 class="mt-3 mb-1">Disks</h5>
         {{print_disks(disks)}}
         
         
-        {% if has_fans %}    
-        <p class="fw-bold mt-3 mb-1">Fans</p>
-        <ul id="fans-list" class="list-group list-group-flush"></ul>
+        {% if fan_devs %}    
+        <h5 class="mt-3 mb-1">Fans</h5>
+        {% for dev, fans in fan_devs.items() %}
+        <small class="fw-semibold">{{dev}}</small>
+        <ul class="list-group list-group-flush">
+            {% for fan in fans %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <small>{{fan.label or 'fan'~loop.index}}</small>
+                <small id="fan-{{dev|replace(' ','')}}-{{fan.label|replace(' ','') or loop.index0}}"></small>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endfor %}
         {% endif %}
         
         
         {% if has_battery %}    
-        <p class="fw-bold mt-3 mb-1">Battery</p>
+        <h5 class="mt-3 mb-1">Battery</h5>
         <div class="progress">
             <div id="bat-perc" class="progress-bar" role="progressbar" style="width: 0%"></div>
         </div>
         <small>Time left: <span id="bat-time"></span> | <span id="bat-chg"></span></small>
         {% endif %}
-
-        {# <p class="fw-bold mt-3 mb-1">Network</p> #}
-
-
     </div>
 </div>
 
@@ -96,7 +144,6 @@
 
 
 {% set ext_scripts = ['chart.umd.min.js'] %}
-{% set init_cmds = ['settings/info'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
@@ -109,7 +156,6 @@ const prog_cache = $('#progress-cache');
 const pill_used = $('#pill-used');
 const pill_buffer = $('#pill-buffer');
 const pill_cache = $('#pill-cache');
-const pill_total = $('#pill-total');
 
 {% if has_battery %}    
 const bat_perc = $('#bat-perc');
@@ -142,7 +188,7 @@ const chartColors_transparent = {
 
 
 const barChartData = {
-    labels: [],
+    labels: ['CPU'{% for i in range(cpu_count)%}, '{{"Core"~i}}'{% endfor -%}],
     datasets: [{
         label: 'Low (Nice)',
         backgroundColor: chartColors_transparent.blue,
@@ -194,10 +240,10 @@ window.onload = () => {
         data: barChartData,
         options: {
             responsive: true,
-            legend: { position: 'top' }
+            legend: { position: 'top' },
+            scales: { y: { min: 0, max: 100 } }
         }
     });
-    setInterval(sendCommand, 3000, 'settings/info');
 };
 
 function human_readable_size(size, precision=3){
@@ -217,12 +263,6 @@ function human_readable_size(size, precision=3){
 case 'settings/info':
     uptime.html(`(Uptime: ${data.uptime})`);
 
-    if (barChartData.labels.length == 0){
-        barChartData.labels = ['CPU'];
-        for(var i = 1; i<data.cpu.length; i++){
-            barChartData.labels.push('Core' + i);
-        }
-    }
     barChartData.datasets.forEach(dataset => {dataset.data = []});
     data.cpu.forEach((val, i) =>{
         barChartData.datasets[0].data.push(val.nice);
@@ -235,66 +275,35 @@ case 'settings/info':
     window.myBar.update();
 
     prog_used.css('width', data.vmem.used/data.vmem.total*100 + '%');
-    pill_used.html($('<small></small>').html(human_readable_size(data.vmem.used)));
+    pill_used.html(human_readable_size(data.vmem.used));
 
     prog_buffer.css('width', data.vmem.buffers/data.vmem.total*100 + '%');
-    pill_buffer.html($('<small></small>').html(human_readable_size(data.vmem.buffers)));
+    pill_buffer.html(human_readable_size(data.vmem.buffers));
 
     prog_cache.css('width', data.vmem.cached/data.vmem.total*100 + '%');
-    pill_cache.html($('<small></small>').html(human_readable_size(data.vmem.cached)));
+    pill_cache.html(human_readable_size(data.vmem.cached));
     
-    pill_total.html($('<small></small>').html(human_readable_size(data.vmem.total)));
-
-    {% if has_battery %}    
+    {% if has_battery %}
     bat_perc.css('width', data.battery.percent + '%');
-    bat_perc.html($('<small></small>').html(data.battery.percent));
+    bat_perc.html(data.battery.percent + '%');
+    bat_perc.toggleClass('bg-danger', !data.battery.power_plugged && data.battery.percent<=15)
+    bat_perc.toggleClass('bg-warning text-dark', !data.battery.power_plugged && 15<data.battery.percent && data.battery.percent<=25)
+    bat_perc.toggleClass('progress-bar-striped progress-bar-animated', data.battery.power_plugged && data.battery.percent<100)
+    bat_perc.toggleClass('bg-success', data.battery.power_plugged && data.battery.percent===100)
 
-    var time = new Date(0);
-    time.setSeconds(data.battery.secsleft); // specify value for SECONDS here
-    bat_time.html(time.toISOString().substring(11, 19));
+    bat_time.html(new Date(data.battery.secsleft*1000).toISOString().substring(11, 19));
 
-    bat_chg.html(data.battery.power_plugged?'Charging':'Discharging');
+    bat_chg.html((data.battery.power_plugged && data.battery.percent===100)?'Charged':data.battery.power_plugged?'Charging':'Discharging');
     {% endif %}
 
-    {% if has_fans %}
-    fans_list.empty();
-    data.fans.forEach((fan, i) => {
-        fans_list.append(
-            $('<li class="list-group-item d-flex justify-content-between align-items-center"></li>')
-                .append(
-                    $('<small></small>').html(fan.label || ('fan' + (i+1))),
-                    $('<small></small>').html(fan.current + ' rpm')
-                )
-        );
-    })
+    {% if fan_devs %}
+    data.fans.forEach((fan, i) => $('#' + fan[0]).html(fan[1] + ' rpm'));
     {% endif %}
 
-    temp_table.empty();
-    Object.entries(data.temperatures).forEach((pair, i) => {
-        pair[1].forEach((temp, j)=>{
-            /* I don't think we need to display threshold values higher than
-             * solder reflow temperature, let alone temperatures hotter than
-             * THE SUN!
-             * Samsung nvme ssds report a high/critical temperature of 65261.85 °C
-             * Considering the Sun is at 5500 °C, we would have a problem if we
-             * reached this temperature, actually 59761.85 problems.
-            */
-            if (temp.high > 300) temp.high = null;
-            if (temp.critical > 300) temp.critical = null;
-            temp_table.append(
-                $('<tr></tr>').append(
-                    $('<th scope="row"></th>').html((!j)?pair[0]:''),
-                    $('<td></td>').html('temp.label'),
-                    $('<td class="text-end"></td>')
-                        .toggleClass('text-danger', temp.high!=null && temp.current>temp.high)
-                        .html(temp.current + ' °C'),
-                    $('<td class="text-end"></td>').html((temp.high!=null)?(temp.high+' °C'):''),
-                    $('<td class="text-end"></td>').html((temp.critical!=null)?(temp.critical+' °C'):'')
-                )
-            );
-        });
+    data.temperatures.forEach((temp, i) => {
+        let row = $('#' + temp[0]).html(temp[1] + ' °C');
+        row.toggleClass('text-danger', temp[1] > row.data('th'));
     });
-
     break;
 {% endblock recv_cmds %}
 </script>

@@ -9,7 +9,7 @@
 <div class="progress" id="upload-progress" style="display: none;">
     <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" style="width: 0%">0%</div>
 </div>
-<form>
+<form style="max-width: 30em;">
     <input class="form-control form-control-sm" type="file" accept="application/zip" name="backup_file" id="formFile">
     <div id="uploadSettings" style="display: none;">
         <div class="p-3">
@@ -100,37 +100,6 @@ $('form').ajaxForm({
     // return false to prevent normal browser submit and page navigation 
     return false; 
 });
-
-/*function readyStateHandler(xhttp, on_success, on_error){
-    if (xhttp.readyState == 4){
-        if (xhttp.status >= 200 && xhttp.status < 300) {
-            if (on_success == true) location.reload();
-            else if (on_success instanceof Function) on_success(xhttp.response);
-        } else if (!(on_error && on_error(xhttp.response, xhttp.status))) {
-            messageModal.querySelector('.modal-title').textContent = "Error";
-            messageModal.querySelector('.modal-body h6').textContent = `Request returned ${xhttp.status} (${xhttp.statusText})`;
-            messageModal.querySelector('.modal-body code').textContent = xhttp.response;
-            new bootstrap.Modal(messageModal).show();
-        }
-    }
-};
-
-function uploadConfig(cfg_file, cfg_options, on_success, on_error) {
-    let xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = () => readyStateHandler(xhttp, on_success, on_error);
-    let formData = new FormData();
-    formData.append('backup_file', cfg_file);
-    formData.append('options', JSON.stringify(cfg_options));
-    $("#upload-progress")[0].removeAttribute("hidden");
-    let progressbar = $("#upload-progress-bar")[0];
-    xhttp.upload.addEventListener('progress', (event) => {
-        var perc = Math.round(event.loaded / event.total * 100);
-        progressbar.style = `width: ${perc}%`;
-        progressbar.innerHTML = perc + "%";
-    });
-    xhttp.open("POST", "/backup", true);
-    xhttp.send(formData);
-}*/
 
 function resetConfig(on_success, on_error) {
     let xhttp = new XMLHttpRequest();

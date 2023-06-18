@@ -1,27 +1,21 @@
 {% extends "settings.html.j2" %}
 {% block content %}
     <h4>Change password</h4>
-    <div class="mb-2 row">
-        <label for="loggedUser" class="my-auto col-sm-5 col-form-label">User</label>
-        <div class="my-auto col-sm-7">
-            <input type="text" class="form-control" id="loggedUser" value="{{logged_user}}" disabled>
-        </div>
+    <div class="form-floating mb-3" style="max-width: 30em;">
+        <input type="email" class="form-control" id="loggedUser" placeholder="admin" value="{{logged_user}}" disabled>
+        <label for="loggedUser">Username</label>
     </div>
-    <div class="mb-2 row">
-        <label for="inputNewPassword" class="my-auto col-sm-5 col-form-label">New password</label>
-        <div class="my-auto col-sm-7">
-            <input type="password" class="form-control" id="inputNewPassword">
-        </div>
+    <div class="form-floating mb-3" style="max-width: 30em;">
+        <input type="password" class="form-control" id="inputNewPassword" placeholder="Password">
+        <label for="inputNewPassword">New password</label>
     </div>
     <form action="/api/settings/set_passwd" method="post">
-        <div class="mb-2 row">
-            <label for="inputNewPassword2" class="my-auto col-sm-5 col-form-label">Repeat new password</label>
-            <div class="my-auto col-sm-7">
-                <input type="password" name="password" class="form-control" id="inputNewPassword2">
-            </div>
+        <div class="form-floating mb-3" style="max-width: 30em;">
+            <input type="password" class="form-control" id="inputNewPassword2" placeholder="Password" name="password">
+            <label for="inputNewPassword2">Repeat new password</label>
         </div>
-        <div class="hstack gap-2">
-            <button type="submit" class="btn btn-sm btn-success ms-auto" id="set_passwd" disabled><i class="bi bi-check2"></i> Change password</button>
+        <div style="max-width: 30em;">
+            <button type="submit" class="btn btn-success float-end" id="set_passwd" disabled><i class="bi bi-check2"></i> Change password</button>
         </div>
     </form>
 {% endblock content %}
