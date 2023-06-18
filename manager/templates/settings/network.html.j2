@@ -56,7 +56,7 @@
 {% block js %}
 const file_selector_btn = $('#file-selector-btn');
 const filesList = $('#files-list');
-const aceEditor = ace.edit('editor', {theme: "ace/theme/xcode", mode: "ace/mode/yaml"});
+const aceEditor = ace.edit('editor', {theme: "ace/theme/{{'xcode' if bs_theme=='light' else 'monokai'}}", mode: "ace/mode/yaml"});
 const set_btn = $('#set-btn');
 const del_btn = $('#del-btn');
 const inputHostname = $('#inputHostname');
