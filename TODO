@@ -18,10 +18,12 @@
 <!-- Check if uploaded file exists -->
 <!-- Use asyncio for file uploads -->
 <!-- Handle exit signals -->
-Move immutable information in info page generation instead of javascript
-    (Cpu count, ram size, ecc can't change without a reboot)
-Add a websocket command to trigger page reload
+<!-- Move immutable information in info page generation instead of javascript
+    (Cpu count, ram size, ecc can't change without a reboot) -->
+<!-- Add a websocket command to trigger page reload -->
 Handle electron window resize (needed?)
+Allow asset enabling schedule (date/time)
+Periodically check that apt list file is enabled
 <!-- Settings backup/restore not fully implemented -->
 <!-- CORRECT BACKUP VERSION CHECK -->
 Reuse code from uploadfile when restoring backup
@@ -30,7 +32,7 @@ Cache MediaInfo metadata
 Handle 'reset' command in electron
 Allow drag-n-drop files
 Show confirmation on command execution (success popup/notification)
-Make info screen update on timer, not on requests
+<!-- Make info screen update on timer, not on requests -->
 Switch to fontawesome
 # https://fontawesome.com/download
 Replace ace.js with Monaco-editor
@@ -41,10 +43,22 @@ Add image fitting method for images not matching screen ration
 Allow Multiuser
 Create a server that controls multiple clients
 
+Add display power control:
+- CEC
+- DDC/CI (Only poweroff)
+- GPIO
+- Serial
 
+Allow customization of image background
+Python libmagic https://github.com/ahupp/python-magic
+Custom scripts
+Receive notifications from org.Freedesktop dbus
 Use custom window manager
 # https://github.com/h-ohsaki/xpywm/tree/master
 Use service workers to handle server offline
 # https://medium.com/swlh/how-to-make-your-web-apps-work-offline-be6f27dd28e
 Configure network with a tool like nmtui (needed?)
 # https://it.linux-console.net/?p=1813#gsc.tab=0
+# https://github.com/heftig/NetworkManager
+# https://python-sdbus-networkmanager.readthedocs.io/en/latest/examples.html
+# https://github.com/python-sdbus/python-sdbus-networkmanager

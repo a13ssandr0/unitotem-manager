@@ -1,13 +1,13 @@
 {% extends "settings.html.j2" %}
 {% block content %}
 <h4>Playback</h4>
-<div class="mb-3 row">
-    <label for="default_duration" class="my-auto col-sm-5 col-form-label">Default asset duration</label>
-    <div class="my-auto col-sm-7">
+<div class="mb-3 d-block d-md-flex" style="max-width: 33em;">
+    <label for="default_duration" class="p-2 flex-shrink-0">Default asset duration</label>
+    <div class="flex-grow-1">
         <div class="input-group">
-            <input type="number" class="form-control" id="default_duration" min="1">
-            <span class="input-group-text">seconds</span>
-            <button type="button" class="btn btn-sm btn-outline-success ms-auto" id="set_def_duration"><i class="bi bi-check2"></i> Apply</button>
+            <input type="number" class="form-control text-end" id="default_duration" min="1">
+            <span class="input-group-text">s<span class="d-none d-sm-block">econds</span></span>
+            <button type="button" class="btn btn-sm btn-outline-success ms-auto" id="set_def_duration" disabled><i class="bi bi-check2"></i><span class="d-none d-sm-inline"> Apply</span></button>
         </div>
     </div>
 </div>
@@ -20,7 +20,7 @@
 case 'settings/default_duration':
     default_duration.attr('def-val', data.duration);
     default_duration.val(data.duration);
-    set_default_duration.removeClass('btn-success').addClass('btn-outline-success');
+    set_default_duration.removeClass('btn-success').addClass('btn-outline-success').prop('disabled', true);
     break;
 {% endblock recv_cmds %}
 
@@ -30,9 +30,9 @@ const set_default_duration = $('#set_def_duration');
 
 default_duration.change(() => {
     if (default_duration.val() != default_duration.attr('def-val')) {
-       set_default_duration.removeClass('btn-outline-success').addClass('btn-success');
+       set_default_duration.removeClass('btn-outline-success').addClass('btn-success').prop('disabled', false);
     } else {
-       set_default_duration.removeClass('btn-success').addClass('btn-outline-success');
+       set_default_duration.removeClass('btn-success').addClass('btn-outline-success').prop('disabled', true);
     }
 });
 

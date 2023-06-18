@@ -24,6 +24,15 @@
     {% endfor -%}
 {% endmacro -%}
 
+{% macro menu_select(name, src) -%}
+    {% if (request.url|string).endswith(src) -%}
+    <span class="text-light text-bg-primary fw-bold px-2 rounded">{{name}}</span>
+    {% else -%}
+    {{name}}
+    {% endif -%}
+{% endmacro -%}
+
+{% set bs_theme = ['light', 'dark'][1] -%}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -41,7 +50,7 @@
     </style>
 </head>
 
-<body data-bs-theme="dark">
+<body data-bs-theme="{{bs_theme}}">
 
     {{confirmModal()}}
     {{newAssetModal() if (request.url|string).endswith('/')}}
@@ -71,25 +80,33 @@
                 <div class="offcanvas-header">
                     <h1 style="color: #7431F9;">UniTotem</h1>
                 </div>
-                <div class="offcanvas-body">
+                <div class="offcanvas-body p-0">
                     <div class="col p-lg-3 mt-3 mt-lg-0" style="flex: 0 0 auto;">
-                        <a href="/" class="list-group-item list-group-item-action m-2 ms-0 mb-4"><i class="bi bi-list-task" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;Scheduler</a>
-                        <a href="/settings" class="list-group-item list-group-item-action m-2 ms-0"><i class="bi bi-sliders" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;Settings</a>
+                        <div class="row m-2 ms-0 mb-4">
+                            <a href="/" class="text-reset text-decoration-none"><i class="bi bi-list-task text-primary-emphasis"></i>&nbsp;&nbsp;&nbsp;{{menu_select('Scheduler', '/')}}</a>
+                        </div>
+                        <div class="row m-2 ms-0">
+                            <a href="/settings" class="text-reset text-decoration-none"><i class="bi bi-sliders text-primary-emphasis"></i>&nbsp;&nbsp;&nbsp;{{menu_select('Settings', '/settings')}}</a>
+                        </div>
                         {%- for name, tab, _, icon in tabs %}
-                        <a href="/settings/{{tab}}" class="list-group-item list-group-item-action m-1 mt-2 ms-3"><i class="bi bi-{{icon}}" style="color: #7431F9;"></i>&nbsp;&nbsp;&nbsp;{{name}}</a>
+                        <div class="row m-1 mt-2 ms-3">
+                            <a href="/settings/{{tab}}" class="text-reset text-decoration-none"><i class="bi bi-{{icon}} text-primary-emphasis"></i>&nbsp;&nbsp;&nbsp;{{menu_select(name, '/settings/' ~ tab)}}</a>
+                        </div>
                         {%- endfor %}
                     </div>
                 </div>
             </div>
 
-            <main class="container-fluid col mt-lg-4 mt-1 mb-3">
+            <main class="container-fluid col mt-lg-4 mt-1 mb-4">
                 {% block main_content %}{% endblock main_content %}
             </main>
         </div>
     </div>
 
+    <div class="toast-container position-absolute bottom-0 end-0 p-3"></div>
+
     {% set display = (disp_size.width|string + 'x' + disp_size.height|string) if disp_size else 'Not connected' -%}
-    <footer class="fixed-bottom text-center border-top" style="width:100vw; z-index:1000;">
+    <footer class="fixed-bottom text-center border-top bg-body" style="width:100%; z-index:1000;">
         <h6 class="my-1" width="100%">
             <small class="text-muted">
                 <a href="https://github.com/a13ssandr0/unitotem">
@@ -101,11 +118,27 @@
     {{_add_scripts('bootstrap.bundle.min.js', 'jquery.min.js', *ext_scripts)}}
 
     <script>
+        const toast_container = $('.toast-container');
 
         function sendCommand(target, args) {
             if(args === undefined) args = {};
             args.target = target
             ws.send(JSON.stringify(args));
+        }
+
+        function notification(title, message, duration=5000, subtitle=''){
+            let toast = 
+                $('<div class="toast" role="alert"></div>').append(
+                    $('<div class="toast-header"></div>').append(
+                        {# $('<img src="..." class="rounded me-2" alt="...">'), #}
+                        $('<strong class="me-auto"></strong>').html(title),
+                        $('<small class="text-body-secondary"></small>').html(subtitle),
+                        $('<button type="button" class="btn-close" data-bs-dismiss="toast"></button>'),
+                    ),
+                    $('<div class="toast-body"></div>').html(message)
+                )
+            toast_container.prepend(toast);
+            new bootstrap.Toast(toast, {autohide: !!duration, delay: duration}).show();
         }
 
         {% block js %}{% endblock js %}
@@ -144,6 +177,10 @@
 
                     case 'connected':
                         connect_retry=0;
+                        break;
+
+                    case 'reload':
+                        location.reload();
                         break;
 
                     default:

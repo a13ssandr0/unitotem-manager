@@ -4,11 +4,11 @@
     {% for name, tab, desc, icon in tabs%}
     <div class="col">
         <div class="card mb-3" style="height: 90%!important;">
-            <div class="row g-0">
-                <div class="col-2 col-xl-3 ps-2 pt-2 text-center">
-                    <i class="bi bi-{{icon}}" style="font-size: 2.75em; color: #7431F9;"></i>
+            <div class="d-flex">
+                <div class="p-3 pe-0 text-center">
+                    <i class="bi bi-{{icon}} text-primary-emphasis" style="font-size: 2.75em;"></i>
                 </div>
-                <div class="col-10 col-xl-9">
+                <div class="flex-grow-1">
                     <div class="card-body">
                         <h5 class="card-title">{{name}}</h5>
                         <p class="card-text"><small class="text-muted"><a href="/settings/{{tab}}" class="text-reset text-decoration-none stretched-link">{{desc}}</a></small></p>

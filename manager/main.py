@@ -5,7 +5,6 @@ __version__ = '3.0.0'
 import asyncio
 import signal
 from argparse import ArgumentParser
-from datetime import datetime
 from io import BytesIO
 from json import dumps, loads
 from math import inf
@@ -36,7 +35,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
 from natsort import natsorted
-from psutil import (boot_time, disk_usage, sensors_battery, sensors_fans,
+from psutil import (cpu_count, disk_usage, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
 from utils import *
 from validators import url as is_valid_url
@@ -264,6 +263,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 case 'settings/update/list':
                     await WS.broadcast('settings/update/list', updates=apt_list_upgrades())
+
+                case 'settings/update/reboot_required':
+                    await WS.broadcast('settings/update/reboot_required', reboot=reboot_required())
                         
                 case 'settings/update/status':
                     await WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
@@ -383,22 +385,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         await WS.send(websocket, 'error', error='Not found', extra='Requested job does not exist')
                     await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
-                case 'settings/info':
-                    cpu_percent = []
-                    for x in cpu_times_percent(None):
-                        y = x._asdict()
-                        y['total'] = round(sum(x)-x.idle-x.guest-x.guest_nice-x.iowait,1)
-                        cpu_percent.append(y)
-                    # cpu_count()
-                    await WS.send(
-                        websocket, 'settings/info',
-                        uptime = str(datetime.fromtimestamp(time()) - datetime.fromtimestamp(boot_time())).split('.')[0],
-                        cpu = cpu_percent,
-                        battery = sensors_battery()._asdict() if sensors_battery() else None,
-                        fans = [x._asdict() for v in sensors_fans().values() for x in v],
-                        temperatures = {k:[x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k,v in sensors_temperatures().items()},
-                        vmem = virtual_memory()._asdict(),
-                    )
+                # case 'settings/info':
+                    
 
                 case _:
                     await WS.send(websocket, 'error', error='Invalid command', extra=dumps(data, indent=4))
@@ -587,13 +575,17 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
         disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total), # type: ignore
         def_wifi=DEF_WIFI_CARD
     )
-    if tab == 'display':
+    if tab == 'audio':
+        data['audio'] = getAudioDevices()
+    elif tab == 'display':
         data['displays'] = SCREENS
     elif tab == 'info':
-        data['disks'] = [blk.dict() for blk in lsblk()] # type: ignore
-        # data['net_addrs'] = do_ip_addr() # type: ignore
+        data['cpu_count'] = cpu_count()
+        data['ram_tot'] = human_readable_size(virtual_memory().total)
+        data['disks'] = [blk.dict() for blk in lsblk()]
         data['has_battery'] = sensors_battery() != None
-        data['has_fans'] = bool(sensors_fans()) # type: ignore
+        data['temp_devs'] = {k:[x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k,v in sensors_temperatures().items()}
+        data['fan_devs'] = {k:[x._asdict() for x in v] for k,v in sensors_fans().items()}
     
     return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
 
@@ -635,7 +627,7 @@ async def webview_goto(asset: int = CURRENT_ASSET, force: bool = False, backward
 
 async def webview_control_main(waiter: asyncio.Event):
     global NEXT_CHANGE_TIME, CURRENT_ASSET, UI_WS
-    while not waiter.is_set:
+    while not waiter.is_set():
         if time()>=NEXT_CHANGE_TIME:
             if Config.first_boot:
                 NEXT_CHANGE_TIME = inf
@@ -652,8 +644,6 @@ async def webview_control_main(waiter: asyncio.Event):
                 if CURRENT_ASSET >= len(Config.assets): CURRENT_ASSET = 0
                 await webview_goto(CURRENT_ASSET)
         await asyncio.sleep(1)
-
-
 
 
 
@@ -691,27 +681,24 @@ if __name__ == "__main__":
     if not cmdargs.get('no_gui', False):
         loop.create_task(webview_control_main(shutdown_event), name='page_controller')
 
+    async def info_loop(ws: WSManager, waiter: asyncio.Event):
+        while not waiter.is_set():
+            await broadcast_sysinfo(ws)
+            await asyncio.sleep(3)
+
+    loop.create_task(info_loop(WS, shutdown_event), name='info_loop')
+
     loop.create_task(serve(WWW, HyperConfig().from_mapping({ # type: ignore
         'bind': ['0.0.0.0:443'],
         'insecure_bind': ['0.0.0.0:80'],
-        'certfile': "/etc/ssl/unitotem.pem",
-        'keyfile': "/etc/ssl/unitotem.pem",
+        'certfile': '/etc/ssl/unitotem.pem',
+        'keyfile': '/etc/ssl/unitotem.pem',
+        'accesslog': '-',
+        'errorlog': '-',
+        'loglevel': 'INFO'
     }), shutdown_trigger=shutdown_event.wait), name='server') # type: ignore
 
     loop.run_forever()
-    
-    # loop = asyncio.new_event_loop()
-
-    # if not cmdargs.get('no_gui', False):
-    #     loop.create_task(webview_control_main(), name='page_controller')
-
-    # loop.create_task(uvServer(uvConfig(FastAPI(middleware=[Middleware(HTTPSRedirectMiddleware)]), port=80)).serve(), name='http_server')
-
-    # Thread(target=loop.run_forever, daemon=True).start()
-    # # logger.info("Starting unitotem-manager")
-
-    # run(WWW, port=443, ssl_certfile="/etc/ssl/unitotem.pem")
-    
 
     stop_hostpot()
 

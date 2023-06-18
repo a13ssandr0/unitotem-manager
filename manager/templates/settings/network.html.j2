@@ -1,7 +1,7 @@
 {% extends "settings.html.j2" %}
 {% block content %}
     <h4>Network</h4>
-    <div class="mb-3 row">
+    <div class="mb-3 row" style="max-width: 30em;">
         <label for="inputHostname" class="col-sm-5 col-form-label">Hostname</label>
         <div class="col-sm-7">
             <div class="input-group">
@@ -19,7 +19,7 @@
         </ul>
         <div class="btn-group mb-2" role="group">
             <div class="dropdown">
-                <button type="button" id="file-selector-btn" class="btn btn-light dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="true">Netplan configuration file</button>
+                <button type="button" id="file-selector-btn" class="btn btn-{{bs_theme}} dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="true">Netplan configuration file</button>
                 <ul class="dropdown-menu" style="min-width: 30rem;">
                     <span id="files-list"></span>
                     <li><hr class="dropdown-divider"></li>
