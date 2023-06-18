@@ -21,22 +21,17 @@
 <!-- Move immutable information in info page generation instead of javascript
     (Cpu count, ram size, ecc can't change without a reboot) -->
 <!-- Add a websocket command to trigger page reload -->
-Handle electron window resize (needed?)
-Allow asset enabling schedule (date/time)
-Periodically check that apt list file is enabled
 <!-- Settings backup/restore not fully implemented -->
 <!-- CORRECT BACKUP VERSION CHECK -->
-Reuse code from uploadfile when restoring backup
-Split file upload in helper functions: file save, file load in assets/config
-Cache MediaInfo metadata
+<!-- Make info screen update on timer, not on requests -->
+Allow asset enabling schedule (date/time)
+Periodically check that apt list file is enabled
 Handle 'reset' command in electron
 Allow drag-n-drop files
 Show confirmation on command execution (success popup/notification)
-<!-- Make info screen update on timer, not on requests -->
-Switch to fontawesome
-# https://fontawesome.com/download
-Replace ace.js with Monaco-editor
-# https://github.com/microsoft/monaco-editor
+Reuse code from uploadfile when restoring backup
+Split file upload in helper functions: file save, file load in assets/config
+Cache MediaInfo metadata
 
 Add image fitting method for images not matching screen ration
 
@@ -49,6 +44,9 @@ Add display power control:
 - GPIO
 - Serial
 
+Switch to fontawesome
+# https://fontawesome.com/download
+Handle electron window resize (needed?)
 Allow customization of image background
 Python libmagic https://github.com/ahupp/python-magic
 Custom scripts
