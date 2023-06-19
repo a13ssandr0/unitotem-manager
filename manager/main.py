@@ -49,7 +49,7 @@ NEXT_CHANGE_TIME  = 0
 DEF_WIFI_CARD     = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP        = None
 
-SCREENS:list[dict]= []
+DISPLAYS:list[dict]= []
 WINDOW            = {'bounds': {}, 'orientation':-2, 'flip':-2}
 
 UI_WS             = WSManager(True)
@@ -73,13 +73,9 @@ WWW = FastAPI(
 
 
 def list_resources():
-    # return list(filter(lambda x: x.is_file(), UPLOAD_FOLDER.iterdir()))
     return list(filter(lambda f: isfile(join(UPLOAD_FOLDER, f)), listdir(UPLOAD_FOLDER)))
 
 def get_resources():
-    # infos = []
-    # for f in list_resources():
-    #     infos.append(get_file_info(UPLOAD_FOLDER, f))
     return [get_file_info(UPLOAD_FOLDER, f) for f in list_resources()]
 
 
@@ -107,7 +103,6 @@ async def ui_websocket(websocket: WebSocket):
             match data['target']:
                 case 'getAllDisplays':
                     DISPLAYS = data['displays']
-                    # await WS.broadcast('settings/display/all', bounds=data['displays'])
                 case 'getBounds':
                     WINDOW['bounds'] = data['bounds']
                     await WS.broadcast('settings/display/getBounds', **WINDOW['bounds'])
@@ -418,6 +413,17 @@ async def set_pass(request: Request, response: Response, password:str, username:
         response.headers['location'] = request.headers['Referer']
 
 
+async def load_file(filename):
+    file_data = get_file_info(filename)
+    Config.add_asset(
+        url= 'file:' + file_data['filename'],
+        duration= file_data.get('duration_s'),
+        enabled= False,
+    )
+    Config.save()
+    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+    await WS.broadcast('scheduler/file', files=get_resources())
+
 @WWW.post("/api/scheduler/upload", dependencies=[Depends(LOGMAN)])
 async def media_upload(response: Response, files: list[UploadFile]):
     makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -436,15 +442,7 @@ async def media_upload(response: Response, files: list[UploadFile]):
                 while buf := await infile.read(64 * 1024 * 1024): #64MB buffer
                     await out.write(buf)
 
-            file_data = get_file_info(out_filename)
-            Config.add_asset(
-                url= 'file:' + file_data['filename'],
-                duration= file_data.get('duration_s'),
-                enabled= False,
-            )
-            Config.save()
-            await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-            await WS.broadcast('scheduler/file', files=get_resources())
+            await load_file(out_filename)            
     response.status_code = status.HTTP_201_CREATED
 
 @WWW.get("/backup", dependencies=[Depends(LOGMAN)])
@@ -486,7 +484,6 @@ async def load_backup(backup_file: UploadFile,
 
                 from packaging.version import Version
                 bkp_ver = Version(config_json.get('version', '0'))
-                ver_3_0_0 = Version('3.0.0')
 
                 if 'CONFIG' in config_json and CONFIG:
                     Config.parse_obj(config_json['CONFIG'])
@@ -498,20 +495,33 @@ async def load_backup(backup_file: UploadFile,
                     set_hostname(config_json['hostname'])
 
                 if 'def_audio_dev' in config_json and def_audio_dev:
-                    if bkp_ver >= ver_3_0_0:
+                    if bkp_ver >= Version('3.0.0'):
                         #with version 3.0.0 audio controls changed from alsa to pulseaudio
                         setDefaultAudioDevice(config_json['def_audio_dev'])
 
                 if 'netplan' in config_json and netplan:
-                    res = set_netplan(filename = None, file_content=config_json['netplan'])
+                    set_netplan(filename = None, file_content=config_json['netplan'], apply=False)
 
             if uploaded:
-                for file in files:
-                    if file.startswith('uploaded/'):
-                        zip_file.extract(file, normpath(join(UPLOAD_FOLDER, '..')))
+                for filename in files:
+                    if filename.startswith('uploaded/'):
+                        out_filename = Path(UPLOAD_FOLDER, secure_filename(Path(filename).name))
+                        # allow files with duplicate filenames, simply add a number at the end
+                        if out_filename.exists():
+                            stem = out_filename.stem + '_{}'
+                            i = 1
+                            while out_filename.exists():
+                                i += 1
+                                out_filename = out_filename.with_stem(stem.format(i))
+                        
+                        async with aopen(out_filename, 'wb') as out:
+                            await out.write(zip_file.read(filename))
 
-            if 'res' in locals():
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=res) # type: ignore
+                        await load_file(out_filename)
+                        # zip_file.extract(filename, normpath(join(UPLOAD_FOLDER, '..')))
+            res = generate_netplan()
+            if isinstance(res, str):
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=res)
             
     except BadZipFile as e:
         raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail=str(e))
@@ -525,7 +535,7 @@ async def factory_reset():
     CRONTAB.remove_all(comment=CRONTAB._cron_re)
     CRONTAB.write()
 
-    await UI_WS.broadcast('reset')
+    await UI_WS.broadcast('reset', nocache=True)
     
     for res in list_resources(): remove(join(UPLOAD_FOLDER, res))
     CURRENT_ASSET    = -1
@@ -578,7 +588,7 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
     if tab == 'audio':
         data['audio'] = getAudioDevices()
     elif tab == 'display':
-        data['displays'] = SCREENS
+        data['displays'] = DISPLAYS
     elif tab == 'info':
         data['cpu_count'] = cpu_count()
         data['ram_tot'] = human_readable_size(virtual_memory().total)

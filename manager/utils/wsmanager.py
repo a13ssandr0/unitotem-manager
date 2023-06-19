@@ -26,7 +26,7 @@ class WSManager:
         await websocket.accept()
         self.active_connections.append(websocket)
         if self.last != None:
-            for cmd in self.last:
+            for cmd in self.last.values():
                 await websocket.send_text(cmd)
 
     def disconnect(self, websocket: WebSocket):
@@ -35,15 +35,15 @@ class WSManager:
         except ValueError:
             pass #it's not necessary to crash if not present
 
-    async def send(self, websocket: WebSocket, target: str, **kwargs):
+    async def send(self, websocket: WebSocket, target: str, nocache=False, **kwargs):
         text = dumps({'target': target, **kwargs})
         await websocket.send_text(text)
-        if self.last != None:
+        if self.last != None and nocache != True:
             self.last[target] = text
 
-    async def broadcast(self, target: str, **kwargs):
+    async def broadcast(self, target: str, nocache=False, **kwargs):
         text = dumps({'target': target, **kwargs})
         for connection in self.active_connections:
             await connection.send_text(text)
-        if self.last != None:
+        if self.last != None and nocache != True:
             self.last[target] = text
