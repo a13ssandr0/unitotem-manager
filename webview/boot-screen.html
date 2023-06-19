@@ -154,12 +154,22 @@
     const imageview   = document.getElementById('imageview');
     const videoview   = document.getElementById('videoview');
     const containers  = [boot_screen, webview, imageview, videoview];
+
+    
+    window.onload = async () => {
+        document.body.setAttribute('r', await window.electronAPI.loadOrientation());
+        document.main.setAttribute('f', await window.electronAPI.loadFlip());
+    };
+
     function connect() {
         var _ws = new WebSocket(`wss://localhost/ui_ws`);
         _ws.onopen = async event => {
             // PAGE INIT
             sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
             sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
+            sendCommand('getOrientation', {orientation: document.body.getAttribute('r') || 0});
+            sendCommand('getFlip', {flip: document.main.getAttribute('f') || 0});
+            sendCommand('getAllowInsecureCerts', {allow: await window.electronAPI.getAllowInsecureCerts()});
         }
         _ws.onmessage = async event => {
             const data = JSON.parse(event.data);
@@ -248,6 +258,9 @@
 
                 case 'setAllowInsecureCerts':
                     await window.electronAPI.setAllowInsecureCerts(data.allow);
+
+                case 'reset':
+                    await window.electronAPI.resetDefaults();
 
                 default:
                     break;

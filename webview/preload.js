@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadFlip: () => ipcRenderer.invoke('mainWindow:loadFlip'),
     getAllowInsecureCerts: () => ipcRenderer.invoke('config:getAllowInsecureCerts'),
     setAllowInsecureCerts: (allow) => ipcRenderer.invoke('config:setAllowInsecureCerts', allow),
+    resetDefaults: () => ipcRenderer.invoke('config:reset'),
 })

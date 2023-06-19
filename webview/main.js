@@ -1,8 +1,9 @@
 const { app, BrowserWindow, screen, ipcMain} = require('electron');
 const path = require('path');
-const {readFileSync, writeFileSync} = require('fs');
+const {readFileSync, writeFileSync, unlinkSync} = require('fs');
 const {homedir} = require("os");
 
+const cfg_file_path = path.join(homedir(), '.unitotem-viewer.conf');
 
 app.whenReady().then(() => {
     const screens = screen.getAllDisplays();
@@ -20,15 +21,15 @@ app.whenReady().then(() => {
     };
     var file = {};
     try {
-        file = JSON.parse(readFileSync(path.join(homedir(), '.unitotem-viewer.conf')));
+        file = JSON.parse(readFileSync(cfg_file_path));
     } catch (err) {
-        writeFileSync(path.join(homedir(), '.unitotem-viewer.conf'), JSON.stringify(_baseConfig));
+        writeFileSync(cfg_file_path, JSON.stringify(_baseConfig));
     }
     const config = new Proxy(file, {
         get: (target, name)=>{
             return target.hasOwnProperty(name) ? target[name] : _baseConfig[name];
         },
-        // save: (filename = path.join(homedir(), '.unitotem-viewer.conf')) =>
+        // save: (filename = cfg_file_path) =>
         //             writeFileSync(filename, JSON.stringify(SELF))
     });
     
@@ -49,31 +50,35 @@ app.whenReady().then(() => {
         width:           config.bounds.width,
         height:          config.bounds.height
     });
-    mainWindow.loadFile('../manager/templates/boot-screen.html');
+    mainWindow.loadFile('boot-screen.html');
     ipcMain.handle('screen:getAllDisplays', screen.getAllDisplays);
     ipcMain.handle('mainWindow:getBounds', () => {return config.bounds});
     ipcMain.handle('mainWindow:setBounds', (e, x, y, w, h) => {
         mainWindow.setBounds({x:x, y:y, width:w, height:h});
         config.bounds = {x:x, y:y, width:w, height:h};
-        writeFileSync(path.join(homedir(), '.unitotem-viewer.conf'), JSON.stringify(config));
+        writeFileSync(cfg_file_path, JSON.stringify(config));
     });
     ipcMain.handle('mainWindow:saveOrientation', (e, orientation) => {
         config.orientation = orientation;
-        writeFileSync(path.join(homedir(), '.unitotem-viewer.conf'), JSON.stringify(config));
+        writeFileSync(cfg_file_path, JSON.stringify(config));
     });
     ipcMain.handle('mainWindow:loadOrientation', () => {return config.orientation});
     ipcMain.handle('mainWindow:saveFlip', (e, flip) => {
         config.flip = flip;
-        writeFileSync(path.join(homedir(), '.unitotem-viewer.conf'), JSON.stringify(config));
+        writeFileSync(cfg_file_path, JSON.stringify(config));
     });
     ipcMain.handle('mainWindow:loadFlip', () => {return config.flip});
     ipcMain.handle('config:getAllowInsecureCerts', () => {return config.allowInsecureCerts});
     ipcMain.handle('config:setAllowInsecureCerts', (e, allow) => {
         config.allowInsecureCerts = allow;
-        writeFileSync(path.join(homedir(), '.unitotem-viewer.conf'), JSON.stringify(config));
+        writeFileSync(cfg_file_path, JSON.stringify(config));
     });
 
-
+    ipcMain.handle('config:reset', () => {
+        unlinkSync(cfg_file_path);
+        // app.relaunch(); // systemd should handle it
+        app.exit();
+    })
     
     app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
         if (config.allowInsecureCerts || url.match('(?:http|ws)s?://localhost')) {
