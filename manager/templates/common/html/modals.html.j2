@@ -25,14 +25,26 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="url" class="col-form-label"><h5>URL:</h5></label>
-                        <input type="text" class="form-control" id="modal_input_url" placeholder="https://github.com/a13ssandr0/unitotem" data-bs-container="body" data-bs-placement="bottom" data-bs-content="Invalid URL">
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="modal_input_name" placeholder="Name">
+                        <label for="modal_input_name">Name</label>
                     </div>
-                    <div class="mb-3">
-                        <label for="duration" class="col-form-label"><h5>Duration (seconds):</h5></label>
-                        <p>Set this to 0 to display indefinitely</p>
+                    <div class="form-floating mb-3">
+                        <input type="url" class="form-control" id="modal_input_url" placeholder="Url">
+                        <label for="modal_input_url">Url</label>
+                    </div>
+                    <div class="form-floating mb-3">
                         <input type="number" class="form-control" id="modal_input_duration" min="0">
+                        <label for="modal_input_duration">Duration</label>
+                        <small class="ms-3">Set this to 0 to display indefinitely</small>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input type="datetime-local" class="form-control" id="modal_input_start" placeholder="Start">
+                        <label for="modal_input_start">Enable date</label>
+                    </div>
+                    <div class="form-floating">
+                        <input type="datetime-local" class="form-control" id="modal_input_stop" placeholder="Stop">
+                        <label for="modal_input_stop">Disable date</label>
                     </div>
                 </div>
                 <div class="modal-footer">

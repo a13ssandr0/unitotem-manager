@@ -8,8 +8,7 @@ from argparse import ArgumentParser
 from io import BytesIO
 from json import dumps, loads
 from math import inf
-from os import listdir, makedirs, remove
-from os.path import dirname, exists, isfile, join, normpath
+from os.path import dirname, exists, join
 from pathlib import Path
 from platform import freedesktop_os_release as os_release
 from platform import node as get_hostname
@@ -19,9 +18,9 @@ from time import strftime, time
 from traceback import format_exc, print_exc
 from typing import Annotated, Any
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
+from functools import wraps
 
 import uvloop
-from aiofiles import open as aopen
 from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
                      UploadFile, WebSocket, WebSocketDisconnect, status)
 from fastapi.middleware import Middleware
@@ -30,67 +29,50 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.routing import Mount
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi_login.exceptions import InvalidCredentialsException
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
 from natsort import natsorted
-from psutil import (cpu_count, disk_usage, sensors_battery, sensors_fans,
+from psutil import (cpu_count, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
 from utils import *
 from validators import url as is_valid_url
+from watchdog.observers import Observer
 from werkzeug.utils import secure_filename
 
-APT_THREAD        = Thread(target=apt_update, name='update')
+APT_THREAD           = Thread(target=apt_update, name='update')
 
-CURRENT_ASSET     = -1
-NEXT_CHANGE_TIME  = 0
+CURRENT_ASSET        = -1
+NEXT_CHANGE_TIME     = 0
 
-DEF_WIFI_CARD     = get_ifaces(IF_WIRELESS)[0]
-DEFAULT_AP        = None
+DEF_WIFI_CARD        = get_ifaces(IF_WIRELESS)[0]
+DEFAULT_AP           = None
 
-DISPLAYS:list[dict]= []
-WINDOW            = {'bounds': {}, 'orientation':-2, 'flip':-2}
+DISPLAYS:list[dict]  = []
+WINDOW               = {'bounds': {}, 'orientation':-2, 'flip':-2}
 
-UI_WS             = WSManager(True)
-WS                = WSManager()
+UI_WS                = WSManager(True)
+WS                   = WSManager()
 
-TEMPLATES         = Jinja2Templates(directory=join(dirname(__file__), 'templates'), extensions=['jinja2.ext.do'])
+TEMPLATES            = Jinja2Templates(directory=join(dirname(__file__), 'templates'), extensions=['jinja2.ext.do'])
 TEMPLATES.env.filters['flatten'] = flatten
-UPLOAD_FOLDER     = Path(__file__).parent.joinpath('uploaded')
+UPLOADS              = UploadManager(Path(__file__).parent.joinpath('uploaded'), lambda x: WS.broadcast('scheduler/file', files=x))
+
 WWW = FastAPI(
     title='UniTotem', version=__version__,
     middleware=[Middleware(HTTPSRedirectMiddleware)],
     routes=[
         Mount('/static', StaticFiles(directory=join(dirname(__file__), 'static')), name='static'),
-        Mount('/uploaded', StaticFiles(directory=UPLOAD_FOLDER), name='uploaded')
+        Mount('/uploaded', StaticFiles(directory=UPLOADS.folder), name='uploaded')
     ],
     exception_handlers={
         InvalidSignatureError: login_redir,
         NotAuthenticatedException: login_redir
     }
 )
+WWW.include_router(login_router)
 
 
-def list_resources():
-    return list(filter(lambda f: isfile(join(UPLOAD_FOLDER, f)), listdir(UPLOAD_FOLDER)))
-
-def get_resources():
-    return [get_file_info(UPLOAD_FOLDER, f) for f in list_resources()]
-
-
-
-
-@WWW.post(LOGMAN.tokenUrl)
-async def login(data: LoginForm = Depends()):
-    if not Config.authenticate(data.username, data.password):
-        raise InvalidCredentialsException
-    access_token = LOGMAN.create_access_token(data={'sub':data.username})
-    resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
-    resp.set_cookie(key=LOGMAN.cookie_name, value=access_token,
-                    httponly=True, samesite='strict',
-                    max_age=int(LOGMAN.default_expiry.total_seconds()) if data.remember_me else None)
-    return resp
 
 
 @WWW.websocket("/ui_ws")
@@ -146,15 +128,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     cmd_run('/usr/sbin/poweroff')
 
                 case 'scheduler/asset':
-                    # check_attrs(request_data, [('add_asset', dict[str, dict[str, Union[int, bool]]])])
                     if 'items' in data:
                         save = False
                         invalid = []
                         for element, attrs in data['items'].items():
-                            if is_valid_url(element) or element in list_resources():
+                            if is_valid_url(element) or element in UPLOADS.filenames:
                                 Config.add_asset(
-                                    url= ('file:' if element in list_resources() else '') + element,
-                                    duration= attrs.get('duration', None) or Config.def_duration,
+                                    url= ('file:' if element in UPLOADS.filenames else '') + element,
+                                    duration= attrs.get('duration'),
                                     enabled= attrs.get('enabled', False),
                                 )
                                 save = True
@@ -201,21 +182,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     Config.save()
 
                 case 'scheduler/file':
-                    await WS.broadcast('scheduler/file', files=get_resources())
+                    await WS.broadcast('scheduler/file', files=UPLOADS.serialize())
 
                 case 'scheduler/delete_file':
                     for file in data['files']:
-                        if exists(join(UPLOAD_FOLDER, file)):
-                            for index, asset in Config.find_assets('file:' + file):
-                                if index == CURRENT_ASSET:
-                                    NEXT_CHANGE_TIME = 0
-                                try:
-                                    Config.remove_asset(asset)
-                                except ValueError:
-                                    pass #element to delete is not in schedule
-                            remove(join(UPLOAD_FOLDER, file))
+                        for index, asset in Config.find_assets('file:' + file):
+                            if index == CURRENT_ASSET:
+                                NEXT_CHANGE_TIME = 0
+                            Config.remove_asset(asset)
+                        UPLOADS.remove(file)
                     await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-                    await WS.broadcast('scheduler/file', files=get_resources())
                     Config.save()
 
                 case 'scheduler/goto':
@@ -380,9 +356,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         await WS.send(websocket, 'error', error='Not found', extra='Requested job does not exist')
                     await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
-                # case 'settings/info':
-                    
-
                 case _:
                     await WS.send(websocket, 'error', error='Invalid command', extra=dumps(data, indent=4))
 
@@ -395,15 +368,28 @@ async def websocket_endpoint(websocket: WebSocket):
     WS.disconnect(websocket)
 
 
-# def check_attrs(d: dict, attr: list[tuple[str, type | tuple[type]]]):
-#     missing = []
-#     mistyped = []
-#     for att, typ in attr:
-#         if att not in d:
-#             missing.append(att)
-#         elif not isinstance(d[att], typ):
-#             mistyped.append((att, typ))
-#     return missing, mistyped
+ws_func = {}
+
+from inspect import signature
+
+def ws_api(target: str):
+    def ws_decorator(func):
+        @wraps(func)
+        async def cmd_wrapper(caller_ws, *args, **kwargs):
+            #TODO check args
+            return func(caller_ws, *args, **kwargs)
+        
+        ws_func[target] = cmd_wrapper
+
+        return cmd_wrapper
+    
+    return ws_decorator
+
+
+
+
+
+
 
 @WWW.post("/api/settings/set_passwd")
 async def set_pass(request: Request, response: Response, password:str, username: str = Depends(LOGMAN)):
@@ -416,38 +402,20 @@ async def set_pass(request: Request, response: Response, password:str, username:
 async def load_file(filename):
     file_data = get_file_info(filename)
     Config.add_asset(
-        url= 'file:' + file_data['filename'],
-        duration= file_data.get('duration_s'),
+        url= 'file:' + file_data.filename,
+        duration= file_data.duration_s,
         enabled= False,
     )
     Config.save()
     await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-    await WS.broadcast('scheduler/file', files=get_resources())
 
-@WWW.post("/api/scheduler/upload", dependencies=[Depends(LOGMAN)])
-async def media_upload(response: Response, files: list[UploadFile]):
-    makedirs(UPLOAD_FOLDER, exist_ok=True)
+@WWW.post("/api/scheduler/upload", status_code=status.HTTP_201_CREATED, dependencies=[Depends(LOGMAN)])
+async def media_upload(files: list[UploadFile]):
     for infile in files:
-        if infile and infile.filename:
-            out_filename = Path(UPLOAD_FOLDER, secure_filename(infile.filename))
-            # allow files with duplicate filenames, simply add a number at the end
-            if out_filename.exists():
-                stem = out_filename.stem + '_{}'
-                i = 1
-                while out_filename.exists():
-                    i += 1
-                    out_filename = out_filename.with_stem(stem.format(i))
-
-            async with aopen(out_filename, 'wb') as out:
-                while buf := await infile.read(64 * 1024 * 1024): #64MB buffer
-                    await out.write(buf)
-
-            await load_file(out_filename)            
-    response.status_code = status.HTTP_201_CREATED
+        await load_file(await UPLOADS.save(infile))            
 
 @WWW.get("/backup", dependencies=[Depends(LOGMAN)])
 async def create_backup(include_uploaded: bool = False):
-    global __version__, UPLOAD_FOLDER
     CRONTAB.read()
     config_backup = {
         "version": __version__,
@@ -462,8 +430,8 @@ async def create_backup(include_uploaded: bool = False):
     with ZipFile(zip_buffer, 'w', ZIP_DEFLATED, False) as zip_file:
         zip_file.writestr("config.json", dumps(config_backup))
         if include_uploaded:
-            for file_name in list_resources():
-                zip_file.write(join(UPLOAD_FOLDER, file_name), "uploaded/" + file_name)
+            for file in UPLOADS.files:
+                zip_file.write(file.absolute(), "uploaded/" + file.name)
     zip_buffer.seek(0)
     return Response(content=zip_buffer, media_type='application/zip',
         headers={'Content-Disposition': 'attachment; filename="' + strftime('unitotem-manager-%Y%m%d-%H%M%S.zip') + '"'})
@@ -475,7 +443,7 @@ async def load_backup(backup_file: UploadFile,
                     hostname: Annotated[bool, Body()] = False,
                     netplan: Annotated[bool, Body()] = False,
                     uploaded: Annotated[bool, Body()] = False):
-    global CURRENT_ASSET, NEXT_CHANGE_TIME, UPLOAD_FOLDER
+    global CURRENT_ASSET, NEXT_CHANGE_TIME
     try:
         with ZipFile(backup_file.file) as zip_file:
             files = zip_file.namelist()
@@ -505,20 +473,11 @@ async def load_backup(backup_file: UploadFile,
             if uploaded:
                 for filename in files:
                     if filename.startswith('uploaded/'):
-                        out_filename = Path(UPLOAD_FOLDER, secure_filename(Path(filename).name))
-                        # allow files with duplicate filenames, simply add a number at the end
-                        if out_filename.exists():
-                            stem = out_filename.stem + '_{}'
-                            i = 1
-                            while out_filename.exists():
-                                i += 1
-                                out_filename = out_filename.with_stem(stem.format(i))
                         
-                        async with aopen(out_filename, 'wb') as out:
-                            await out.write(zip_file.read(filename))
+                        with zip_file.open(filename) as infile:
+                            filename = await UPLOADS.save(infile, filename)
 
-                        await load_file(out_filename)
-                        # zip_file.extract(filename, normpath(join(UPLOAD_FOLDER, '..')))
+                        await load_file(filename)
             res = generate_netplan()
             if isinstance(res, str):
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=res)
@@ -537,7 +496,7 @@ async def factory_reset():
 
     await UI_WS.broadcast('reset', nocache=True)
     
-    for res in list_resources(): remove(join(UPLOAD_FOLDER, res))
+    for file in UPLOADS.files: UPLOADS.remove(file)
     CURRENT_ASSET    = -1
     NEXT_CHANGE_TIME = 0
 
@@ -549,8 +508,8 @@ async def scheduler(request: Request, username:str = Depends(LOGMAN)):
         logged_user=username,
         hostname=get_hostname(),
         disp_size=WINDOW['bounds'],
-        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),  # type: ignore
-        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total) # type: ignore
+        disk_used=UPLOADS.disk_usedh,  # type: ignore
+        disk_total=UPLOADS.disk_totalh # type: ignore
     ))
 
 @WWW.get('/login')
@@ -581,8 +540,8 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
         logged_user=username,
         cur_tab=tab,
         disp_size=WINDOW['bounds'],
-        disk_used=human_readable_size(disk_usage(UPLOAD_FOLDER).used),   # type: ignore
-        disk_total=human_readable_size(disk_usage(UPLOAD_FOLDER).total), # type: ignore
+        disk_used=UPLOADS.disk_usedh,   # type: ignore
+        disk_total=UPLOADS.disk_totalh, # type: ignore
         def_wifi=DEF_WIFI_CARD
     )
     if tab == 'audio':
@@ -688,6 +647,14 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.add_signal_handler(signal.SIGTERM, lambda *_: shutdown_event.set())
 
+    UPLOADS._evloop = loop
+
+    observer = Observer()
+    observer.schedule(UPLOADS, UPLOADS.folder)
+    observer.start()
+
+    UPLOADS.scan_folder()
+
     if not cmdargs.get('no_gui', False):
         loop.create_task(webview_control_main(shutdown_event), name='page_controller')
 
@@ -712,4 +679,5 @@ if __name__ == "__main__":
 
     stop_hostpot()
 
+    observer.stop()
     APT_THREAD.join()

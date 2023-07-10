@@ -1,5 +1,6 @@
 __all__ = [
     "login_redir",
+    "login_router",
     "LoginForm",
     "LOGMAN",
     "NotAuthenticatedException"
@@ -11,14 +12,16 @@ from datetime import timedelta
 from os import environ, urandom
 from pathlib import Path
 from typing import Optional
-from dotenv import load_dotenv, set_key
-from fastapi import Form
-from fastapi.responses import RedirectResponse
 from urllib.parse import quote_plus
+
+from dotenv import load_dotenv, set_key
+from fastapi import APIRouter, Form, Depends, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_login import LoginManager
-from .configuration import Config
+from fastapi_login.exceptions import InvalidCredentialsException
 
+from .files import Config
 
 _envfile = Path('/etc/unitotem/unitotem.env')
 
@@ -59,3 +62,16 @@ LOGMAN = LoginManager(environ['auth_token'], custom_exception=NotAuthenticatedEx
 @LOGMAN.user_loader() # type: ignore
 async def load_user(username:str):
     return username if username in Config.users else None
+
+login_router = APIRouter()
+
+@login_router.post(LOGMAN.tokenUrl)
+async def login(data: LoginForm = Depends()):
+    if not Config.authenticate(data.username, data.password):
+        raise InvalidCredentialsException
+    access_token = LOGMAN.create_access_token(data={'sub':data.username})
+    resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
+    resp.set_cookie(key=LOGMAN.cookie_name, value=access_token,
+                    httponly=True, samesite='strict',
+                    max_age=int(LOGMAN.default_expiry.total_seconds()) if data.remember_me else None)
+    return resp

@@ -152,7 +152,7 @@
                 // PAGE INIT
                 {{ init_cmds|flatten|safe }}
                     .forEach(cmd => sendCommand(cmd));
-            }
+            };
             _ws.onmessage = event => {
                 const data = JSON.parse(event.data);
                 if (data.target == 'settings/hostname')

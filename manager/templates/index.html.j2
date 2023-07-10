@@ -35,9 +35,9 @@
                 <h5>Files</h5>
                 <div class="ms-auto">
                     <div class="btn-group" role="group">
-                        <button type="button" title="Delete files" onclick="sendCommand('scheduler/delete_file', {files: checkedfiles}); uncheckAll()" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                        <button type="button" title="Download files" onclick="downloadFiles(checkedfiles); uncheckAll()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></a>
-                        <button type="button" title="Add to list" onclick="sendCommand('scheduler/asset', {items: checkedfiles}); uncheckAll()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
+                        <button type="button" title="Delete files" id="delete_all_btn" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        <button type="button" title="Download files" id="download_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></a>
+                        <button type="button" title="Add to list" id="add_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
                     </div>
                 </div>
                 <button type="button" class="btn btn-sm btn-success" onclick="fileSelector.click()" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</button>
@@ -90,8 +90,14 @@
 <script>
 {% block js %}
     const asset_table = $('#asset_table');
-    const modal_input_url = $('#modal_input_url');
-    const invalid_input_popover = bootstrap.Popover.getOrCreateInstance(modal_input_url, {container: 'body', content: 'Invalid url', placement: 'bottom'});
+    const modal_input = {
+        name : $('#modal_input_name'),
+        url : $('#modal_input_url'),
+        duration : $('#modal_input_duration'),
+        start : $('#modal_input_start'),
+        stop : $('#modal_input_stop'),
+    }
+    const invalid_input_popover = bootstrap.Popover.getOrCreateInstance(modal_input.url, {container: 'body', content: 'Invalid url', placement: 'bottom'});
     const upload_progress = $("#upload-progress");
     const progressbar = $("#upload-progress-bar");
     const fileSelector = $('<input type="file" name="files" multiple>')
@@ -162,16 +168,26 @@
         };
     }
     
-    checkedfiles = {};        
-    function uncheckAll(){
-        $('input[name="filecheck"]:checked').each((i, e) => {e.checked = false});
-        checkedfiles = {};
-    }
+    $('#delete_all_btn').click(() => {
+        let checkedfiles = $('input[name="filecheck"]:checked');
+        sendCommand('scheduler/delete_file', {files: checkedfiles});
+        checkedfiles.each((i, e) => {e.checked = false});
+    })
+    $('#download_all_btn').click(() => {
+        let checkedfiles = $('input[name="filecheck"]:checked');
+        downloadFiles(checkedfiles);
+        checkedfiles.each((i, e) => {e.checked = false});
+    })
+    $('#add_all_btn').click(() => {
+        let checkedfiles = $('input[name="filecheck"]:checked');
+        sendCommand('scheduler/asset', {items: checkedfiles});
+        checkedfiles.each((i, e) => {e.checked = false});
+    })
 
-    modal_input_url.oninput = () => sendCommand('scheduler/validate_url', {url: modal_input_url.value});
+    modal_input.url.oninput = () => sendCommand('scheduler/validate_url', {url: modal_input.url.value});
     $('#add_asset_btn').click(() => {
         var tmp = { items: {} };
-        tmp.items[modal_input_url.val()] = {duration: $('modal_input_duration').val()};
+        tmp.items[modal_input.url.val()] = {duration: modal_input.duration.val()};
         sendCommand('scheduler/asset', tmp);
     });
 
@@ -240,12 +256,12 @@ case 'scheduler/asset':
     break;
 
 case 'scheduler/validate_url':
-    if (modal_input_url.val().length && !data.valid){
+    if (modal_input.url.val().length && !data.valid){
         invalid_input_popover.show();
-        modal_input_url.addClass("border border-danger border-2");
+        modal_input.url.addClass("border border-danger border-2");
     } else {
         invalid_input_popover.dispose();
-        modal_input_url.removeClass("border border-danger border-2");
+        modal_input.url.removeClass("border border-danger border-2");
     }
     break;
 
@@ -258,20 +274,20 @@ case 'scheduler/asset/current':
 case 'scheduler/file':
     const list = $('#file-list');
     list.empty();
-    data.files.forEach(file => {
+    Object.entries(data.files).forEach(([fname, fdata], i) => {
         list.append(
             $('<li class="list-group-item list-group-item-action d-flex justify-content-between align-items-start p-2"></li>').append(
                 $('<input class="form-check-input" style="min-width: 1em;" type="checkbox" name="filecheck">')
                     .click((e) => {
                         if (e.target.checked)
-                            checkedfiles[file.filename] = {duration: file.duration_s};
+                            checkedfiles.append({filename:fdata.filename, duration: fdata.duration_s});
                         else
-                            delete checkedfiles[file.filename];
+                            delete checkedfiles[fdata.filename];
                     }),
                 $('<div class="ms-2 me-auto w-100"></div>').append(
-                    $('<p class="text-break mb-0"></p>').html(file.filename),
+                    $('<p class="text-break mb-0"></p>').html(fdata.filename),
                     $('<small class="text-muted"></small>')
-                        .html('Duration: ' + (file.duration ?? (file.duration_s+'s')) + ' | Size: ' + file.size)
+                        .html('Duration: ' + (fdata.duration ?? (fdata.duration_s+'s')) + ' | Size: ' + fdata.size)
                 ).click(function() {
                     $(this).siblings('input').click();
                 })
