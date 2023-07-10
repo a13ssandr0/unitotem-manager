@@ -17,4 +17,5 @@ ruamel.yaml
 uvloop
 validators
 jinja2
+watchdog
 Werkzeug

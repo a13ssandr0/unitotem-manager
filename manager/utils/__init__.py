@@ -1,5 +1,5 @@
 from utils.audio import *
-from utils.configuration import *
+from utils.files import *
 from utils.cpu import *
 from utils.files import *
 from utils.login import *
