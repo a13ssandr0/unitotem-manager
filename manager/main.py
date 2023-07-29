@@ -18,7 +18,6 @@ from time import strftime, time
 from traceback import format_exc, print_exc
 from typing import Annotated, Any
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
-from functools import wraps
 
 import uvloop
 from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
@@ -41,9 +40,6 @@ from watchdog.observers import Observer
 from werkzeug.utils import secure_filename
 
 APT_THREAD           = Thread(target=apt_update, name='update')
-
-CURRENT_ASSET        = -1
-NEXT_CHANGE_TIME     = 0
 
 DEF_WIFI_CARD        = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP           = None
@@ -102,7 +98,6 @@ async def ui_websocket(websocket: WebSocket):
 
 @WWW.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    global NEXT_CHANGE_TIME, CURRENT_ASSET, APT_THREAD, WINDOW
     
     request = Request({'type': 'http'})
     request._cookies = websocket.cookies
@@ -118,249 +113,14 @@ async def websocket_endpoint(websocket: WebSocket):
     await WS.send(websocket, 'connected')
     while True:
         try:
-            data = await websocket.receive_json()
-            match data['target']:
-
-                case 'power/reboot':
-                    cmd_run('/usr/sbin/reboot')
-
-                case 'power/shutdown':
-                    cmd_run('/usr/sbin/poweroff')
-
-                case 'scheduler/asset':
-                    if 'items' in data:
-                        save = False
-                        invalid = []
-                        for element, attrs in data['items'].items():
-                            if is_valid_url(element) or element in UPLOADS.filenames:
-                                Config.add_asset(
-                                    url= ('file:' if element in UPLOADS.filenames else '') + element,
-                                    duration= attrs.get('duration'),
-                                    enabled= attrs.get('enabled', False),
-                                )
-                                save = True
-                            else: invalid.append(element)
-                        if save: 
-                            Config.save()
-                        if invalid:
-                            await WS.send(websocket, 'scheduler/asset', error='Invalid elements', extra=invalid)
-                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-
-                case 'scheduler/validate_url':
-                    await WS.send(websocket, 'scheduler/validate_url', valid=bool(is_valid_url(data['url'])))
-
-                case 'scheduler/asset/current':
-                    if CURRENT_ASSET >= 0:
-                        await WS.broadcast('scheduler/asset/current', uuid=Config.assets[CURRENT_ASSET].uuid)
-
-                case 'scheduler/set_state':
-                    index, asset = Config.get_asset(data['uuid'])
-                    start_rotation = not Config.enabled_asset_count
-                    asset.enabled = data['state']
-                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-                    Config.save()
-                    if start_rotation:
-                        await webview_goto(0)
-                    elif index == CURRENT_ASSET:
-                        NEXT_CHANGE_TIME = 0
-
-                case 'scheduler/update_duration':
-                    index, asset = Config.get_asset(data['uuid'])
-                    old_dur = asset.duration
-                    asset.duration = data['duration']
-                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-                    Config.save()
-                    if index == CURRENT_ASSET:
-                        NEXT_CHANGE_TIME += (asset.duration or inf) - old_dur # type: ignore
-
-                case 'scheduler/delete':
-                    index, asset = Config.get_asset(data['uuid'])
-                    if index == CURRENT_ASSET:
-                        NEXT_CHANGE_TIME = 0
-                    Config.remove_asset(asset)
-                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-                    Config.save()
-
-                case 'scheduler/file':
-                    await WS.broadcast('scheduler/file', files=UPLOADS.serialize())
-
-                case 'scheduler/delete_file':
-                    for file in data['files']:
-                        for index, asset in Config.find_assets('file:' + file):
-                            if index == CURRENT_ASSET:
-                                NEXT_CHANGE_TIME = 0
-                            Config.remove_asset(asset)
-                        UPLOADS.remove(file)
-                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-                    Config.save()
-
-                case 'scheduler/goto':
-                    await webview_goto(data.get('index', CURRENT_ASSET), force=data.get('force', 'index' in data))
-
-                case 'scheduler/goto/back':
-                    await webview_goto(CURRENT_ASSET-1, backwards=True)
-
-                case 'scheduler/goto/next':
-                    await webview_goto(CURRENT_ASSET+1)
-
-                case 'scheduler/reorder':
-                    Config.move_asset(data['from'], data['to'])
-                    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
-                    Config.save()
-                    if CURRENT_ASSET in [data['to'], data['from']]:
-                        await webview_goto()  #show new asset
-
-                case 'settings/default_duration':
-                    if 'duration' in data:
-                        Config.def_duration = data['duration']
-                        Config.save()
-                    await WS.broadcast('settings/default_duration', duration=Config.def_duration)
-
-                case 'settings/update':
-                    if not APT_THREAD.is_alive():
-                        loop = asyncio.get_running_loop()
-                        def apt():
-                            for line in apt_update(data.get('do_upgrade', False)):
-                                if line == True:
-                                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/start', upgrading=data.get('do_upgrade', False)), loop)
-                                elif line == False:
-                                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/end', upgrading=data.get('do_upgrade', False)), loop)
-                                elif isinstance(line, tuple):
-                                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/progress', upgrading=data.get('do_upgrade', False), is_stdout=line[0], data=line[1]), loop)
-
-                        APT_THREAD = Thread(target=apt, name=('upgrade' if data.get('do_upgrade', False) else 'update'))
-                        APT_THREAD.start()
-                        await WS.broadcast('settings/update/status', status=APT_THREAD.name, log=get_apt_log())
-
-                case 'settings/update/list':
-                    await WS.broadcast('settings/update/list', updates=apt_list_upgrades())
-
-                case 'settings/update/reboot_required':
-                    await WS.broadcast('settings/update/reboot_required', reboot=reboot_required())
-                        
-                case 'settings/update/status':
-                    await WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
-
-                case 'settings/audio/default':
-                    if 'device' in data:
-                        setDefaultAudioDevice(data['device'])
-                    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
-
-                case 'settings/audio/devices':
-                    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
-
-                case 'settings/audio/volume':
-                    if 'volume' in data:
-                        setVolume(data.get('device'), data['volume'])
-                    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
-
-                case 'settings/audio/mute':
-                    if 'mute' in data:
-                        setMute(data.get('device'), data['mute'])
-                    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
-
-                case 'settings/display/getBounds':
-                    await WS.broadcast('settings/display/getBounds', **WINDOW['bounds'])
-
-                case 'settings/display/setBounds':
-                    await UI_WS.broadcast('setBounds', x=int(data['x']), y=int(data['y']), width=int(data['width']), height=int(data['height']))
-
-                case 'settings/display/getOrientation':
-                    await WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
-
-                case 'settings/display/setOrientation':
-                    await UI_WS.broadcast('setOrientation', orientation=data['orientation'])
-
-                case 'settings/display/getFlip':
-                    await WS.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
-
-                case 'settings/display/setFlip':
-                    await UI_WS.broadcast('setFlip', flip=data['flip'])
-
-                case 'settings/hostname':
-                    if 'hostname' in data:
-                        set_hostname(data['hostname'])
-                    await WS.broadcast('settings/hostname', hostname=get_hostname())
-
-                case 'settings/get_wifis':
-                    await WS.broadcast('settings/get_wifis', wifis=get_wifis())
-
-                case 'settings/netplan/file/new':
-                    create_netplan(data['filename'])
-                    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
-
-                case 'settings/netplan/file/set':
-                    if 'filename' in data:
-                        res = set_netplan(secure_filename(data['filename']), data.get('content', ''), data.get('apply', True))
-                    else:
-                        res = generate_netplan(data.get('apply', True))
-                    if res == True:
-                        if DEFAULT_AP and do_ip_addr(True): #AP is still enabled but now we are connected, AP is no longer needed
-                            stop_hostpot()
-                            NEXT_CHANGE_TIME = 0
-                            await webview_goto(0)
-                    elif isinstance(res, str):
-                        await WS.send(websocket, 'error', error='Netplan error', extra=res)
-                    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
-
-                case 'settings/netplan/file/get':
-                    netplan_files = get_netplan_file_list()
-                    if 'filename' in data:
-                        if data['filename'] in netplan_files:
-                            await WS.broadcast('settings/netplan/file/get', files={data['filename']: get_netplan_file(data['filename'])})
-                    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in netplan_files})
-
-                case 'settings/netplan/file/del':
-                    res = del_netplan_file(data['filename'], data.get('apply', True))
-                    if isinstance(res, str):
-                        await WS.send(websocket, 'error', error='Netplan error', extra=res)
-                    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
-
-                case 'settings/cron/job':
-                    CRONTAB.read()
-                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-                case 'settings/cron/job/add':
-                    CRONTAB.read()
-                    if CRONTAB.new(**data):
-                        CRONTAB.write()
-                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-                case 'settings/cron/job/set_state':
-                    CRONTAB.read()
-                    try:
-                        next(CRONTAB.find_comment(data['job'])).enable(data['state'])
-                        CRONTAB.write()
-                    except StopIteration:
-                        await WS.send(websocket, 'error', error='Not found', extra='Requested job does not exist')
-                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-                case 'settings/cron/job/delete':
-                    CRONTAB.read()
-                    CRONTAB.remove_all(comment=data['job'])
-                    CRONTAB.write()
-                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-                case 'settings/cron/job/edit':
-                    CRONTAB.read()
-                    try:
-                        job = next(CRONTAB.find_comment(data['job']))
-                        if all([x in data and data[x] != None for x in ['m', 'h', 'dom', 'mon', 'dow']]):
-                            job.setall(data['m'],data['h'],data['dom'],data['mon'],data['dow'])
-                        if data.get('cmd') == 'pwr':
-                            job.set_command('/usr/sbin/poweroff')
-                        elif data.get('cmd') == 'reb':
-                            job.set_command('/usr/sbin/reboot')
-                        CRONTAB.write()
-                    except StopIteration:
-                        await WS.send(websocket, 'error', error='Not found', extra='Requested job does not exist')
-                    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-                case _:
-                    await WS.send(websocket, 'error', error='Invalid command', extra=dumps(data, indent=4))
+            data:dict[str,Any] = await websocket.receive_json()
+            t = data.pop('target')
+            try:
+                await WS.handlers[t](websocket, **data)
+            except KeyError:
+                await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target':t, **data}, indent=4))
 
         except WebSocketDisconnect:
-            WS.disconnect(websocket)
             break
         except Exception:
             await WS.send(websocket, 'error', error='Exception', extra=format_exc())
@@ -368,23 +128,272 @@ async def websocket_endpoint(websocket: WebSocket):
     WS.disconnect(websocket)
 
 
-ws_func = {}
 
-from inspect import signature
 
-def ws_api(target: str):
-    def ws_decorator(func):
-        @wraps(func)
-        async def cmd_wrapper(caller_ws, *args, **kwargs):
-            #TODO check args
-            return func(caller_ws, *args, **kwargs)
+@WS.add('power/reboot')(lambda: cmd_run('/usr/sbin/reboot'))
+
+@WS.add('power/shutdown')(lambda: cmd_run('/usr/sbin/poweroff'))
+
+@WS.add('scheduler/asset')
+async def asset_add(ws: WebSocket, items:dict|None = None):
+    if items != None:
+        save = False
+        invalid = []
+        for element, attrs in items.items():
+            if is_valid_url(element) or element in UPLOADS.filenames:
+                Config.assets.add(
+                    url= ('file:' if element in UPLOADS.filenames else '') + element,
+                    duration= attrs.get('duration'),
+                    enabled= attrs.get('enabled', False),
+                )
+                save = True
+            else: invalid.append(element)
+        if save: 
+            Config.save()
+        if invalid:
+            await WS.send(ws, 'scheduler/asset', error='Invalid elements', extra=invalid)
+    await WS.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid)
+
+@WS.add('scheduler/validate_url')
+async def url_validate(ws: WebSocket, url: str):
+    await WS.send(ws, 'scheduler/validate_url', valid=bool(is_valid_url(url))) # type: ignore
+
+@WS.add('scheduler/asset/current')
+async def asset_current():
+    if Config.assets.currentid >= 0:
+        await WS.broadcast('scheduler/asset/current', uuid=Config.assets.current.uuid)
+
+@WS.add('scheduler/set_state')
+async def asset_set_state(uuid: str, state: bool):
+    asset = Config.assets[uuid]
+    start_rotation = not Config.enabled_asset_count
+    asset.enabled = state
+    Config.save()
+    if start_rotation:
+        await webview_goto(0)
+    elif asset == Config.assets.current:
+        Config.assets.next_change_time = 0
+
+@WS.add('scheduler/update_duration')
+async def asset_set_duration(uuid: str, duration: int|float):
+    asset = Config.assets[uuid]
+    old_dur = asset.duration
+    asset.duration = duration
+    Config.save()
+    if asset == Config.assets.current:
+        Config.assets.next_change_time += (asset.duration or inf) - old_dur # type: ignore
+
+@WS.add('scheduler/delete')
+async def asset_delete(uuid: str):
+    asset = Config.assets[uuid]
+    if asset == Config.assets.current:
+        Config.assets.next_change_time = 0
+    Config.assets.remove(asset)
+    Config.save()
+
+@WS.add('scheduler/file')(lambda: WS.broadcast('scheduler/file', files=UPLOADS.serialize()))
+
+@WS.add('scheduler/delete_file')
+async def file_delete(files: list[str]):
+    for file in files:
+        for asset in Config.assets.find('file:' + file):
+            if asset == Config.assets.current:
+                Config.assets.next_change_time = 0
+            Config.assets.remove(asset)
+        UPLOADS.remove(file)
+    Config.save()
+
+@WS.add('scheduler/goto')
+async def playlist_goto(index: int = Config.assets.currentid, force: bool = False):
+    await webview_goto(index, force=force or index != Config.assets.currentid)
+
+@WS.add('scheduler/goto/back')
+async def playlist_back():
+    await webview_goto(Config.assets.currentid-1, backwards=True)
+
+@WS.add('scheduler/goto/next')
+async def playlist_next():
+    await webview_goto(Config.assets.currentid+1)
+
+@WS.add('scheduler/reorder')
+async def playlist_reorder(from_i: int, to_i: int):
+    Config.assets.move(from_i, to_i)
+    Config.save()
+    if Config.assets.currentid in [from_i, to_i]:
+        await webview_goto()  #show new asset
+
+@WS.add('settings/default_duration')
+async def settings_default_duration(duration: int|None = None):
+    if duration != None:
+        Config.def_duration = duration
+        Config.save()
+    await WS.broadcast('settings/default_duration', duration=Config.def_duration)
+
+@WS.add('settings/update')
+async def settings_update(do_upgrade: bool = False):
+    global APT_THREAD
+    if not APT_THREAD.is_alive():
+        loop = asyncio.get_running_loop()
+        def apt():
+            for line in apt_update(do_upgrade):
+                if line == True:
+                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/start', upgrading=do_upgrade), loop)
+                elif line == False:
+                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/end', upgrading=do_upgrade), loop)
+                elif isinstance(line, tuple):
+                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/progress', upgrading=do_upgrade, is_stdout=line[0], data=line[1]), loop)
+
+        APT_THREAD = Thread(target=apt, name=('upgrade' if do_upgrade else 'update'))
+        APT_THREAD.start()
+        await WS.broadcast('settings/update/status', status=APT_THREAD.name, log=get_apt_log())
+
+@WS.add('settings/update/list')
+async def settings_update_list():
+    await WS.broadcast('settings/update/list', updates=apt_list_upgrades())
+
+@WS.add('settings/update/reboot_required')
+async def settings_update_reboot_required():
+    await WS.broadcast('settings/update/reboot_required', reboot=reboot_required())
         
-        ws_func[target] = cmd_wrapper
+@WS.add('settings/update/status')
+async def settings_update_status():
+    await WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
 
-        return cmd_wrapper
-    
-    return ws_decorator
+@WS.add('settings/audio/default')
+async def settings_audio_default(device: str|None = None):
+    if device != None:
+        setDefaultAudioDevice(device)
+    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
+@WS.add('settings/audio/devices')
+async def settings_audio_devices():
+    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
+
+@WS.add('settings/audio/volume')
+async def settings_audio_volume(device: str|None = None, volume: int|None = None):
+    if volume != None:
+        setVolume(device, volume)
+    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
+
+@WS.add('settings/audio/mute')
+async def settings_audio_mute(device: str|None = None, mute: bool|None = None):
+    if mute != None:
+        setMute(device, mute)
+    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
+
+@WS.add('settings/display/getBounds')
+async def settings_display_boundsget():
+    await WS.broadcast('settings/display/getBounds', **WINDOW['bounds'])
+
+@WS.add('settings/display/setBounds')
+async def settings_display_boundsset(x: int, y: int, w: int, h: int):
+    await UI_WS.broadcast('setBounds', x=x, y=y, width=w, height=h)
+
+@WS.add('settings/display/getOrientation')
+async def settings_display_orientationget():
+    await WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
+
+@WS.add('settings/display/setOrientation')
+async def settings_display_orientationset(orientation: int):
+    await UI_WS.broadcast('setOrientation', orientation=orientation)
+
+@WS.add('settings/display/getFlip')
+async def settings_display_flipget():
+    await WS.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
+
+@WS.add('settings/display/setFlip')
+async def settings_display_flipset(flip: int):
+    await UI_WS.broadcast('setFlip', flip=flip)
+
+@WS.add('settings/hostname')
+async def settings_hostname(hostname: str|None = None):
+    if hostname != None:
+        set_hostname(hostname)
+    await WS.broadcast('settings/hostname', hostname=get_hostname())
+
+@WS.add('settings/get_wifis')
+async def settings_wifi_get():
+    await WS.broadcast('settings/get_wifis', wifis=get_wifis())
+
+@WS.add('settings/netplan/file/new')
+async def settings_netpfile_new(filename: str):
+    create_netplan(filename)
+    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+
+@WS.add('settings/netplan/file/set')
+async def settings_netpfile_set(ws: WebSocket, filename: str|None = None, content: str = '', apply: bool = True):
+    if filename != None:
+        res = set_netplan(secure_filename(filename), content, apply)
+    else:
+        res = generate_netplan(apply)
+    if res == True:
+        if DEFAULT_AP and do_ip_addr(True): #AP is still enabled but now we are connected, AP is no longer needed
+            stop_hostpot()
+            Config.assets.next_change_time = 0
+            await webview_goto(0)
+    elif isinstance(res, str):
+        await WS.send(ws, 'error', error='Netplan error', extra=res)
+    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+
+@WS.add('settings/netplan/file/get')
+async def settings_netpfile_get(filename: str|None = None):
+    netplan_files = get_netplan_file_list()
+    if  filename != None:
+        if filename in netplan_files:
+            await WS.broadcast('settings/netplan/file/get', files={filename: get_netplan_file(filename)})
+    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in netplan_files})
+
+@WS.add('settings/netplan/file/del')
+async def settings_netpfile_del(ws: WebSocket, filename: str|None = None, apply: bool = True):
+    res = del_netplan_file(filename, apply)
+    if isinstance(res, str):
+        await WS.send(ws, 'error', error='Netplan error', extra=res)
+    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+
+@WS.add('settings/cron/job')
+async def settings_cronjob_get():
+    CRONTAB.read()
+    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+
+@WS.add('settings/cron/job/add')
+async def settings_cronjob_add(cmd: str = '', m = None, h = None, dom = None, mon = None, dow = None):
+    CRONTAB.read()
+    if CRONTAB.new(cmd, m, h, dom, mon, dow):
+        CRONTAB.write()
+    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+
+@WS.add('settings/cron/job/set_state')
+async def settings_cronjob_state_set(ws: WebSocket, job: str, state: bool):
+    CRONTAB.read()
+    try:
+        next(CRONTAB.find_comment(job)).enable(state)
+        CRONTAB.write()
+    except StopIteration:
+        await WS.send(ws, 'error', error='Not found', extra='Requested job does not exist')
+    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+
+@WS.add('settings/cron/job/delete')
+async def settings_cronjob_delete(job: str):
+    CRONTAB.read()
+    CRONTAB.remove_all(comment=job)
+    CRONTAB.write()
+    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+
+@WS.add('settings/cron/job/edit')
+async def settings_cronjob_edit(ws: WebSocket, job: str, cmd: str = '', m = None, h = None, dom = None, mon = None, dow = None):
+    CRONTAB.read()
+    try:
+        _job = next(CRONTAB.find_comment(job))
+        if all([x != None for x in [m, h, dom, mon, dow]]):
+            _job.setall(m,h,dom,mon,dow)
+        if cmd == 'pwr':
+            _job.set_command('/usr/sbin/poweroff')
+        elif cmd == 'reb':
+            _job.set_command('/usr/sbin/reboot')
+        CRONTAB.write()
+    except StopIteration:
+        await WS.send(ws, 'error', error='Not found', extra='Requested job does not exist')
+    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
 
 
@@ -399,27 +408,21 @@ async def set_pass(request: Request, response: Response, password:str, username:
         response.headers['location'] = request.headers['Referer']
 
 
-async def load_file(filename):
-    file_data = get_file_info(filename)
-    Config.add_asset(
-        url= 'file:' + file_data.filename,
-        duration= file_data.duration_s,
-        enabled= False,
-    )
-    Config.save()
-    await WS.broadcast('scheduler/asset', items=Config.assets_json(), current=Config.assets[CURRENT_ASSET].uuid if CURRENT_ASSET>=0 else None)
+    
+    
 
 @WWW.post("/api/scheduler/upload", status_code=status.HTTP_201_CREATED, dependencies=[Depends(LOGMAN)])
 async def media_upload(files: list[UploadFile]):
     for infile in files:
-        await load_file(await UPLOADS.save(infile))            
+        await UPLOADS.save(infile)
+
 
 @WWW.get("/backup", dependencies=[Depends(LOGMAN)])
 async def create_backup(include_uploaded: bool = False):
     CRONTAB.read()
     config_backup = {
         "version": __version__,
-        "CONFIG": Config.json(),
+        "CONFIG": Config.model_dump_json(),
         "hostname": get_hostname(),
         "def_audio_dev": getDefaultAudioDevice(),
         "netplan": {fname: get_netplan_file(fname) for fname in get_netplan_file_list()},
@@ -443,7 +446,6 @@ async def load_backup(backup_file: UploadFile,
                     hostname: Annotated[bool, Body()] = False,
                     netplan: Annotated[bool, Body()] = False,
                     uploaded: Annotated[bool, Body()] = False):
-    global CURRENT_ASSET, NEXT_CHANGE_TIME
     try:
         with ZipFile(backup_file.file) as zip_file:
             files = zip_file.namelist()
@@ -454,9 +456,7 @@ async def load_backup(backup_file: UploadFile,
                 bkp_ver = Version(config_json.get('version', '0'))
 
                 if 'CONFIG' in config_json and CONFIG:
-                    Config.parse_obj(config_json['CONFIG'])
-                    CURRENT_ASSET    = -1
-                    NEXT_CHANGE_TIME = 0
+                    Config(obj=config_json['CONFIG'])
                     Config.save()
 
                 if 'hostname' in config_json and hostname:
@@ -477,7 +477,7 @@ async def load_backup(backup_file: UploadFile,
                         with zip_file.open(filename) as infile:
                             filename = await UPLOADS.save(infile, filename)
 
-                        await load_file(filename)
+                
             res = generate_netplan()
             if isinstance(res, str):
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=res)
@@ -487,7 +487,6 @@ async def load_backup(backup_file: UploadFile,
             
 @WWW.delete('/backup', status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(LOGMAN)])
 async def factory_reset():
-    global CURRENT_ASSET, NEXT_CHANGE_TIME
     Config.reset()
 
     CRONTAB.read()
@@ -497,8 +496,7 @@ async def factory_reset():
     await UI_WS.broadcast('reset', nocache=True)
     
     for file in UPLOADS.files: UPLOADS.remove(file)
-    CURRENT_ASSET    = -1
-    NEXT_CHANGE_TIME = 0
+
 
 @WWW.get("/", response_class=HTMLResponse)
 async def scheduler(request: Request, username:str = Depends(LOGMAN)):
@@ -551,7 +549,7 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
     elif tab == 'info':
         data['cpu_count'] = cpu_count()
         data['ram_tot'] = human_readable_size(virtual_memory().total)
-        data['disks'] = [blk.dict() for blk in lsblk()]
+        data['disks'] = [blk.model_dump() for blk in lsblk()]
         data['has_battery'] = sensors_battery() != None
         data['temp_devs'] = {k:[x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k,v in sensors_temperatures().items()}
         data['fan_devs'] = {k:[x._asdict() for x in v] for k,v in sensors_fans().items()}
@@ -581,37 +579,36 @@ async def first_boot_page(request: Request):
         wifi=DEFAULT_AP
     ))
 
-async def webview_goto(asset: int = CURRENT_ASSET, force: bool = False, backwards: bool = False):
-    global NEXT_CHANGE_TIME, CURRENT_ASSET, WS
+async def webview_goto(asset: int = Config.assets.currentid, force: bool = False, backwards: bool = False):
     if 0 <= asset < len(Config.assets):
         if Config.assets[asset].enabled or force:
-            url = Config.assets[CURRENT_ASSET := asset].url
+            Config.assets.currentid = asset
+            url = Config.assets.current.url
             if url.startswith('file:'):
                 url = 'https://localhost/uploaded/' + url.removeprefix('file:')
             await UI_WS.broadcast('Show', src=url)
-            NEXT_CHANGE_TIME = int(time()) + (Config.assets[CURRENT_ASSET].duration or inf)
-            await WS.broadcast('scheduler/asset/current', uuid=Config.assets[CURRENT_ASSET].uuid)
+            Config.assets.next_change_time = int(time()) + (Config.assets.current.duration or inf)
+            await WS.broadcast('scheduler/asset/current', uuid=Config.assets.current.uuid)
         else:
             await webview_goto(asset + (-1 if backwards else 1))
 
 async def webview_control_main(waiter: asyncio.Event):
-    global NEXT_CHANGE_TIME, CURRENT_ASSET, UI_WS
     while not waiter.is_set():
-        if time()>=NEXT_CHANGE_TIME:
+        if time()>=Config.assets.next_change_time:
             if Config.first_boot:
-                NEXT_CHANGE_TIME = inf
-                CURRENT_ASSET = -1
+                Config.assets.next_change_time = inf
+                Config.assets.currentid = -1
                 await WS.broadcast('scheduler/asset/current', uuid=None)
                 await UI_WS.broadcast('Show', src='https://localhost/unitotem-first-boot', container='web')
             elif not Config.enabled_asset_count:
-                NEXT_CHANGE_TIME = inf
-                CURRENT_ASSET = -1
+                Config.assets.next_change_time = inf
+                Config.assets.currentid = -1
                 await WS.broadcast('scheduler/asset/current', uuid=None)
                 await UI_WS.broadcast('Show', src='https://localhost/unitotem-no-assets', container='web')
             else:
-                CURRENT_ASSET += 1
-                if CURRENT_ASSET >= len(Config.assets): CURRENT_ASSET = 0
-                await webview_goto(CURRENT_ASSET)
+                Config.assets.currentid += 1
+                if Config.assets.currentid >= len(Config.assets): Config.assets.currentid = 0
+                await webview_goto(Config.assets.currentid)
         await asyncio.sleep(1)
 
 
@@ -624,7 +621,7 @@ if __name__ == "__main__":
 
 
     try:
-        Config.parse_file_('/etc/unitotem/unitotem.conf')
+        Config(filename='/etc/unitotem/unitotem.conf')
     except FileNotFoundError:
         print('First boot or no configuration file found.')
         try:
@@ -646,6 +643,8 @@ if __name__ == "__main__":
 
     loop = asyncio.get_event_loop()
     loop.add_signal_handler(signal.SIGTERM, lambda *_: shutdown_event.set())
+
+    Config.assets.set_callback(lambda assets, current: WS.broadcast('scheduler/asset', items=assets, current=current), loop)
 
     UPLOADS._evloop = loop
 

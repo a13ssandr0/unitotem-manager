@@ -2,7 +2,10 @@ __all__ = ['WSManager']
 
 
 
+from functools import wraps
+from inspect import isawaitable
 from json import dumps
+from pydantic import validate_arguments
 
 from fastapi import WebSocket
 
@@ -47,3 +50,37 @@ class WSManager:
             await connection.send_text(text)
         if self.last != None and nocache != True:
             self.last[target] = text
+
+    
+    handlers = {}
+
+    def add(self, target: str):
+        def decorator(func):
+            
+            # func = validate_arguments(func)
+
+            if WebSocket in func.__annotations__.values() or \
+                    (callable(func) and func.__name__ == "<lambda>" and func.__code__.co_posonlyargcount):
+                #lambda functions with websocket parameter must declare it as the
+                #first positional only argument
+                @wraps(func)
+                async def wrapper(caller_ws, *args, **kwargs): # type: ignore
+                    f = func(caller_ws, *args, **kwargs)
+                    if isawaitable(f):
+                        return await f
+                    else:
+                        return f
+            else:
+                @wraps(func)
+                async def wrapper(_, *args, **kwargs):
+                    f = func(*args, **kwargs)
+                    if isawaitable(f):
+                        return await f
+                    else:
+                        return f
+            
+            self.handlers[target] = wrapper
+            
+            return wrapper
+        
+        return decorator
