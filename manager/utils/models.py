@@ -12,23 +12,23 @@ __all__ = [
 
 
 import asyncio
-from collections.abc import Iterator
+from asyncio import iscoroutinefunction
 from os import remove
 from os.path import basename, getsize, isfile, join
 from pathlib import Path
 from shutil import disk_usage
+from time import time
 from typing import Callable, Coroutine, Optional, Union, cast
 from uuid import uuid4
 
 from aiofiles import open as aopen
 from PIL import Image
-from pydantic import BaseModel, Field, Protocol, StrBytes, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pymediainfo import MediaInfo, Track
 from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from manager.utils.files import Asset
 
 
 CFG_FILE = Path('/etc/unitotem/unitotem.conf')
@@ -43,23 +43,32 @@ _def_dur = 30
 
 class Asset(BaseModel):
     url:str
-    duration:Optional[int] = Field(_def_dur, ge=0)
+    duration:Optional[int|float] = Field(_def_dur, ge=0)
     enabled:Optional[bool] = False
-    uuid:Optional[str] = Field(str(uuid4()), allow_mutation=False)
+    uuid:Optional[str] = Field(str(uuid4()), frozen=False)
 
     # @validator('url')
 
-    @validator('duration')
+    @field_validator('duration')
+    @classmethod
     def duration_default(cls, v):
         return _def_dur if v == None else v
 
-    @validator('enabled')
+    @field_validator('enabled')
+    @classmethod
     def enabled_default(cls, v):
         return v or False
 
-    @validator('uuid')
+    @field_validator('uuid')
+    @classmethod
     def uuid_default(cls, v):
         return v or str(uuid4())
+    
+    @model_validator(mode='after')
+    def run_update(self):
+        if 'Config' in globals():
+            Config.assets.callback()
+        return self
 
     def __bool__(self):
         return bool(self.enabled)
@@ -70,43 +79,87 @@ class Asset(BaseModel):
 
 
 
-""" class AssetsList(list[Asset]): #, Iterator[Asset]):
+class AssetsList(list[Asset]): #, Iterator[Asset]):
     _current: int = -1
     _next_change_time: float = 0
     _current_duration: float = 0
+    _callback = None
+    _loop = None
+    _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0, enabled=None, uuid=None)
+    _first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0, enabled=None, uuid=None)
+    # __waiting_task
 
-    # def __init__(self, iterable = []):
-    #     super().__init__(iterable)
+    def __init__(self, iterable = []):
+        super().__init__([Asset.model_validate(e) for e in iterable])
+        self.callback()
 
-    # def __setitem__(self, index, item):
-    #     super().__setitem__(index, item)
+    def __setitem__(self, index, item):
+        super().__setitem__(index, Asset.model_validate(item))
+        self.callback()
+    
+    def __getitem__(self, _id):
+        if isinstance(_id, str):
+            for asset in self:
+                if asset.uuid == _id:
+                    return asset
+            else:
+                raise ValueError(f'No asset with uuid {_id} in list')
+        else:
+            return super().__getitem__(_id)
+        
+    def find(self, url:str|None = None):
+        return list(filter(lambda a: a.url==url, self))
 
-    # def __getitem__(self, index):
-    #     if 0 <= index < super().__len__():
-    #         super().__getitem__(index)
+    def insert(self, index, item):
+        super().insert(index, Asset.model_validate(item))
+        self.callback()
 
-    # def insert(self, index, item):
-    #     super().insert(index, item)
+    def append(self, item):
+        super().append(Asset.model_validate(item))
+        self.callback()
 
-    # def append(self, item):
-    #     super().append(item)
+    def extend(self, other):
+        super().extend([Asset.model_validate(item) for item in other])
+        self.callback()
 
-    # def extend(self, other):
-    #     if isinstance(other, type(self)):
-    #         super().extend(other)
-    #     else:
-    #         super().extend(item for item in other)
+    def pop(self, index):
+        e = super().pop(index)
+        self.callback()
+        return e
 
+    def remove(self, value):
+        super().remove(value)
+        self.callback()
+
+    def __delitem__(self, _id):
+        if isinstance(_id, str):
+            for index, asset in enumerate(self):
+                if asset.uuid == _id:
+                    _id = index
+                    break
+            else:
+                return
+                # raise ValueError(f'No asset with uuid {_id} in list')
+        super().__delitem__(_id)
+        self.callback()
+
+    def move(self, from_i:int, to_i:int):
+        super().insert(to_i, super().pop(from_i))
+        self.callback()
+
+    def add(self, url:str, duration=None, enabled=None, uuid=None):
+        super().append(Asset(url=url, duration=duration, enabled=enabled, uuid=uuid))
+    
     # def __iter__(self) -> Iterator[Asset]:
     #     return self
     
     # def __next__(self) -> Asset|None:
     #     return self.next()
 
-    def next(self, force = False) -> Asset|None:
+    def next(self, force = False) -> Asset:
         if not (any(self) or force):
             self._current = -1
-            return None
+            return self._no_assets
         self._current += 1
         if self._current >= super().__len__(): self._current = 0
         if self[self._current] or force:
@@ -114,9 +167,18 @@ class Asset(BaseModel):
         else:
             return self.next()
 
-    async def wait_next(self, *, force = False):
-        # await asyncio.sleep()
-        self.next(force=force)
+    async def __asleep(self, delay: float):
+        try:
+            return await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            pass
+
+    async def iter_wait(self, *, force = False, waiter = asyncio.Event()):
+        while not waiter.is_set():
+            yield self.next(force=force)
+            self.__waiting_task = asyncio.create_task(self.__asleep(self._next_change_time - time()))
+            
+
 
     def prev(self, force = False):
         if not (any(self) or force):
@@ -133,15 +195,52 @@ class Asset(BaseModel):
     def current(self):
         if 0 <= self._current < super().__len__():
             return self[self._current]
+        return self._no_assets
+    
+    @property
+    def currentid(self):
+        return self._current
+        
+    @currentid.setter
+    def currentid(self, val):
+        self._current = val
+
         
     @property
     def next_change_time(self):
-        return self._next_change_time """
+       return self._next_change_time
+    
+    @next_change_time.setter
+    def next_change_time(self, val):
+        self._next_change_time = val
+    
+    def set_callback(self, callback: Callable[[list, str|None], Coroutine], loop: asyncio.AbstractEventLoop):
+        self._callback = callback
+        self._loop = loop
+
+    def callback(self):
+        if self._callback != None and self._loop != None:
+            asyncio.run_coroutine_threadsafe(self._callback(self.serialize(), 
+                    self[self.currentid].uuid if self.currentid>=0 else None), self._loop)
+
+    def serialize(self):
+        return [a.model_dump() for a in self]
 
 
 
+
+
+#TODO: replace with BaseSettings
 class _Config(BaseModel):
-    assets:      list[Asset]                = Field([], alias='urls')
+    model_config = ConfigDict(
+        populate_by_name = True,
+        arbitrary_types_allowed=True,
+        # json_encoders = {
+        #     AssetsList: lambda al: al.model_dump()
+        # }
+    )
+    #TODO: switch from Field assignment to Field annotation
+    assets:      AssetsList                = Field(AssetsList(), alias='urls')
     def_duration:int                       = Field(_def_dur, alias='default_duration', ge=0)
     users:       dict[str, dict[str, str]] = {
         'admin': { #default user: name=admin; password=admin (pre-hashed)
@@ -151,93 +250,43 @@ class _Config(BaseModel):
     # _current:str = ''
     filename:    Union[str, Path]          = Field('/etc/unitotem/unitotem.conf', exclude=True)
     first_boot:  bool                      = Field(True, exclude=True)
+
+    @field_validator('assets', mode='before')
+    @classmethod
+    def validate_assets(cls, val):
+        return AssetsList(val)
     
-    def self_load(self, obj, first_boot = False):
-        self.assets = obj.assets
+    def __call__(self, *, obj=None, filename = filename, first_boot = False):
+        if obj == None:
+            with open(filename) as o:
+                obj = o.read()
+        if isinstance(obj, (str,bytes,bytearray)):
+            obj = self.model_validate_json(obj)
+        else:
+            obj = self.model_validate(obj)
+        self.assets = AssetsList(obj.assets)
         self.def_duration = obj.def_duration
         self.users = obj.users
         self.first_boot = first_boot
 
-    def parse_obj_(self, obj):
-        self.self_load(self.parse_obj(obj))
-
-    def parse_raw_(self,
-                b:StrBytes,
-                *,
-                content_type:str = None, # type: ignore
-                encoding:str = 'utf8',
-                proto:Protocol = None, # type: ignore
-                allow_pickle:bool = False):
-        
-        self.self_load(self.parse_raw(b,
-                    content_type=content_type,
-                    encoding=encoding,
-                    proto=proto,
-                    allow_pickle=allow_pickle))
-        
-
-    def parse_file_(self,
-                path:Union[str, Path] = CFG_FILE,
-                *,
-                content_type:str = None, # type: ignore
-                encoding:str = 'utf8',
-                proto:Protocol = None, # type: ignore
-                allow_pickle:bool = False):
-        
-        self.self_load(self.parse_file(path,
-                    content_type=content_type,
-                    encoding=encoding,
-                    proto=proto,
-                    allow_pickle=allow_pickle))
-        self.filename = path
-
 
     def save(self, path:Union[str, Path] = CFG_FILE):
         with open(path, 'w') as conf_f:
-            conf_f.write(self.json(indent=4))
+            conf_f.write(self.model_dump_json(indent=4))
         self.filename = path
         self.first_boot = False
 
 
     def reset(self):
         remove(self.filename)
-        self.self_load(_Config(), True) # type: ignore
+        self(_Config(), first_boot=True) # type: ignore
 
     # def cycle_enabled(self):
     #     for asset in cycle(self.assets):
     #         if asset:
     #             self._current = asset.uuid
     #             yield asset
-
-    def assets_json(self):
-        return self.dict()['assets']
-
-    def add_asset(self, url:str, duration=None, enabled=None, uuid=None):
-        self.assets.append(Asset(url=url, duration=duration, enabled=enabled, uuid=uuid))
-
-    def get_asset(self, uuid: str) -> tuple[int, Asset]:
-        for index, asset in enumerate(self.assets):
-            if asset.uuid == uuid:
-                return index, asset
-        else:
-            raise ValueError(f'No asset with uuid {uuid} in list')
-
-    def find_assets(self, url:str):
-        return filter(lambda a: a[1].url==url, enumerate(self.assets))
-
-    def move_asset(self, from_i:int, to_i:int):
-        self.assets.insert(to_i, self.assets.pop(from_i))
-
-    def remove_asset(self, asset:Asset|str, missing_ok:bool = True):
-        try:
-            if isinstance(asset, str):
-                asset = self.get_asset(asset)[1]
-            self.assets.remove(asset)
-        except ValueError:
-            # element to delete is not in schedule
-            if not missing_ok:
-                raise
-
+    
     # def add_user(self, user:str, password:str, administrator:bool = False):
     #     self.users[user] = {'pass': generate_password_hash(password), 'adm': administrator}
 
@@ -255,10 +304,6 @@ class _Config(BaseModel):
     # def current_asset(self):
     #     return self._current
 
-    class Config:
-        allow_population_by_field_name = True
-
-
 
 
 
@@ -270,10 +315,10 @@ Config = _Config() # type: ignore
 
 
 class FileInfo(BaseModel):
-    filename: str = Field(allow_mutation=False)
-    duration: Optional[str] = Field(allow_mutation=False)
-    duration_s: int = Field(Config.def_duration, allow_mutation=False)
-    size: str = Field(allow_mutation=False)
+    filename: str = Field(frozen=False)
+    duration: Optional[str] = Field(frozen=False)
+    duration_s: int = Field(Config.def_duration, frozen=False)
+    size: str = Field(frozen=False)
 
     class Config:
         validate_assignment = True
@@ -369,7 +414,7 @@ class UploadManager(FileSystemEventHandler):
         out_filename = self.create_filename(out_filename)
         try:
             async with aopen(out_filename, 'wb') as out:
-                if isinstance(infile.read(), Coroutine):
+                if iscoroutinefunction(infile.read):
                     while buf := await infile.read(_buf_size): 
                         await out.write(buf)
                 else:
@@ -379,6 +424,14 @@ class UploadManager(FileSystemEventHandler):
             self.mkdirs() #create directory if not exists
             return await self.save(infile, out_filename)
         
+        file_data = get_file_info(out_filename)
+        Config.assets.add(
+            url= 'file:' + file_data.filename,
+            duration= file_data.duration_s,
+            enabled= False,
+        )
+        Config.save()
+
         return out_filename
 
     def mkdirs(self):

@@ -21,7 +21,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
 
-from .files import Config
+from .models import Config
 
 _envfile = Path('/etc/unitotem/unitotem.env')
 
@@ -50,7 +50,13 @@ class LoginForm(OAuth2PasswordRequestForm):
                 client_secret: Optional[str] = Form(default=None),
                 src: Optional[str] = Form(default = None),
                 remember_me: Optional[bool] = Form(default = False)):
-        super().__init__(grant_type, username, password, scope, client_id, client_secret)
+        super().__init__(
+            grant_type=grant_type, 
+            username=username, 
+            password=password, 
+            scope=scope, 
+            client_id=client_id, 
+            client_secret=client_secret)
         self.src = src or '/'
         self.remember_me = remember_me
 

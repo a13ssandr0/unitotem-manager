@@ -61,7 +61,8 @@
     <nav class="navbar navbar-dark hdr">
         <div class="container-fluid gap-2">
             <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasResponsive"><span class="navbar-toggler-icon"></span></button>
-            <a class="navbar-brand p-0" href="/"><h1 class="my-auto"><b>U<span class="d-none d-md-inline">niTotem</span></b></h1></a>
+            <a class="navbar-brand p-0" href="/"><span class="my-auto fw-bold fs-1">U<span class="d-none d-md-inline">niTotem<span id="navbar_hostname" class="fs-3"></span></span></span></a>
+            
             <button class="btn btn-outline-light ms-auto" type="button" data-bs-title="Do you want to reboot UniTotem?" data-bs-positive-btn="Reboot" data-bs-positive-action="sendCommand('power/reboot')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
                 <i class="bi bi-bootstrap-reboot"></i><span class="d-none d-sm-inline"> Reboot</span>
             </button>
@@ -119,6 +120,7 @@
 
     <script>
         const toast_container = $('.toast-container');
+        const navbar_hostname = $('#navbar_hostname');
 
         function sendCommand(target, args) {
             if(args === undefined) args = {};
@@ -155,8 +157,10 @@
             };
             _ws.onmessage = event => {
                 const data = JSON.parse(event.data);
-                if (data.target == 'settings/hostname')
+                if (data.target == 'settings/hostname'){
                     document.title = data.hostname + ' - UniTotem Manager';
+                    navbar_hostname.html('&nbsp;@&nbsp;' + data.hostname);
+                }
                 if (data.hasOwnProperty('error')){
                     messageModal.find('.modal-title').text('Error');
                     messageModal.find('.modal-body h6').text(data.target + ' returned ' + data.error);
