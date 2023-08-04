@@ -13,6 +13,7 @@ __all__ = [
 
 import asyncio
 from asyncio import iscoroutinefunction
+from datetime import datetime
 from os import remove
 from os.path import basename, getsize, isfile, join
 from pathlib import Path
@@ -23,13 +24,14 @@ from uuid import uuid4
 
 from aiofiles import open as aopen
 from PIL import Image
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (BaseModel, ConfigDict, Field, PrivateAttr,
+                      field_serializer, field_validator, model_validator)
 from pymediainfo import MediaInfo, Track
 from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-
+from .async_timer import Timer
 
 CFG_FILE = Path('/etc/unitotem/unitotem.conf')
 
@@ -37,41 +39,126 @@ _buf_size = 64 * 1024 * 1024 #64MB buffer
 _def_dur = 30
 
 
-
+TIMERS:dict[str,dict[str,Timer]] = {}
 
 
 
 class Asset(BaseModel):
+    name:str = ''
     url:str
-    duration:Optional[int|float] = Field(_def_dur, ge=0)
-    enabled:Optional[bool] = False
-    uuid:Optional[str] = Field(str(uuid4()), frozen=False)
+    duration:Union[int,float] = Field(default_factory=lambda: Config.def_duration if 'Config' in globals() else _def_dur, ge=0)
+    enabled:bool = False
+    uuid:str = Field(default_factory=uuid4().__str__, frozen=True)
+
+    ena_date:Optional[datetime] = None
+    _ena_date_old:Optional[datetime] = PrivateAttr(None)
+
+    dis_date:Optional[datetime] = None
+    _dis_date_old:Optional[datetime] = PrivateAttr(None)
+
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+        def ena(self):
+            self._ena_date_old = None
+            self.ena_date = None
+            self.enabled = True
+
+
+        def dis(self):
+            self._dis_date_old = None
+            self.dis_date = None
+            self.enabled = False
+
+
+        TIMERS[self.uuid] = {
+            'ena': Timer(-1, ena),
+            'dis': Timer(-1, dis)
+        }
+
+        self._ena_date_old = self.ena_date
+        if self.ena_date != None and self.ena_date > datetime.now():
+            TIMERS[self.uuid]['ena'].set_timeout(self.ena_date)
+    
+        self._dis_date_old = self.dis_date
+        if self.dis_date != None and self.dis_date > datetime.now():
+            TIMERS[self.uuid]['dis'].set_timeout(self.dis_date)
+    
+    def __del__(self):
+        TIMERS[self.uuid]['ena'].cancel()
+        TIMERS[self.uuid]['dis'].cancel()
+        del TIMERS[self.uuid]
 
     # @validator('url')
 
-    @field_validator('duration')
-    @classmethod
-    def duration_default(cls, v):
-        return _def_dur if v == None else v
+    # @field_validator('duration')
+    # @classmethod
+    # def duration_default(cls, v):
+    #     if v is None:
+    #         v = Config.def_duration if 'Config' in globals() else _def_dur
+    #     return v
 
-    @field_validator('enabled')
-    @classmethod
-    def enabled_default(cls, v):
-        return v or False
+    # @field_validator('enabled')
+    # @classmethod
+    # def enabled_default(cls, v, info):
+    #     return v or False
 
-    @field_validator('uuid')
-    @classmethod
-    def uuid_default(cls, v):
-        return v or str(uuid4())
-    
+    # @field_validator('uuid')
+    # @classmethod
+    # def uuid_default(cls, v):
+    #     return v or str(uuid4())
+
     @model_validator(mode='after')
     def run_update(self):
+        if self.uuid in TIMERS:
+            #during __init__, validator gets called before timers are initialized
+            #and added to their dictionary, we don't need them yet
+            if self.ena_date != self._ena_date_old:
+                self._ena_date_old = self.ena_date
+                if self.ena_date is None:
+                    TIMERS[self.uuid]['ena'].cancel()
+                elif self.ena_date <= datetime.now():
+                    TIMERS[self.uuid]['ena'].cancel()
+                    self.enabled = True
+                else:
+                    TIMERS[self.uuid]['ena'].set_timeout(self.ena_date)
+
+            if self.dis_date != self._dis_date_old:
+                self._dis_date_old = self.dis_date
+                if self.dis_date is None:
+                    TIMERS[self.uuid]['dis'].cancel()
+                elif self.dis_date <= datetime.now():
+                    TIMERS[self.uuid]['dis'].cancel()
+                    self.enabled = False
+                else:
+                    TIMERS[self.uuid]['dis'].set_timeout(self.dis_date)
         if 'Config' in globals():
             Config.assets.callback()
         return self
 
+    @field_validator('ena_date', 'dis_date', mode='before')
+    @classmethod
+    def validate_date(cls, v):
+        if isinstance(v, str):
+            if not v:
+                return None
+            return datetime.strptime(v, '%Y-%m-%dT%H:%M')
+        return v
+
+    @field_serializer('ena_date', 'dis_date')
+    def serialize_date(self, dt: Optional[datetime]):
+        if dt is None: return None
+        return dt.strftime('%4Y-%m-%dT%H:%M')
+
     def __bool__(self):
         return bool(self.enabled)
+    
+    def __eq__(self, __value) -> bool:
+        try:
+            return self.uuid == __value.uuid
+        except:
+            return False
 
     class Config:
         validate_assignment = True
@@ -85,8 +172,8 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
     _current_duration: float = 0
     _callback = None
     _loop = None
-    _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0, enabled=None, uuid=None)
-    _first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0, enabled=None, uuid=None)
+    _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0)
+    _first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0)
     # __waiting_task
 
     def __init__(self, iterable = []):
@@ -123,12 +210,23 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         self.callback()
 
     def pop(self, index):
+        #see __delitem__ for explanation
         e = super().pop(index)
+
+        if e.uuid == Config.assets.current.uuid:
+            Config.assets.next_change_time = 0
+        
         self.callback()
+        
         return e
 
     def remove(self, value):
+        #see __delitem__ for explanation        
         super().remove(value)
+        
+        if value.uuid == Config.assets.current.uuid:
+            Config.assets.next_change_time = 0
+        
         self.callback()
 
     def __delitem__(self, _id):
@@ -140,15 +238,24 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
             else:
                 return
                 # raise ValueError(f'No asset with uuid {_id} in list')
+        
+        #save the uuid of the asset to remove
+        uuid = self[_id].uuid
+
+        #remove the asset
         super().__delitem__(_id)
+        
+        #NOW force asset change to avoid race conditions if the only enabled
+        #asset is the one we want to remove and the main controller
+        #is changing asset in this exact moment
+        if uuid == Config.assets.current.uuid:
+            Config.assets.next_change_time = 0
+        
         self.callback()
 
     def move(self, from_i:int, to_i:int):
         super().insert(to_i, super().pop(from_i))
         self.callback()
-
-    def add(self, url:str, duration=None, enabled=None, uuid=None):
-        super().append(Asset(url=url, duration=duration, enabled=enabled, uuid=uuid))
     
     # def __iter__(self) -> Iterator[Asset]:
     #     return self
@@ -224,7 +331,7 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
                     self[self.currentid].uuid if self.currentid>=0 else None), self._loop)
 
     def serialize(self):
-        return [a.model_dump() for a in self]
+        return [a.model_dump(mode='json') for a in self]
 
 
 
@@ -315,10 +422,10 @@ Config = _Config() # type: ignore
 
 
 class FileInfo(BaseModel):
-    filename: str = Field(frozen=False)
-    duration: Optional[str] = Field(frozen=False)
-    duration_s: int = Field(Config.def_duration, frozen=False)
-    size: str = Field(frozen=False)
+    filename: str = Field(frozen=True)
+    duration: Optional[str] = Field(frozen=True)
+    duration_s: int = Field(Config.def_duration, frozen=True)
+    size: str = Field(frozen=True)
 
     class Config:
         validate_assignment = True
@@ -356,7 +463,7 @@ class UploadManager(FileSystemEventHandler):
         return self._files_info.copy()
 
     def serialize(self) -> dict[str, dict]:
-        return {k:v.dict() for k,v in self._files_info.items()}
+        return {k:v.model_dump() for k,v in self._files_info.items()}
 
     @property
     def disk_used(self) -> int:
@@ -425,11 +532,11 @@ class UploadManager(FileSystemEventHandler):
             return await self.save(infile, out_filename)
         
         file_data = get_file_info(out_filename)
-        Config.assets.add(
-            url= 'file:' + file_data.filename,
-            duration= file_data.duration_s,
-            enabled= False,
-        )
+        Config.assets.append({
+            'url': 'file:' + file_data.filename,
+            'duration': file_data.duration_s,
+            'enabled': False,
+        })
         Config.save()
 
         return out_filename
@@ -441,6 +548,8 @@ class UploadManager(FileSystemEventHandler):
         return self._folder.joinpath(file).exists()
 
     def remove(self, file):
+        for asset in Config.assets.find('file:' + file):
+            Config.assets.remove(asset)
         self._folder.joinpath(file).unlink(True)
 
     def on_closed(self, event):

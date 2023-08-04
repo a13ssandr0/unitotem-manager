@@ -5,6 +5,7 @@ __version__ = '3.0.0'
 import asyncio
 import signal
 from argparse import ArgumentParser
+from datetime import datetime
 from io import BytesIO
 from json import dumps, loads
 from math import inf
@@ -16,7 +17,7 @@ from subprocess import run as cmd_run
 from threading import Thread
 from time import strftime, time
 from traceback import format_exc, print_exc
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional, Union
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
 import uvloop
@@ -130,29 +131,72 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 
-@WS.add('power/reboot')(lambda: cmd_run('/usr/sbin/reboot'))
+WS.add('power/reboot')(lambda: cmd_run('/usr/sbin/reboot'))
 
-@WS.add('power/shutdown')(lambda: cmd_run('/usr/sbin/poweroff'))
+WS.add('power/shutdown')(lambda: cmd_run('/usr/sbin/poweroff'))
 
-@WS.add('scheduler/asset')
-async def asset_add(ws: WebSocket, items:dict|None = None):
-    if items != None:
-        save = False
-        invalid = []
-        for element, attrs in items.items():
-            if is_valid_url(element) or element in UPLOADS.filenames:
-                Config.assets.add(
-                    url= ('file:' if element in UPLOADS.filenames else '') + element,
-                    duration= attrs.get('duration'),
-                    enabled= attrs.get('enabled', False),
-                )
-                save = True
-            else: invalid.append(element)
-        if save: 
-            Config.save()
-        if invalid:
-            await WS.send(ws, 'scheduler/asset', error='Invalid elements', extra=invalid)
-    await WS.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid)
+WS.add('scheduler/asset')(lambda: WS.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid))
+
+@WS.add('scheduler/add_url')
+async def add_url(ws: WebSocket, items:list[str|dict] = []):
+    invalid = []
+    for element in items:
+        if isinstance(element, str):
+            element = {'url': element}
+        element.pop('uuid', None) # uuid MUST be generated internally
+        if is_valid_url(element['url']): # type: ignore
+            Config.assets.append(element)
+        else: invalid.append(element)
+    Config.save()
+    if invalid:
+        await WS.send(ws, 'scheduler/add_url', error='Invalid elements', extra=invalid)
+    
+@WS.add('scheduler/add_file')
+async def add_file(ws: WebSocket, items: list[str|dict] = []):
+    invalid = []
+    for element in items:
+        if isinstance(element, str):
+            element = {'url': element}
+        if element['url'] in UPLOADS.filenames: # type: ignore
+            Config.assets.append({
+                'url': 'file:' + element['url'],
+                'duration': element.get('duration', UPLOADS.files_info[element['url']].duration_s),
+                'enabled': element.get('enabled', False),
+            })
+        else: invalid.append(element)
+    Config.save()
+    if invalid:
+        await WS.send(ws, 'scheduler/add_file', error='Invalid elements', extra=invalid)
+
+@WS.add('scheduler/asset/edit')
+async def asset_edit(uuid: str,
+                    name:Optional[str] = None,
+                    url:Optional[str] = None,
+                    duration:Optional[Union[int,float]] = None,
+                    ena_date:Optional[datetime] = None,
+                    dis_date:Optional[datetime] = None,
+                    state:Optional[bool] = None):
+    asset = Config.assets[uuid]
+    if name != None:
+        asset.name = name
+    if url != None:
+        asset.url = url
+    if duration != None:
+        duration, asset.duration = asset.duration, duration
+        if asset == Config.assets.current:
+            Config.assets.next_change_time += (asset.duration or inf) - duration # type: ignore
+    if ena_date != None:
+        asset.ena_date = ena_date
+    if dis_date != None:
+        asset.dis_date = dis_date
+    if state != None:
+        start_rotation = not Config.enabled_asset_count
+        asset.enabled = state
+        if start_rotation:
+            await webview_goto(0)
+        elif asset == Config.assets.current:
+            Config.assets.next_change_time = 0
+    Config.save()
 
 @WS.add('scheduler/validate_url')
 async def url_validate(ws: WebSocket, url: str):
@@ -163,57 +207,26 @@ async def asset_current():
     if Config.assets.currentid >= 0:
         await WS.broadcast('scheduler/asset/current', uuid=Config.assets.current.uuid)
 
-@WS.add('scheduler/set_state')
-async def asset_set_state(uuid: str, state: bool):
-    asset = Config.assets[uuid]
-    start_rotation = not Config.enabled_asset_count
-    asset.enabled = state
-    Config.save()
-    if start_rotation:
-        await webview_goto(0)
-    elif asset == Config.assets.current:
-        Config.assets.next_change_time = 0
-
-@WS.add('scheduler/update_duration')
-async def asset_set_duration(uuid: str, duration: int|float):
-    asset = Config.assets[uuid]
-    old_dur = asset.duration
-    asset.duration = duration
-    Config.save()
-    if asset == Config.assets.current:
-        Config.assets.next_change_time += (asset.duration or inf) - old_dur # type: ignore
-
 @WS.add('scheduler/delete')
 async def asset_delete(uuid: str):
-    asset = Config.assets[uuid]
-    if asset == Config.assets.current:
-        Config.assets.next_change_time = 0
-    Config.assets.remove(asset)
+    del Config.assets[uuid]
     Config.save()
 
-@WS.add('scheduler/file')(lambda: WS.broadcast('scheduler/file', files=UPLOADS.serialize()))
+WS.add('scheduler/file')(lambda: WS.broadcast('scheduler/file', files=UPLOADS.serialize()))
 
 @WS.add('scheduler/delete_file')
 async def file_delete(files: list[str]):
     for file in files:
-        for asset in Config.assets.find('file:' + file):
-            if asset == Config.assets.current:
-                Config.assets.next_change_time = 0
-            Config.assets.remove(asset)
         UPLOADS.remove(file)
     Config.save()
 
 @WS.add('scheduler/goto')
 async def playlist_goto(index: int = Config.assets.currentid, force: bool = False):
-    await webview_goto(index, force=force or index != Config.assets.currentid)
+    await webview_goto(index, True)
 
-@WS.add('scheduler/goto/back')
-async def playlist_back():
-    await webview_goto(Config.assets.currentid-1, backwards=True)
+WS.add('scheduler/goto/back')(lambda: webview_goto(Config.assets.currentid-1, backwards=True))
 
-@WS.add('scheduler/goto/next')
-async def playlist_next():
-    await webview_goto(Config.assets.currentid+1)
+WS.add('scheduler/goto/next')(lambda: webview_goto(Config.assets.currentid+1))
 
 @WS.add('scheduler/reorder')
 async def playlist_reorder(from_i: int, to_i: int):
@@ -223,7 +236,7 @@ async def playlist_reorder(from_i: int, to_i: int):
         await webview_goto()  #show new asset
 
 @WS.add('settings/default_duration')
-async def settings_default_duration(duration: int|None = None):
+async def settings_default_duration(duration: Optional[int] = None):
     if duration != None:
         Config.def_duration = duration
         Config.save()
@@ -247,73 +260,57 @@ async def settings_update(do_upgrade: bool = False):
         APT_THREAD.start()
         await WS.broadcast('settings/update/status', status=APT_THREAD.name, log=get_apt_log())
 
-@WS.add('settings/update/list')
-async def settings_update_list():
-    await WS.broadcast('settings/update/list', updates=apt_list_upgrades())
+WS.add('settings/update/list')(lambda: WS.broadcast('settings/update/list', updates=apt_list_upgrades()))
 
-@WS.add('settings/update/reboot_required')
-async def settings_update_reboot_required():
-    await WS.broadcast('settings/update/reboot_required', reboot=reboot_required())
+WS.add('settings/update/reboot_required')(lambda: WS.broadcast('settings/update/reboot_required', reboot=reboot_required()))
         
-@WS.add('settings/update/status')
-async def settings_update_status():
-    await WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
+WS.add('settings/update/status')(lambda: WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log()))
 
 @WS.add('settings/audio/default')
-async def settings_audio_default(device: str|None = None):
+async def settings_audio_default(device: Optional[str] = None):
     if device != None:
         setDefaultAudioDevice(device)
     await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
-@WS.add('settings/audio/devices')
-async def settings_audio_devices():
-    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
+WS.add('settings/audio/devices')(lambda: WS.broadcast('settings/audio/devices', devices=getAudioDevices()))
 
 @WS.add('settings/audio/volume')
-async def settings_audio_volume(device: str|None = None, volume: int|None = None):
+async def settings_audio_volume(device: Optional[str] = None, volume: Optional[int] = None):
     if volume != None:
         setVolume(device, volume)
     await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
 @WS.add('settings/audio/mute')
-async def settings_audio_mute(device: str|None = None, mute: bool|None = None):
+async def settings_audio_mute(device: Optional[str] = None, mute: Optional[bool] = None):
     if mute != None:
         setMute(device, mute)
     await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
-@WS.add('settings/display/getBounds')
-async def settings_display_boundsget():
-    await WS.broadcast('settings/display/getBounds', **WINDOW['bounds'])
+WS.add('settings/display/getBounds')(lambda: WS.broadcast('settings/display/getBounds', **WINDOW['bounds']))
 
 @WS.add('settings/display/setBounds')
 async def settings_display_boundsset(x: int, y: int, w: int, h: int):
     await UI_WS.broadcast('setBounds', x=x, y=y, width=w, height=h)
 
-@WS.add('settings/display/getOrientation')
-async def settings_display_orientationget():
-    await WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
+WS.add('settings/display/getOrientation')(lambda: WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation']))
 
 @WS.add('settings/display/setOrientation')
 async def settings_display_orientationset(orientation: int):
     await UI_WS.broadcast('setOrientation', orientation=orientation)
 
-@WS.add('settings/display/getFlip')
-async def settings_display_flipget():
-    await WS.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
+WS.add('settings/display/getFlip')(lambda: WS.broadcast('settings/display/getFlip', flip=WINDOW['flip']))
 
 @WS.add('settings/display/setFlip')
 async def settings_display_flipset(flip: int):
     await UI_WS.broadcast('setFlip', flip=flip)
 
 @WS.add('settings/hostname')
-async def settings_hostname(hostname: str|None = None):
+async def settings_hostname(hostname: Optional[str] = None):
     if hostname != None:
         set_hostname(hostname)
     await WS.broadcast('settings/hostname', hostname=get_hostname())
 
-@WS.add('settings/get_wifis')
-async def settings_wifi_get():
-    await WS.broadcast('settings/get_wifis', wifis=get_wifis())
+WS.add('settings/get_wifis')(lambda: WS.broadcast('settings/get_wifis', wifis=get_wifis()))
 
 @WS.add('settings/netplan/file/new')
 async def settings_netpfile_new(filename: str):
@@ -321,7 +318,7 @@ async def settings_netpfile_new(filename: str):
     await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
 @WS.add('settings/netplan/file/set')
-async def settings_netpfile_set(ws: WebSocket, filename: str|None = None, content: str = '', apply: bool = True):
+async def settings_netpfile_set(ws: WebSocket, filename: Optional[str] = None, content: str = '', apply: bool = True):
     if filename != None:
         res = set_netplan(secure_filename(filename), content, apply)
     else:
@@ -336,7 +333,7 @@ async def settings_netpfile_set(ws: WebSocket, filename: str|None = None, conten
     await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
 @WS.add('settings/netplan/file/get')
-async def settings_netpfile_get(filename: str|None = None):
+async def settings_netpfile_get(filename: Optional[str] = None):
     netplan_files = get_netplan_file_list()
     if  filename != None:
         if filename in netplan_files:
@@ -344,7 +341,7 @@ async def settings_netpfile_get(filename: str|None = None):
     await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in netplan_files})
 
 @WS.add('settings/netplan/file/del')
-async def settings_netpfile_del(ws: WebSocket, filename: str|None = None, apply: bool = True):
+async def settings_netpfile_del(ws: WebSocket, filename: Optional[str] = None, apply: bool = True):
     res = del_netplan_file(filename, apply)
     if isinstance(res, str):
         await WS.send(ws, 'error', error='Netplan error', extra=res)
@@ -511,7 +508,7 @@ async def scheduler(request: Request, username:str = Depends(LOGMAN)):
     ))
 
 @WWW.get('/login')
-async def login_page(request: Request, src:str|None = '/'):
+async def login_page(request: Request, src:Optional[str] = '/'):
     try:
         await LOGMAN(request)
         # why are you trying to access login page from an authenticated session?
