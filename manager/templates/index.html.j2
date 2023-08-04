@@ -57,7 +57,7 @@
                         <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/next')"><i class="bi bi-skip-forward"></i></button>
                     </div>
                 </div>
-                <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal"><i class="bi bi-plus-circle"></i> Add URL</button>
+                <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal" onclick="modal_input.label.text('New asset')"><i class="bi bi-plus-circle"></i> Add URL</button>
             </div>
             <div class="row">
                 <table class="table table-hover mt-2">
@@ -66,7 +66,7 @@
                             <th scope="col" style="width: 2em;"></th>
                             <th scope="col">URL</th>
                             <th scope="col" style="width: 6em;">Duration</th>
-                            <th scope="col" style="width: 8em;"></th>
+                            <th scope="col" style="width: 10em;"></th>
                         </tr>
                     </thead>
                     <tbody id="asset_table"></tbody>
@@ -91,11 +91,15 @@
 {% block js %}
     const asset_table = $('#asset_table');
     const modal_input = {
-        name : $('#modal_input_name'),
-        url : $('#modal_input_url'),
-        duration : $('#modal_input_duration'),
-        start : $('#modal_input_start'),
-        stop : $('#modal_input_stop'),
+        parent: new bootstrap.Modal('#newAssetModal'),
+        parentEl: $('#newAssetModal'),
+        label: $('#newAssetModalLabel'),
+        name: $('#modal_input_name'),
+        url: $('#modal_input_url'),
+        duration: $('#modal_input_duration'),
+        ena_date: $('#modal_input_start'),
+        dis_date: $('#modal_input_stop'),
+        submit_btn: $('#add_asset_btn')
     }
     const invalid_input_popover = bootstrap.Popover.getOrCreateInstance(modal_input.url, {container: 'body', content: 'Invalid url', placement: 'bottom'});
     const upload_progress = $("#upload-progress");
@@ -148,7 +152,7 @@
         parent.html(`
         <div class="input-group" style="width: 10ch; max-width: 10ch;">
             <input type="number" class="form-control form-control-sm" id="update-duration" min="0" value="${cur_dur}">
-            <button title="Save" class="btn btn-sm btn-outline-success" type="button" onclick="sendCommand('scheduler/update_duration', {uuid: '${uuid}', duration: $('#update-duration').val()});" id="duration-update-confirm-btn"><i class="bi bi-check-lg"></i></button>
+            <button title="Save" class="btn btn-sm btn-outline-success" type="button" onclick="sendCommand('scheduler/asset/edit', {uuid: '${uuid}', duration: $('#update-duration').val()});" id="duration-update-confirm-btn"><i class="bi bi-check-lg"></i></button>
         </div>
         `);
         $('#update-duration').blur((event) => {
@@ -157,10 +161,6 @@
             parent.click(duration_editor(parent, uuid));
         }).focus();
     };
-    
-    {# function downloadFiles(files) {
-        files;
-    } #}
     
     $('#delete_all_btn').click(() => {
         let checkedfiles = $('input[name="filecheck"]:checked');
@@ -181,16 +181,41 @@
     })
     $('#add_all_btn').click(() => {
         let checkedfiles = $('input[name="filecheck"]:checked');
-        sendCommand('scheduler/asset', {items: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
+        sendCommand('scheduler/add_file', {items: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
         checkedfiles.each((i, e) => {e.checked = false});
     })
 
     modal_input.url.oninput = () => sendCommand('scheduler/validate_url', {url: modal_input.url.value});
-    $('#add_asset_btn').click(() => {
-        var tmp = { items: {} };
-        tmp.items[modal_input.url.val()] = {duration: modal_input.duration.val()};
-        sendCommand('scheduler/asset', tmp);
+    modal_input.submit_btn.click(() => {
+        if (modal_input.label.text().includes('New')){
+            sendCommand('scheduler/add_url', { items: [
+                {
+                    name: modal_input.name.val(),
+                    url: modal_input.url.val(),
+                    duration: modal_input.duration.val(),
+                    ena_date: modal_input.ena_date.val(),
+                    dis_date: modal_input.dis_date.val()
+                }
+            ]});
+        } else {
+            sendCommand('scheduler/asset/edit', {
+                name: modal_input.name.val(),
+                url: modal_input.url.val(),
+                duration: modal_input.duration.val(),
+                ena_date: modal_input.ena_date.val(),
+                dis_date: modal_input.dis_date.val(),
+                uuid: modal_input.submit_btn.attr('data-uuid')
+            });
+        }
     });
+    modal_input.parentEl[0].addEventListener('hide.bs.modal', ()=>{
+        modal_input.name.val('');
+        modal_input.url.val('');
+        modal_input.duration.val(modal_input.duration.attr('def-value'));
+        modal_input.ena_date.val('');
+        modal_input.dis_date.val('');
+        modal_input.submit_btn.attr('data-uuid', '');
+    })
 
     /* $('#dnd-interceptor').on('drop', event => {
         event.preventDefault();
@@ -224,7 +249,7 @@ case 'scheduler/asset':
             $('<tr></tr>').attr('id', item.uuid)
                 .toggleClass('table-active', item.uuid == data.current)
                 .append(
-                    $('<td class="align-middle asset-list-handle" style="width: 2em;"></td>')
+                    $('<td class="align-middle asset-list-handle"></td>')
                     .append(
                         $('<i class="bi bi-globe" style="color: grey;"></i>')
                             .attr('id', 'icon-' + item.uuid)
@@ -232,20 +257,31 @@ case 'scheduler/asset':
                             .mouseout((e) => $(e.target).removeClass('bi-arrow-down-up').addClass('bi-globe'))
                     ),
                     $('<td class="align-middle"></td>').html(item.url),
-                    $('<td class="align-middle" style="width: 6em;" name="dur_edit"></td>')
+                    $('<td class="align-middle" name="dur_edit"></td>')
                         .click((e) => duration_editor($(e.target), item.uuid))
                         .html(item.duration),
-                    $('<td class="align-middle" style="width: 8em;"></td>').append(
+                    $('<td class="align-middle"></td>').append(
                         $('<div class="hstack gap-2"></div>').append(
                             $('<div class="form-check form-switch"></div>').append(
                                 $('<input class="form-check-input" type="checkbox" role="switch">')
                                     .attr('title', (item.enabled?'Dis':'En') + 'able asset')
                                     .prop('checked', item.enabled)
-                                    .change(() => sendCommand('scheduler/set_state', {uuid: item.uuid, state: !item.enabled}))
+                                    .change(() => sendCommand('scheduler/asset/edit', {uuid: item.uuid, state: !item.enabled}))
                             ),
                             $('<div class="btn-group" role="group"></div>').append(
                                 $('<button type="button" title="Delete asset" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>')
                                     .click(() => sendCommand('scheduler/delete', {uuid: item.uuid})),
+                                $('<button type="button" title="Edit asset" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></button>')
+                                    .click(() => {
+                                        modal_input.label.text('Edit asset');
+                                        modal_input.name.val(item.name);
+                                        modal_input.url.val(item.url);
+                                        modal_input.duration.val(item.duration);
+                                        modal_input.ena_date.val(item.ena_date);
+                                        modal_input.dis_date.val(item.dis_date);
+                                        modal_input.submit_btn.attr('data-uuid', item.uuid);
+                                        modal_input.parent.show();
+                                    }),
                                 $('<button type="button" title="Show asset" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>')
                                     .click(() => sendCommand('scheduler/goto', {index: i}))
                             )
@@ -293,7 +329,7 @@ case 'scheduler/file':
     break;
 
 case 'settings/default_duration':
-    $('#modal_input_duration').val(data.duration);
+    modal_input.duration.val(data.duration).attr('def-value', data.duration);
     break;
 
 case 'settings/display/bounds':
