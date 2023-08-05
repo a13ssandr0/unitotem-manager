@@ -4,8 +4,6 @@
 <style>
     {% block custom_style %}
         table { table-layout: fixed; word-wrap: break-word; }
-        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; appearance: none; margin: 0; } /* Chrome, Safari, Edge, Opera */
-        input[type=number] { -moz-appearance: textfield; appearance: textfield; } /* Firefox */
         .asset-list-handle { cursor: move; cursor: -webkit-grabbing; }
         /* .overlay { position: fixed; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0;}
         .dim { background-color: rgba(0,0,0,0.5);}
@@ -65,7 +63,7 @@
                         <tr name="asset-row">
                             <th scope="col" style="width: 2em;"></th>
                             <th scope="col">URL</th>
-                            <th scope="col" style="width: 6em;">Duration</th>
+                            <th scope="col" style="width: 8rem;">Duration</th>
                             <th scope="col" style="width: 10em;"></th>
                         </tr>
                     </thead>
@@ -208,7 +206,7 @@
             });
         }
     });
-    modal_input.parentEl[0].addEventListener('hide.bs.modal', ()=>{
+    modal_input.parentEl[0].addEventListener('hidden.bs.modal', ()=>{
         modal_input.name.val('');
         modal_input.url.val('');
         modal_input.duration.val(modal_input.duration.attr('def-value'));
@@ -245,28 +243,44 @@
 case 'scheduler/asset':
     asset_table.empty();
     data.items.forEach((item, i) => {
+        let icon = (item.url.startsWith('file:'))?'bi-file-earmark':'bi-globe';
         asset_table.append(
-            $('<tr></tr>').attr('id', item.uuid)
+            $('<tr style="min-height:3rem;max-height:3rem;"></tr>').attr('id', item.uuid)
                 .toggleClass('table-active', item.uuid == data.current)
                 .append(
                     $('<td class="align-middle asset-list-handle"></td>')
                     .append(
-                        $('<i class="bi bi-globe" style="color: grey;"></i>')
+                        $('<i class="bi" style="color: grey;"></i>')
+                            .addClass(icon)
                             .attr('id', 'icon-' + item.uuid)
-                            .mouseover((e) => $(e.target).removeClass('bi-globe').addClass('bi-arrow-down-up'))
-                            .mouseout((e) => $(e.target).removeClass('bi-arrow-down-up').addClass('bi-globe'))
+                            .mouseover((e) => $(e.target).removeClass(icon).addClass('bi-arrow-down-up'))
+                            .mouseout((e) => $(e.target).removeClass('bi-arrow-down-up').addClass(icon))
                     ),
-                    $('<td class="align-middle"></td>').html(item.url),
-                    $('<td class="align-middle" name="dur_edit"></td>')
-                        .click((e) => duration_editor($(e.target), item.uuid))
-                        .html(item.duration),
+                    $('<td class="align-middle py-0"></td>').append(
+                        $('<span class="d-block text-truncate"></span>').html((!!item.name)?item.name:item.url),
+                        $('<span class="d-block text-truncate text-muted" style="font-size:0.75rem"></span>').html((!!item.name)?item.url:'')
+                    ),
+                    $('<td class="align-middle" style="font-size:0.75rem"></td>')
+                        .html((()=>{
+                            if (!item.duration)
+                                return 'Forever';
+                            let [h,m,s] = new Date(item.duration * 1000).toISOString().slice(11, 19).split(':');
+                            if (h>0) h+=' h'; else h='';
+                            if (m>0) m+=' min'; else m='';
+                            return `${h} ${m} ${s} sec`;
+                        })()),
                     $('<td class="align-middle"></td>').append(
                         $('<div class="hstack gap-2"></div>').append(
-                            $('<div class="form-check form-switch"></div>').append(
+                            $('<div class="form-check form-switch position-relative"></div>').append(
                                 $('<input class="form-check-input" type="checkbox" role="switch">')
                                     .attr('title', (item.enabled?'Dis':'En') + 'able asset')
                                     .prop('checked', item.enabled)
-                                    .change(() => sendCommand('scheduler/asset/edit', {uuid: item.uuid, state: !item.enabled}))
+                                    .change(() => sendCommand('scheduler/asset/edit', {uuid: item.uuid, state: !item.enabled})),
+                                (()=>{
+                                    if (!item.ena_date && !item.dis_date) return;
+                                    return $('<i class="position-absolute top-100 start-0 translate-middle bi bi-clock" style="font-size:0.75rem" data-bs-toggle="tooltip" data-bs-placement="bottom"></i>')
+                                        .attr('data-bs-title', 'Enabling/disabling scheduled');
+                                })()
                             ),
                             $('<div class="btn-group" role="group"></div>').append(
                                 $('<button type="button" title="Delete asset" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>')
@@ -313,12 +327,12 @@ case 'scheduler/file':
     list.empty();
     Object.entries(data.files).forEach(([fname, fdata], i) => {
         list.append(
-            $('<li class="list-group-item list-group-item-action d-flex justify-content-between align-items-start p-2"></li>').append(
+            $('<li class="list-group-item list-group-item-action d-flex p-1" style="min-height:3rem;max-height:3rem;"></li>').append(
                 $('<input class="form-check-input" style="min-width: 1em;" type="checkbox" name="filecheck">')
                     .attr('data-filename', fdata.filename),
-                $('<div class="ms-2 me-auto w-100"></div>').append(
-                    $('<p class="text-break mb-0"></p>').html(fdata.filename),
-                    $('<small class="text-muted"></small>')
+                $('<div class="ms-2 me-auto flex-grow-1" style="max-width:93%"></div>').append(
+                    $('<span class="d-block text-truncate"></span>').html(fdata.filename),
+                    $('<span class="d-block text-truncate text-muted" style="font-size:0.75rem"></span>')
                         .html('Duration: ' + (fdata.duration ?? (fdata.duration_s+'s')) + ' | Size: ' + fdata.size)
                 ).click(function() {
                     $(this).siblings('input').click();

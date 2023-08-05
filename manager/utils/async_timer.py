@@ -18,7 +18,7 @@ class Timer:
         self._task = asyncio.ensure_future(self._job())
 
     async def _job(self):
-        if self._timeout <= 0 or not self._callback:
+        if self._timeout is None or not self._callback:
             return
         await asyncio.sleep(self._timeout)
         c = self._callback()

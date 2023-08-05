@@ -57,33 +57,55 @@ class Asset(BaseModel):
     _dis_date_old:Optional[datetime] = PrivateAttr(None)
 
 
+    def ena(self):
+        self._ena_date_old = None
+        self.ena_date = None
+        self.enabled = True
+        Config.save()
+
+
+    def dis(self):
+        self._dis_date_old = None
+        self.dis_date = None
+        self.enabled = False
+        Config.save()
+
     def __init__(self, **data):
         super().__init__(**data)
 
-        def ena(self):
-            self._ena_date_old = None
-            self.ena_date = None
-            self.enabled = True
-
-
-        def dis(self):
-            self._dis_date_old = None
-            self.dis_date = None
-            self.enabled = False
-
 
         TIMERS[self.uuid] = {
-            'ena': Timer(-1, ena),
-            'dis': Timer(-1, dis)
+            'ena': Timer(None, self.ena),
+            'dis': Timer(None, self.dis)
         }
 
         self._ena_date_old = self.ena_date
-        if self.ena_date != None and self.ena_date > datetime.now():
-            TIMERS[self.uuid]['ena'].set_timeout(self.ena_date)
-    
         self._dis_date_old = self.dis_date
-        if self.dis_date != None and self.dis_date > datetime.now():
-            TIMERS[self.uuid]['dis'].set_timeout(self.dis_date)
+
+
+        if self.ena_date and self.dis_date \
+            and self.ena_date <= datetime.now() and self.dis_date <= datetime.now():
+            #prevent undesired behaviours if both ena_date and dis_date
+            #happened before initialization (i.e. while UniTotem was powered off)
+            #we check which one should have been last
+            if self.ena_date >= self.dis_date:
+                self.ena()
+            else:
+                self.dis()
+        else:
+            if self.ena_date:
+                if self.ena_date > datetime.now():
+                    TIMERS[self.uuid]['ena'].set_timeout(self.ena_date)
+                else:
+                    self.ena()
+        
+            if self.dis_date:
+                if self.dis_date > datetime.now():
+                    TIMERS[self.uuid]['dis'].set_timeout(self.dis_date)
+                else:
+                    self.dis()
+
+        
     
     def __del__(self):
         TIMERS[self.uuid]['ena'].cancel()
@@ -120,7 +142,7 @@ class Asset(BaseModel):
                     TIMERS[self.uuid]['ena'].cancel()
                 elif self.ena_date <= datetime.now():
                     TIMERS[self.uuid]['ena'].cancel()
-                    self.enabled = True
+                    self.ena()
                 else:
                     TIMERS[self.uuid]['ena'].set_timeout(self.ena_date)
 
@@ -130,7 +152,7 @@ class Asset(BaseModel):
                     TIMERS[self.uuid]['dis'].cancel()
                 elif self.dis_date <= datetime.now():
                     TIMERS[self.uuid]['dis'].cancel()
-                    self.enabled = False
+                    self.dis()
                 else:
                     TIMERS[self.uuid]['dis'].set_timeout(self.dis_date)
         if 'Config' in globals():
@@ -168,8 +190,8 @@ class Asset(BaseModel):
 
 class AssetsList(list[Asset]): #, Iterator[Asset]):
     _current: int = -1
-    _next_change_time: float = 0
-    _current_duration: float = 0
+    _nct: float = 0 #next_change_time
+    _cur_dur: float = 0 #current_duration
     _callback = None
     _loop = None
     _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0)
@@ -213,8 +235,8 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         #see __delitem__ for explanation
         e = super().pop(index)
 
-        if e.uuid == Config.assets.current.uuid:
-            Config.assets.next_change_time = 0
+        if e.uuid == self.current.uuid:
+            self._nct = 0
         
         self.callback()
         
@@ -224,8 +246,8 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         #see __delitem__ for explanation        
         super().remove(value)
         
-        if value.uuid == Config.assets.current.uuid:
-            Config.assets.next_change_time = 0
+        if value.uuid == self.current.uuid:
+            self._nct = 0
         
         self.callback()
 
@@ -248,8 +270,8 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         #NOW force asset change to avoid race conditions if the only enabled
         #asset is the one we want to remove and the main controller
         #is changing asset in this exact moment
-        if uuid == Config.assets.current.uuid:
-            Config.assets.next_change_time = 0
+        if uuid == self.current.uuid:
+            self._nct = 0
         
         self.callback()
 
@@ -283,7 +305,7 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
     async def iter_wait(self, *, force = False, waiter = asyncio.Event()):
         while not waiter.is_set():
             yield self.next(force=force)
-            self.__waiting_task = asyncio.create_task(self.__asleep(self._next_change_time - time()))
+            self.__waiting_task = asyncio.create_task(self.__asleep(self._nct - time()))
             
 
 
@@ -315,11 +337,11 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         
     @property
     def next_change_time(self):
-       return self._next_change_time
+       return self._nct
     
     @next_change_time.setter
     def next_change_time(self, val):
-        self._next_change_time = val
+        self._nct = val
     
     def set_callback(self, callback: Callable[[list, str|None], Coroutine], loop: asyncio.AbstractEventLoop):
         self._callback = callback
