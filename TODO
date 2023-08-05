@@ -26,7 +26,7 @@
 <!-- Make info screen update on timer, not on requests -->
 <!-- Reuse code from uploadfile when restoring backup -->
 <!-- Split file upload in helper functions: file save, file load in assets/config -->
-Allow asset enabling schedule (date/time)
+<!-- Allow asset enabling schedule (date/time) -->
 Periodically check that apt list file is enabled
 <!-- Handle 'reset' command in electron -->
 Allow drag-n-drop files

@@ -160,6 +160,7 @@ async def add_file(ws: WebSocket, items: list[str|dict] = []):
         if element['url'] in UPLOADS.filenames: # type: ignore
             Config.assets.append({
                 'url': 'file:' + element['url'],
+                'name': element['url'],
                 'duration': element.get('duration', UPLOADS.files_info[element['url']].duration_s),
                 'enabled': element.get('enabled', False),
             })
