@@ -51,7 +51,7 @@
                 <div class="ms-auto">
                     <div class="btn-group" role="group">
                         <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/back')"><i class="bi bi-skip-backward"></i></button>
-                        <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto', {force: true})"><i class="bi bi-arrow-clockwise"></i></button>
+                        <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto')"><i class="bi bi-arrow-clockwise"></i></button>
                         <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/next')"><i class="bi bi-skip-forward"></i></button>
                     </div>
                 </div>
@@ -142,23 +142,6 @@
         args.target = target
         ws.send(JSON.stringify(args));
     }
-    
-    function duration_editor(parent, uuid) {
-        let oldHTML = parent[0].outerHTML;
-        let cur_dur = parent.html();
-        parent.unbind();
-        parent.html(`
-        <div class="input-group" style="width: 10ch; max-width: 10ch;">
-            <input type="number" class="form-control form-control-sm" id="update-duration" min="0" value="${cur_dur}">
-            <button title="Save" class="btn btn-sm btn-outline-success" type="button" onclick="sendCommand('scheduler/asset/edit', {uuid: '${uuid}', duration: $('#update-duration').val()});" id="duration-update-confirm-btn"><i class="bi bi-check-lg"></i></button>
-        </div>
-        `);
-        $('#update-duration').blur((event) => {
-            if (event.relatedTarget && event.relatedTarget.id == "duration-update-confirm-btn") return;
-            parent.html(cur_dur);
-            parent.click(duration_editor(parent, uuid));
-        }).focus();
-    };
     
     $('#delete_all_btn').click(() => {
         let checkedfiles = $('input[name="filecheck"]:checked');
@@ -297,7 +280,7 @@ case 'scheduler/asset':
                                         modal_input.parent.show();
                                     }),
                                 $('<button type="button" title="Show asset" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>')
-                                    .click(() => sendCommand('scheduler/goto', {index: i}))
+                                    .click(() => sendCommand('scheduler/goto', {index: item.uuid}))
                             )
                         )
                     )

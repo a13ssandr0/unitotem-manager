@@ -5,7 +5,7 @@ __all__ = ['WSManager']
 from functools import wraps
 from inspect import isawaitable
 from json import dumps
-from pydantic import validate_arguments
+from pydantic import validate_call
 
 from fastapi import WebSocket
 
@@ -54,15 +54,15 @@ class WSManager:
     
     handlers = {}
 
-    def add(self, target: str):
+    def add(self, target: str, **validator_kwargs):
+        validator_kwargs.setdefault('arbitrary_types_allowed', True)
         def decorator(func):
             
-            # func = validate_arguments(func)
-
             if WebSocket in func.__annotations__.values() or \
                     (callable(func) and func.__name__ == "<lambda>" and func.__code__.co_posonlyargcount):
                 #lambda functions with websocket parameter must declare it as the
                 #first positional only argument
+                func = validate_call(func, config=validator_kwargs) # type: ignore
                 @wraps(func)
                 async def wrapper(caller_ws, *args, **kwargs): # type: ignore
                     f = func(caller_ws, *args, **kwargs)
@@ -71,6 +71,7 @@ class WSManager:
                     else:
                         return f
             else:
+                func = validate_call(func, config=validator_kwargs) # type: ignore
                 @wraps(func)
                 async def wrapper(_, *args, **kwargs):
                     f = func(*args, **kwargs)

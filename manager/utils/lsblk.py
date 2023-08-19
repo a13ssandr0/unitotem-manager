@@ -14,19 +14,19 @@ from pydantic import BaseModel, Field, validator
 Blk = ForwardRef('Blk') # type: ignore
 
 class Blk(BaseModel):
-    name:str                    = Field(description='device name')
-    rm:bool                     = Field(description='removable device')
-    size:int                    = Field(description='size of the device')
-    ro:bool                     = Field(description='read-only device')
-    type:str                    = Field(description='device type')
-    hotplug:bool                = Field(description='removable or hotplug device (usb, pcmcia, ...)')
-    mountpoint:Optional[str]    = Field(description='where the device is mounted')
-    fssize:Optional[int]        = Field(description='filesystem size')
-    fstype:Optional[str]        = Field(description='filesystem type')
-    fsused:Optional[int]        = Field(description='filesystem size used')
-    fsuse_perc:Optional[int]    = Field(alias='fsuse%', description='filesystem use percentage')
-    fsavail:Optional[int]       = Field(description='filesystem size available')
-    children:Optional[list[Blk]]
+    name:str                     = Field(description='device name')
+    rm:bool                      = Field(description='removable device')
+    size:int                     = Field(description='size of the device')
+    ro:bool                      = Field(description='read-only device')
+    type:str                     = Field(description='device type')
+    hotplug:bool                 = Field(description='removable or hotplug device (usb, pcmcia, ...)')
+    mountpoint:Optional[str]     = Field(description='where the device is mounted')
+    fssize:Optional[int]         = Field(description='filesystem size')
+    fstype:Optional[str]         = Field(description='filesystem type')
+    fsused:Optional[int]         = Field(description='filesystem size used')
+    fsuse_perc:Optional[int]     = Field(alias='fsuse%', description='filesystem use percentage')
+    fsavail:Optional[int]        = Field(description='filesystem size available')
+    children:Optional[list[Blk]] = []
 
     @validator('fsuse_perc', pre=True)
     def validate_percentage(cls, v:str):
@@ -34,13 +34,13 @@ class Blk(BaseModel):
             return None
         return int(v.split('%')[0])
 
-Blk.update_forward_refs()
+Blk.model_rebuild()
 
 
 
 
 def lsblk():
-    return [Blk.parse_obj(dev) for dev in loads(run([
+    return [Blk.model_validate(dev) for dev in loads(run([
             '/usr/bin/lsblk', '-JMbe7',
             '-oNAME,RM,SIZE,RO,TYPE,HOTPLUG,MOUNTPOINT,FSSIZE,FSTYPE,FSUSED,FSUSE%,FSAVAIL'
         ], stdout=PIPE).stdout.decode())['blockdevices']]
