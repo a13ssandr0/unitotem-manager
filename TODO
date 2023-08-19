@@ -31,8 +31,8 @@ Periodically check that apt list file is enabled
 <!-- Handle 'reset' command in electron -->
 Allow drag-n-drop files
 Show confirmation on command execution (success popup/notification)
-Cache MediaInfo metadata
-Check for command redundancy (init_cmds)
+<!-- Cache MediaInfo metadata -->
+<!-- Check for command redundancy (init_cmds) -->
 
 Add image fitting method for images not matching screen ratio
 
