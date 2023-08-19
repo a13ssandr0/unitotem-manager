@@ -6,7 +6,8 @@ __all__ = [
     "get_dominant_color",
     "get_file_info",
     "human_readable_size",
-    "UploadManager"
+    "UploadManager",
+    "validate_date"
 ]
 
 
@@ -14,19 +15,20 @@ __all__ = [
 import asyncio
 from asyncio import iscoroutinefunction
 from datetime import datetime
+from math import ceil, inf
 from os import remove
 from os.path import basename, getsize, isfile, join
 from pathlib import Path
 from shutil import disk_usage
 from time import time
-from typing import Callable, Coroutine, Optional, Union, cast
+from typing import Annotated, Callable, Coroutine, Optional, Union
 from uuid import uuid4
 
 from aiofiles import open as aopen
 from PIL import Image
-from pydantic import (BaseModel, ConfigDict, Field, PrivateAttr,
+from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field, PrivateAttr,
                       field_serializer, field_validator, model_validator)
-from pymediainfo import MediaInfo, Track
+from pymediainfo import MediaInfo
 from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -41,33 +43,38 @@ _def_dur = 30
 
 TIMERS:dict[str,dict[str,Timer]] = {}
 
-
+def validate_date(v):
+    if isinstance(v, str):
+        if not v:
+            return None
+        return datetime.strptime(v, '%Y-%m-%dT%H:%M')
+    return v
 
 class Asset(BaseModel):
     name:str = ''
     url:str
     duration:Union[int,float] = Field(default_factory=lambda: Config.def_duration if 'Config' in globals() else _def_dur, ge=0)
     enabled:bool = False
-    uuid:str = Field(default_factory=uuid4().__str__, frozen=True)
+    uuid:str = Field(default_factory=lambda: uuid4().__str__(), frozen=True)
 
-    ena_date:Optional[datetime] = None
+    ena_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None
     _ena_date_old:Optional[datetime] = PrivateAttr(None)
 
-    dis_date:Optional[datetime] = None
+    dis_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None
     _dis_date_old:Optional[datetime] = PrivateAttr(None)
 
 
-    def ena(self):
+    def __enable(self):
         self._ena_date_old = None
         self.ena_date = None
-        self.enabled = True
+        self.enable()
         Config.save()
 
 
-    def dis(self):
+    def __disable(self):
         self._dis_date_old = None
         self.dis_date = None
-        self.enabled = False
+        self.disable()
         Config.save()
 
     def __init__(self, **data):
@@ -75,8 +82,8 @@ class Asset(BaseModel):
 
 
         TIMERS[self.uuid] = {
-            'ena': Timer(None, self.ena),
-            'dis': Timer(None, self.dis)
+            'ena': Timer(None, self.__enable),
+            'dis': Timer(None, self.__disable)
         }
 
         self._ena_date_old = self.ena_date
@@ -89,21 +96,21 @@ class Asset(BaseModel):
             #happened before initialization (i.e. while UniTotem was powered off)
             #we check which one should have been last
             if self.ena_date >= self.dis_date:
-                self.ena()
+                self.__enable()
             else:
-                self.dis()
+                self.__disable()
         else:
             if self.ena_date:
                 if self.ena_date > datetime.now():
                     TIMERS[self.uuid]['ena'].set_timeout(self.ena_date)
                 else:
-                    self.ena()
+                    self.__enable()
         
             if self.dis_date:
                 if self.dis_date > datetime.now():
                     TIMERS[self.uuid]['dis'].set_timeout(self.dis_date)
                 else:
-                    self.dis()
+                    self.__disable()
 
         
     
@@ -114,22 +121,29 @@ class Asset(BaseModel):
 
     # @validator('url')
 
-    # @field_validator('duration')
-    # @classmethod
-    # def duration_default(cls, v):
-    #     if v is None:
-    #         v = Config.def_duration if 'Config' in globals() else _def_dur
-    #     return v
+    @field_validator('duration')
+    @classmethod
+    def duration_default(cls, v, info):
+        if 'Config' in globals() and info.data.get('uuid') == Config.assets.current.uuid:
+            # Config.assets.next_change_time += (v or inf) - Config.assets.current.duration
+            # delta = Config.assets.next_change_time - time()
+            delta = (v or inf) - (time() - Config.assets._last_time)
+            if delta>0:
+                Config.assets._waiting_timer.set_timeout(delta)
+            else:
+                Config.assets.next_a()
+        return v
 
-    # @field_validator('enabled')
-    # @classmethod
-    # def enabled_default(cls, v, info):
-    #     return v or False
-
-    # @field_validator('uuid')
-    # @classmethod
-    # def uuid_default(cls, v):
-    #     return v or str(uuid4())
+    def enable(self):
+        start_loop = not Config.enabled_asset_count
+        self.enabled = True
+        if 'Config' in globals() and start_loop:
+            Config.assets.next_a()
+    
+    def disable(self):
+        self.enabled = False
+        if 'Config' in globals() and self.uuid == Config.assets.current.uuid:
+            Config.assets.next_a()
 
     @model_validator(mode='after')
     def run_update(self):
@@ -142,7 +156,7 @@ class Asset(BaseModel):
                     TIMERS[self.uuid]['ena'].cancel()
                 elif self.ena_date <= datetime.now():
                     TIMERS[self.uuid]['ena'].cancel()
-                    self.ena()
+                    self.__enable()
                 else:
                     TIMERS[self.uuid]['ena'].set_timeout(self.ena_date)
 
@@ -152,21 +166,12 @@ class Asset(BaseModel):
                     TIMERS[self.uuid]['dis'].cancel()
                 elif self.dis_date <= datetime.now():
                     TIMERS[self.uuid]['dis'].cancel()
-                    self.dis()
+                    self.__disable()
                 else:
                     TIMERS[self.uuid]['dis'].set_timeout(self.dis_date)
         if 'Config' in globals():
             Config.assets.callback()
         return self
-
-    @field_validator('ena_date', 'dis_date', mode='before')
-    @classmethod
-    def validate_date(cls, v):
-        if isinstance(v, str):
-            if not v:
-                return None
-            return datetime.strptime(v, '%Y-%m-%dT%H:%M')
-        return v
 
     @field_serializer('ena_date', 'dis_date')
     def serialize_date(self, dt: Optional[datetime]):
@@ -176,6 +181,14 @@ class Asset(BaseModel):
     def __bool__(self):
         return bool(self.enabled)
     
+    def __add__(self, other):
+        if isinstance(other, Asset):
+            other = other.enabled
+        return self.enabled + other
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
     def __eq__(self, __value) -> bool:
         try:
             return self.uuid == __value.uuid
@@ -189,14 +202,14 @@ class Asset(BaseModel):
 
 
 class AssetsList(list[Asset]): #, Iterator[Asset]):
-    _current: int = -1
-    _nct: float = 0 #next_change_time
-    _cur_dur: float = 0 #current_duration
+    __current: int = -1
+    _last_time = 0
     _callback = None
     _loop = None
     _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0)
     _first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0)
-    # __waiting_task
+    _waiting_evt = asyncio.Event()
+    _waiting_timer = Timer(None, None)
 
     def __init__(self, iterable = []):
         super().__init__([Asset.model_validate(e) for e in iterable])
@@ -236,7 +249,7 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         e = super().pop(index)
 
         if e.uuid == self.current.uuid:
-            self._nct = 0
+            self.next_a()
         
         self.callback()
         
@@ -247,7 +260,7 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         super().remove(value)
         
         if value.uuid == self.current.uuid:
-            self._nct = 0
+            self.next_a()
         
         self.callback()
 
@@ -277,71 +290,72 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
 
     def move(self, from_i:int, to_i:int):
         super().insert(to_i, super().pop(from_i))
+        if self._current in [from_i, to_i]:
+            self.goto_a(None)
         self.callback()
-    
-    # def __iter__(self) -> Iterator[Asset]:
-    #     return self
-    
-    # def __next__(self) -> Asset|None:
-    #     return self.next()
 
-    def next(self, force = False) -> Asset:
+    reset_asset_timer = _waiting_timer.reset
+
+    # def _clamp(self, n): return max(min(super().__len__()-1, n), 0)
+
+    def next_a(self, force = False):
         if not (any(self) or force):
-            self._current = -1
-            return self._no_assets
-        self._current += 1
-        if self._current >= super().__len__(): self._current = 0
-        if self[self._current] or force:
-            return self[self._current]
+            temp_current = -1
         else:
-            return self.next()
-
-    async def __asleep(self, delay: float):
-        try:
-            return await asyncio.sleep(delay)
-        except asyncio.CancelledError:
-            pass
+            temp_current = (self._current + 1) % super().__len__()
+            if not (self[temp_current] or force):
+                first = next(filter(lambda x: x.enabled, self[temp_current:] + self[:temp_current])) # type: ignore
+                temp_current = super().index(first)
+        self._current = temp_current
 
     async def iter_wait(self, *, force = False, waiter = asyncio.Event()):
+        self._waiting_timer.cancel()
+        self._waiting_timer = Timer(None, self.next_a)
+        self.next_a(force=force)
         while not waiter.is_set():
-            yield self.next(force=force)
-            self.__waiting_task = asyncio.create_task(self.__asleep(self._nct - time()))
-            
+            yield self.current
+            await self._waiting_evt.wait()
 
-
-    def prev(self, force = False):
+    def prev_a(self, force = False):
         if not (any(self) or force):
-            self._current = -1
-            return None
-        self._current -= 1
-        if self._current < 0: self._current = super().__len__() - 1
-        if self[self._current] or force:
-            return self[self._current]
+            temp_current = -1
         else:
-            return self.prev()
+            temp_current = (self._current - 1) % super().__len__()
+            if not (self[temp_current] or force):
+                first = next(filter(lambda x: x.enabled, reversed(self[temp_current:] + self[:temp_current]))) # type: ignore
+                temp_current = super().index(first)
+        self._current = temp_current
         
+    def goto_a(self, index:Union[None,int,str] = __current):
+        if index is None:
+            self._current = self._current
+            return
+        if isinstance(index, str):
+            for i, asset in enumerate(self):
+                if asset.uuid == index:
+                    index = i
+                    break
+            else:
+                raise ValueError(f'No asset with uuid {index} in list')
+        self._current = index % super().__len__()
+
+    @property
+    def _current(self):
+        return self.__current
+    
+    @_current.setter
+    def _current(self, val):
+        self.__current = val
+        self._last_time = time()
+        self._waiting_evt.set()
+        self._waiting_evt.clear()
+        self._waiting_timer.set_timeout(self.current.duration or inf)
+    
     @property
     def current(self):
         if 0 <= self._current < super().__len__():
             return self[self._current]
-        return self._no_assets
-    
-    @property
-    def currentid(self):
-        return self._current
-        
-    @currentid.setter
-    def currentid(self, val):
-        self._current = val
-
-        
-    @property
-    def next_change_time(self):
-       return self._nct
-    
-    @next_change_time.setter
-    def next_change_time(self, val):
-        self._nct = val
+        return self._first_boot if Config.first_boot else self._no_assets
     
     def set_callback(self, callback: Callable[[list, str|None], Coroutine], loop: asyncio.AbstractEventLoop):
         self._callback = callback
@@ -350,7 +364,7 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
     def callback(self):
         if self._callback != None and self._loop != None:
             asyncio.run_coroutine_threadsafe(self._callback(self.serialize(), 
-                    self[self.currentid].uuid if self.currentid>=0 else None), self._loop)
+                    self[self._current].uuid if self._current>=0 else None), self._loop)
 
     def serialize(self):
         return [a.model_dump(mode='json') for a in self]
@@ -409,12 +423,6 @@ class _Config(BaseModel):
     def reset(self):
         remove(self.filename)
         self(_Config(), first_boot=True) # type: ignore
-
-    # def cycle_enabled(self):
-    #     for asset in cycle(self.assets):
-    #         if asset:
-    #             self._current = asset.uuid
-    #             yield asset
     
     # def add_user(self, user:str, password:str, administrator:bool = False):
     #     self.users[user] = {'pass': generate_password_hash(password), 'adm': administrator}
@@ -427,11 +435,7 @@ class _Config(BaseModel):
 
     @property
     def enabled_asset_count(self):
-        return sum(1 for a in self.assets if a.enabled)
-
-    # @property
-    # def current_asset(self):
-    #     return self._current
+        return sum(self.assets)
 
 
 
@@ -444,13 +448,11 @@ Config = _Config() # type: ignore
 
 
 class FileInfo(BaseModel):
-    filename: str = Field(frozen=True)
-    duration: Optional[str] = Field(frozen=True)
-    duration_s: int = Field(Config.def_duration, frozen=True)
-    size: str = Field(frozen=True)
-
-    class Config:
-        validate_assignment = True
+    model_config = ConfigDict(validate_assignment=True, frozen=True)
+    filename: str
+    duration: Optional[str]
+    duration_s: int = Config.def_duration
+    size: str
 
 
 
@@ -555,6 +557,7 @@ class UploadManager(FileSystemEventHandler):
         
         file_data = get_file_info(out_filename)
         Config.assets.append({
+            'name': file_data.filename,
             'url': 'file:' + file_data.filename,
             'duration': file_data.duration_s,
             'enabled': False,
@@ -606,17 +609,17 @@ def get_file_info(b, *f, def_dur = Config.def_duration):
     dur = None
     dur_s = def_dur
     if isfile(f := join(b, *f)):
-        for track in cast(list[Track], MediaInfo.parse(f).tracks): # type: ignore
+        for track in MediaInfo.parse(f).general_tracks: # type: ignore
             track_data = track.to_data()
             if 'duration' in track_data:
                 dur = track_data.get('other_duration', [None])[0]
-                dur_s = round(int(track_data['duration'])/1000)
+                dur_s = ceil(int(track_data['duration'])/1000)
                 break
     return FileInfo(filename=basename(f), duration=dur, duration_s=dur_s,
         size=human_readable_size(getsize(f)))
 
 
-def get_dominant_color(pil_img, palette_size=16): # https://stackoverflow.com/a/61730849/9655651
+def get_dominant_color(pil_img:Image.Image, palette_size=16): # https://stackoverflow.com/a/61730849/9655651
     # Resize image to speed up processing
     img = pil_img.copy()
     img.thumbnail((100, 100))
@@ -626,5 +629,5 @@ def get_dominant_color(pil_img, palette_size=16): # https://stackoverflow.com/a/
     palette = paletted.getpalette()
     color_counts = sorted(paletted.getcolors(), reverse=True)
     palette_index = color_counts[0][1]
-    dominant_color = palette[palette_index*3:palette_index*3+3]
+    dominant_color = palette[palette_index*3:palette_index*3+3] #type: ignore [reportOptionalSubscript]
     return hex((dominant_color[0]<<16) + (dominant_color[1]<<8) + dominant_color[2])

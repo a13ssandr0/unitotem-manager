@@ -240,7 +240,7 @@
                 case 'setOrientation':
                     document.body.setAttribute('r', data.orientation);
                     await window.electronAPI.saveOrientation(data.orientation);
-                    // echo new bounds for confirmation
+                    // echo new orientation for confirmation
                 case 'getOrientation':
                     sendCommand('getOrientation', {orientation: document.body.getAttribute('r') || 0});
                     break;
@@ -248,7 +248,7 @@
                 case 'setFlip':
                     document.main.setAttribute('f', data.flip);
                     await window.electronAPI.saveFlip(data.flip);
-                    // echo new bounds for confirmation
+                    // echo new flip for confirmation
                 case 'getFlip':
                     sendCommand('getFlip', {flip: document.main.getAttribute('f') || 0});
                     break;

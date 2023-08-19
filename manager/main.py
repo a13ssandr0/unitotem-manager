@@ -19,6 +19,7 @@ from time import strftime, time
 from traceback import format_exc, print_exc
 from typing import Annotated, Any, Optional, Union
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
+from pydantic import BeforeValidator
 
 import uvloop
 from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
@@ -174,8 +175,8 @@ async def asset_edit(uuid: str,
                     name:Optional[str] = None,
                     url:Optional[str] = None,
                     duration:Optional[Union[int,float]] = None,
-                    ena_date:Optional[datetime] = None,
-                    dis_date:Optional[datetime] = None,
+                    ena_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
+                    dis_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
                     state:Optional[bool] = None):
     asset = Config.assets[uuid]
     if name != None:
@@ -183,20 +184,14 @@ async def asset_edit(uuid: str,
     if url != None:
         asset.url = url
     if duration != None:
-        duration, asset.duration = asset.duration, duration
-        if asset == Config.assets.current:
-            Config.assets.next_change_time += (asset.duration or inf) - duration # type: ignore
+        asset.duration = duration
     if ena_date != None:
         asset.ena_date = ena_date
     if dis_date != None:
         asset.dis_date = dis_date
     if state != None:
-        start_rotation = not Config.enabled_asset_count
-        asset.enabled = state
-        if start_rotation:
-            await webview_goto(0)
-        elif asset == Config.assets.current:
-            Config.assets.next_change_time = 0
+        if state: asset.enable()
+        else: asset.disable()
     Config.save()
 
 @WS.add('scheduler/validate_url')
@@ -205,7 +200,7 @@ async def url_validate(ws: WebSocket, url: str):
 
 @WS.add('scheduler/asset/current')
 async def asset_current():
-    if Config.assets.currentid >= 0:
+    if Config.enabled_asset_count:
         await WS.broadcast('scheduler/asset/current', uuid=Config.assets.current.uuid)
 
 @WS.add('scheduler/delete')
@@ -222,19 +217,17 @@ async def file_delete(files: list[str]):
     Config.save()
 
 @WS.add('scheduler/goto')
-async def playlist_goto(index: int = Config.assets.currentid, force: bool = False):
-    await webview_goto(index, True)
+async def playlist_goto(index: Union[None,int,str] = None):
+    Config.assets.goto_a(index)
 
-WS.add('scheduler/goto/back')(lambda: webview_goto(Config.assets.currentid-1, backwards=True))
+WS.add('scheduler/goto/back')(lambda: Config.assets.prev_a())
 
-WS.add('scheduler/goto/next')(lambda: webview_goto(Config.assets.currentid+1))
+WS.add('scheduler/goto/next')(lambda: Config.assets.next_a())
 
 @WS.add('scheduler/reorder')
 async def playlist_reorder(from_i: int, to_i: int):
     Config.assets.move(from_i, to_i)
     Config.save()
-    if Config.assets.currentid in [from_i, to_i]:
-        await webview_goto()  #show new asset
 
 @WS.add('settings/default_duration')
 async def settings_default_duration(duration: Optional[int] = None):
@@ -290,8 +283,8 @@ async def settings_audio_mute(device: Optional[str] = None, mute: Optional[bool]
 WS.add('settings/display/getBounds')(lambda: WS.broadcast('settings/display/getBounds', **WINDOW['bounds']))
 
 @WS.add('settings/display/setBounds')
-async def settings_display_boundsset(x: int, y: int, w: int, h: int):
-    await UI_WS.broadcast('setBounds', x=x, y=y, width=w, height=h)
+async def settings_display_boundsset(x: int, y: int, width: int, height: int):
+    await UI_WS.broadcast('setBounds', x=x, y=y, width=width, height=height)
 
 WS.add('settings/display/getOrientation')(lambda: WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation']))
 
@@ -320,6 +313,7 @@ async def settings_netpfile_new(filename: str):
 
 @WS.add('settings/netplan/file/set')
 async def settings_netpfile_set(ws: WebSocket, filename: Optional[str] = None, content: str = '', apply: bool = True):
+    global DEFAULT_AP
     if filename != None:
         res = set_netplan(secure_filename(filename), content, apply)
     else:
@@ -327,8 +321,8 @@ async def settings_netpfile_set(ws: WebSocket, filename: Optional[str] = None, c
     if res == True:
         if DEFAULT_AP and do_ip_addr(True): #AP is still enabled but now we are connected, AP is no longer needed
             stop_hostpot()
-            Config.assets.next_change_time = 0
-            await webview_goto(0)
+            DEFAULT_AP = None
+            Config.assets.next_a()
     elif isinstance(res, str):
         await WS.send(ws, 'error', error='Netplan error', extra=res)
     await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
@@ -577,37 +571,13 @@ async def first_boot_page(request: Request):
         wifi=DEFAULT_AP
     ))
 
-async def webview_goto(asset: int = Config.assets.currentid, force: bool = False, backwards: bool = False):
-    if 0 <= asset < len(Config.assets):
-        if Config.assets[asset].enabled or force:
-            Config.assets.currentid = asset
-            url = Config.assets.current.url
-            if url.startswith('file:'):
-                url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-            await UI_WS.broadcast('Show', src=url)
-            Config.assets.next_change_time = int(time()) + (Config.assets.current.duration or inf)
-            await WS.broadcast('scheduler/asset/current', uuid=Config.assets.current.uuid)
-        else:
-            await webview_goto(asset + (-1 if backwards else 1))
-
 async def webview_control_main(waiter: asyncio.Event):
-    while not waiter.is_set():
-        if time()>=Config.assets.next_change_time:
-            if Config.first_boot:
-                Config.assets.next_change_time = inf
-                Config.assets.currentid = -1
-                await WS.broadcast('scheduler/asset/current', uuid=None)
-                await UI_WS.broadcast('Show', src='https://localhost/unitotem-first-boot', container='web')
-            elif not Config.enabled_asset_count:
-                Config.assets.next_change_time = inf
-                Config.assets.currentid = -1
-                await WS.broadcast('scheduler/asset/current', uuid=None)
-                await UI_WS.broadcast('Show', src='https://localhost/unitotem-no-assets', container='web')
-            else:
-                Config.assets.currentid += 1
-                if Config.assets.currentid >= len(Config.assets): Config.assets.currentid = 0
-                await webview_goto(Config.assets.currentid)
-        await asyncio.sleep(1)
+    async for asset in Config.assets.iter_wait(waiter=waiter):
+        await WS.broadcast('scheduler/asset/current', uuid=asset.uuid)
+        url = asset.url
+        if url.startswith('file:'):
+            url = 'https://localhost/uploaded/' + url.removeprefix('file:')
+        await UI_WS.broadcast('Show', src=url)
 
 
 

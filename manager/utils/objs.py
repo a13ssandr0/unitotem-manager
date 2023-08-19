@@ -12,7 +12,7 @@ from jinja2 import Undefined
 
 
 # https://github.com/ansible/ansible/blob/0830b6905996fb02eefcba79a9b055961e251078/lib/ansible/plugins/filter/core.py#L476
-def flatten(mylist, levels=None, skip_nulls=True):
+def flatten(mylist, levels=None, skip_nulls=True, remove_duplicates=True):
 
     ret = []
     for element in mylist:
@@ -29,6 +29,9 @@ def flatten(mylist, levels=None, skip_nulls=True):
                 ret.append(element)
         else:
             ret.append(element)
+
+    if remove_duplicates:
+        ret = list(set(ret))
 
     return ret
 
