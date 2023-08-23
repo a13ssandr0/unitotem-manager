@@ -8,18 +8,16 @@ from argparse import ArgumentParser
 from datetime import datetime
 from io import BytesIO
 from json import dumps, loads
-from math import inf
 from os.path import dirname, exists, join
 from pathlib import Path
 from platform import freedesktop_os_release as os_release
 from platform import node as get_hostname
 from subprocess import run as cmd_run
 from threading import Thread
-from time import strftime, time
+from time import strftime
 from traceback import format_exc, print_exc
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
-from pydantic import BeforeValidator
 
 import uvloop
 from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
@@ -36,8 +34,9 @@ from jwt import InvalidSignatureError
 from natsort import natsorted
 from psutil import (cpu_count, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
+from pydantic import BeforeValidator
+from pydantic_extra_types.color import Color
 from utils import *
-from validators import url as is_valid_url
 from watchdog.observers import Observer
 from werkzeug.utils import secure_filename
 
@@ -94,6 +93,12 @@ async def ui_websocket(websocket: WebSocket):
                     await WS.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
                 case 'getAllowInsecureCerts':
                     await WS.broadcast('settings/display/allowInsecureCerts', bounds=data['allow'])
+                case 'setContainer':
+                    try:
+                        Config.assets.current.media_type = data['media_type']
+                    except IndexError:
+                        # no-assets and first-boot pages have an invalid index
+                        pass
         except WebSocketDisconnect:
             UI_WS.disconnect(websocket)
             break
@@ -140,17 +145,12 @@ WS.add('scheduler/asset')(lambda: WS.broadcast('scheduler/asset', items=Config.a
 
 @WS.add('scheduler/add_url')
 async def add_url(ws: WebSocket, items:list[str|dict] = []):
-    invalid = []
     for element in items:
         if isinstance(element, str):
             element = {'url': element}
         element.pop('uuid', None) # uuid MUST be generated internally
-        if is_valid_url(element['url']): # type: ignore
-            Config.assets.append(element)
-        else: invalid.append(element)
+        Config.assets.append(element)    
     Config.save()
-    if invalid:
-        await WS.send(ws, 'scheduler/add_url', error='Invalid elements', extra=invalid)
     
 @WS.add('scheduler/add_file')
 async def add_file(ws: WebSocket, items: list[str|dict] = []):
@@ -164,6 +164,7 @@ async def add_file(ws: WebSocket, items: list[str|dict] = []):
                 'name': element['url'],
                 'duration': element.get('duration', UPLOADS.files_info[element['url']].duration_s),
                 'enabled': element.get('enabled', False),
+                'media_type': element.get('media_type', UPLOADS.files_info[element['url']].mime)
             })
         else: invalid.append(element)
     Config.save()
@@ -175,6 +176,8 @@ async def asset_edit(uuid: str,
                     name:Optional[str] = None,
                     url:Optional[str] = None,
                     duration:Optional[Union[int,float]] = None,
+                    fit:Optional[FitEnum] = None,
+                    bg_color:Union[Color,None,Literal[-1]] = -1,
                     ena_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
                     dis_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
                     state:Optional[bool] = None):
@@ -183,8 +186,13 @@ async def asset_edit(uuid: str,
         asset.name = name
     if url != None:
         asset.url = url
+        asset.media_type = MediaType.undefined
     if duration != None:
         asset.duration = duration
+    if fit != None:
+        asset.fit = fit
+    if bg_color != -1:
+        asset.bg_color = bg_color
     if ena_date != None:
         asset.ena_date = ena_date
     if dis_date != None:
@@ -193,10 +201,6 @@ async def asset_edit(uuid: str,
         if state: asset.enable()
         else: asset.disable()
     Config.save()
-
-@WS.add('scheduler/validate_url')
-async def url_validate(ws: WebSocket, url: str):
-    await WS.send(ws, 'scheduler/validate_url', valid=bool(is_valid_url(url))) # type: ignore
 
 @WS.add('scheduler/asset/current')
 async def asset_current():
@@ -269,7 +273,7 @@ async def settings_audio_default(device: Optional[str] = None):
 WS.add('settings/audio/devices')(lambda: WS.broadcast('settings/audio/devices', devices=getAudioDevices()))
 
 @WS.add('settings/audio/volume')
-async def settings_audio_volume(device: Optional[str] = None, volume: Optional[int] = None):
+async def settings_audio_volume(device: Optional[str] = None, volume: Optional[float] = None):
     if volume != None:
         setVolume(device, volume)
     await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
@@ -577,7 +581,12 @@ async def webview_control_main(waiter: asyncio.Event):
         url = asset.url
         if url.startswith('file:'):
             url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-        await UI_WS.broadcast('Show', src=url)
+        await UI_WS.broadcast('Show',
+            src=url,
+            container=[None, 'web','image','video','audio'][asset.media_type+1],
+            fit=['contain', 'cover', 'fill'][asset.fit],
+            bg_color=asset.bg_color.as_rgb() if asset.bg_color != None else '#000000'
+        )
 
 
 

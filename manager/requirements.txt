@@ -1,4 +1,5 @@
 aiofiles
+aiohttp
 fastapi
 fastapi_login
 hypercorn
@@ -9,6 +10,7 @@ Pillow
 psutil
 pulsectl
 pydantic
+pydantic-extra-types
 PyJWT
 pymediainfo
 python_crontab

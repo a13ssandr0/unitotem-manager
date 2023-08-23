@@ -155,7 +155,6 @@
     const videoview   = document.getElementById('videoview');
     const containers  = [boot_screen, webview, imageview, videoview];
 
-    
     window.onload = async () => {
         document.body.setAttribute('r', await window.electronAPI.loadOrientation());
         document.main.setAttribute('f', await window.electronAPI.loadFlip());
@@ -181,14 +180,17 @@
                         xhttp.open('HEAD', data.src, false);
                         try {
                             xhttp.send();
-                            var mime = xhttp.getResponseHeader('Content-Type') || '';
+                            var mime = xhttp.getResponseHeader('Content-Type') ?? '';
                             if (mime.startsWith('audio')){
                                 data.container = 'audio';
                             } else if (mime.startsWith('video')){
                                 data.container = 'video';
+                            } else if (mime.startsWith('image')){
+                                data.container = 'image';
                             } else {
                                 data.container = 'web';
                             }
+                            sendCommand('setContainer', {media_type: data.container});
                         } catch (error) {
                             console.log(error);
                             data.container = 'web';
@@ -205,11 +207,15 @@
                         case 'image':
                             imageview.src = data.src;
                             imageview.style.display = 'flex';
+                            imageview.style.objectFit = data.fit ?? 'contain';
+                            imageview.style.backgroundColor = data.bg_color ?? '#000000';
                             lastCont = data.container;
                             break;
                         case 'video':
                             videoview.src = data.src;
                             videoview.style.display = 'flex';
+                            videoview.style.objectFit = data.fit ?? 'contain';
+                            videoview.style.backgroundColor = data.bg_color ?? '#000000';
                             videoview.play();
                             lastCont = data.container;
                             break;
