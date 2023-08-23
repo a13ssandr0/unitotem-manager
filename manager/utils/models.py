@@ -3,9 +3,11 @@ __all__ = [
     "CFG_FILE",
     "Config",
     "FileInfo",
+    "FitEnum",
     "get_dominant_color",
     "get_file_info",
     "human_readable_size",
+    "MediaType",
     "UploadManager",
     "validate_date"
 ]
@@ -15,6 +17,7 @@ __all__ = [
 import asyncio
 from asyncio import iscoroutinefunction
 from datetime import datetime
+from enum import IntEnum
 from math import ceil, inf
 from os import remove
 from os.path import basename, getsize, isfile, join
@@ -22,12 +25,15 @@ from pathlib import Path
 from shutil import disk_usage
 from time import time
 from typing import Annotated, Callable, Coroutine, Optional, Union
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from aiofiles import open as aopen
 from PIL import Image
-from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field, PrivateAttr,
-                      field_serializer, field_validator, model_validator)
+from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field,
+                      PrivateAttr, field_serializer, field_validator,
+                      model_validator)
+from pydantic_extra_types.color import Color
 from pymediainfo import MediaInfo
 from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -50,11 +56,26 @@ def validate_date(v):
         return datetime.strptime(v, '%Y-%m-%dT%H:%M')
     return v
 
+class FitEnum(IntEnum):
+    contain = 0
+    cover = 1
+    fill = 2
+
+class MediaType(IntEnum):
+    undefined = -1
+    web = 0
+    image = 1
+    video = 2
+    audio = 3
+
 class Asset(BaseModel):
     name:str = ''
     url:str
     duration:Union[int,float] = Field(default_factory=lambda: Config.def_duration if 'Config' in globals() else _def_dur, ge=0)
     enabled:bool = False
+    fit:FitEnum = FitEnum.contain
+    bg_color:Optional[Color] = None
+    media_type:MediaType = MediaType.undefined
     uuid:str = Field(default_factory=lambda: uuid4().__str__(), frozen=True)
 
     ena_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None
@@ -119,20 +140,39 @@ class Asset(BaseModel):
         TIMERS[self.uuid]['dis'].cancel()
         del TIMERS[self.uuid]
 
-    # @validator('url')
+    @field_validator('url')
+    @classmethod
+    def url_guesser(cls, v):
+        url = urlsplit(v)
+        scheme = ''
+        if not url.scheme:
+            if (url.netloc or url.path).startswith('ftp.'):
+                scheme = 'ftp://'
+            else:
+                scheme = 'http://'
+        return scheme + v
 
     @field_validator('duration')
     @classmethod
     def duration_default(cls, v, info):
         if 'Config' in globals() and info.data.get('uuid') == Config.assets.current.uuid:
-            # Config.assets.next_change_time += (v or inf) - Config.assets.current.duration
-            # delta = Config.assets.next_change_time - time()
             delta = (v or inf) - (time() - Config.assets._last_time)
             if delta>0:
                 Config.assets._waiting_timer.set_timeout(delta)
             else:
                 Config.assets.next_a()
         return v
+
+    @field_validator('media_type', mode='before')
+    @classmethod
+    def mime_validator(cls, v):
+        if isinstance(v, str):
+            if 'image' in v:   return MediaType.image
+            elif 'video' in v: return MediaType.video
+            elif 'audio' in v: return MediaType.audio
+            else:              return MediaType.undefined
+        else:
+            return v
 
     def enable(self):
         start_loop = not Config.enabled_asset_count
@@ -206,8 +246,8 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
     _last_time = 0
     _callback = None
     _loop = None
-    _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0)
-    _first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0)
+    _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0, media_type=MediaType.web)
+    _first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0, media_type=MediaType.web)
     _waiting_evt = asyncio.Event()
     _waiting_timer = Timer(None, None)
 
@@ -246,9 +286,11 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
 
     def pop(self, index):
         #see __delitem__ for explanation
+        curr_uuid = self.current.uuid
+        if index <= self.__current: self.__current-=1
         e = super().pop(index)
 
-        if e.uuid == self.current.uuid:
+        if e.uuid == curr_uuid:
             self.next_a()
         
         self.callback()
@@ -257,9 +299,11 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
 
     def remove(self, value):
         #see __delitem__ for explanation        
+        curr_uuid = self.current.uuid
+        if self.index(value) <= self.__current: self.__current-=1
         super().remove(value)
         
-        if value.uuid == self.current.uuid:
+        if value.uuid == curr_uuid:
             self.next_a()
         
         self.callback()
@@ -276,27 +320,25 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         
         #save the uuid of the asset to remove
         uuid = self[_id].uuid
-
+        curr_uuid = self.current.uuid
+        if _id <= self.__current: self.__current-=1
         #remove the asset
         super().__delitem__(_id)
-        
         #NOW force asset change to avoid race conditions if the only enabled
         #asset is the one we want to remove and the main controller
         #is changing asset in this exact moment
-        if uuid == self.current.uuid:
-            self._nct = 0
+        if uuid == curr_uuid:
+            self.next_a()
         
         self.callback()
 
     def move(self, from_i:int, to_i:int):
         super().insert(to_i, super().pop(from_i))
+        self.callback()
         if self._current in [from_i, to_i]:
             self.goto_a(None)
-        self.callback()
 
     reset_asset_timer = _waiting_timer.reset
-
-    # def _clamp(self, n): return max(min(super().__len__()-1, n), 0)
 
     def next_a(self, force = False):
         if not (any(self) or force):
@@ -390,7 +432,6 @@ class _Config(BaseModel):
             'pass': 'pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c'
         }
     }
-    # _current:str = ''
     filename:    Union[str, Path]          = Field('/etc/unitotem/unitotem.conf', exclude=True)
     first_boot:  bool                      = Field(True, exclude=True)
 
@@ -401,6 +442,7 @@ class _Config(BaseModel):
     
     def __call__(self, *, obj=None, filename = filename, first_boot = False):
         if obj == None:
+            self.filename = filename
             with open(filename) as o:
                 obj = o.read()
         if isinstance(obj, (str,bytes,bytearray)):
@@ -453,6 +495,7 @@ class FileInfo(BaseModel):
     duration: Optional[str]
     duration_s: int = Config.def_duration
     size: str
+    mime: Optional[str]
 
 
 
@@ -561,6 +604,7 @@ class UploadManager(FileSystemEventHandler):
             'url': 'file:' + file_data.filename,
             'duration': file_data.duration_s,
             'enabled': False,
+            'media_type': file_data.mime
         })
         Config.save()
 
@@ -608,15 +652,17 @@ def human_readable_size(size, decimal_places=2):
 def get_file_info(b, *f, def_dur = Config.def_duration):
     dur = None
     dur_s = def_dur
+    mime = None
     if isfile(f := join(b, *f)):
         for track in MediaInfo.parse(f).general_tracks: # type: ignore
             track_data = track.to_data()
+            mime = track.internet_media_type
             if 'duration' in track_data:
                 dur = track_data.get('other_duration', [None])[0]
                 dur_s = ceil(int(track_data['duration'])/1000)
-                break
+            break #we only need the first general track
     return FileInfo(filename=basename(f), duration=dur, duration_s=dur_s,
-        size=human_readable_size(getsize(f)))
+        size=human_readable_size(getsize(f)), mime=mime)
 
 
 def get_dominant_color(pil_img:Image.Image, palette_size=16): # https://stackoverflow.com/a/61730849/9655651

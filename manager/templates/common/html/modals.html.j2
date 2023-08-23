@@ -38,7 +38,24 @@
                         <label for="modal_input_duration">Duration</label>
                         <small class="ms-3">Set this to 0 to display indefinitely</small>
                     </div>
-                    <div class="form-floating mb-3">
+                    <label>Object fit (only for images and videos)</label>
+                    <div class="m-0 mt-1 mb-3 border-0 d-flex justify-content-evenly" role="group">
+                        <input type="radio" class="btn-check" name="modal_fit_radio" id="modal_fit_contain" value="0" autocomplete="off" checked>
+                        <label class="btn p-0" for="modal_fit_contain"><img class="object-fit-contain border rounded" style="background-color:black;" width="136" height="76" src="data:image/svg+xml,%3Csvg%20style='font-size:%202rem;%20font-family:system-ui,-apple-system,%22Segoe%20UI%22,Roboto,%22Helvetica%20Neue%22,%22Noto%20Sans%22,%22Liberation%20Sans%22,Arial,sans-serif,%22Apple%20Color%20Emoji%22,%22Segoe%20UI%20Emoji%22,%22Segoe%20UI%20Symbol%22,%22Noto%20Color%20Emoji%22;%20-webkit-user-select:%20none;%20-moz-user-select:%20none;%20user-select:%20none;%20text-anchor:%20middle;'%20width='200'%20height='200'%20xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EPlaceholder%3C/title%3E%3Crect%20width='100%25'%20height='100%25'%20fill='%23555555'%3E%3C/rect%3E%3Ccircle%20cx='100'%20cy='100'%20r='100'%20fill='%23dee2e6'%3E%3C/circle%3E%3Ctext%20x='50%25'%20y='50%25'%20fill='%23868e96'%20dy='.3em'%3EContain%3C/text%3E%3C/svg%3E"></label>
+                        <input type="radio" class="btn-check" name="modal_fit_radio" id="modal_fit_cover" value="1" autocomplete="off">
+                        <label class="btn p-0" for="modal_fit_cover"><img class="object-fit-cover border rounded" width="136" height="76" src="data:image/svg+xml,%3Csvg%20style='font-size:%202rem;%20font-family:system-ui,-apple-system,%22Segoe%20UI%22,Roboto,%22Helvetica%20Neue%22,%22Noto%20Sans%22,%22Liberation%20Sans%22,Arial,sans-serif,%22Apple%20Color%20Emoji%22,%22Segoe%20UI%20Emoji%22,%22Segoe%20UI%20Symbol%22,%22Noto%20Color%20Emoji%22;%20-webkit-user-select:%20none;%20-moz-user-select:%20none;%20user-select:%20none;%20text-anchor:%20middle;'%20width='200'%20height='200'%20xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EPlaceholder%3C/title%3E%3Crect%20width='100%25'%20height='100%25'%20fill='%23555555'%3E%3C/rect%3E%3Ccircle%20cx='100'%20cy='100'%20r='100'%20fill='%23dee2e6'%3E%3C/circle%3E%3Ctext%20x='50%25'%20y='50%25'%20fill='%23868e96'%20dy='.3em'%3ECover%3C/text%3E%3C/svg%3E"></label>
+                        <input type="radio" class="btn-check" name="modal_fit_radio" id="modal_fit_fill" value="2" autocomplete="off">
+                        <label class="btn p-0" for="modal_fit_fill"><img class="object-fit-fill border rounded" width="136" height="76" src="data:image/svg+xml,%3Csvg%20style='font-size:%202rem;%20font-family:system-ui,-apple-system,%22Segoe%20UI%22,Roboto,%22Helvetica%20Neue%22,%22Noto%20Sans%22,%22Liberation%20Sans%22,Arial,sans-serif,%22Apple%20Color%20Emoji%22,%22Segoe%20UI%20Emoji%22,%22Segoe%20UI%20Symbol%22,%22Noto%20Color%20Emoji%22;%20-webkit-user-select:%20none;%20-moz-user-select:%20none;%20user-select:%20none;%20text-anchor:%20middle;'%20width='200'%20height='200'%20xmlns='http://www.w3.org/2000/svg'%3E%3Ctitle%3EPlaceholder%3C/title%3E%3Crect%20width='100%25'%20height='100%25'%20fill='%23555555'%3E%3C/rect%3E%3Ccircle%20cx='100'%20cy='100'%20r='100'%20fill='%23dee2e6'%3E%3C/circle%3E%3Ctext%20x='50%25'%20y='50%25'%20fill='%23868e96'%20dy='.3em'%3EFill%3C/text%3E%3C/svg%3E"></label>
+                    </div>
+                    <label>Background color (only for images and videos)</label>
+                    <div class="d-flex flex-row align-items-center gap-2 mt-1 mb-3 ms-2">
+                        <input type="color" id="modal_input_bg_color" value="#000000" oninput="modal_input.fit_contain_img.css('background-color', this.value)"/>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="modal_input_color_auto" onchange="modal_input.bg_color.enable(!this.checked).val('#000000'); modal_input.fit_contain_img.css('background-color', '#000000')">
+                            <label class="form-check-label" for="modal_input_color_auto">Auto</label>
+                        </div>
+                    </div>
+                    <div class="form-floating mt-1 mb-3">
                         <input type="datetime-local" class="form-control" id="modal_input_start" placeholder="Start">
                         <label for="modal_input_start">Enable date</label>
                     </div>

@@ -132,7 +132,6 @@
             let toast = 
                 $('<div class="toast" role="alert"></div>').append(
                     $('<div class="toast-header"></div>').append(
-                        {# $('<img src="..." class="rounded me-2" alt="...">'), #}
                         $('<strong class="me-auto"></strong>').html(title),
                         $('<small class="text-body-secondary"></small>').html(subtitle),
                         $('<button type="button" class="btn-close" data-bs-dismiss="toast"></button>'),
@@ -195,6 +194,7 @@
 
             _ws.onclose = e => {
                 connect_retry++;
+                notification('Disconnected', 'Attempting to reconnect...', );
                 console.log('Socket is closed. Reconnect will be attempted in', connect_retry, 'second(s).', e.reason);
                 if (e.reason == 'Not Authenticated') location.reload();
                 setTimeout(() => ws=connect(), connect_retry*1000);

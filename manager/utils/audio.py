@@ -24,7 +24,7 @@ def setDefaultAudioDevice(dev: str):
     with rpyc.connect('localhost') as conn, conn.modules.pulsectl.Pulse() as pulse:
         pulse.default_set(pulse.get_sink_by_name(dev))
 
-def setVolume(dev: str|None, volume: int):
+def setVolume(dev: str|None, volume: float):
     with rpyc.connect('localhost') as conn, conn.modules.pulsectl.Pulse() as pulse:
         pulse.volume_set_all_chans(pulse.get_sink_by_name(
             dev or pulse.server_info().default_sink_name), volume)

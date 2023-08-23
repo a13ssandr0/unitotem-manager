@@ -95,11 +95,16 @@
         name: $('#modal_input_name'),
         url: $('#modal_input_url'),
         duration: $('#modal_input_duration'),
+        fit_contain: $('#modal_fit_contain'),
+        fit_contain_img: $('img.object-fit-contain'),
+        fit_cover: $('#modal_fit_cover'),
+        fit_fill: $('#modal_fit_fill'),
+        bg_color: $('#modal_input_bg_color'),
+        color_auto: $('#modal_input_color_auto'),
         ena_date: $('#modal_input_start'),
         dis_date: $('#modal_input_stop'),
         submit_btn: $('#add_asset_btn')
     }
-    const invalid_input_popover = bootstrap.Popover.getOrCreateInstance(modal_input.url, {container: 'body', content: 'Invalid url', placement: 'bottom'});
     const upload_progress = $("#upload-progress");
     const progressbar = $("#upload-progress-bar");
     const fileSelector = $('<input type="file" name="files" multiple>')
@@ -166,23 +171,24 @@
         checkedfiles.each((i, e) => {e.checked = false});
     })
 
-    modal_input.url.oninput = () => sendCommand('scheduler/validate_url', {url: modal_input.url.value});
     modal_input.submit_btn.click(() => {
         if (modal_input.label.text().includes('New')){
-            sendCommand('scheduler/add_url', { items: [
-                {
-                    name: modal_input.name.val(),
-                    url: modal_input.url.val(),
-                    duration: modal_input.duration.val(),
-                    ena_date: modal_input.ena_date.val(),
-                    dis_date: modal_input.dis_date.val()
-                }
-            ]});
+            sendCommand('scheduler/add_url', { items: [{
+                name: modal_input.name.val(),
+                url: modal_input.url.val(),
+                duration: modal_input.duration.val(),
+                fit: $("[name=modal_fit_radio]:checked").val(),
+                bg_color: modal_input.color_auto[0].checked?null:modal_input.bg_color.val(),
+                ena_date: modal_input.ena_date.val(),
+                dis_date: modal_input.dis_date.val()
+            }]});
         } else {
             sendCommand('scheduler/asset/edit', {
                 name: modal_input.name.val(),
                 url: modal_input.url.val(),
                 duration: modal_input.duration.val(),
+                fit: $("[name=modal_fit_radio]:checked").val(),
+                bg_color: modal_input.color_auto[0].checked?null:modal_input.bg_color.val(),
                 ena_date: modal_input.ena_date.val(),
                 dis_date: modal_input.dis_date.val(),
                 uuid: modal_input.submit_btn.attr('data-uuid')
@@ -193,6 +199,10 @@
         modal_input.name.val('');
         modal_input.url.val('');
         modal_input.duration.val(modal_input.duration.attr('def-value'));
+        modal_input.fit_contain[0].checked=true;
+        modal_input.fit_contain_img.css('background-color', '#000000');
+        modal_input.bg_color.val('#000000').enable(true);
+        modal_input.color_auto[0].checked=false;
         modal_input.ena_date.val('');
         modal_input.dis_date.val('');
         modal_input.submit_btn.attr('data-uuid', '');
@@ -226,7 +236,19 @@
 case 'scheduler/asset':
     asset_table.empty();
     data.items.forEach((item, i) => {
-        let icon = (item.url.startsWith('file:'))?'bi-file-earmark':'bi-globe';
+        let icon = (()=>{
+            if (item.media_type == 1)
+                return 'bi-image';
+            else if (item.media_type == 2)
+                return 'bi-film';
+            else if (item.media_type == 3)
+                return 'bi-music-note-beamed';
+            else if (item.url.startsWith('file:'))
+                return 'bi-file-earmark';
+            else
+                return 'bi-globe';
+        })();
+        
         asset_table.append(
             $('<tr style="min-height:3rem;max-height:3rem;"></tr>').attr('id', item.uuid)
                 .toggleClass('table-active', item.uuid == data.current)
@@ -274,6 +296,27 @@ case 'scheduler/asset':
                                         modal_input.name.val(item.name);
                                         modal_input.url.val(item.url);
                                         modal_input.duration.val(item.duration);
+                                        switch (item.fit){
+                                            default:
+                                            case 0:
+                                                modal_input.fit_contain[0].checked=true;
+                                                break;
+                                            case 1:
+                                                modal_input.fit_cover[0].checked=true;
+                                                break;
+                                            case 2:
+                                                modal_input.fit_cover[0].checked=true;
+                                                break;
+                                        }
+                                        if (!item.bg_color){
+                                            modal_input.color_auto[0].checked = true;
+                                            modal_input.bg_color.val('#000000').enable(false);
+                                            modal_input.fit_contain_img.css('background-color', '#000000');
+                                        } else {
+                                            modal_input.color_auto[0].checked = false;
+                                            modal_input.bg_color.val(item.bg_color).enable(true);
+                                            modal_input.fit_contain_img.css('background-color', item.bg_color);
+                                        }
                                         modal_input.ena_date.val(item.ena_date);
                                         modal_input.dis_date.val(item.dis_date);
                                         modal_input.submit_btn.attr('data-uuid', item.uuid);
@@ -287,16 +330,6 @@ case 'scheduler/asset':
                 )
         )
     });
-    break;
-
-case 'scheduler/validate_url':
-    if (modal_input.url.val().length && !data.valid){
-        invalid_input_popover.show();
-        modal_input.url.addClass("border border-danger border-2");
-    } else {
-        invalid_input_popover.dispose();
-        modal_input.url.removeClass("border border-danger border-2");
-    }
     break;
 
 case 'scheduler/asset/current':
@@ -334,12 +367,6 @@ case 'settings/display/bounds':
         (data.bounds.width && data.bounds.height)?
             `${data.bounds.width}x${data.bounds.height}`:
             'Not connected');
-    break;
-
-case 'scheduler/asset/current':
-    document.getElementsByName('asset-row').forEach(element => 
-        element.classList.toggle('table-active', element.id == ('icon-' + data.uuid))
-    );
     break;
 {% endblock recv_cmds %}
 </script>
