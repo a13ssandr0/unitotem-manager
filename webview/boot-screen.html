@@ -152,8 +152,13 @@
     const boot_screen = document.getElementById('boot_screen');
     const webview     = document.getElementById('webview');
     const imageview   = document.getElementById('imageview');
+    const canvas      = document.createElement('canvas');
+    const context     = canvas.getContext('2d');
     const videoview   = document.getElementById('videoview');
     const containers  = [boot_screen, webview, imageview, videoview];
+    
+    canvas.width = 1;
+    canvas.height = 1;
 
     window.onload = async () => {
         document.body.setAttribute('r', await window.electronAPI.loadOrientation());
@@ -206,9 +211,17 @@
                     switch (data.container){
                         case 'image':
                             imageview.src = data.src;
+                            if (!data.bg_color){
+                                imageview.onload = () => {
+                                    context.drawImage(imageview, 0, 0, 1, 1);
+                                    imageview.style.backgroundColor = `rgba(${context.getImageData(0, 0, 1, 1).data.join(',')})`;
+                                    imageview.onload = null;
+                                };
+                            } else {
+                                imageview.style.backgroundColor = data.bg_color;
+                            }
                             imageview.style.display = 'flex';
                             imageview.style.objectFit = data.fit ?? 'contain';
-                            imageview.style.backgroundColor = data.bg_color ?? '#000000';
                             lastCont = data.container;
                             break;
                         case 'video':
