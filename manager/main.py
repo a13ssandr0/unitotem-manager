@@ -180,25 +180,25 @@ async def asset_edit(uuid: str,
                     bg_color:Union[Color,None,Literal[-1]] = -1,
                     ena_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
                     dis_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
-                    state:Optional[bool] = None):
+                    enabled:Optional[bool] = None):
     asset = Config.assets[uuid]
-    if name != None:
+    if name != None and asset.name != name:
         asset.name = name
-    if url != None:
+    if url != None and asset.url != url:
         asset.url = url
         asset.media_type = MediaType.undefined
-    if duration != None:
+    if duration != None and asset.duration != duration:
         asset.duration = duration
-    if fit != None:
+    if fit != None and asset.fit != fit:
         asset.fit = fit
-    if bg_color != -1:
+    if bg_color != -1 and asset.bg_color != bg_color:
         asset.bg_color = bg_color
-    if ena_date != None:
+    if ena_date != None and asset.ena_date != ena_date:
         asset.ena_date = ena_date
-    if dis_date != None:
+    if dis_date != None and asset.dis_date != dis_date:
         asset.dis_date = dis_date
-    if state != None:
-        if state: asset.enable()
+    if enabled != None and asset.enabled != enabled:
+        if enabled: asset.enable()
         else: asset.disable()
     Config.save()
 
@@ -585,7 +585,7 @@ async def webview_control_main(waiter: asyncio.Event):
             src=url,
             container=[None, 'web','image','video','audio'][asset.media_type+1],
             fit=['contain', 'cover', 'fill'][asset.fit],
-            bg_color=asset.bg_color.as_rgb() if asset.bg_color != None else '#000000'
+            bg_color=asset.bg_color.as_rgb() if asset.bg_color != None else None
         )
 
 

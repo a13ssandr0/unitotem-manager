@@ -280,7 +280,7 @@ case 'scheduler/asset':
                                 $('<input class="form-check-input" type="checkbox" role="switch">')
                                     .attr('title', (item.enabled?'Dis':'En') + 'able asset')
                                     .prop('checked', item.enabled)
-                                    .change(() => sendCommand('scheduler/asset/edit', {uuid: item.uuid, state: !item.enabled})),
+                                    .change(() => sendCommand('scheduler/asset/edit', {uuid: item.uuid, enabled: !item.enabled})),
                                 (()=>{
                                     if (!item.ena_date && !item.dis_date) return;
                                     return $('<i class="position-absolute top-100 start-0 translate-middle bi bi-clock" style="font-size:0.75rem" data-bs-toggle="tooltip" data-bs-placement="bottom"></i>')
