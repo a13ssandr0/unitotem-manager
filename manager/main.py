@@ -18,10 +18,11 @@ from time import strftime
 from traceback import format_exc, print_exc
 from typing import Annotated, Any, Literal, Optional, Union
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
+import asyncwebsockets
 
 import uvloop
 from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
-                     UploadFile, WebSocket, WebSocketDisconnect, status)
+                     UploadFile, WebSocket, WebSocketDisconnect, WebSocketException, status)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -48,6 +49,9 @@ DEFAULT_AP           = None
 DISPLAYS:list[dict]  = []
 WINDOW               = {'bounds': {}, 'orientation':-2, 'flip':-2}
 
+SHUTDOWN_EVENT       = asyncio.Event()
+
+REMOTE_WS            = WSManager(True)
 UI_WS                = WSManager(True)
 WS                   = WSManager()
 
@@ -70,11 +74,41 @@ WWW = FastAPI(
 WWW.include_router(login_router)
 
 
-
+@WWW.websocket("/remote")
+async def remote_websocket(websocket: WebSocket):
+    if Config.remote_server:
+        #immediately refuse connections if remote_server is configured (!=None)
+        #this means that this instance is running in client/slave mode
+        #and someone is trying either to connect from another client or
+        # +----------------------+ is trying to be funny and
+        # |                      | discover what happens
+        # |    OOOOOOOOO         | when the snake eats itself!
+        # |    O  *    O         |
+        # |    O  X    O         |
+        # |    OOOO    O         |
+        # |            O         |
+        # |            O         |
+        # +----------------------+
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+    
+    await REMOTE_WS.connect(websocket)
+    while True:
+        try:
+            data = await websocket.receive_text()
+            print(data)
+        except WebSocketDisconnect:
+            REMOTE_WS.disconnect(websocket)
+            break
+        except Exception:
+            print_exc()
 
 @WWW.websocket("/ui_ws")
 async def ui_websocket(websocket: WebSocket):
     global DISPLAYS, WINDOW
+    if websocket.scope['client'][0] != websocket.scope['server'][0]:
+        #prohibit external connections
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+    
     await UI_WS.connect(websocket)
     while True:
         try:
@@ -144,7 +178,7 @@ WS.add('power/shutdown')(lambda: cmd_run('/usr/sbin/poweroff'))
 WS.add('scheduler/asset')(lambda: WS.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid))
 
 @WS.add('scheduler/add_url')
-async def add_url(ws: WebSocket, items:list[str|dict] = []):
+async def add_url(items:list[str|dict] = []):
     for element in items:
         if isinstance(element, str):
             element = {'url': element}
@@ -301,6 +335,21 @@ WS.add('settings/display/getFlip')(lambda: WS.broadcast('settings/display/getFli
 @WS.add('settings/display/setFlip')
 async def settings_display_flipset(flip: int):
     await UI_WS.broadcast('setFlip', flip=flip)
+
+WS.add('settings/remote/get')(lambda: WS.broadcast('settings/remote/get', remote_server=Config.remote_server, remote_clients=list(Config.remote_clients.keys())))
+
+@WS.add('settings/remote/set')
+async def remote_mode_set(remote_server:Optional[str]):
+    if Config.remote_server == remote_server: return
+    Config.remote_server = remote_server
+    for task in asyncio.all_tasks():
+        if task.get_name() in ['page_controller','remote_control']:
+            task.cancel()
+    if remote_server:
+        asyncio.create_task(connect_to_server(remote_server))
+    else:
+        asyncio.create_task(webview_control_main())
+    Config.save()
 
 @WS.add('settings/hostname')
 async def settings_hostname(hostname: Optional[str] = None):
@@ -552,21 +601,10 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
     
     return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
 
-@WWW.api_route("/unitotem-no-assets", response_class=HTMLResponse, methods=['GET', 'HEAD'])
-async def no_assets_page(request: Request):
+@WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
+async def first_boot_page(request: Request, page:Union[Literal['first-boot'], Literal['no-assets']]):
     ip = do_ip_addr(get_default=True)
-    return TEMPLATES.TemplateResponse('no-assets.html.j2', dict(
-        request=request,
-        ut_vers=__version__,
-        os_vers=os_release()['PRETTY_NAME'],
-        ip_addr=ip['addr'][0]['addr'] if ip else None,
-        hostname=get_hostname()
-    ))
-
-@WWW.api_route("/unitotem-first-boot", response_class=HTMLResponse, methods=['GET', 'HEAD'])
-async def first_boot_page(request: Request):
-    ip = do_ip_addr(get_default=True)
-    return TEMPLATES.TemplateResponse('first-boot.html.j2', dict(
+    return TEMPLATES.TemplateResponse(f'{page}.html.j2', dict(
         request=request,
         ut_vers=__version__,
         os_vers=os_release()['PRETTY_NAME'],
@@ -575,30 +613,60 @@ async def first_boot_page(request: Request):
         wifi=DEFAULT_AP
     ))
 
-async def webview_control_main(waiter: asyncio.Event):
-    async for asset in Config.assets.iter_wait(waiter=waiter):
+
+async def connect_to_server(url:str, headers = None):
+    while not SHUTDOWN_EVENT.is_set():
+        try:
+            print('Connecting to', url)
+            async with asyncwebsockets.open_websocket(url, headers) as ws:
+                print('Connected to', url)
+                await ws.send('aaaaaaaaaaa')
+                async for evt in ws:
+                    data = loads(getattr(evt, 'data', '{}'))
+                    if 'target' in data and data.pop('target') == 'Show':
+                        await UI_WS.broadcast('Show', False, **data)
+                    if SHUTDOWN_EVENT.is_set():
+                        break
+        except asyncio.exceptions.CancelledError:
+            print('Disconnected from remote server')
+            break
+        except OSError:
+            await asyncio.sleep(5)
+        except:
+            print_exc()
+
+
+async def webview_control_main():
+    print('Starting webview controller')
+    async for asset in Config.assets.iter_wait(waiter=SHUTDOWN_EVENT):
         await WS.broadcast('scheduler/asset/current', uuid=asset.uuid)
         url = asset.url
         if url.startswith('file:'):
             url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-        await UI_WS.broadcast('Show',
+        data = dict(
             src=url,
             container=[None, 'web','image','video','audio'][asset.media_type+1],
             fit=['contain', 'cover', 'fill'][asset.fit],
             bg_color=asset.bg_color.as_rgb() if asset.bg_color != None else None
         )
+        await UI_WS.broadcast('Show', False, **data)
+        await REMOTE_WS.broadcast('Show', False, **data)
 
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('--no-gui', action='store_true', help='Start UniTotem Manager without webview gui (for testing)')
+    parser.add_argument('--bind', default='0.0.0.0:443')
+    parser.add_argument('--insecure_bind', default='0.0.0.0:80')
+    parser.add_argument('--remote')
+    parser.add_argument('--config', default='/etc/unitotem/unitotem.conf')
     parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
     cmdargs = vars(parser.parse_args())
 
 
     try:
-        Config(filename='/etc/unitotem/unitotem.conf')
+        Config(filename=cmdargs['config'])
     except FileNotFoundError:
         print('First boot or no configuration file found.')
         try:
@@ -616,10 +684,9 @@ if __name__ == "__main__":
 
     uvloop.install()
 
-    shutdown_event = asyncio.Event()
 
     loop = asyncio.get_event_loop()
-    loop.add_signal_handler(signal.SIGTERM, lambda *_: shutdown_event.set())
+    loop.add_signal_handler(signal.SIGTERM, lambda *_: SHUTDOWN_EVENT.set())
 
     Config.assets.set_callback(lambda assets, current: WS.broadcast('scheduler/asset', items=assets, current=current), loop)
 
@@ -631,25 +698,26 @@ if __name__ == "__main__":
 
     UPLOADS.scan_folder()
 
-    if not cmdargs.get('no_gui', False):
-        loop.create_task(webview_control_main(shutdown_event), name='page_controller')
+    if cmdargs.get('remote'):
+        loop.create_task(connect_to_server(cmdargs['remote']), name='remote_control')
+    elif Config.remote_server:
+        loop.create_task(connect_to_server(Config.remote_server), name='remote_control')
+    elif not cmdargs.get('no_gui', False):
+        loop.create_task(webview_control_main(), name='page_controller')
 
     async def info_loop(ws: WSManager, waiter: asyncio.Event):
         while not waiter.is_set():
             await broadcast_sysinfo(ws)
             await asyncio.sleep(3)
 
-    loop.create_task(info_loop(WS, shutdown_event), name='info_loop')
+    loop.create_task(info_loop(WS, SHUTDOWN_EVENT), name='info_loop')
 
-    loop.create_task(serve(WWW, HyperConfig().from_mapping({ # type: ignore
-        'bind': ['0.0.0.0:443'],
-        'insecure_bind': ['0.0.0.0:80'],
-        'certfile': '/etc/ssl/unitotem.pem',
-        'keyfile': '/etc/ssl/unitotem.pem',
-        'accesslog': '-',
-        'errorlog': '-',
-        'loglevel': 'INFO'
-    }), shutdown_trigger=shutdown_event.wait), name='server') # type: ignore
+    loop.create_task(serve(WWW, HyperConfig().from_mapping( # type: ignore
+        bind=[cmdargs['bind']], insecure_bind=[cmdargs['insecure_bind']],
+        certfile='/etc/ssl/unitotem.pem',
+        keyfile='/etc/ssl/unitotem.pem',
+        accesslog='-', errorlog='-', loglevel='INFO'
+    ), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server') # type: ignore
 
     loop.run_forever()
 
