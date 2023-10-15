@@ -1,0 +1,80 @@
+{% extends "settings.html.j2" %}
+
+{% block content %}
+<h4>Remote control</h4>
+<div class="form-floating mb-3" style="max-width: 33em;">
+    <select class="form-select" id="mode_selector">
+        <option value="0" selected>Server</option>
+        <option value="1">Client</option>
+    </select>
+    <label for="mode_selector">Mode</label>
+</div>
+
+<div class="input-group mb-3" style="max-width: 33em; display: none;" id="server_ip_container">
+    <div class="form-floating">
+        <input type="text" class="form-control" id="server_ip" placeholder="Server IP">
+        <label for="server_ip">Server IP</label>
+    </div>
+    <button class="btn btn-outline-success" type="button">Connect</button>
+</div>
+
+<div class="container text-center">
+    <div class="row row-cols-4" id="client_container">
+        <p class="text-muted">Clients will appear here once connected</p>
+    </div>
+</div>
+
+{% endblock content %}
+
+{% set init_cmds = ['settings/remote/get'] %}
+
+<script type="text/javascript" charset="utf-8">
+{% block js %}
+const mode_selector = $('#mode_selector');
+const server_ip_container = $('#server_ip_container');
+const server_ip = $('#server_ip_container input');
+const client_container = $('#client_container');
+
+
+$('#server_ip_container button').click(()=>{
+    sendCommand('settings/remote/set', {remote_server:server_ip.val()});
+})
+
+mode_selector.change(function(){
+    if (this.value==1){
+        server_ip_container.show();
+    } else {
+        server_ip_container.hide();
+        sendCommand('settings/remote/set', {remote_server:null});
+    }
+})
+
+{% endblock js %}
+
+{% block recv_cmds %}
+case 'settings/remote/get':
+    if (data.remote_server) {
+        mode_selector.val(1).change();
+        server_ip.val(data.remote_server);
+    } else {
+        mode_selector.val(0).change();
+        if (data.remote_clients.lenght) client_container.empty();
+        data.remote_clients.forEach((e)=>{
+            client_container.append(
+                $('<div class="col mb-3"></div>').append(
+                    $('<div class="card">').append(
+                        $('<div class="card-body">').append(
+                            $('<h5 class="card-title">Client name</h5>'),
+                            $('<h6 class="card-subtitle mb-2 text-body-secondary"></h6>').html(e),
+                            $('<a href="#" class="card-link">Disconnect</a>'),
+                            $('<a href="#" class="card-link">Disable</a>'),
+                            $('<a href="#" class="card-link">Manage</a>')
+                        )
+                    )
+                )
+            )
+        })
+    }
+    break
+{% endblock recv_cmds %}
+</script>

@@ -419,10 +419,7 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
 class _Config(BaseModel):
     model_config = ConfigDict(
         populate_by_name = True,
-        arbitrary_types_allowed=True,
-        # json_encoders = {
-        #     AssetsList: lambda al: al.model_dump()
-        # }
+        arbitrary_types_allowed=True
     )
     #TODO: switch from Field assignment to Field annotation
     assets:      AssetsList                = Field(AssetsList(), alias='urls')
@@ -432,6 +429,8 @@ class _Config(BaseModel):
             'pass': 'pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c'
         }
     }
+    remote_server:Optional[str] = None
+    remote_clients:dict[str,str] = {}
     filename:    Union[str, Path]          = Field('/etc/unitotem/unitotem.conf', exclude=True)
     first_boot:  bool                      = Field(True, exclude=True)
 
@@ -452,6 +451,8 @@ class _Config(BaseModel):
         self.assets = AssetsList(obj.assets)
         self.def_duration = obj.def_duration
         self.users = obj.users
+        self.remote_clients = obj.remote_clients
+        self.remote_server = obj.remote_server
         self.first_boot = first_boot
 
 

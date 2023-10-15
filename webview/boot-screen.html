@@ -166,7 +166,7 @@
     };
 
     function connect() {
-        var _ws = new WebSocket(`wss://localhost/ui_ws`);
+        var _ws = new WebSocket(`wss://localhost:4433/ui_ws`);
         _ws.onopen = async event => {
             // PAGE INIT
             sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
