@@ -1,6 +1,5 @@
 __all__ = [
     "Asset",
-    "CFG_FILE",
     "Config",
     "FileInfo",
     "FitEnum",
@@ -15,11 +14,13 @@ __all__ = [
 
 
 import asyncio
+import os
 from asyncio import iscoroutinefunction
 from datetime import datetime
 from enum import IntEnum
+from ipaddress import IPv4Address
 from math import ceil, inf
-from os import remove
+from os import environ, remove
 from os.path import basename, getsize, isfile, join
 from pathlib import Path
 from shutil import disk_usage
@@ -29,22 +30,32 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from aiofiles import open as aopen
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from dotenv import load_dotenv, set_key
 from PIL import Image
 from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field,
-                      PrivateAttr, field_serializer, field_validator,
-                      model_validator)
+                      PositiveInt, PrivateAttr, field_serializer,
+                      field_validator, model_validator)
 from pydantic_extra_types.color import Color
 from pymediainfo import MediaInfo
 from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+from . import constants as const
 from .async_timer import Timer
 
-CFG_FILE = Path('/etc/unitotem/unitotem.conf')
+load_dotenv(const.envfile)
+
+if 'instance_id' not in environ:
+    environ['instance_id'] = os.urandom(16).hex()
+    const.envfile.touch(mode=0o600)
+    set_key(const.envfile, 'instance_id', environ['instance_id'])
+
 
 _buf_size = 64 * 1024 * 1024 #64MB buffer
-_def_dur = 30
 
 
 TIMERS:dict[str,dict[str,Timer]] = {}
@@ -71,12 +82,12 @@ class MediaType(IntEnum):
 class Asset(BaseModel):
     name:str = ''
     url:str
-    duration:Union[int,float] = Field(default_factory=lambda: Config.def_duration if 'Config' in globals() else _def_dur, ge=0)
+    duration:Union[int,float] = Field(default_factory=lambda: Config.def_duration if 'Config' in globals() else const.def_duration, ge=0)
     enabled:bool = False
     fit:FitEnum = FitEnum.contain
     bg_color:Optional[Color] = None
     media_type:MediaType = MediaType.undefined
-    uuid:str = Field(default_factory=lambda: uuid4().__str__(), frozen=True)
+    uuid:str = Field(default_factory=lambda: os.urandom(16).hex(), frozen=True)
 
     ena_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None
     _ena_date_old:Optional[datetime] = PrivateAttr(None)
@@ -423,21 +434,49 @@ class _Config(BaseModel):
     )
     #TODO: switch from Field assignment to Field annotation
     assets:      AssetsList                = Field(AssetsList(), alias='urls')
-    def_duration:int                       = Field(_def_dur, alias='default_duration', ge=0)
+    def_duration:int                       = Field(const.def_duration, alias='default_duration', ge=0)
     users:       dict[str, dict[str, str]] = {
         'admin': { #default user: name=admin; password=admin (pre-hashed)
             'pass': 'pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c'
         }
     }
-    remote_server:Optional[str] = None
-    remote_clients:dict[str,str] = {}
-    filename:    Union[str, Path]          = Field('/etc/unitotem/unitotem.conf', exclude=True)
-    first_boot:  bool                      = Field(True, exclude=True)
+    remote_server_ip:  Optional[IPv4Address]     = None
+    remote_server_port:PositiveInt                 = const.default_port_secure
+    remote_server_id:  Optional[str]               = None
+    remote_server_pk:  Optional[rsa.RSAPublicKey]  = None
+    rsa_pk:            rsa.RSAPrivateKey           = Field(default_factory=lambda: rsa.generate_private_key(65537,4096))
+    remote_clients:    dict[str,dict[str,str|int]] = {}
+    filename:          Union[str, Path]            = Field(const.default_config_file, exclude=True)
+    first_boot:        bool                        = Field(True, exclude=True)
 
     @field_validator('assets', mode='before')
     @classmethod
     def validate_assets(cls, val):
         return AssetsList(val)
+    
+    @field_validator('rsa_pk', mode='before')
+    @classmethod
+    def validate_rsa_pk(cls, pk):
+        if pk:
+            return serialization.load_pem_private_key(pk.encode(), password=None)
+
+    @field_serializer('rsa_pk')
+    def rsa_pk_serializer(self, rsa_pk: rsa.RSAPrivateKey):
+        return rsa_pk.private_bytes(encoding=serialization.Encoding.PEM,
+                             format=serialization.PrivateFormat.TraditionalOpenSSL,
+                             encryption_algorithm=serialization.NoEncryption()).decode()
+    
+    @field_validator('remote_server_pk', mode='before')
+    @classmethod
+    def validate_remote_server_pk(cls, pk):
+        if pk:
+            return serialization.load_pem_public_key(pk.encode())
+
+    @field_serializer('remote_server_pk')
+    def remote_server_pk_serializer(self, rsa_pk: rsa.RSAPublicKey):
+        if rsa_pk:
+            return rsa_pk.public_bytes(encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo).decode()
     
     def __call__(self, *, obj=None, filename = filename, first_boot = False):
         if obj == None:
@@ -451,12 +490,18 @@ class _Config(BaseModel):
         self.assets = AssetsList(obj.assets)
         self.def_duration = obj.def_duration
         self.users = obj.users
+        self.remote_server_ip = obj.remote_server_ip
+        self.remote_server_port = obj.remote_server_port
+        self.remote_server_id = obj.remote_server_id
+        self.remote_server_pk = obj.remote_server_pk
+        self.rsa_pk = obj.rsa_pk
         self.remote_clients = obj.remote_clients
-        self.remote_server = obj.remote_server
         self.first_boot = first_boot
 
 
-    def save(self, path:Union[str, Path] = CFG_FILE):
+    def save(self, path:Union[None, str, Path] = None):
+        if path is None:
+            path = self.filename
         with open(path, 'w') as conf_f:
             conf_f.write(self.model_dump_json(indent=4))
         self.filename = path
@@ -475,6 +520,12 @@ class _Config(BaseModel):
 
     def authenticate(self, user:str, password:str):
         return check_password_hash(self.users.get(user, {}).get('pass', ''), password)
+    
+    def associate_client(self, pub_key: str, ip: str):
+        _id = os.urandom(16).hex()
+        self.remote_clients[_id] = {'pk': pub_key, 'ip': ip}
+        self.save()
+        return _id
 
     @property
     def enabled_asset_count(self):
@@ -568,7 +619,7 @@ class UploadManager(FileSystemEventHandler):
             filename = Path(filename)
 
         filename = self._folder.joinpath(
-            secure_filename(filename.name) or uuid4().hex[:8]
+            secure_filename(filename.name) or os.urandom(4).hex()
         )
         # allow files with duplicate filenames, simply add a number at the end
         if filename.exists():

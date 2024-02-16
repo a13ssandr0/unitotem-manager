@@ -1,28 +1,33 @@
-__author__ = 'Alessandro Campolo (a13ssandr0)'
-__version__ = '3.0.0'
-
-
 import asyncio
+import base64
 import signal
+import warnings
 from argparse import ArgumentParser
 from datetime import datetime
 from io import BytesIO
+from ipaddress import IPv4Address
 from json import dumps, loads
-from os.path import dirname, exists, join
-from pathlib import Path
+from os import environ
+from os.path import exists
 from platform import freedesktop_os_release as os_release
 from platform import node as get_hostname
 from subprocess import run as cmd_run
 from threading import Thread
 from time import strftime
 from traceback import format_exc, print_exc
-from typing import Annotated, Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union, cast
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
-import asyncwebsockets
 
+import asyncwebsockets
+import requests
+import urllib3
 import uvloop
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
-                     UploadFile, WebSocket, WebSocketDisconnect, WebSocketException, status)
+                     UploadFile, WebSocket, WebSocketDisconnect,
+                     WebSocketException, status)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -35,13 +40,16 @@ from jwt import InvalidSignatureError
 from natsort import natsorted
 from psutil import (cpu_count, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
-from pydantic import BeforeValidator
+from pydantic import BeforeValidator, PositiveInt
 from pydantic_extra_types.color import Color
 from utils import *
 from watchdog.observers import Observer
 from werkzeug.utils import secure_filename
+from wsproto.events import CloseConnection
 
-APT_THREAD           = Thread(target=apt_update, name='update')
+warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
+
+# APT_THREAD           = Thread(target=apt_update, name='update')
 
 DEF_WIFI_CARD        = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP           = None
@@ -55,16 +63,18 @@ REMOTE_WS            = WSManager(True)
 UI_WS                = WSManager(True)
 WS                   = WSManager()
 
-TEMPLATES            = Jinja2Templates(directory=join(dirname(__file__), 'templates'), extensions=['jinja2.ext.do'])
+REMOTE_CONNECTED     = False
+
+TEMPLATES            = Jinja2Templates(const.templates_folder, extensions=['jinja2.ext.do'])
 TEMPLATES.env.filters['flatten'] = flatten
-UPLOADS              = UploadManager(Path(__file__).parent.joinpath('uploaded'), lambda x: WS.broadcast('scheduler/file', files=x))
+UPLOADS              = UploadManager(const.uploads_folder, lambda x: WS.broadcast('scheduler/file', files=x))
 
 WWW = FastAPI(
-    title='UniTotem', version=__version__,
+    title='UniTotem', version=const.__version__,
     middleware=[Middleware(HTTPSRedirectMiddleware)],
     routes=[
-        Mount('/static', StaticFiles(directory=join(dirname(__file__), 'static')), name='static'),
-        Mount('/uploaded', StaticFiles(directory=UPLOADS.folder), name='uploaded')
+        Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
+        Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded')
     ],
     exception_handlers={
         InvalidSignatureError: login_redir,
@@ -76,7 +86,7 @@ WWW.include_router(login_router)
 
 @WWW.websocket("/remote")
 async def remote_websocket(websocket: WebSocket):
-    if Config.remote_server:
+    if Config.remote_server_ip:
         #immediately refuse connections if remote_server is configured (!=None)
         #this means that this instance is running in client/slave mode
         #and someone is trying either to connect from another client or
@@ -91,7 +101,18 @@ async def remote_websocket(websocket: WebSocket):
         # +----------------------+
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
     
+    if not websocket.client or not 'instance_id' in websocket.headers:
+        return
+    
     await REMOTE_WS.connect(websocket)
+    
+    Config.remote_clients[websocket.headers['instance_id']] = {
+        'ip': websocket.client.host,
+        'port': websocket.headers.get('port', const.default_port_secure),
+        'hostname': websocket.headers.get('hostname', websocket.headers['instance_id'])
+    }
+    Config.save()
+
     while True:
         try:
             data = await websocket.receive_text()
@@ -101,6 +122,13 @@ async def remote_websocket(websocket: WebSocket):
             break
         except Exception:
             print_exc()
+
+@WWW.get("/remote/public_key")
+async def get_public_key():
+    return Response(Config.rsa_pk.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ), media_type="text/plain")
 
 @WWW.websocket("/ui_ws")
 async def ui_websocket(websocket: WebSocket):
@@ -171,9 +199,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 
-WS.add('power/reboot')(lambda: cmd_run('/usr/sbin/reboot'))
+WS.add('power/reboot')(lambda: cmd_run(['/usr/bin/systemctl', 'reboot', '-i']))
 
-WS.add('power/shutdown')(lambda: cmd_run('/usr/sbin/poweroff'))
+WS.add('power/shutdown')(lambda: cmd_run(['/usr/bin/systemctl', 'poweroff', '-i']))
 
 WS.add('scheduler/asset')(lambda: WS.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid))
 
@@ -274,29 +302,29 @@ async def settings_default_duration(duration: Optional[int] = None):
         Config.save()
     await WS.broadcast('settings/default_duration', duration=Config.def_duration)
 
-@WS.add('settings/update')
-async def settings_update(do_upgrade: bool = False):
-    global APT_THREAD
-    if not APT_THREAD.is_alive():
-        loop = asyncio.get_running_loop()
-        def apt():
-            for line in apt_update(do_upgrade):
-                if line == True:
-                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/start', upgrading=do_upgrade), loop)
-                elif line == False:
-                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/end', upgrading=do_upgrade), loop)
-                elif isinstance(line, tuple):
-                    asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/progress', upgrading=do_upgrade, is_stdout=line[0], data=line[1]), loop)
+# @WS.add('settings/update')
+# async def settings_update(do_upgrade: bool = False):
+#     global APT_THREAD
+#     if not APT_THREAD.is_alive():
+#         loop = asyncio.get_running_loop()
+#         def apt():
+#             for line in apt_update(do_upgrade):
+#                 if line == True:
+#                     asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/start', upgrading=do_upgrade), loop)
+#                 elif line == False:
+#                     asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/end', upgrading=do_upgrade), loop)
+#                 elif isinstance(line, tuple):
+#                     asyncio.run_coroutine_threadsafe(WS.broadcast('settings/update/progress', upgrading=do_upgrade, is_stdout=line[0], data=line[1]), loop)
 
-        APT_THREAD = Thread(target=apt, name=('upgrade' if do_upgrade else 'update'))
-        APT_THREAD.start()
-        await WS.broadcast('settings/update/status', status=APT_THREAD.name, log=get_apt_log())
+#         APT_THREAD = Thread(target=apt, name=('upgrade' if do_upgrade else 'update'))
+#         APT_THREAD.start()
+#         await WS.broadcast('settings/update/status', status=APT_THREAD.name, log=get_apt_log())
 
-WS.add('settings/update/list')(lambda: WS.broadcast('settings/update/list', updates=apt_list_upgrades()))
+# WS.add('settings/update/list')(lambda: WS.broadcast('settings/update/list', updates=apt_list_upgrades()))
 
-WS.add('settings/update/reboot_required')(lambda: WS.broadcast('settings/update/reboot_required', reboot=reboot_required()))
+# WS.add('settings/update/reboot_required')(lambda: WS.broadcast('settings/update/reboot_required', reboot=reboot_required()))
         
-WS.add('settings/update/status')(lambda: WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log()))
+# WS.add('settings/update/status')(lambda: WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log()))
 
 @WS.add('settings/audio/default')
 async def settings_audio_default(device: Optional[str] = None):
@@ -336,20 +364,46 @@ WS.add('settings/display/getFlip')(lambda: WS.broadcast('settings/display/getFli
 async def settings_display_flipset(flip: int):
     await UI_WS.broadcast('setFlip', flip=flip)
 
-WS.add('settings/remote/get')(lambda: WS.broadcast('settings/remote/get', remote_server=Config.remote_server, remote_clients=list(Config.remote_clients.keys())))
+WS.add('settings/remote/get')(lambda: WS.broadcast('settings/remote/get',
+                                                   remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+                                                   remote_connected=REMOTE_CONNECTED,
+                                                   remote_port=Config.remote_server_port,
+                                                   remote_clients=list(Config.remote_clients.items())))
 
 @WS.add('settings/remote/set')
-async def remote_mode_set(remote_server:Optional[str]):
-    if Config.remote_server == remote_server: return
-    Config.remote_server = remote_server
+async def remote_mode_set(remote_server:Optional[IPv4Address], remote_port: Optional[PositiveInt] = const.default_port_secure):
+    remote_port = remote_port or const.default_port_secure
+    if Config.remote_server_ip == remote_server and Config.remote_server_port == remote_port: return
+    Config.remote_server_ip = remote_server
+    Config.remote_server_port = remote_port
+    Config.remote_server_pk = None
+    Config.save()
     for task in asyncio.all_tasks():
         if task.get_name() in ['page_controller','remote_control']:
             task.cancel()
     if remote_server:
-        asyncio.create_task(connect_to_server(remote_server))
+        asyncio.create_task(connect_to_server(remote_server, remote_port), name='remote_control')
     else:
-        asyncio.create_task(webview_control_main())
-    Config.save()
+        asyncio.create_task(webview_control_main(), name='page_controller')
+    await WS.broadcast('settings/remote/get',
+                        remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+                        remote_connected=REMOTE_CONNECTED,
+                        remote_port=Config.remote_server_port,
+                        remote_clients=list(Config.remote_clients.items()))
+
+@WS.add('settings/remote/disconnect')
+async def remote_disconnect(client: str):
+    for remote in REMOTE_WS.active_connections:
+        if remote.headers['instance_id'] == client:
+            await remote.close(code=4023, reason="Server forced disconnection")
+            REMOTE_WS.disconnect(remote)
+            del Config.remote_clients[remote.headers['instance_id']]
+            await WS.broadcast('settings/remote/get',
+                remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+                remote_connected=REMOTE_CONNECTED,
+                remote_port=Config.remote_server_port,
+                remote_clients=list(Config.remote_clients.items()))
+
 
 @WS.add('settings/hostname')
 async def settings_hostname(hostname: Optional[str] = None):
@@ -466,7 +520,7 @@ async def media_upload(files: list[UploadFile]):
 async def create_backup(include_uploaded: bool = False):
     CRONTAB.read()
     config_backup = {
-        "version": __version__,
+        "version": const.__version__,
         "CONFIG": Config.model_dump_json(),
         "hostname": get_hostname(),
         "def_audio_dev": getDefaultAudioDevice(),
@@ -547,7 +601,7 @@ async def factory_reset():
 async def scheduler(request: Request, username:str = Depends(LOGMAN)):
     return TEMPLATES.TemplateResponse('index.html.j2', dict(
         request=request,
-        ut_vers=__version__,
+        ut_vers=const.__version__,
         logged_user=username,
         hostname=get_hostname(),
         disp_size=WINDOW['bounds'],
@@ -568,7 +622,7 @@ async def login_page(request: Request, src:Optional[str] = '/'):
     return TEMPLATES.TemplateResponse('login.html.j2', dict(
         request=request,
         src=src,
-        ut_vers=__version__,
+        ut_vers=const.__version__,
         os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname()
@@ -579,7 +633,7 @@ async def login_page(request: Request, src:Optional[str] = '/'):
 async def settings(request: Request, tab: str = 'main_menu', username: str = Depends(LOGMAN)):
     data:dict[str, Any] = dict(
         request=request,
-        ut_vers=__version__,
+        ut_vers=const.__version__,
         logged_user=username,
         cur_tab=tab,
         disp_size=WINDOW['bounds'],
@@ -606,7 +660,7 @@ async def first_boot_page(request: Request, page:Union[Literal['first-boot'], Li
     ip = do_ip_addr(get_default=True)
     return TEMPLATES.TemplateResponse(f'{page}.html.j2', dict(
         request=request,
-        ut_vers=__version__,
+        ut_vers=const.__version__,
         os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
         hostname=get_hostname(),
@@ -614,26 +668,63 @@ async def first_boot_page(request: Request, page:Union[Literal['first-boot'], Li
     ))
 
 
-async def connect_to_server(url:str, headers = None):
+async def connect_to_server(ip:IPv4Address, port:PositiveInt = const.default_port_secure, headers:dict = {}):
+    global REMOTE_CONNECTED
+    url = f'wss://{ip}:{port}/remote'
+    headers.setdefault("instance_id", environ['instance_id'])
+    headers.setdefault("hostname", get_hostname())
+    headers.setdefault("port", cmdargs['bind'].split(':')[1])
     while not SHUTDOWN_EVENT.is_set():
         try:
             print('Connecting to', url)
-            async with asyncwebsockets.open_websocket(url, headers) as ws:
+            if Config.remote_server_pk is None:
+                server_pk = requests.get(f'https://{ip}:{port}/remote/public_key', verify=False).content
+                Config.remote_server_pk = cast(rsa.RSAPublicKey, serialization.load_pem_public_key(server_pk))
+                Config.save()
+            async with asyncwebsockets.open_websocket(url, list(headers.items())) as ws:
+                REMOTE_CONNECTED = True
                 print('Connected to', url)
-                await ws.send('aaaaaaaaaaa')
-                async for evt in ws:
-                    data = loads(getattr(evt, 'data', '{}'))
-                    if 'target' in data and data.pop('target') == 'Show':
+                while True:
+                    msg = await ws._next_event()
+                    if isinstance(msg, CloseConnection):
+                        if msg.code == 4023: #Server forced disconnection for unpairing
+                            REMOTE_CONNECTED = False
+                            #decorated function accepts a websocket as first argument, but we don't either have or need one
+                            #the type checking of the IDE reports an error in the syntax due to a exceeding number of arguments
+                            #so we just suppress the error
+                            await remote_mode_set(None, remote_server=None, remote_port=None) #type: ignore
+                            return
+                        break
+                    data = loads(getattr(msg, 'data', '{}'))
+                    if 'target' in data and '__signature__' in data:
+                        Config.remote_server_pk.verify(
+                            base64.b64decode(data['__signature__'].encode()),
+                            data['src'].encode(),
+                            padding.PSS(
+                                mgf=padding.MGF1(hashes.SHA256()),
+                                salt_length=padding.PSS.MAX_LENGTH
+                            ),
+                            hashes.SHA256()
+                        )
+                    if data.pop('target') == 'Show':
                         await UI_WS.broadcast('Show', False, **data)
                     if SHUTDOWN_EVENT.is_set():
                         break
         except asyncio.exceptions.CancelledError:
             print('Disconnected from remote server')
             break
-        except OSError:
+        except InvalidSignature:
+            print('Invalid signature, disconnected from server')
+            await asyncio.sleep(5)
+        except OSError as e:
+            if e.args[0] == 'All connection attempts failed':
+                print('Server unavailable, retrying in 5 seconds...')
+            else:
+                print_exc()
             await asyncio.sleep(5)
         except:
             print_exc()
+        REMOTE_CONNECTED = False
 
 
 async def webview_control_main():
@@ -657,11 +748,11 @@ async def webview_control_main():
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('--no-gui', action='store_true', help='Start UniTotem Manager without webview gui (for testing)')
-    parser.add_argument('--bind', default='0.0.0.0:443')
-    parser.add_argument('--insecure_bind', default='0.0.0.0:80')
+    parser.add_argument('--bind', default=const.default_bind_secure)
+    parser.add_argument('--insecure_bind', default=const.default_bind)
     parser.add_argument('--remote')
-    parser.add_argument('--config', default='/etc/unitotem/unitotem.conf')
-    parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
+    parser.add_argument('--config', default=const.default_config_file)
+    parser.add_argument('--version', action='version', version='%(prog)s ' + const.__version__)
     cmdargs = vars(parser.parse_args())
 
 
@@ -679,8 +770,9 @@ if __name__ == "__main__":
             print("Couldn't start wifi hotspot.")
             print_exc()
 
+    REMOTE_WS.pk = Config.rsa_pk
 
-    APT_THREAD.start()
+    # APT_THREAD.start()
 
     uvloop.install()
 
@@ -698,10 +790,11 @@ if __name__ == "__main__":
 
     UPLOADS.scan_folder()
 
-    if cmdargs.get('remote'):
-        loop.create_task(connect_to_server(cmdargs['remote']), name='remote_control')
-    elif Config.remote_server:
-        loop.create_task(connect_to_server(Config.remote_server), name='remote_control')
+    # if cmdargs.get('remote'):
+    #     loop.create_task(connect_to_server(cmdargs['remote']), name='remote_control')
+    # el
+    if Config.remote_server_ip:
+        loop.create_task(connect_to_server(Config.remote_server_ip, Config.remote_server_port), name='remote_control')
     elif not cmdargs.get('no_gui', False):
         loop.create_task(webview_control_main(), name='page_controller')
 
@@ -713,9 +806,8 @@ if __name__ == "__main__":
     loop.create_task(info_loop(WS, SHUTDOWN_EVENT), name='info_loop')
 
     loop.create_task(serve(WWW, HyperConfig().from_mapping( # type: ignore
-        bind=[cmdargs['bind']], insecure_bind=[cmdargs['insecure_bind']],
-        certfile='/etc/ssl/unitotem.pem',
-        keyfile='/etc/ssl/unitotem.pem',
+        bind=cmdargs['bind'], insecure_bind=cmdargs['insecure_bind'],
+        certfile=const.certfile, keyfile=const.keyfile,
         accesslog='-', errorlog='-', loglevel='INFO'
     ), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server') # type: ignore
 
@@ -724,4 +816,4 @@ if __name__ == "__main__":
     stop_hostpot()
 
     observer.stop()
-    APT_THREAD.join()
+    # APT_THREAD.join()

@@ -1,6 +1,7 @@
 aiofiles
 aiohttp
 asyncwebsockets
+cryptography
 fastapi
 fastapi_login
 hypercorn
@@ -18,6 +19,7 @@ python_crontab
 python-dotenv
 python-multipart
 qrcode
+requests
 rpyc
 ruamel.yaml
 uvloop

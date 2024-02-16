@@ -10,6 +10,7 @@ __all__ = [
 
 
 from datetime import datetime
+import os
 from os.path import exists
 from re import compile
 from select import select
@@ -39,7 +40,7 @@ class UniCron(CronTab):
         if cmd:
             item = super().new(
                 '/usr/sbin/' + ('poweroff' if cmd == 'pwr' else 'reboot'),  #command
-                'unitotem:-)' + str(uuid4())                                #comment
+                'unitotem:-)' + os.urandom(16).hex()                        #comment
             )
             if None not in [m, h, dom, mon, dow]:
                 item.setall(m,h,dom,mon,dow) #time
@@ -62,7 +63,7 @@ class UniCron(CronTab):
 
 
 
-CRONTAB  = UniCron(user='root')
+CRONTAB  = UniCron()#user='root')
 
 
 #https://serverfault.com/questions/300749/apt-get-update-upgrade-list-without-changing-anything

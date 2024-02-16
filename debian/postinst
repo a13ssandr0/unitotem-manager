@@ -3,8 +3,11 @@
 if [ "$1" == "configure" ] && [ -z "$2" ]; then
 	# if $2 is null we are installing, run first setting code
 	echo "Creating virtual environment for UniTotem and installing required dependencies"
-	python3 -m venv /var/unitotem-venv --system-site-packages
-	/var/unitotem-venv/bin/pip3 install python-crontab requests validators decorator qrcode PyChromeDevTools pymediainfo ruamel.yaml pillow
+	python3 -m venv /var/unitotem-venv --system-site-packages --copy
+	setcap CAP_NET_BIND_SERVICE=+eip /var/unitotem-venv/bin/python
+	setcap CAP_NET_BIND_SERVICE=+eip /var/unitotem-venv/bin/python3
+	/var/unitotem-venv/bin/pip3 install -r #TODO requirements.txt
+	# /var/unitotem-venv/bin/pip3 install python-crontab requests validators decorator qrcode PyChromeDevTools pymediainfo ruamel.yaml pillow
 	# fastapi, (starlette), uvicorn, python-multipart, jinja2, Werkzeug, websockets
 
 

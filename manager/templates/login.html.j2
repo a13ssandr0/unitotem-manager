@@ -1,3 +1,5 @@
+{% set bs_theme = ['light', 'dark'][1] -%}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,7 +21,6 @@
             align-items: center;
             padding-top: 40px;
             padding-bottom: 40px;
-            background-color: #f5f5f5;
         }
 
         .form-signin {
@@ -44,7 +45,8 @@
         }
     </style>
 </head>
-<body class="text-center">
+
+<body class="text-center bg-body-tertiary" data-bs-theme="{{bs_theme}}">
     <main class="form-signin w-100 m-auto">
         <form action="/auth/token" method="post">
             <h1 class="h2 mb-4 fw-normal">Please sign in</h1>

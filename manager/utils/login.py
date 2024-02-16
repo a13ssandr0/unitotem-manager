@@ -22,15 +22,14 @@ from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
 
 from .models import Config
+from . import constants as const
 
-_envfile = Path('/etc/unitotem/unitotem.env')
-
-load_dotenv(_envfile)
+load_dotenv(const.envfile)
 
 if 'auth_token' not in environ:
     environ['auth_token'] = urandom(24).hex()
-    _envfile.touch(mode=0o600)
-    set_key(_envfile, 'auth_token', environ['auth_token'])
+    const.envfile.touch(mode=0o600)
+    set_key(const.envfile, 'auth_token', environ['auth_token'])
 
 
 class NotAuthenticatedException(Exception):
