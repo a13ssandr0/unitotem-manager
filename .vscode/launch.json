@@ -11,9 +11,9 @@
             "program": "${workspaceFolder}/manager/main.py",
             "args": [],
             "console": "integratedTerminal",
-            "preLaunchTask": "userProc",
+            // "preLaunchTask": "userProc",
             "justMyCode": false,
-            "sudo": true
+            // "sudo": true
         },
         {
             "name": "Manager (slave)",
@@ -28,9 +28,9 @@
                 "--remote", "wss://127.0.0.1/remote"
             ],
             "console": "integratedTerminal",
-            "preLaunchTask": "userProc",
+            // "preLaunchTask": "userProc",
             "justMyCode": false,
-            "sudo": true
+            // "sudo": true
         },
         {
             "name": "Electron",

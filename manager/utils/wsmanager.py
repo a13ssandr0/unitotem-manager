@@ -2,14 +2,21 @@ __all__ = ['WSManager']
 
 
 
+from base64 import b64encode
 from functools import wraps
 from inspect import isawaitable
 from json import dumps
+from typing import Optional
+
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from fastapi import WebSocket
 from pydantic import validate_call
 
-from fastapi import WebSocket
 
 class WSManager:
+    pk: Optional[RSAPrivateKey] = None
 
     def __init__(self, cache_last=False):
         self.active_connections: list[WebSocket] = []
@@ -38,18 +45,29 @@ class WSManager:
         except ValueError:
             pass #it's not necessary to crash if not present
 
+    def prepare_message(self, msg:dict, nocache=False):
+        if self.pk:
+            msg['__signature__'] = b64encode(self.pk.sign(
+                msg['src'].encode(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )).decode()
+        text = dumps(msg)
+        if self.last != None and not nocache:
+            self.last[msg['target']] = text
+        return text
+
     async def send(self, websocket: WebSocket, target: str, nocache=False, **kwargs):
-        text = dumps({'target': target, **kwargs})
+        text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         await websocket.send_text(text)
-        if self.last != None and nocache != True:
-            self.last[target] = text
 
     async def broadcast(self, target: str, nocache=False, **kwargs):
-        text = dumps({'target': target, **kwargs})
+        text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         for connection in self.active_connections:
             await connection.send_text(text)
-        if self.last != None and nocache != True:
-            self.last[target] = text
 
     
     handlers = {}

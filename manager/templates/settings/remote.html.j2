@@ -15,10 +15,21 @@
         <input type="text" class="form-control" id="server_ip" placeholder="Server IP">
         <label for="server_ip">Server IP</label>
     </div>
+    <div class="form-floating">
+        <input type="text" class="form-control" id="server_port" placeholder="Server port">
+        <label for="server_port">Server port</label>
+    </div>
     <button class="btn btn-outline-success" type="button">Connect</button>
 </div>
 
-<div class="container text-center">
+<div class="container mx-0 text-center" style="max-width: 33em; display: none;" id="server_info_container">
+    <div class="d-flex flex-row">
+        <p class="flex-grow-1 text-muted my-auto"></p>
+        <button class="btn btn-outline-danger" type="button">Disconnect</button>
+    </div>
+</div>
+
+<div class="container mx-0 text-center">
     <div class="row row-cols-4" id="client_container">
         <p class="text-muted">Clients will appear here once connected</p>
     </div>
@@ -32,22 +43,34 @@
 {% block js %}
 const mode_selector = $('#mode_selector');
 const server_ip_container = $('#server_ip_container');
-const server_ip = $('#server_ip_container input');
+const server_ip = $('#server_ip');
+const server_port = $('#server_port');
+const server_info_container = $('#server_info_container');
+const server_info = $('#server_info_container p');
 const client_container = $('#client_container');
 
 
 $('#server_ip_container button').click(()=>{
-    sendCommand('settings/remote/set', {remote_server:server_ip.val()});
-})
+    sendCommand('settings/remote/set', {
+        remote_server:server_ip.val(),
+        remote_port:server_port.val() || null
+    });
+});
+
+$('#server_info_container button').click(()=>{
+    sendCommand('settings/remote/set', {remote_server:null});
+});
 
 mode_selector.change(function(){
     if (this.value==1){
         server_ip_container.show();
+        client_container.hide();
     } else {
         server_ip_container.hide();
+        client_container.show();
         sendCommand('settings/remote/set', {remote_server:null});
     }
-})
+});
 
 {% endblock js %}
 
@@ -55,21 +78,35 @@ mode_selector.change(function(){
 case 'settings/remote/get':
     if (data.remote_server) {
         mode_selector.val(1).change();
+        if (data.remote_connected) {
+            server_ip_container.hide();
+            server_info_container.show();
+        } else {
+            server_ip_container.show();
+            server_info_container.hide();
+        }
         server_ip.val(data.remote_server);
+        server_port.val(data.remote_port);
+        server_info.html(`Connected to ${data.remote_server}:${data.remote_port}`);
     } else {
         mode_selector.val(0).change();
-        if (data.remote_clients.lenght) client_container.empty();
-        data.remote_clients.forEach((e)=>{
+        server_info_container.hide();
+        if (data.remote_clients.length) client_container.empty();
+        data.remote_clients.forEach(([id, prop])=>{
             client_container.append(
                 $('<div class="col mb-3"></div>').append(
                     $('<div class="card">').append(
                         $('<div class="card-body">').append(
-                            $('<h5 class="card-title">Client name</h5>'),
-                            $('<h6 class="card-subtitle mb-2 text-body-secondary"></h6>').html(e),
-                            $('<a href="#" class="card-link">Disconnect</a>'),
-                            $('<a href="#" class="card-link">Disable</a>'),
-                            $('<a href="#" class="card-link">Manage</a>')
-                        )
+                            $('<h5 class="card-title"></h5>').html(prop.hostname),
+                            $('<h6 class="card-subtitle mb-2 text-body-secondary"></h6>').html(`${prop.ip}:${prop.port}`),
+                            $('<button type="button" class="btn btn-sm btn-primary">Disconnect</button>').click(()=>{
+                                sendCommand('settings/remote/disconnect', {client:id});
+                            }),
+                            {# $('<a href="#" class="card-link">Disable</a>'), #}
+                            $('<a type="button" class="btn btn-sm btn-primary ms-1" target="_blank" rel="noopener noreferrer">Manage</a>')
+                                    .prop('href', `https://${prop.ip}:${prop.port}/settings`)
+                        ),
+                        $('<div class="card-footer text-body-secondary m-0 p-0 px-1 text-truncate"></div>').append($('<small></small>').html(id))
                     )
                 )
             )
