@@ -27,7 +27,6 @@
 <!-- Reuse code from uploadfile when restoring backup -->
 <!-- Split file upload in helper functions: file save, file load in assets/config -->
 <!-- Allow asset enabling schedule (date/time) -->
-Periodically check that apt list file is enabled
 <!-- Handle 'reset' command in electron -->
 Allow drag-n-drop files
 Show confirmation on command execution (success popup/notification)
@@ -39,7 +38,7 @@ Show confirmation on command execution (success popup/notification)
 Screensaver for touch panels
 
 Allow Multiuser
-Create a server that controls multiple clients
+<!-- Create a server that controls multiple clients -->
 
 Add display power control:
 - CEC
