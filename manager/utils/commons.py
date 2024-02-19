@@ -11,4 +11,5 @@ from .models import UploadManager
 
 TEMPLATES = Jinja2Templates(templates_folder, extensions=['jinja2.ext.do'])
 
-UPLOADS = UploadManager(uploads_folder, lambda x: WS.broadcast('scheduler/file', files=x))
+# noinspection PyTypeChecker
+UPLOADS: UploadManager = None

@@ -73,123 +73,123 @@ WWW.include_router(ws_endpoints_router)
 
 
 
-WS.add('power/reboot')(lambda: cmd_run(['/usr/bin/systemctl', 'reboot', '-i']))
+# WS.add('power/reboot')(lambda: cmd_run(['/usr/bin/systemctl', 'reboot', '-i']))
 
-WS.add('power/shutdown')(lambda: cmd_run(['/usr/bin/systemctl', 'poweroff', '-i']))
+# WS.add('power/shutdown')(lambda: cmd_run(['/usr/bin/systemctl', 'poweroff', '-i']))
 
-WS.add('scheduler/asset')(
-    lambda: WS.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid))
-
-
-@WS.add('scheduler/add_url')
-async def add_url(items: list[str | dict] = []):
-    for element in items:
-        if isinstance(element, str):
-            element = {'url': element}
-        element.pop('uuid', None)  # uuid MUST be generated internally
-        Config.assets.append(element)
-    Config.save()
+# WS.add('scheduler/asset')(
+#     lambda: WS.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid))
 
 
-@WS.add('scheduler/add_file')
-async def add_file(ws: WebSocket, items: list[str | dict] = []):
-    invalid = []
-    for element in items:
-        if isinstance(element, str):
-            element = {'url': element}
-        if element['url'] in UPLOADS.filenames:  # type: ignore
-            Config.assets.append({
-                'url': 'file:' + element['url'],
-                'name': element['url'],
-                'duration': element.get('duration', UPLOADS.files_info[element['url']].duration_s),
-                'enabled': element.get('enabled', False),
-                'media_type': element.get('media_type', UPLOADS.files_info[element['url']].mime)
-            })
-        else:
-            invalid.append(element)
-    Config.save()
-    if invalid:
-        await WS.send(ws, 'scheduler/add_file', error='Invalid elements', extra=invalid)
+# @WS.add('scheduler/add_url')
+# async def add_url(items: list[str | dict] = []):
+#     for element in items:
+#         if isinstance(element, str):
+#             element = {'url': element}
+#         element.pop('uuid', None)  # uuid MUST be generated internally
+#         Config.assets.append(element)
+#     Config.save()
 
 
-@WS.add('scheduler/asset/edit')
-async def asset_edit(uuid: str,
-                     name: Optional[str] = None,
-                     url: Optional[str] = None,
-                     duration: Optional[Union[int, float]] = None,
-                     fit: Optional[FitEnum] = None,
-                     bg_color: Union[Color, None, Literal[-1]] = -1,
-                     ena_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
-                     dis_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
-                     enabled: Optional[bool] = None):
-    asset = Config.assets[uuid]
-    if name is not None and asset.name != name:
-        asset.name = name
-    if url is not None and asset.url != url:
-        asset.url = url
-        asset.media_type = MediaType.undefined
-    if duration is not None and asset.duration != duration:
-        asset.duration = duration
-    if fit is not None and asset.fit != fit:
-        asset.fit = fit
-    if bg_color != -1 and asset.bg_color != bg_color:
-        asset.bg_color = bg_color
-    if ena_date is not None and asset.ena_date != ena_date:
-        asset.ena_date = ena_date
-    if dis_date is not None and asset.dis_date != dis_date:
-        asset.dis_date = dis_date
-    if enabled is not None and asset.enabled != enabled:
-        if enabled:
-            asset.enable()
-        else:
-            asset.disable()
-    Config.save()
+# @WS.add('scheduler/add_file')
+# async def add_file(ws: WebSocket, items: list[str | dict] = []):
+#     invalid = []
+#     for element in items:
+#         if isinstance(element, str):
+#             element = {'url': element}
+#         if element['url'] in UPLOADS.filenames:  # type: ignore
+#             Config.assets.append({
+#                 'url': 'file:' + element['url'],
+#                 'name': element['url'],
+#                 'duration': element.get('duration', UPLOADS.files_info[element['url']].duration_s),
+#                 'enabled': element.get('enabled', False),
+#                 'media_type': element.get('media_type', UPLOADS.files_info[element['url']].mime)
+#             })
+#         else:
+#             invalid.append(element)
+#     Config.save()
+#     if invalid:
+#         await WS.send(ws, 'scheduler/add_file', error='Invalid elements', extra=invalid)
 
 
-@WS.add('scheduler/asset/current')
-async def asset_current():
-    if Config.enabled_asset_count:
-        await WS.broadcast('scheduler/asset/current', uuid=Config.assets.current.uuid)
+# @WS.add('scheduler/asset/edit')
+# async def asset_edit(uuid: str,
+#                      name: Optional[str] = None,
+#                      url: Optional[str] = None,
+#                      duration: Optional[Union[int, float]] = None,
+#                      fit: Optional[FitEnum] = None,
+#                      bg_color: Union[Color, None, Literal[-1]] = -1,
+#                      ena_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
+#                      dis_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
+#                      enabled: Optional[bool] = None):
+#     asset = Config.assets[uuid]
+#     if name is not None and asset.name != name:
+#         asset.name = name
+#     if url is not None and asset.url != url:
+#         asset.url = url
+#         asset.media_type = MediaType.undefined
+#     if duration is not None and asset.duration != duration:
+#         asset.duration = duration
+#     if fit is not None and asset.fit != fit:
+#         asset.fit = fit
+#     if bg_color != -1 and asset.bg_color != bg_color:
+#         asset.bg_color = bg_color
+#     if ena_date is not None and asset.ena_date != ena_date:
+#         asset.ena_date = ena_date
+#     if dis_date is not None and asset.dis_date != dis_date:
+#         asset.dis_date = dis_date
+#     if enabled is not None and asset.enabled != enabled:
+#         if enabled:
+#             asset.enable()
+#         else:
+#             asset.disable()
+#     Config.save()
 
 
-@WS.add('scheduler/delete')
-async def asset_delete(uuid: str):
-    del Config.assets[uuid]
-    Config.save()
+# @WS.add('scheduler/asset/current')
+# async def asset_current():
+#     if Config.enabled_asset_count:
+#         await WS.broadcast('scheduler/asset/current', uuid=Config.assets.current.uuid)
+#
+#
+# @WS.add('scheduler/delete')
+# async def asset_delete(uuid: str):
+#     del Config.assets[uuid]
+#     Config.save()
+#
+#
+# WS.add('scheduler/file')(lambda: WS.broadcast('scheduler/file', files=UPLOADS.serialize()))
+#
+#
+# @WS.add('scheduler/delete_file')
+# async def file_delete(files: list[str]):
+#     for file in files:
+#         UPLOADS.remove(file)
+#     Config.save()
+#
+#
+# @WS.add('scheduler/goto')
+# async def playlist_goto(index: Union[None, int, str] = None):
+#     Config.assets.goto_a(index)
 
 
-WS.add('scheduler/file')(lambda: WS.broadcast('scheduler/file', files=UPLOADS.serialize()))
+# WS.add('scheduler/goto/back')(lambda: Config.assets.prev_a())
+#
+# WS.add('scheduler/goto/next')(lambda: Config.assets.next_a())
 
 
-@WS.add('scheduler/delete_file')
-async def file_delete(files: list[str]):
-    for file in files:
-        UPLOADS.remove(file)
-    Config.save()
+# @WS.add('scheduler/reorder')
+# async def playlist_reorder(from_i: int, to_i: int):
+#     Config.assets.move(from_i, to_i)
+#     Config.save()
 
 
-@WS.add('scheduler/goto')
-async def playlist_goto(index: Union[None, int, str] = None):
-    Config.assets.goto_a(index)
-
-
-WS.add('scheduler/goto/back')(lambda: Config.assets.prev_a())
-
-WS.add('scheduler/goto/next')(lambda: Config.assets.next_a())
-
-
-@WS.add('scheduler/reorder')
-async def playlist_reorder(from_i: int, to_i: int):
-    Config.assets.move(from_i, to_i)
-    Config.save()
-
-
-@WS.add('settings/default_duration')
-async def settings_default_duration(duration: Optional[int] = None):
-    if duration is not None:
-        Config.def_duration = duration
-        Config.save()
-    await WS.broadcast('settings/default_duration', duration=Config.def_duration)
+# @WS.add('settings/default_duration')
+# async def settings_default_duration(duration: Optional[int] = None):
+#     if duration is not None:
+#         Config.def_duration = duration
+#         Config.save()
+#     await WS.broadcast('settings/default_duration', duration=Config.def_duration)
 
 
 # @WS.add('settings/update')
@@ -216,201 +216,201 @@ async def settings_default_duration(duration: Optional[int] = None):
 
 # WS.add('settings/update/status')(lambda: WS.broadcast('settings/update/status', status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log()))
 
-@WS.add('settings/audio/default')
-async def settings_audio_default(device: Optional[str] = None):
-    if device is not None:
-        setDefaultAudioDevice(device)
-    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
+# @WS.add('settings/audio/default')
+# async def settings_audio_default(device: Optional[str] = None):
+#     if device is not None:
+#         setDefaultAudioDevice(device)
+#     await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
 
-WS.add('settings/audio/devices')(lambda: WS.broadcast('settings/audio/devices', devices=getAudioDevices()))
+# WS.add('settings/audio/devices')(lambda: WS.broadcast('settings/audio/devices', devices=getAudioDevices()))
 
 
-@WS.add('settings/audio/volume')
-async def settings_audio_volume(device: Optional[str] = None, volume: Optional[float] = None):
-    if volume is not None:
-        setVolume(device, volume)
-    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
+# @WS.add('settings/audio/volume')
+# async def settings_audio_volume(device: Optional[str] = None, volume: Optional[float] = None):
+#     if volume is not None:
+#         setVolume(device, volume)
+#     await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
+#
+#
+# @WS.add('settings/audio/mute')
+# async def settings_audio_mute(device: Optional[str] = None, mute: Optional[bool] = None):
+#     if mute is not None:
+#         setMute(device, mute)
+#     await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
 
 
-@WS.add('settings/audio/mute')
-async def settings_audio_mute(device: Optional[str] = None, mute: Optional[bool] = None):
-    if mute is not None:
-        setMute(device, mute)
-    await WS.broadcast('settings/audio/devices', devices=getAudioDevices())
+# WS.add('settings/display/getBounds')(lambda: WS.broadcast('settings/display/getBounds', **WINDOW['bounds']))
+#
+#
+# @WS.add('settings/display/setBounds')
+# async def settings_display_boundsset(x: int, y: int, width: int, height: int):
+#     await UI_WS.broadcast('setBounds', x=x, y=y, width=width, height=height)
+#
+#
+# WS.add('settings/display/getOrientation')(
+#     lambda: WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation']))
+#
+#
+# @WS.add('settings/display/setOrientation')
+# async def settings_display_orientationset(orientation: int):
+#     await UI_WS.broadcast('setOrientation', orientation=orientation)
+#
+#
+# WS.add('settings/display/getFlip')(lambda: WS.broadcast('settings/display/getFlip', flip=WINDOW['flip']))
+#
+#
+# @WS.add('settings/display/setFlip')
+# async def settings_display_flipset(flip: int):
+#     await UI_WS.broadcast('setFlip', flip=flip)
 
 
-WS.add('settings/display/getBounds')(lambda: WS.broadcast('settings/display/getBounds', **WINDOW['bounds']))
+# WS.add('settings/remote/get')(lambda: WS.broadcast('settings/remote/get',
+#                                                    remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+#                                                    remote_connected=REMOTE_CONNECTED,
+#                                                    remote_port=Config.remote_server_port,
+#                                                    remote_clients=list(Config.remote_clients.items())))
 
 
-@WS.add('settings/display/setBounds')
-async def settings_display_boundsset(x: int, y: int, width: int, height: int):
-    await UI_WS.broadcast('setBounds', x=x, y=y, width=width, height=height)
+# @WS.add('settings/remote/set')
+# async def remote_mode_set(remote_server: Optional[IPv4Address],
+#                           remote_port: Optional[PositiveInt] = const.default_port_secure):
+#     remote_port = remote_port or const.default_port_secure
+#     if Config.remote_server_ip == remote_server and Config.remote_server_port == remote_port:
+#         return
+#     Config.remote_server_ip = remote_server
+#     Config.remote_server_port = remote_port
+#     Config.remote_server_pk = None
+#     Config.save()
+#     for task in asyncio.all_tasks():
+#         if task.get_name() in ['page_controller', 'remote_control']:
+#             task.cancel()
+#     if remote_server:
+#         # noinspection PyAsyncCall
+#         asyncio.create_task(connect_to_server(remote_server, remote_port), name='remote_control')
+#     else:
+#         # noinspection PyAsyncCall
+#         asyncio.create_task(webview_control_main(), name='page_controller')
+#     await WS.broadcast('settings/remote/get',
+#                        remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+#                        remote_connected=REMOTE_CONNECTED,
+#                        remote_port=Config.remote_server_port,
+#                        remote_clients=list(Config.remote_clients.items()))
 
 
-WS.add('settings/display/getOrientation')(
-    lambda: WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation']))
+# @WS.add('settings/remote/disconnect')
+# async def remote_disconnect(client: str):
+#     for remote in REMOTE_WS.active_connections:
+#         if remote.headers['instance_id'] == client:
+#             await remote.close(code=4023, reason="Server forced disconnection")
+#             REMOTE_WS.disconnect(remote)
+#             del Config.remote_clients[remote.headers['instance_id']]
+#             await WS.broadcast('settings/remote/get',
+#                                remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+#                                remote_connected=REMOTE_CONNECTED,
+#                                remote_port=Config.remote_server_port,
+#                                remote_clients=list(Config.remote_clients.items()))
 
 
-@WS.add('settings/display/setOrientation')
-async def settings_display_orientationset(orientation: int):
-    await UI_WS.broadcast('setOrientation', orientation=orientation)
+# @WS.add('settings/hostname')
+# async def settings_hostname(hostname: Optional[str] = None):
+#     if hostname is not None:
+#         set_hostname(hostname)
+#     await WS.broadcast('settings/hostname', hostname=get_hostname())
+#
+#
+# WS.add('settings/get_wifis')(lambda: WS.broadcast('settings/get_wifis', wifis=get_wifis()))
 
 
-WS.add('settings/display/getFlip')(lambda: WS.broadcast('settings/display/getFlip', flip=WINDOW['flip']))
+# @WS.add('settings/netplan/file/new')
+# async def settings_netpfile_new(filename: str):
+#     create_netplan(filename)
+#     await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+#
+#
+# @WS.add('settings/netplan/file/set')
+# async def settings_netpfile_set(ws: WebSocket, filename: Optional[str] = None, content: str = '', apply: bool = True):
+#     global DEFAULT_AP
+#     if filename is not None:
+#         res = set_netplan(secure_filename(filename), content, apply)
+#     else:
+#         res = generate_netplan(apply)
+#     # noinspection PySimplifyBooleanCheck
+#     if res is True:
+#         if DEFAULT_AP and do_ip_addr(True):  # AP is still enabled, but now we are connected, AP is no longer needed
+#             stop_hostpot()
+#             DEFAULT_AP = None
+#             Config.assets.next_a()
+#     elif isinstance(res, str):
+#         await WS.send(ws, 'error', error='Netplan error', extra=res)
+#     await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+#
+#
+# @WS.add('settings/netplan/file/get')
+# async def settings_netpfile_get(filename: Optional[str] = None):
+#     netplan_files = get_netplan_file_list()
+#     if filename is not None:
+#         if filename in netplan_files:
+#             await WS.broadcast('settings/netplan/file/get', files={filename: get_netplan_file(filename)})
+#     await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in netplan_files})
 
 
-@WS.add('settings/display/setFlip')
-async def settings_display_flipset(flip: int):
-    await UI_WS.broadcast('setFlip', flip=flip)
+# @WS.add('settings/netplan/file/del')
+# async def settings_netpfile_del(ws: WebSocket, filename: Optional[str] = None, apply: bool = True):
+#     res = del_netplan_file(filename, apply)
+#     if isinstance(res, str):
+#         await WS.send(ws, 'error', error='Netplan error', extra=res)
+#     await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
 
-WS.add('settings/remote/get')(lambda: WS.broadcast('settings/remote/get',
-                                                   remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
-                                                   remote_connected=REMOTE_CONNECTED,
-                                                   remote_port=Config.remote_server_port,
-                                                   remote_clients=list(Config.remote_clients.items())))
-
-
-@WS.add('settings/remote/set')
-async def remote_mode_set(remote_server: Optional[IPv4Address],
-                          remote_port: Optional[PositiveInt] = const.default_port_secure):
-    remote_port = remote_port or const.default_port_secure
-    if Config.remote_server_ip == remote_server and Config.remote_server_port == remote_port:
-        return
-    Config.remote_server_ip = remote_server
-    Config.remote_server_port = remote_port
-    Config.remote_server_pk = None
-    Config.save()
-    for task in asyncio.all_tasks():
-        if task.get_name() in ['page_controller', 'remote_control']:
-            task.cancel()
-    if remote_server:
-        # noinspection PyAsyncCall
-        asyncio.create_task(connect_to_server(remote_server, remote_port), name='remote_control')
-    else:
-        # noinspection PyAsyncCall
-        asyncio.create_task(webview_control_main(), name='page_controller')
-    await WS.broadcast('settings/remote/get',
-                       remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
-                       remote_connected=REMOTE_CONNECTED,
-                       remote_port=Config.remote_server_port,
-                       remote_clients=list(Config.remote_clients.items()))
-
-
-@WS.add('settings/remote/disconnect')
-async def remote_disconnect(client: str):
-    for remote in REMOTE_WS.active_connections:
-        if remote.headers['instance_id'] == client:
-            await remote.close(code=4023, reason="Server forced disconnection")
-            REMOTE_WS.disconnect(remote)
-            del Config.remote_clients[remote.headers['instance_id']]
-            await WS.broadcast('settings/remote/get',
-                               remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
-                               remote_connected=REMOTE_CONNECTED,
-                               remote_port=Config.remote_server_port,
-                               remote_clients=list(Config.remote_clients.items()))
-
-
-@WS.add('settings/hostname')
-async def settings_hostname(hostname: Optional[str] = None):
-    if hostname is not None:
-        set_hostname(hostname)
-    await WS.broadcast('settings/hostname', hostname=get_hostname())
-
-
-WS.add('settings/get_wifis')(lambda: WS.broadcast('settings/get_wifis', wifis=get_wifis()))
-
-
-@WS.add('settings/netplan/file/new')
-async def settings_netpfile_new(filename: str):
-    create_netplan(filename)
-    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
-
-
-@WS.add('settings/netplan/file/set')
-async def settings_netpfile_set(ws: WebSocket, filename: Optional[str] = None, content: str = '', apply: bool = True):
-    global DEFAULT_AP
-    if filename is not None:
-        res = set_netplan(secure_filename(filename), content, apply)
-    else:
-        res = generate_netplan(apply)
-    # noinspection PySimplifyBooleanCheck
-    if res is True:
-        if DEFAULT_AP and do_ip_addr(True):  # AP is still enabled, but now we are connected, AP is no longer needed
-            stop_hostpot()
-            DEFAULT_AP = None
-            Config.assets.next_a()
-    elif isinstance(res, str):
-        await WS.send(ws, 'error', error='Netplan error', extra=res)
-    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
-
-
-@WS.add('settings/netplan/file/get')
-async def settings_netpfile_get(filename: Optional[str] = None):
-    netplan_files = get_netplan_file_list()
-    if filename is not None:
-        if filename in netplan_files:
-            await WS.broadcast('settings/netplan/file/get', files={filename: get_netplan_file(filename)})
-    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in netplan_files})
-
-
-@WS.add('settings/netplan/file/del')
-async def settings_netpfile_del(ws: WebSocket, filename: Optional[str] = None, apply: bool = True):
-    res = del_netplan_file(filename, apply)
-    if isinstance(res, str):
-        await WS.send(ws, 'error', error='Netplan error', extra=res)
-    await WS.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
-
-
-@WS.add('settings/cron/job')
-async def settings_cronjob_get():
-    CRONTAB.read()
-    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-
-@WS.add('settings/cron/job/add')
-async def settings_cronjob_add(cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
-    CRONTAB.read()
-    if CRONTAB.new(cmd, m, h, dom, mon, dow):
-        CRONTAB.write()
-    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-
-@WS.add('settings/cron/job/set_state')
-async def settings_cronjob_state_set(ws: WebSocket, job: str, state: bool):
-    CRONTAB.read()
-    try:
-        next(CRONTAB.find_comment(job)).enable(state)
-        CRONTAB.write()
-    except StopIteration:
-        await WS.send(ws, 'error', error='Not found', extra='Requested job does not exist')
-    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-
-@WS.add('settings/cron/job/delete')
-async def settings_cronjob_delete(job: str):
-    CRONTAB.read()
-    CRONTAB.remove_all(comment=job)
-    CRONTAB.write()
-    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-
-@WS.add('settings/cron/job/edit')
-async def settings_cronjob_edit(ws: WebSocket, job: str, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
-    CRONTAB.read()
-    try:
-        _job = next(CRONTAB.find_comment(job))
-        if all([x is not None for x in [m, h, dom, mon, dow]]):
-            _job.setall(m, h, dom, mon, dow)
-        if cmd == 'pwr':
-            _job.set_command('/usr/sbin/poweroff')
-        elif cmd == 'reb':
-            _job.set_command('/usr/sbin/reboot')
-        CRONTAB.write()
-    except StopIteration:
-        await WS.send(ws, 'error', error='Not found', extra='Requested job does not exist')
-    await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+# @WS.add('settings/cron/job')
+# async def settings_cronjob_get():
+#     CRONTAB.read()
+#     await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+#
+#
+# @WS.add('settings/cron/job/add')
+# async def settings_cronjob_add(cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
+#     CRONTAB.read()
+#     if CRONTAB.new(cmd, m, h, dom, mon, dow):
+#         CRONTAB.write()
+#     await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+#
+#
+# @WS.add('settings/cron/job/set_state')
+# async def settings_cronjob_state_set(ws: WebSocket, job: str, state: bool):
+#     CRONTAB.read()
+#     try:
+#         next(CRONTAB.find_comment(job)).enable(state)
+#         CRONTAB.write()
+#     except StopIteration:
+#         await WS.send(ws, 'error', error='Not found', extra='Requested job does not exist')
+#     await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+#
+#
+# @WS.add('settings/cron/job/delete')
+# async def settings_cronjob_delete(job: str):
+#     CRONTAB.read()
+#     CRONTAB.remove_all(comment=job)
+#     CRONTAB.write()
+#     await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+#
+#
+# @WS.add('settings/cron/job/edit')
+# async def settings_cronjob_edit(ws: WebSocket, job: str, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
+#     CRONTAB.read()
+#     try:
+#         _job = next(CRONTAB.find_comment(job))
+#         if all([x is not None for x in [m, h, dom, mon, dow]]):
+#             _job.setall(m, h, dom, mon, dow)
+#         if cmd == 'pwr':
+#             _job.set_command('/usr/sbin/poweroff')
+#         elif cmd == 'reb':
+#             _job.set_command('/usr/sbin/reboot')
+#         CRONTAB.write()
+#     except StopIteration:
+#         await WS.send(ws, 'error', error='Not found', extra='Requested job does not exist')
+#     await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
 
 @WWW.post("/api/scheduler/upload", status_code=status.HTTP_201_CREATED, dependencies=[Depends(LOGMAN)])
