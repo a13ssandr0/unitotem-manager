@@ -1,4 +1,7 @@
+from inspect import isclass, isgeneratorfunction, iscoroutinefunction
 from json import dumps
+from os.path import join
+from subprocess import run as cmd_run
 from traceback import print_exc, format_exc
 from typing import Any
 
@@ -7,12 +10,64 @@ from fastapi import APIRouter, WebSocketException, Request, status, WebSocket, W
 import utils.constants as const
 from utils.models import Config
 from utils.security import LOGMAN, NotAuthenticatedException
-from wsmanager import WSManager
+from .wsmanager import WSManager
+from utils.system import Settings
 
 router = APIRouter()
 REMOTE_WS = WSManager(True)
 UI_WS = WSManager(True)
 WS = WSManager()
+
+
+# noinspection PyUnresolvedReferences
+class WebSocketAPI:
+    def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
+        self.__ws = ws
+        self.__ui_ws = ui_ws
+        self.__remote_ws = remote_ws
+        from ws_api.scheduler import Scheduler
+
+    def treegen(self, cls: type, prefix: str = None):
+        classname = cls.__name__
+        print("Class:", classname)
+        if prefix is None:
+            prefix = classname
+        else:
+            prefix = join(prefix, classname)
+
+        cal = {}
+        gen = {}
+        awa = {}
+
+        for att in dir(cls):
+            if not att.startswith('__'):
+                a = cls().__getattribute__(att)
+                if callable(a):
+                    if isclass(a):
+                        c, g, a = self.treegen(a, prefix)
+                        cal.update(c)
+                        gen.update(g)
+                        awa.update(a)
+                    elif isgeneratorfunction(a):
+                        print("Generator:", att)
+                        gen[join(prefix, att).lower()] = a
+                    elif iscoroutinefunction(a):
+                        print("Awaitable:", att)
+                        awa[join(prefix, att).lower()] = a
+                    else:
+                        print("Callable:", att)
+                        cal[join(prefix, att).lower()] = a
+
+        return cal, gen, awa
+
+    class Power:
+        @staticmethod
+        def reboot():
+            cmd_run(['/usr/bin/systemctl', 'reboot', '-i'])
+
+        @staticmethod
+        def poweroff():
+            cmd_run(['/usr/bin/systemctl', 'poweroff', '-i'])
 
 
 @router.websocket("/ws")
