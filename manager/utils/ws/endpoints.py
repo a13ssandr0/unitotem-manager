@@ -10,8 +10,7 @@ from fastapi import APIRouter, WebSocketException, Request, status, WebSocket, W
 import utils.constants as const
 from utils.models import Config
 from utils.security import LOGMAN, NotAuthenticatedException
-from .wsmanager import WSManager
-from utils.system import Settings
+from .wsmanager import WSManager, WSAPIBase
 
 router = APIRouter()
 REMOTE_WS = WSManager(True)
@@ -21,14 +20,27 @@ WS = WSManager()
 
 # noinspection PyUnresolvedReferences
 class WebSocketAPI:
+    callables = {}
+    generators = {}
+    awaitables = {}
+
     def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
         self.__ws = ws
         self.__ui_ws = ui_ws
         self.__remote_ws = remote_ws
-        from ws_api.scheduler import Scheduler
+        self.load_class(self.Power)
 
-    def treegen(self, cls: type, prefix: str = None):
-        classname = cls.__name__
+    def load_class(self, cls: type, prefix: str = None):
+        if not issubclass(cls, WSAPIBase):
+            raise ValueError("Class is not a subclass of WSAPIBase")
+
+        cal, gen, awa = self.__treegen(cls, prefix)
+        self.callables.update(cal)
+        self.generators.update(gen)
+        self.awaitables.update(awa)
+
+    def __treegen(self, Cls: type, prefix: str = None):
+        classname = Cls.__name__
         print("Class:", classname)
         if prefix is None:
             prefix = classname
@@ -39,12 +51,14 @@ class WebSocketAPI:
         gen = {}
         awa = {}
 
+        cls = Cls(self.__ws, self.__ui_ws, self.__remote_ws)
+
         for att in dir(cls):
             if not att.startswith('__'):
-                a = cls().__getattribute__(att)
+                a = cls.__getattribute__(att)
                 if callable(a):
                     if isclass(a):
-                        c, g, a = self.treegen(a, prefix)
+                        c, g, a = self.__treegen(a, prefix)
                         cal.update(c)
                         gen.update(g)
                         awa.update(a)
@@ -60,7 +74,12 @@ class WebSocketAPI:
 
         return cal, gen, awa
 
-    class Power:
+    class Power(WSAPIBase):
+        @staticmethod
+        def test_method(txt='test'):
+            print(txt)
+            return txt
+
         @staticmethod
         def reboot():
             cmd_run(['/usr/bin/systemctl', 'reboot', '-i'])
@@ -68,6 +87,18 @@ class WebSocketAPI:
         @staticmethod
         def poweroff():
             cmd_run(['/usr/bin/systemctl', 'poweroff', '-i'])
+
+
+api = WebSocketAPI(WS, UI_WS, REMOTE_WS)
+from utils.scheduler import Scheduler
+api.load_class(Scheduler)
+from utils.audio import Audio
+api.load_class(Audio, 'settings')
+from utils.network import Settings
+api.load_class(Settings)
+from utils.system import Cron
+api.load_class(Cron, 'settings')
+print()
 
 
 @router.websocket("/ws")
@@ -180,3 +211,26 @@ async def ui_websocket(websocket: WebSocket):
         except WebSocketDisconnect:
             UI_WS.disconnect(websocket)
             break
+
+
+class Display(WSAPIBase):
+    async def getBounds(self):
+        await self.ws.broadcast('settings/display/getBounds', **WINDOW['bounds'])
+
+    async def setBounds(self, x: int, y: int, width: int, height: int):
+        await self.ui_ws.broadcast('setBounds', x=x, y=y, width=width, height=height)
+
+    async def getOrientation(self):
+        await self.ws.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
+
+    async def setOrientation(self, orientation: int):
+        await self.ui_ws.broadcast('setOrientation', orientation=orientation)
+
+    async def getFlip(self):
+        await self.ws.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
+
+    async def setFlip(self, flip: int):
+        await self.ui_ws.broadcast('setFlip', flip=flip)
+
+
+api.load_class(Display, 'settings')
