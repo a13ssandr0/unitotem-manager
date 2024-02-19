@@ -27,14 +27,12 @@ from shutil import disk_usage
 from time import time
 from typing import Annotated, Callable, Coroutine, Optional, Union
 from urllib.parse import urlsplit
-from uuid import uuid4
 
+from PIL import Image
 from aiofiles import open as aopen
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from dotenv import load_dotenv, set_key
-from PIL import Image
 from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field,
                       PositiveInt, PrivateAttr, field_serializer,
                       field_validator, model_validator)
@@ -608,11 +606,11 @@ class UploadManager(FileSystemEventHandler):
                 self._files.append(file)
                 self._files_info[file.name] = get_file_info(file)
         self._disk_used = disk_usage(self._folder).used
-        if self._callback != None and self._evloop != None:
+        if self._callback is not None and self._evloop is not None:
             asyncio.run_coroutine_threadsafe(self._callback(self.serialize()), self._evloop)
 
     def create_filename(self, filename: Union[str, Path, None]):
-        if filename == None:
+        if filename is None:
             filename = ''
         
         if isinstance(filename, str):

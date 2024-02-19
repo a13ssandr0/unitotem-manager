@@ -9,21 +9,20 @@ __all__ = [
 
 
 
-from datetime import datetime
 import os
+from datetime import datetime
 from os.path import exists
 from re import compile
 from select import select
 from subprocess import PIPE, Popen, run
 from time import time
-from uuid import uuid4
 
 from crontab import CronTab
 from psutil import (boot_time, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
 
+from utils.ws.wsmanager import WSManager
 from .cpu import cpu_times_percent
-from .wsmanager import WSManager
 
 upgradableRe = compile(r"(?P<package>.*)/(?P<origin>.*?) (?P<new_version>.*?) (?P<architecture>.*?) \[upgradable from: (?P<old_version>.*?)]")
 

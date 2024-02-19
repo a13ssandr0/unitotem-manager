@@ -1,7 +1,5 @@
 __all__ = ['WSManager']
 
-
-
 from base64 import b64encode
 from functools import wraps
 from inspect import isawaitable
@@ -29,13 +27,13 @@ class WSManager:
         # viewer for whatever reason restarts)
         #
         # if we need caching, last is initialized to something different from None
-        # this way we avoid usind two variables: one for setting and the other
+        # this way we avoid using two variables: one for setting and the other
         # for actual caching
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        if self.last != None:
+        if self.last is not None:
             for cmd in self.last.values():
                 await websocket.send_text(cmd)
 
@@ -43,9 +41,9 @@ class WSManager:
         try:
             self.active_connections.remove(websocket)
         except ValueError:
-            pass #it's not necessary to crash if not present
+            pass  # it's not necessary to crash if not present
 
-    def prepare_message(self, msg:dict, nocache=False):
+    def prepare_message(self, msg: dict, nocache=False):
         if self.pk:
             msg['__signature__'] = b64encode(self.pk.sign(
                 msg['src'].encode(),
@@ -56,7 +54,7 @@ class WSManager:
                 hashes.SHA256()
             )).decode()
         text = dumps(msg)
-        if self.last != None and not nocache:
+        if self.last is not None and not nocache:
             self.last[msg['target']] = text
         return text
 
@@ -69,27 +67,29 @@ class WSManager:
         for connection in self.active_connections:
             await connection.send_text(text)
 
-    
     handlers = {}
 
     def add(self, target: str, **validator_kwargs):
         validator_kwargs.setdefault('arbitrary_types_allowed', True)
+
         def decorator(func):
-            
+
             if WebSocket in func.__annotations__.values() or \
                     (callable(func) and func.__name__ == "<lambda>" and func.__code__.co_posonlyargcount):
-                #lambda functions with websocket parameter must declare it as the
-                #first positional only argument
-                func = validate_call(func, config=validator_kwargs) # type: ignore
+                # lambda functions with websocket parameter must declare it as the
+                # first positional only argument
+                func = validate_call(func, config=validator_kwargs)  # type: ignore
+
                 @wraps(func)
-                async def wrapper(caller_ws, *args, **kwargs): # type: ignore
+                async def wrapper(caller_ws, *args, **kwargs):  # type: ignore
                     f = func(caller_ws, *args, **kwargs)
                     if isawaitable(f):
                         return await f
                     else:
                         return f
             else:
-                func = validate_call(func, config=validator_kwargs) # type: ignore
+                func = validate_call(func, config=validator_kwargs)  # type: ignore
+
                 @wraps(func)
                 async def wrapper(_, *args, **kwargs):
                     f = func(*args, **kwargs)
@@ -97,9 +97,9 @@ class WSManager:
                         return await f
                     else:
                         return f
-            
+
             self.handlers[target] = wrapper
-            
+
             return wrapper
-        
+
         return decorator

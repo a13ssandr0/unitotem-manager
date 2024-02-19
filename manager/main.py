@@ -4,18 +4,15 @@ import signal
 import warnings
 from argparse import ArgumentParser
 from datetime import datetime
-from io import BytesIO
 from ipaddress import IPv4Address
-from json import dumps, loads
+from json import loads
 from os import environ
 from os.path import exists
 from platform import freedesktop_os_release as os_release
 from platform import node as get_hostname
 from subprocess import run as cmd_run
-from time import strftime
-from traceback import format_exc, print_exc
+from traceback import print_exc
 from typing import Annotated, Any, Literal, Optional, Union, cast
-from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
 import asyncwebsockets
 import requests
@@ -24,15 +21,12 @@ import uvloop
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from fastapi import (Body, Depends, FastAPI, HTTPException, Request, Response,
-                     UploadFile, WebSocket, WebSocketDisconnect,
-                     WebSocketException, status)
+from fastapi import (Depends, FastAPI, Request, UploadFile, WebSocket, status)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi.routing import Mount
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
@@ -51,27 +45,18 @@ warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
 # APT_THREAD           = Thread(target=apt_update, name='update')
 
-DEF_WIFI_CARD = get_ifaces(IF_WIRELESS)[0]
 DEFAULT_AP = None
-
-DISPLAYS: list[dict] = []
-WINDOW = {'bounds': {}, 'orientation': -2, 'flip': -2}
 
 SHUTDOWN_EVENT = asyncio.Event()
 
-REMOTE_WS = WSManager(True)
-UI_WS = WSManager(True)
-WS = WSManager()
-
 REMOTE_CONNECTED = False
 
-TEMPLATES = Jinja2Templates(const.templates_folder, extensions=['jinja2.ext.do'])
 TEMPLATES.env.filters['flatten'] = flatten
-UPLOADS = UploadManager(const.uploads_folder, lambda x: WS.broadcast('scheduler/file', files=x))
 
+# noinspection PyTypeChecker
 WWW = FastAPI(
     title='UniTotem', version=const.__version__,
-    middleware=[Middleware(HTTPSRedirectMiddleware)],  # type: ignore
+    middleware=[Middleware(HTTPSRedirectMiddleware)],
     routes=[
         Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
         Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded')
@@ -82,122 +67,10 @@ WWW = FastAPI(
     }
 )
 WWW.include_router(login_router)
+WWW.include_router(ws_endpoints_router)
 
 
-@WWW.websocket("/remote")
-async def remote_websocket(websocket: WebSocket):
-    if Config.remote_server_ip:
-        # immediately refuse connections if remote_server is configured (!=None)
-        # this means that this instance is running in client/slave mode
-        # and someone is trying either to connect from another client or
-        # +----------------------+ is trying to be funny and
-        # |                      | discover what happens
-        # |    OOOOOOOOO         | when the snake eats itself!
-        # |    O  *    O         |
-        # |    O  X    O         |
-        # |    OOOO    O         |
-        # |            O         |
-        # |            O         |
-        # +----------------------+
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
-    if not websocket.client or 'instance_id' not in websocket.headers:
-        return
-
-    await REMOTE_WS.connect(websocket)
-
-    Config.remote_clients[websocket.headers['instance_id']] = {
-        'ip': websocket.client.host,
-        'port': websocket.headers.get('port', const.default_port_secure),
-        'hostname': websocket.headers.get('hostname', websocket.headers['instance_id'])
-    }
-    Config.save()
-
-    while True:
-        # noinspection PyBroadException
-        try:
-            data = await websocket.receive_text()
-            print(data)
-        except WebSocketDisconnect:
-            REMOTE_WS.disconnect(websocket)
-            break
-        except Exception:
-            print_exc()
-
-
-@WWW.get("/remote/public_key")
-async def get_public_key():
-    return Response(Config.rsa_pk.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    ), media_type="text/plain")
-
-
-@WWW.websocket("/ui_ws")
-async def ui_websocket(websocket: WebSocket):
-    global DISPLAYS, WINDOW
-    if websocket.scope['client'][0] != websocket.scope['server'][0]:
-        # prohibit external connections
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
-
-    await UI_WS.connect(websocket)
-    while True:
-        try:
-            data = await websocket.receive_json()
-            match data['target']:
-                case 'getAllDisplays':
-                    DISPLAYS = data['displays']
-                case 'getBounds':
-                    WINDOW['bounds'] = data['bounds']
-                    await WS.broadcast('settings/display/getBounds', **WINDOW['bounds'])
-                case 'getOrientation':
-                    WINDOW['orientation'] = data['orientation']
-                    await WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
-                case 'getFlip':
-                    WINDOW['flip'] = data['flip']
-                    await WS.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
-                case 'getAllowInsecureCerts':
-                    await WS.broadcast('settings/display/allowInsecureCerts', bounds=data['allow'])
-                case 'setContainer':
-                    try:
-                        Config.assets.current.media_type = data['media_type']
-                    except IndexError:
-                        # no-assets and first-boot pages have an invalid index
-                        pass
-        except WebSocketDisconnect:
-            UI_WS.disconnect(websocket)
-            break
-
-
-@WWW.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    request = Request({'type': 'http'})
-    request._cookies = websocket.cookies
-    try:
-        await LOGMAN(request)
-    except NotAuthenticatedException:
-        await websocket.accept()
-        await websocket.close(1008, 'Not Authenticated')
-        return
-
-    await WS.connect(websocket)
-    await WS.send(websocket, 'connected')
-    while True:
-        # noinspection PyBroadException
-        try:
-            data: dict[str, Any] = await websocket.receive_json()
-            t = data.pop('target')
-            try:
-                await WS.handlers[t](websocket, **data)
-            except KeyError:
-                await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
-
-        except WebSocketDisconnect:
-            break
-        except Exception:
-            await WS.send(websocket, 'error', error='Exception', extra=format_exc())
-            print_exc()
-    WS.disconnect(websocket)
 
 
 WS.add('power/reboot')(lambda: cmd_run(['/usr/bin/systemctl', 'reboot', '-i']))
@@ -540,103 +413,13 @@ async def settings_cronjob_edit(ws: WebSocket, job: str, cmd: str = '', m=None, 
     await WS.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
 
-@WWW.post("/api/settings/set_passwd")
-async def set_pass(request: Request, response: Response, password: str, username: str = Depends(LOGMAN)):
-    Config.change_password(username, password)
-    Config.save()
-    if 'Referer' in request.headers:
-        response.headers['location'] = request.headers['Referer']
-
-
 @WWW.post("/api/scheduler/upload", status_code=status.HTTP_201_CREATED, dependencies=[Depends(LOGMAN)])
 async def media_upload(files: list[UploadFile]):
     for infile in files:
         await UPLOADS.save(infile)
 
 
-@WWW.get("/backup", dependencies=[Depends(LOGMAN)])
-async def create_backup(include_uploaded: bool = False):
-    CRONTAB.read()
-    config_backup = {
-        "version": const.__version__,
-        "CONFIG": Config.model_dump_json(),
-        "hostname": get_hostname(),
-        "def_audio_dev": getDefaultAudioDevice(),
-        "netplan": {fname: get_netplan_file(fname) for fname in get_netplan_file_list()},
-        "cron": CRONTAB.serialize()
-    }
 
-    zip_buffer = BytesIO()
-    with ZipFile(zip_buffer, 'w', ZIP_DEFLATED, False) as zip_file:
-        zip_file.writestr("config.json", dumps(config_backup))
-        if include_uploaded:
-            for file in UPLOADS.files:
-                zip_file.write(file.absolute(), "uploaded/" + file.name)
-    zip_buffer.seek(0)
-    return Response(content=zip_buffer, media_type='application/zip',
-                    headers={'Content-Disposition': 'attachment; filename="' + strftime(
-                        'unitotem-manager-%Y%m%d-%H%M%S.zip') + '"'})
-
-
-# noinspection PyPep8Naming
-@WWW.post("/backup", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(LOGMAN)])
-async def load_backup(backup_file: UploadFile,
-                      CONFIG: Annotated[bool, Body()] = False,
-                      def_audio_dev: Annotated[bool, Body()] = False,
-                      hostname: Annotated[bool, Body()] = False,
-                      netplan: Annotated[bool, Body()] = False,
-                      uploaded: Annotated[bool, Body()] = False):
-    try:
-        with ZipFile(backup_file.file) as zip_file:
-            files = zip_file.namelist()
-            if 'config.json' in files:
-                config_json = loads(zip_file.read('config.json'))
-
-                from packaging.version import Version
-                bkp_ver = Version(config_json.get('version', '0'))
-
-                if 'CONFIG' in config_json and CONFIG:
-                    Config(obj=config_json['CONFIG'])
-                    Config.save()
-
-                if 'hostname' in config_json and hostname:
-                    set_hostname(config_json['hostname'])
-
-                if 'def_audio_dev' in config_json and def_audio_dev:
-                    if bkp_ver >= Version('3.0.0'):
-                        # with version 3.0.0 audio controls changed from alsa to pulseaudio
-                        setDefaultAudioDevice(config_json['def_audio_dev'])
-
-                if 'netplan' in config_json and netplan:
-                    set_netplan(filename=None, file_content=config_json['netplan'], apply=False)
-
-            if uploaded:
-                for filename in files:
-                    if filename.startswith('uploaded/'):
-                        with zip_file.open(filename) as infile:
-                            filename = await UPLOADS.save(infile, filename)
-
-            res = generate_netplan()
-            if isinstance(res, str):
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=res)
-
-    except BadZipFile as e:
-        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail=str(e))
-
-
-@WWW.delete('/backup', status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(LOGMAN)])
-async def factory_reset():
-    Config.reset()
-
-    CRONTAB.read()
-    # noinspection PyProtectedMember
-    CRONTAB.remove_all(comment=CRONTAB._cron_re)
-    CRONTAB.write()
-
-    await UI_WS.broadcast('reset', nocache=True)
-
-    for file in UPLOADS.files:
-        UPLOADS.remove(file)
 
 
 @WWW.get("/", response_class=HTMLResponse)
@@ -652,26 +435,6 @@ async def scheduler(request: Request, username: str = Depends(LOGMAN)):
     ))
 
 
-@WWW.get('/login')
-async def login_page(request: Request, src: Optional[str] = '/'):
-    try:
-        await LOGMAN(request)
-        # why are you trying to access login page from an authenticated session?
-        return RedirectResponse(src or '/')
-    except NotAuthenticatedException:
-        pass
-
-    ip = do_ip_addr(get_default=True)
-    return TEMPLATES.TemplateResponse('login.html.j2', dict(
-        request=request,
-        src=src,
-        ut_vers=const.__version__,
-        os_vers=os_release()['PRETTY_NAME'],
-        ip_addr=ip['addr'][0]['addr'] if ip else None,
-        hostname=get_hostname()
-    ))
-
-
 @WWW.get("/settings", response_class=HTMLResponse)
 @WWW.get("/settings/{tab}", response_class=HTMLResponse)
 async def settings(request: Request, tab: str = 'main_menu', username: str = Depends(LOGMAN)):
@@ -683,7 +446,7 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
         disp_size=WINDOW['bounds'],
         disk_used=UPLOADS.disk_usedh,  # type: ignore
         disk_total=UPLOADS.disk_totalh,  # type: ignore
-        def_wifi=DEF_WIFI_CARD
+        def_wifi=get_ifaces(IF_WIRELESS)[0]
     )
     if tab == 'audio':
         data['audio'] = getAudioDevices()
@@ -850,9 +613,9 @@ if __name__ == "__main__":
         loop.create_task(webview_control_main(), name='page_controller')
 
 
-    async def info_loop(ws: WSManager, waiter: asyncio.Event):
+    async def info_loop(_ws: WSManager, waiter: asyncio.Event):
         while not waiter.is_set():
-            await broadcast_sysinfo(ws)
+            await broadcast_sysinfo(_ws)
             await asyncio.sleep(3)
 
 
