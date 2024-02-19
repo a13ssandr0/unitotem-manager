@@ -281,7 +281,7 @@ case 'settings/info':
     
     {% if has_battery %}
     bat_perc.css('width', data.battery.percent + '%');
-    bat_perc.html(data.battery.percent + '%');
+    bat_perc.html(new Intl.NumberFormat('en-EN', {maximumSignificantDigits: 3}).format(data.battery.percent) + '%');
     bat_perc.toggleClass('bg-danger', !data.battery.power_plugged && data.battery.percent<=15)
     bat_perc.toggleClass('bg-warning text-dark', !data.battery.power_plugged && 15<data.battery.percent && data.battery.percent<=25)
     bat_perc.toggleClass('progress-bar-striped progress-bar-animated', data.battery.power_plugged && data.battery.percent<100)
