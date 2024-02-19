@@ -29,6 +29,7 @@ upgradableRe = compile(
 
 _last_log = []
 _upd_list_cache = []
+# APT_THREAD           = Thread(target=apt_update, name='update')
 REBOOT_REQ = '/var/run/reboot-required'
 REBOOT_REQ_PKGS = '/var/run/reboot-required.pkgs'
 
@@ -129,76 +130,75 @@ async def broadcast_sysinfo(ws: WSManager):
                        )
 
 
-class Settings(WSAPIBase):
-    # class APT(WSAPIBase):
-    #     async def update(self, do_upgrade: bool = False):
-    #         global APT_THREAD
-    #         if not APT_THREAD.is_alive():
-    #             loop = asyncio.get_running_loop()
-    #             def apt():
-    #                 for line in apt_update(do_upgrade):
-    #                     if line == True:
-    #                         asyncio.run_coroutine_threadsafe(
-    #                               self.ws.broadcast('settings/update/start', upgrading=do_upgrade), loop)
-    #                     elif line == False:
-    #                         asyncio.run_coroutine_threadsafe(
-    #                               self.ws.broadcast('settings/update/end', upgrading=do_upgrade), loop)
-    #                     elif isinstance(line, tuple):
-    #                         asyncio.run_coroutine_threadsafe(
-    #                               self.ws.broadcast('settings/update/progress', upgrading=do_upgrade,
-    #                                           is_stdout=line[0], data=line[1]), loop)
-    #
-    #             APT_THREAD = Thread(target=apt, name=('upgrade' if do_upgrade else 'update'))
-    #             APT_THREAD.start()
-    #             await self.ws.broadcast('settings/update/status', status=APT_THREAD.name, log=get_apt_log())
-    #
-    #     async def list(self):
-    #         await self.ws.broadcast('settings/update/list', updates=apt_list_upgrades())
-    #
-    #     async def reboot_required(self):
-    #         await self.ws.broadcast('settings/update/reboot_required', reboot=reboot_required())
-    #
-    #     async def status(self):
-    #         await self.ws.broadcast('settings/update/status',
-    #                   status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
+# class APT(WSAPIBase):
+#     async def update(self, do_upgrade: bool = False):
+#         global APT_THREAD
+#         if not APT_THREAD.is_alive():
+#             loop = asyncio.get_running_loop()
+#             def apt():
+#                 for line in apt_update(do_upgrade):
+#                     if line == True:
+#                         asyncio.run_coroutine_threadsafe(
+#                               self.ws.broadcast('settings/update/start', upgrading=do_upgrade), loop)
+#                     elif line == False:
+#                         asyncio.run_coroutine_threadsafe(
+#                               self.ws.broadcast('settings/update/end', upgrading=do_upgrade), loop)
+#                     elif isinstance(line, tuple):
+#                         asyncio.run_coroutine_threadsafe(
+#                               self.ws.broadcast('settings/update/progress', upgrading=do_upgrade,
+#                                           is_stdout=line[0], data=line[1]), loop)
+#
+#             APT_THREAD = Thread(target=apt, name=('upgrade' if do_upgrade else 'update'))
+#             APT_THREAD.start()
+#             await self.ws.broadcast('settings/update/status', status=APT_THREAD.name, log=get_apt_log())
+#
+#     async def list(self):
+#         await self.ws.broadcast('settings/update/list', updates=apt_list_upgrades())
+#
+#     async def reboot_required(self):
+#         await self.ws.broadcast('settings/update/reboot_required', reboot=reboot_required())
+#
+#     async def status(self):
+#         await self.ws.broadcast('settings/update/status',
+#                   status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
 
-    class Cron(WSAPIBase):
-        async def getJobs(self):
-            CRONTAB.read()
-            await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+class Cron(WSAPIBase):
+    async def getJobs(self):
+        CRONTAB.read()
+        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
-        async def addJob(self, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
-            CRONTAB.read()
-            if CRONTAB.new(cmd, m, h, dom, mon, dow):
-                CRONTAB.write()
-            await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-        async def setJobEnabled(self, ws: WebSocket, job: str, state: bool):
-            CRONTAB.read()
-            try:
-                next(CRONTAB.find_comment(job)).enable(state)
-                CRONTAB.write()
-            except StopIteration:
-                await self.ws.send(ws, 'error', error='Not found', extra='Requested job does not exist')
-            await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
-
-        async def deleteJob(self, job: str):
-            CRONTAB.read()
-            CRONTAB.remove_all(comment=job)
+    async def addJob(self, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
+        CRONTAB.read()
+        if CRONTAB.new(cmd, m, h, dom, mon, dow):
             CRONTAB.write()
-            await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
 
-        async def changeJob(self, ws: WebSocket, job: str, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
-            CRONTAB.read()
-            try:
-                _job = next(CRONTAB.find_comment(job))
-                if all([x is not None for x in [m, h, dom, mon, dow]]):
-                    _job.setall(m, h, dom, mon, dow)
-                if cmd == 'pwr':
-                    _job.set_command('/usr/sbin/poweroff')
-                elif cmd == 'reb':
-                    _job.set_command('/usr/sbin/reboot')
-                CRONTAB.write()
-            except StopIteration:
-                await self.ws.send(ws, 'error', error='Not found', extra='Requested job does not exist')
-            await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+    async def setJobEnabled(self, ws: WebSocket, job: str, state: bool):
+        CRONTAB.read()
+        try:
+            next(CRONTAB.find_comment(job)).enable(state)
+            CRONTAB.write()
+        except StopIteration:
+            await self.ws.send(ws, 'error', error='Not found', extra='Requested job does not exist')
+        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+
+    async def deleteJob(self, job: str):
+        CRONTAB.read()
+        CRONTAB.remove_all(comment=job)
+        CRONTAB.write()
+        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+
+    async def changeJob(self, ws: WebSocket, job: str, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
+        CRONTAB.read()
+        try:
+            _job = next(CRONTAB.find_comment(job))
+            if all([x is not None for x in [m, h, dom, mon, dow]]):
+                _job.setall(m, h, dom, mon, dow)
+            if cmd == 'pwr':
+                _job.set_command('/usr/sbin/poweroff')
+            elif cmd == 'reb':
+                _job.set_command('/usr/sbin/reboot')
+            CRONTAB.write()
+        except StopIteration:
+            await self.ws.send(ws, 'error', error='Not found', extra='Requested job does not exist')
+        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())

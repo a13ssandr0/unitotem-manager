@@ -1,4 +1,5 @@
 __all__ = [
+    "DEFAULT_AP",
     "IF_WIRED",
     "IF_WIRELESS",
     "IF_ALL",
@@ -29,12 +30,19 @@ from re import compile, sub
 from socket import inet_aton, inet_ntoa
 from struct import pack
 from subprocess import PIPE, run
-from typing import Union
+from typing import Union, Optional
 
 from qrcode import make as make_qr
 from qrcode.constants import ERROR_CORRECT_Q
 from qrcode.image.svg import SvgPathFillImage
 from ruamel.yaml import YAML
+from starlette.websockets import WebSocket
+from werkzeug.utils import secure_filename
+
+from utils import Config
+from utils.ws.wsmanager import WSAPIBase
+
+DEFAULT_AP = None
 
 ETC_HOSTNAME     = '/etc/hostname'
 ETC_HOSTS        = '/etc/hosts'
@@ -341,8 +349,45 @@ def do_ip_addr(get_default=False):
     return r[def_iface] if get_default and def_iface else False if get_default and not def_iface else r
 
 
+class Settings(WSAPIBase):
+    async def hostname(self, hostname: Optional[str] = None):
+        if hostname is not None:
+            set_hostname(hostname)
+        await self.ws.broadcast('settings/hostname', hostname=get_hostname())
 
+    async def get_wifis(self):
+        await self.ws.broadcast('settings/get_wifis', wifis=get_wifis())
 
-# if __name__ == '__main__':
-#     from pprint import pprint
-#     pprint(get_wifis())
+    class Netplan(WSAPIBase):
+        async def newFile(self, filename: str):
+            create_netplan(filename)
+            await self.ws.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+
+        async def getFile(self, filename: Optional[str] = None):
+            netplan_files = get_netplan_file_list()
+            if filename is not None:
+                if filename in netplan_files:
+                    await self.ws.broadcast('settings/netplan/file/get', files={filename: get_netplan_file(filename)})
+            await self.ws.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in netplan_files})
+
+        async def changeFile(self, ws: WebSocket, filename: Optional[str] = None, content: str = '', apply: bool = True):
+            global DEFAULT_AP
+            if filename is not None:
+                res = set_netplan(secure_filename(filename), content, apply)
+            else:
+                res = generate_netplan(apply)
+            # noinspection PySimplifyBooleanCheck
+            if res is True:
+                if DEFAULT_AP and do_ip_addr(True):  # AP is still enabled, but now we are connected, AP is no longer needed
+                    stop_hostpot()
+                    DEFAULT_AP = None
+                    Config.assets.next_a()
+            elif isinstance(res, str):
+                await self.ws.send(ws, 'error', error='Netplan error', extra=res)
+            await self.ws.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+
+        async def deleteFile(self, ws: WebSocket, filename: Optional[str] = None, apply: bool = True):
+            res = del_netplan_file(filename, apply)
+            if isinstance(res, str):
+                await self.ws.send(ws, 'error', error='Netplan error', extra=res)
+            await self.ws.broadcast('settings/netplan/file/get', files={f: get_netplan_file(f) for f in get_netplan_file_list()})

@@ -44,6 +44,7 @@ from werkzeug.utils import secure_filename
 
 from . import constants as const
 from .async_timer import Timer
+from .ws.wsmanager import WSAPIBase
 
 load_dotenv(const.envfile)
 
@@ -727,3 +728,11 @@ def get_dominant_color(pil_img:Image.Image, palette_size=16): # https://stackove
     palette_index = color_counts[0][1]
     dominant_color = palette[palette_index*3:palette_index*3+3] #type: ignore [reportOptionalSubscript]
     return hex((dominant_color[0]<<16) + (dominant_color[1]<<8) + dominant_color[2])
+
+
+class Settings(WSAPIBase):
+    async def default_duration(self, duration: Optional[int] = None):
+        if duration is not None:
+            Config.def_duration = duration
+            Config.save()
+        await self.ws.broadcast('settings/default_duration', duration=Config.def_duration)
