@@ -59,10 +59,12 @@ class WSManager:
         return text
 
     async def send(self, websocket: WebSocket, target: str, nocache=False, **kwargs):
+        target = target.lower()
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         await websocket.send_text(text)
 
     async def broadcast(self, target: str, nocache=False, **kwargs):
+        target = target.lower()
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         for connection in self.active_connections:
             await connection.send_text(text)
@@ -110,3 +112,15 @@ class WSAPIBase:
         self.ws = ws
         self.ui_ws = ui_ws
         self.remote_ws = remote_ws
+
+
+def api_props(*, allowed_users, allowed_roles, **validator_kwargs):
+    validator_kwargs.setdefault('arbitrary_types_allowed', True)
+
+    def decorator(func):
+        func.allowed_users = allowed_users
+        func.allowed_roles = allowed_roles
+        func.validator_kwargs = validator_kwargs
+        return func
+
+    return decorator

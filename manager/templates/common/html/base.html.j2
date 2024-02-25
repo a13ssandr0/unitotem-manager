@@ -157,6 +157,7 @@
             };
             _ws.onmessage = event => {
                 const data = JSON.parse(event.data);
+                data.target = data.target.toLowerCase();
                 if (data.target == 'settings/hostname'){
                     document.title = data.hostname + ' - UniTotem Manager';
                     navbar_hostname.html('&nbsp;@&nbsp;' + data.hostname);

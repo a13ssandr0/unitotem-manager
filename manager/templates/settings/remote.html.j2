@@ -51,14 +51,14 @@ const client_container = $('#client_container');
 
 
 $('#server_ip_container button').click(()=>{
-    sendCommand('settings/remote/set', {
+    sendCommand('settings/remote/setMode', {
         remote_server:server_ip.val(),
         remote_port:server_port.val() || null
     });
 });
 
 $('#server_info_container button').click(()=>{
-    sendCommand('settings/remote/set', {remote_server:null});
+    sendCommand('settings/remote/setMode', {remote_server:null});
 });
 
 mode_selector.change(function(){
@@ -68,14 +68,14 @@ mode_selector.change(function(){
     } else {
         server_ip_container.hide();
         client_container.show();
-        sendCommand('settings/remote/set', {remote_server:null});
+        sendCommand('settings/remote/setMode', {remote_server:null});
     }
 });
 
 {% endblock js %}
 
 {% block recv_cmds %}
-case 'settings/remote/get':
+case 'settings/remote/getMode':
     if (data.remote_server) {
         mode_selector.val(1).change();
         if (data.remote_connected) {

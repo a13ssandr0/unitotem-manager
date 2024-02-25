@@ -108,17 +108,17 @@ $('input[name="flip"]').on('change', (e) => sendCommand('settings/display/setFli
 {% endblock js %}
 
 {% block recv_cmds %}
-case 'settings/display/getBounds':
+case 'settings/display/getbounds':
     window_bound_rect.attr('x', data.x).attr('y', data.y)
         .attr('width', data.width).attr('height', data.height);
     break;
 
-case 'settings/display/getOrientation':
+case 'settings/display/getorientation':
     $('input[name="orientation"]:checked').removeAttr('checked');
     $(`input[name="orientation"][value="${data.orientation}"]`).prop('checked', true);
     break;
 
-case 'settings/display/getFlip':
+case 'settings/display/getflip':
     $('input[name="flip"]:checked').removeAttr('checked');
     $(`input[name="flip"][value="${data.flip}"]`).prop('checked', true);
     break;
