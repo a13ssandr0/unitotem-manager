@@ -1,17 +1,19 @@
+from functools import wraps
 from inspect import isclass, isgeneratorfunction, iscoroutinefunction, isasyncgenfunction
 from json import dumps
 from os.path import join
 from subprocess import run as cmd_run
 from traceback import print_exc, format_exc
 from typing import Any
-from pydantic import validate_call
 
 from fastapi import APIRouter, WebSocketException, Request, status, WebSocket, WebSocketDisconnect
+from pydantic import validate_call
 
 import utils.constants as const
 from utils.models import Config
 from utils.security import LOGMAN, NotAuthenticatedException
 from .wsmanager import WSManager, WSAPIBase, api_props
+from utils.commons import UPLOADS
 
 router = APIRouter()
 REMOTE_WS = WSManager(True)
@@ -21,10 +23,10 @@ WS = WSManager()
 
 # noinspection PyUnresolvedReferences
 class WebSocketAPI:
-    callables = {}
+    # callables = {}
     generators = {}
-    awaitables = {}
-    async_gens = {}
+    # awaitables = {}
+    # async_gens = {}
 
     def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
         self.__ws = ws
@@ -36,11 +38,11 @@ class WebSocketAPI:
         if not issubclass(cls, WSAPIBase):
             raise ValueError("Class is not a subclass of WSAPIBase")
 
-        cal, gen, awa, agn = self.__treegen(cls, prefix)
-        self.callables.update(cal)
+        gen = self.__treegen(cls, prefix)
+        # self.callables.update(cal)
         self.generators.update(gen)
-        self.awaitables.update(awa)
-        self.async_gens.update(agn)
+        # self.awaitables.update(awa)
+        # self.async_gens.update(agn)
 
     def __treegen(self, Cls: type, prefix: str = None):
         classname = Cls.__name__
@@ -50,23 +52,23 @@ class WebSocketAPI:
         else:
             prefix = join(prefix, classname)
 
-        cal = {}
+        # cal = {}
         gen = {}
-        awa = {}
-        agn = {}
+        # awa = {}
+        # agn = {}
 
         cls = Cls(self.__ws, self.__ui_ws, self.__remote_ws)
 
         for att in dir(cls):
-            if not att.startswith('__'):
+            if not (att.startswith('__') and att.endswith('__')):
                 a = cls.__getattribute__(att)
                 if callable(a):
                     if isclass(a):
-                        c, g, aw, ag = self.__treegen(a, prefix)
-                        cal.update(c)
+                        g = self.__treegen(a, prefix)
+                        # cal.update(c)
                         gen.update(g)
-                        awa.update(aw)
-                        agn.update(ag)
+                        # awa.update(aw)
+                        # agn.update(ag)
                     else:
                         name = join(prefix, att).lower()
                         validator_kwargs = {'arbitrary_types_allowed': True}
@@ -74,21 +76,36 @@ class WebSocketAPI:
                             validator_kwargs.update(a.validator_kwargs)
                         except AttributeError:
                             pass
-                        func = validate_call(a, config=validator_kwargs)
-                        if iscoroutinefunction(a):
-                            print("Awaitable:", att)
-                            awa[name] = func
-                        elif isgeneratorfunction(a):
-                            print("Generator:", att)
-                            gen[name] = func
-                        elif isasyncgenfunction(a):
-                            print("Asynchronous generator:")
-                            agn[name] = func
-                        else:
-                            print("Callable:", att)
-                            cal[name] = func
+                        gen[name] = self.__make_async_gen(a, validator_kwargs)
 
-        return cal, gen, awa, agn
+        return gen
+
+    @staticmethod
+    def __make_async_gen(func, validator_kwargs):
+        # noinspection PyArgumentList
+        validated_func = validate_call(func, config=validator_kwargs)
+        if iscoroutinefunction(func):
+            # awa[name] = validated_func
+            @wraps(validated_func)
+            async def async_gen(*args, **kwargs):
+                yield await validated_func(*args, **kwargs)
+        elif isgeneratorfunction(func):
+            # gen[name] = validated_func
+            @wraps(validated_func)
+            async def async_gen(*args, **kwargs):
+                for ret in validated_func(*args, **kwargs):
+                    yield ret
+        elif isasyncgenfunction(func):
+            async_gen = validated_func
+        else:
+            # cal[name] = validated_func
+            @wraps(validated_func)
+            async def async_gen(*args, **kwargs):
+                yield validated_func(*args, **kwargs)
+
+        async_gen.__original_func__ = func
+        async_gen.__validated_func__ = validated_func
+        return async_gen
 
     class Power(WSAPIBase):
         @staticmethod
@@ -110,9 +127,15 @@ api = WebSocketAPI(WS, UI_WS, REMOTE_WS)
 from utils.scheduler import Scheduler
 
 api.load_class(Scheduler)
+from utils.models import Settings
+
+api.load_class(Settings)
 from utils.audio import Audio
 
 api.load_class(Audio, 'settings')
+from utils.remote import Remote
+
+api.load_class(Remote, 'settings')
 from utils.network import Settings
 
 api.load_class(Settings)
@@ -138,22 +161,22 @@ async def websocket_endpoint(websocket: WebSocket):
         # noinspection PyBroadException
         try:
             data: dict[str, Any] = await websocket.receive_json()
-            t = data.pop('target')
+            t = data.pop('target').lower()
             try:
-                if t in api.awaitables:
-                    ret = await check_permissions(api.awaitables[t])(**data)
+                # if t in api.awaitables:
+                #     ret = await check_permissions(api.awaitables[t])(**data)
+                #     await send_response(websocket, ret, t)
+                # elif t in api.callables:
+                #     ret = check_permissions(api.callables[t])(**data)
+                #     await send_response(websocket, ret, t)
+                # elif t in api.async_gens:
+                #     async for ret in check_permissions(api.async_gens[t])(**data):
+                #         await send_response(websocket, ret, t)
+                # elif t in api.generators:
+                async for ret in check_permissions(api.generators[t])(**data):
                     await send_response(websocket, ret, t)
-                elif t in api.callables:
-                    ret = check_permissions(api.callables[t])(**data)
-                    await send_response(websocket, ret, t)
-                elif t in api.async_gens:
-                    async for ret in check_permissions(api.async_gens[t])(**data):
-                        await send_response(websocket, ret, t)
-                elif t in api.generators:
-                    for ret in check_permissions(api.generators[t])(**data):
-                        await send_response(websocket, ret, t)
-                else:
-                    raise KeyError()
+                # else:
+                #     raise KeyError()
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
 
@@ -178,6 +201,7 @@ def check_permissions(func):
 
 
 async def send_response(websocket, ret, target):
+    if ret is None: return
     if isinstance(ret, list | tuple | set) and len(ret) == 2 and isinstance(ret[0], str) and isinstance(
             ret[1], dict):
         await WS.send(websocket, ret[0], **ret[1])
@@ -289,3 +313,8 @@ class Display(WSAPIBase):
 
 
 api.load_class(Display, 'settings')
+
+UPLOADS._callback = lambda x: WS.broadcast('scheduler/file', files=x)
+
+from pprint import pp
+pp(list(api.generators.keys()))
