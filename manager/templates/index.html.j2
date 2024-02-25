@@ -34,7 +34,7 @@
                 <div class="ms-auto">
                     <div class="btn-group" role="group">
                         <button type="button" title="Delete files" id="delete_all_btn" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                        <button type="button" title="Download files" id="download_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></a>
+                        <button type="button" title="Download files" id="download_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></button>
                         <button type="button" title="Add to list" id="add_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
                     </div>
                 </div>
@@ -79,7 +79,7 @@
     
 {% set init_cmds = [
     'scheduler/asset',
-    'scheduler/asset/current',
+    'scheduler/current',
     'scheduler/file',
     'settings/hostname',
     'settings/default_duration'
@@ -237,11 +237,11 @@ case 'scheduler/asset':
     asset_table.empty();
     data.items.forEach((item, i) => {
         let icon = (()=>{
-            if (item.media_type == 1)
+            if (item.media_type === 1)
                 return 'bi-image';
-            else if (item.media_type == 2)
+            else if (item.media_type === 2)
                 return 'bi-film';
-            else if (item.media_type == 3)
+            else if (item.media_type === 3)
                 return 'bi-music-note-beamed';
             else if (item.url.startsWith('file:'))
                 return 'bi-file-earmark';
@@ -251,7 +251,7 @@ case 'scheduler/asset':
         
         asset_table.append(
             $('<tr style="min-height:3rem;max-height:3rem;"></tr>').attr('id', item.uuid)
-                .toggleClass('table-active', item.uuid == data.current)
+                .toggleClass('table-active', item.uuid === data.current)
                 .append(
                     $('<td class="align-middle asset-list-handle"></td>')
                     .append(
@@ -332,9 +332,9 @@ case 'scheduler/asset':
     });
     break;
 
-case 'scheduler/asset/current':
+case 'scheduler/current':
     asset_table.children().each((i,element) => {
-        $(element).toggleClass('table-active', element.id == data.uuid);
+        $(element).toggleClass('table-active', element.id === data.uuid);
     });
     break;
 
@@ -362,7 +362,7 @@ case 'settings/default_duration':
     modal_input.duration.val(data.duration).attr('def-value', data.duration);
     break;
 
-case 'settings/display/bounds':
+case 'settings/display/getbounds':
     $('#display_bounds').html( 
         (data.bounds.width && data.bounds.height)?
             `${data.bounds.width}x${data.bounds.height}`:

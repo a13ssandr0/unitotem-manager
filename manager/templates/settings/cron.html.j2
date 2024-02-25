@@ -18,13 +18,13 @@
     </div>
 {% endblock content %}
 
-{% set init_cmds = ['settings/cron/job'] %}
+{% set init_cmds = ['settings/cron/getJobs'] %}
 
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
     const table = $('#asset_table');
-    $('#add_schedule').click(() => sendCommand('settings/cron/job/add', {
+    $('#add_schedule').click(() => sendCommand('settings/cron/addJob', {
         cmd: $('#action_selector').val(),
         m: $('#minute_selector').val(),
         h: $('#hour_selector').val(),
@@ -36,7 +36,7 @@
 
 
 {% block recv_cmds %}
-case 'settings/cron/job':
+case 'settings/cron/getjobs':
     table.empty();
     data.jobs.forEach(job => {
         table.append(
@@ -52,12 +52,12 @@ case 'settings/cron/job':
                         $('<input class="form-check-input" type="checkbox" role="switch">')
                             .attr('title', ((job.enabled)?'Dis':'En') + 'able job')
                             .prop('checked', job.enabled)
-                            .change(() => sendCommand('settings/cron/job/set_state', {job: job.comment, state: !job.enabled}))
+                            .change(() => sendCommand('settings/cron/setJobEnabled', {job: job.comment, state: !job.enabled}))
                     )
                 ),
                 $('<td class="my-auto"></td>').append(
                     $('<button type="button" title="Remove job" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>')
-                        .click(() => sendCommand('settings/cron/job/delete', {job: job.comment}))
+                        .click(() => sendCommand('settings/cron/deleteJob', {job: job.comment}))
                 )
             )
         );

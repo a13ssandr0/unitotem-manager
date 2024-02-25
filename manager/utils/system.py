@@ -165,13 +165,13 @@ async def broadcast_sysinfo(ws: WSManager):
 class Cron(WSAPIBase):
     async def getJobs(self):
         CRONTAB.read()
-        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+        await self.ws.broadcast('settings/cron/getjobs', jobs=CRONTAB.serialize())
 
     async def addJob(self, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
         CRONTAB.read()
         if CRONTAB.new(cmd, m, h, dom, mon, dow):
             CRONTAB.write()
-        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+        await self.ws.broadcast('settings/cron/getjobs', jobs=CRONTAB.serialize())
 
     async def setJobEnabled(self, ws: WebSocket, job: str, state: bool):
         CRONTAB.read()
@@ -180,13 +180,13 @@ class Cron(WSAPIBase):
             CRONTAB.write()
         except StopIteration:
             await self.ws.send(ws, 'error', error='Not found', extra='Requested job does not exist')
-        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+        await self.ws.broadcast('settings/cron/getjobs', jobs=CRONTAB.serialize())
 
     async def deleteJob(self, job: str):
         CRONTAB.read()
         CRONTAB.remove_all(comment=job)
         CRONTAB.write()
-        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+        await self.ws.broadcast('settings/cron/getjobs', jobs=CRONTAB.serialize())
 
     async def changeJob(self, ws: WebSocket, job: str, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
         CRONTAB.read()
@@ -201,4 +201,4 @@ class Cron(WSAPIBase):
             CRONTAB.write()
         except StopIteration:
             await self.ws.send(ws, 'error', error='Not found', extra='Requested job does not exist')
-        await self.ws.broadcast('settings/cron/job', jobs=CRONTAB.serialize())
+        await self.ws.broadcast('settings/cron/getjobs', jobs=CRONTAB.serialize())

@@ -79,18 +79,18 @@ class Scheduler(WSAPIBase):
 
     async def current(self):
         if Config.enabled_asset_count:
-            await self.ws.broadcast('scheduler/asset/current', uuid=Config.assets.current.uuid)
+            await self.ws.broadcast('scheduler/current', uuid=Config.assets.current.uuid)
 
-    async def delete(self, uuid: str):
+    def delete(self, uuid: str):
         del Config.assets[uuid]
         Config.save()
 
-    async def delete_file(self, files: list[str]):
+    def delete_file(self, files: list[str]):
         for file in files:
             UPLOADS.remove(file)
         Config.save()
 
-    async def goto(self, index: Union[None, int, str] = None):
+    def goto(self, index: Union[None, int, str] = None):
         Config.assets.goto_a(index)
 
     class Goto(WSAPIBase):
@@ -100,6 +100,6 @@ class Scheduler(WSAPIBase):
         def next(self):
             Config.assets.next_a()
 
-    async def reorder(self, from_i: int, to_i: int):
+    def reorder(self, from_i: int, to_i: int):
         Config.assets.move(from_i, to_i)
         Config.save()

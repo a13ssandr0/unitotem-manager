@@ -1,16 +1,17 @@
-from inspect import isclass, isgeneratorfunction, iscoroutinefunction
+from inspect import isclass, isgeneratorfunction, iscoroutinefunction, isasyncgenfunction
 from json import dumps
 from os.path import join
 from subprocess import run as cmd_run
 from traceback import print_exc, format_exc
 from typing import Any
+from pydantic import validate_call
 
 from fastapi import APIRouter, WebSocketException, Request, status, WebSocket, WebSocketDisconnect
 
 import utils.constants as const
 from utils.models import Config
 from utils.security import LOGMAN, NotAuthenticatedException
-from .wsmanager import WSManager, WSAPIBase
+from .wsmanager import WSManager, WSAPIBase, api_props
 
 router = APIRouter()
 REMOTE_WS = WSManager(True)
@@ -23,6 +24,7 @@ class WebSocketAPI:
     callables = {}
     generators = {}
     awaitables = {}
+    async_gens = {}
 
     def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
         self.__ws = ws
@@ -34,10 +36,11 @@ class WebSocketAPI:
         if not issubclass(cls, WSAPIBase):
             raise ValueError("Class is not a subclass of WSAPIBase")
 
-        cal, gen, awa = self.__treegen(cls, prefix)
+        cal, gen, awa, agn = self.__treegen(cls, prefix)
         self.callables.update(cal)
         self.generators.update(gen)
         self.awaitables.update(awa)
+        self.async_gens.update(agn)
 
     def __treegen(self, Cls: type, prefix: str = None):
         classname = Cls.__name__
@@ -50,6 +53,7 @@ class WebSocketAPI:
         cal = {}
         gen = {}
         awa = {}
+        agn = {}
 
         cls = Cls(self.__ws, self.__ui_ws, self.__remote_ws)
 
@@ -58,24 +62,37 @@ class WebSocketAPI:
                 a = cls.__getattribute__(att)
                 if callable(a):
                     if isclass(a):
-                        c, g, a = self.__treegen(a, prefix)
+                        c, g, aw, ag = self.__treegen(a, prefix)
                         cal.update(c)
                         gen.update(g)
-                        awa.update(a)
-                    elif isgeneratorfunction(a):
-                        print("Generator:", att)
-                        gen[join(prefix, att).lower()] = a
-                    elif iscoroutinefunction(a):
-                        print("Awaitable:", att)
-                        awa[join(prefix, att).lower()] = a
+                        awa.update(aw)
+                        agn.update(ag)
                     else:
-                        print("Callable:", att)
-                        cal[join(prefix, att).lower()] = a
+                        name = join(prefix, att).lower()
+                        validator_kwargs = {'arbitrary_types_allowed': True}
+                        try:
+                            validator_kwargs.update(a.validator_kwargs)
+                        except AttributeError:
+                            pass
+                        func = validate_call(a, config=validator_kwargs)
+                        if iscoroutinefunction(a):
+                            print("Awaitable:", att)
+                            awa[name] = func
+                        elif isgeneratorfunction(a):
+                            print("Generator:", att)
+                            gen[name] = func
+                        elif isasyncgenfunction(a):
+                            print("Asynchronous generator:")
+                            agn[name] = func
+                        else:
+                            print("Callable:", att)
+                            cal[name] = func
 
-        return cal, gen, awa
+        return cal, gen, awa, agn
 
     class Power(WSAPIBase):
         @staticmethod
+        @api_props(allowed_users='all', allowed_roles='all')
         def test_method(txt='test'):
             print(txt)
             return txt
@@ -91,14 +108,17 @@ class WebSocketAPI:
 
 api = WebSocketAPI(WS, UI_WS, REMOTE_WS)
 from utils.scheduler import Scheduler
+
 api.load_class(Scheduler)
 from utils.audio import Audio
+
 api.load_class(Audio, 'settings')
 from utils.network import Settings
+
 api.load_class(Settings)
 from utils.system import Cron
+
 api.load_class(Cron, 'settings')
-print()
 
 
 @router.websocket("/ws")
@@ -120,7 +140,20 @@ async def websocket_endpoint(websocket: WebSocket):
             data: dict[str, Any] = await websocket.receive_json()
             t = data.pop('target')
             try:
-                await WS.handlers[t](websocket, **data)
+                if t in api.awaitables:
+                    ret = await check_permissions(api.awaitables[t])(**data)
+                    await send_response(websocket, ret, t)
+                elif t in api.callables:
+                    ret = check_permissions(api.callables[t])(**data)
+                    await send_response(websocket, ret, t)
+                elif t in api.async_gens:
+                    async for ret in check_permissions(api.async_gens[t])(**data):
+                        await send_response(websocket, ret, t)
+                elif t in api.generators:
+                    for ret in check_permissions(api.generators[t])(**data):
+                        await send_response(websocket, ret, t)
+                else:
+                    raise KeyError()
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
 
@@ -130,6 +163,28 @@ async def websocket_endpoint(websocket: WebSocket):
             await WS.send(websocket, 'error', error='Exception', extra=format_exc())
             print_exc()
     WS.disconnect(websocket)
+
+
+def check_permissions(func):
+    try:
+        print(func.allowed_users)
+    except:
+        pass
+    try:
+        print(func.allowed_roles)
+    except:
+        pass
+    return func
+
+
+async def send_response(websocket, ret, target):
+    if isinstance(ret, list | tuple | set) and len(ret) == 2 and isinstance(ret[0], str) and isinstance(
+            ret[1], dict):
+        await WS.send(websocket, ret[0], **ret[1])
+    elif isinstance(ret, dict):
+        await WS.send(websocket, target, **ret)
+    else:
+        raise ValueError("Invalid response type")
 
 
 @router.websocket("/remote")
