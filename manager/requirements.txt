@@ -11,7 +11,7 @@ packaging
 Pillow
 psutil
 pulsectl
-pydantic
+pydantic==2.6.3
 pydantic-extra-types
 PyJWT
 pymediainfo
@@ -25,4 +25,5 @@ ruamel.yaml
 uvloop
 validators
 watchdog
+wcmatch
 Werkzeug

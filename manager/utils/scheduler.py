@@ -8,9 +8,11 @@ from pydantic.color import Color
 from utils.commons import UPLOADS
 from utils.models import Config, FitEnum, validate_date, MediaType
 from utils.ws.endpoints import WSAPIBase
+from utils.ws.wsmanager import api_props
 
 
 class Scheduler(WSAPIBase):
+    @api_props(allowed_roles='alessandro', allowed_users='all')
     async def asset(self):
         await self.ws.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid)
 

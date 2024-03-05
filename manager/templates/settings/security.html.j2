@@ -1,7 +1,44 @@
 {% extends "settings.html.j2" %}
 {% block content %}
-    <h4>Change password</h4>
-    <div class="form-floating mb-3" style="max-width: 30em;">
+    <div class="row">
+        <div class="col col-6">
+            <h4>Users</h4>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="col-2">Username</th>
+                        <th scope="col">Groups</th>
+                        <th scope="col" class="col-2"></th>
+                    </tr>
+                </thead>
+                <tbody id="usertable"></tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3"><div class="d-grid"><button type="button" class="btn"><i class="bi bi-person-add"></i> New user</button></div></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="col col-6">
+            <h4>Groups</h4>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="col-2">Group&nbsp;name</th>
+                        <th scope="col">Permissions</th>
+                        <th scope="col" class="col-2"></th>
+                    </tr>
+                </thead>
+                <tbody id="grouptable"></tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3"><div class="d-grid"><button type="button" class="btn"><i class="bi bi-folder-plus"></i> New group</button></div></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {#<div class="form-floating mb-3" style="max-width: 30em;">
         <input type="email" class="form-control" id="loggedUser" placeholder="admin" value="{{logged_user}}" disabled>
         <label for="loggedUser">Username</label>
     </div>
@@ -17,15 +54,47 @@
         <div style="max-width: 30em;">
             <button type="submit" class="btn btn-success float-end" id="set_passwd" disabled><i class="bi bi-check2"></i> Change password</button>
         </div>
-    </form>
+    </form>#}
 {% endblock content %}
+
+{% set init_cmds = ['settings/security/getUsers', 'settings/security/getGroups'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
-const pwd1 = $('#inputNewPassword');
-const pwd2 = $('#inputNewPassword2');
-const sub = $('#set_passwd');
-pwd1.on('input', () => sub.prop('disabled', (pwd1.val() == '') || (pwd1.val() != pwd2.val())));
-pwd2.on('input', () => sub.prop('disabled', (pwd1.val() == '') || (pwd1.val() != pwd2.val())));
+{#const pwd1 = $('#inputNewPassword');#}
+{#const pwd2 = $('#inputNewPassword2');#}
+{#const sub = $('#set_passwd');#}
+{#pwd1.on('input', () => sub.prop('disabled', (pwd1.val() === '') || (pwd1.val() !== pwd2.val())));#}
+{#pwd2.on('input', () => sub.prop('disabled', (pwd1.val() === '') || (pwd1.val() !== pwd2.val())));#}
+const user_table = $('#usertable');
+const group_table = $('#grouptable');
 {% endblock js %}
+
+{% block recv_cmds %}
+case 'settings/security/getusers':
+    user_table.empty();
+    data.users.forEach(([user,data])=>{
+        user_table.append(
+            $('<tr></tr>').append(
+                $('<th scope="col"></th>').html(user),
+                $('<td></td>').html(data.groups),
+                $('<td></td>')
+            )
+        )
+    });
+    break
+
+case 'settings/security/getgroups':
+    group_table.empty();
+    data.groups.forEach(([group,data])=>{
+        group_table.append(
+            $('<tr></tr>').append(
+                $('<th scope="col"></th>').html(group),
+                $('<td></td>').html(data.perms.join(', ')),
+                $('<td></td>')
+            )
+        )
+    });
+    break
+{% endblock recv_cmds %}
 </script>

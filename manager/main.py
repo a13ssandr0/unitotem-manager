@@ -1,12 +1,6 @@
 import asyncio
 import signal
 import warnings
-from ipaddress import IPv4Address
-from os import environ
-from pathlib import Path
-
-from pydantic import BaseModel, Field
-# from pydantic_argparse import ArgumentParser
 from argparse import ArgumentParser
 from os.path import exists
 from platform import freedesktop_os_release as os_release
@@ -86,18 +80,19 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
         disk_total=UPLOADS.disk_totalh,  # type: ignore
         def_wifi=get_ifaces(IF_WIRELESS)[0]
     )
-    if tab == 'audio':
-        data['audio'] = getAudioDevices()
-    elif tab == 'display':
-        data['displays'] = DISPLAYS
-    elif tab == 'info':
-        data['cpu_count'] = cpu_count()
-        data['ram_tot'] = human_readable_size(virtual_memory().total)
-        data['disks'] = [blk.model_dump() for blk in lsblk()]
-        data['has_battery'] = sensors_battery() is not None
-        data['temp_devs'] = {k: [x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k, v in
-                             sensors_temperatures().items()}
-        data['fan_devs'] = {k: [x._asdict() for x in v] for k, v in sensors_fans().items()}
+    match tab:
+        case 'audio':
+            data['audio'] = getAudioDevices()
+        case 'display':
+            data['displays'] = DISPLAYS
+        case 'info':
+            data['cpu_count'] = cpu_count()
+            data['ram_tot'] = human_readable_size(virtual_memory().total)
+            data['disks'] = [blk.model_dump() for blk in lsblk()]
+            data['has_battery'] = sensors_battery() is not None
+            data['temp_devs'] = {k: [x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k, v in
+                                 sensors_temperatures().items()}
+            data['fan_devs'] = {k: [x._asdict() for x in v] for k, v in sensors_fans().items()}
 
     return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
 
@@ -176,11 +171,11 @@ if __name__ == "__main__":
     # if cmdargs.get('remote'):
     #     loop.create_task(connect_to_server(cmdargs['remote']), name='remote_control')
     # el
-    # if Config.remote_server_ip:
-    #     loop.create_task(api.generators['settings/remote/_remote__connect_to_server'].__original_func__(
-    #         Config.remote_server_ip, Config.remote_server_port), name='remote_control')
-    # elif not cmdargs.no_gui:
-    #     loop.create_task(api.generators['settings/remote/_remote__webview_control_main'].__original_func__(), name='page_controller')
+    if Config.remote_server_ip:
+        loop.create_task(api.generators['settings/remote/_remote__connect_to_server'].__original_func__(
+            Config.remote_server_ip, Config.remote_server_port), name='remote_control')
+    elif not cmdargs.no_gui:
+        loop.create_task(api.generators['settings/remote/_remote__webview_control_main'].__original_func__(), name='page_controller')
 
 
     async def info_loop(_ws: WSManager, waiter: asyncio.Event):
