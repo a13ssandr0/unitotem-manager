@@ -26,6 +26,7 @@ import utils.constants as const
 from .commons import TEMPLATES
 from .models import Config
 from .network import do_ip_addr
+from .ws.wsmanager import WSAPIBase
 
 load_dotenv(const.envfile)
 
@@ -123,3 +124,10 @@ async def set_pass(request: Request, response: Response, password: str, username
     Config.save()
     if 'Referer' in request.headers:
         response.headers['location'] = request.headers['Referer']
+
+class Security(WSAPIBase):
+    async def getUsers(self):
+        await self.ws.broadcast('settings/security/getUsers', users=[(user, {'groups': data.groups}) for user, data in Config.users.items()])
+
+    async def getGroups(self):
+        await self.ws.broadcast('settings/security/getGroups', groups=[(group, data.model_dump()) for group, data in Config.groups.items()])

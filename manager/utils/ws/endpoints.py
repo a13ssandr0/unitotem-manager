@@ -23,10 +23,7 @@ WS = WSManager()
 
 # noinspection PyUnresolvedReferences
 class WebSocketAPI:
-    # callables = {}
     generators = {}
-    # awaitables = {}
-    # async_gens = {}
 
     def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
         self.__ws = ws
@@ -38,11 +35,7 @@ class WebSocketAPI:
         if not issubclass(cls, WSAPIBase):
             raise ValueError("Class is not a subclass of WSAPIBase")
 
-        gen = self.__treegen(cls, prefix)
-        # self.callables.update(cal)
-        self.generators.update(gen)
-        # self.awaitables.update(awa)
-        # self.async_gens.update(agn)
+        self.generators.update(self.__treegen(cls, prefix))
 
     def __treegen(self, Cls: type, prefix: str = None):
         classname = Cls.__name__
@@ -52,10 +45,7 @@ class WebSocketAPI:
         else:
             prefix = join(prefix, classname)
 
-        # cal = {}
         gen = {}
-        # awa = {}
-        # agn = {}
 
         cls = Cls(self.__ws, self.__ui_ws, self.__remote_ws)
 
@@ -64,11 +54,7 @@ class WebSocketAPI:
                 a = cls.__getattribute__(att)
                 if callable(a):
                     if isclass(a):
-                        g = self.__treegen(a, prefix)
-                        # cal.update(c)
-                        gen.update(g)
-                        # awa.update(aw)
-                        # agn.update(ag)
+                        gen.update(self.__treegen(a, prefix))
                     else:
                         name = join(prefix, att).lower()
                         validator_kwargs = {'arbitrary_types_allowed': True}
@@ -85,12 +71,10 @@ class WebSocketAPI:
         # noinspection PyArgumentList
         validated_func = validate_call(func, config=validator_kwargs)
         if iscoroutinefunction(func):
-            # awa[name] = validated_func
             @wraps(validated_func)
             async def async_gen(*args, **kwargs):
                 yield await validated_func(*args, **kwargs)
         elif isgeneratorfunction(func):
-            # gen[name] = validated_func
             @wraps(validated_func)
             async def async_gen(*args, **kwargs):
                 for ret in validated_func(*args, **kwargs):
@@ -98,7 +82,6 @@ class WebSocketAPI:
         elif isasyncgenfunction(func):
             async_gen = validated_func
         else:
-            # cal[name] = validated_func
             @wraps(validated_func)
             async def async_gen(*args, **kwargs):
                 yield validated_func(*args, **kwargs)
@@ -142,6 +125,9 @@ api.load_class(Settings)
 from utils.system import Cron
 
 api.load_class(Cron, 'settings')
+from utils.security import Security
+
+api.load_class(Security, 'settings')
 
 
 @router.websocket("/ws")
@@ -163,20 +149,8 @@ async def websocket_endpoint(websocket: WebSocket):
             data: dict[str, Any] = await websocket.receive_json()
             t = data.pop('target').lower()
             try:
-                # if t in api.awaitables:
-                #     ret = await check_permissions(api.awaitables[t])(**data)
-                #     await send_response(websocket, ret, t)
-                # elif t in api.callables:
-                #     ret = check_permissions(api.callables[t])(**data)
-                #     await send_response(websocket, ret, t)
-                # elif t in api.async_gens:
-                #     async for ret in check_permissions(api.async_gens[t])(**data):
-                #         await send_response(websocket, ret, t)
-                # elif t in api.generators:
                 async for ret in check_permissions(api.generators[t])(**data):
                     await send_response(websocket, ret, t)
-                # else:
-                #     raise KeyError()
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
 

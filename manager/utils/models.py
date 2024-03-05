@@ -11,8 +11,6 @@ __all__ = [
     "validate_date"
 ]
 
-
-
 import asyncio
 import os
 from asyncio import iscoroutinefunction
@@ -53,11 +51,10 @@ if 'instance_id' not in environ:
     const.envfile.touch(mode=0o600)
     set_key(const.envfile, 'instance_id', environ['instance_id'])
 
+_buf_size = 64 * 1024 * 1024  # 64MB buffer
 
-_buf_size = 64 * 1024 * 1024 #64MB buffer
+TIMERS: dict[str, dict[str, Timer]] = {}
 
-
-TIMERS:dict[str,dict[str,Timer]] = {}
 
 def validate_date(v):
     if isinstance(v, str):
@@ -66,10 +63,12 @@ def validate_date(v):
         return datetime.strptime(v, '%Y-%m-%dT%H:%M')
     return v
 
+
 class FitEnum(IntEnum):
     contain = 0
     cover = 1
     fill = 2
+
 
 class MediaType(IntEnum):
     undefined = -1
@@ -78,29 +77,29 @@ class MediaType(IntEnum):
     video = 2
     audio = 3
 
+
 class Asset(BaseModel):
-    name:str = ''
-    url:str
-    duration:Union[int,float] = Field(default_factory=lambda: Config.def_duration if 'Config' in globals() else const.def_duration, ge=0)
-    enabled:bool = False
-    fit:FitEnum = FitEnum.contain
-    bg_color:Optional[Color] = None
-    media_type:MediaType = MediaType.undefined
-    uuid:str = Field(default_factory=lambda: os.urandom(16).hex(), frozen=True)
+    name: str = ''
+    url: str
+    duration: Union[int, float] = Field(
+        default_factory=lambda: Config.def_duration if 'Config' in globals() else const.def_duration, ge=0)
+    enabled: bool = False
+    fit: FitEnum = FitEnum.contain
+    bg_color: Optional[Color] = None
+    media_type: MediaType = MediaType.undefined
+    uuid: str = Field(default_factory=lambda: os.urandom(16).hex(), frozen=True)
 
-    ena_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None
-    _ena_date_old:Optional[datetime] = PrivateAttr(None)
+    ena_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None
+    _ena_date_old: Optional[datetime] = PrivateAttr(None)
 
-    dis_date:Annotated[Optional[datetime], BeforeValidator(validate_date)] = None
-    _dis_date_old:Optional[datetime] = PrivateAttr(None)
-
+    dis_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None
+    _dis_date_old: Optional[datetime] = PrivateAttr(None)
 
     def __enable(self):
         self._ena_date_old = None
         self.ena_date = None
         self.enable()
         Config.save()
-
 
     def __disable(self):
         self._dis_date_old = None
@@ -111,7 +110,6 @@ class Asset(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
 
-
         TIMERS[self.uuid] = {
             'ena': Timer(None, self.__enable),
             'dis': Timer(None, self.__disable)
@@ -120,12 +118,11 @@ class Asset(BaseModel):
         self._ena_date_old = self.ena_date
         self._dis_date_old = self.dis_date
 
-
         if self.ena_date and self.dis_date \
-            and self.ena_date <= datetime.now() and self.dis_date <= datetime.now():
-            #prevent undesired behaviours if both ena_date and dis_date
-            #happened before initialization (i.e. while UniTotem was powered off)
-            #we check which one should have been last
+                and self.ena_date <= datetime.now() and self.dis_date <= datetime.now():
+            # prevent undesired behaviours if both ena_date and dis_date
+            # happened before initialization (i.e. while UniTotem was powered off)
+            # we check which one should have been last
             if self.ena_date >= self.dis_date:
                 self.__enable()
             else:
@@ -136,15 +133,13 @@ class Asset(BaseModel):
                     TIMERS[self.uuid]['ena'].set_timeout(self.ena_date)
                 else:
                     self.__enable()
-        
+
             if self.dis_date:
                 if self.dis_date > datetime.now():
                     TIMERS[self.uuid]['dis'].set_timeout(self.dis_date)
                 else:
                     self.__disable()
 
-        
-    
     def __del__(self):
         TIMERS[self.uuid]['ena'].cancel()
         TIMERS[self.uuid]['dis'].cancel()
@@ -167,7 +162,7 @@ class Asset(BaseModel):
     def duration_default(cls, v, info):
         if 'Config' in globals() and info.data.get('uuid') == Config.assets.current.uuid:
             delta = (v or inf) - (time() - Config.assets._last_time)
-            if delta>0:
+            if delta > 0:
                 Config.assets._waiting_timer.set_timeout(delta)
             else:
                 Config.assets.next_a()
@@ -177,10 +172,14 @@ class Asset(BaseModel):
     @classmethod
     def mime_validator(cls, v):
         if isinstance(v, str):
-            if 'image' in v:   return MediaType.image
-            elif 'video' in v: return MediaType.video
-            elif 'audio' in v: return MediaType.audio
-            else:              return MediaType.undefined
+            if 'image' in v:
+                return MediaType.image
+            elif 'video' in v:
+                return MediaType.video
+            elif 'audio' in v:
+                return MediaType.audio
+            else:
+                return MediaType.undefined
         else:
             return v
 
@@ -189,7 +188,7 @@ class Asset(BaseModel):
         self.enabled = True
         if 'Config' in globals() and start_loop:
             Config.assets.next_a()
-    
+
     def disable(self):
         self.enabled = False
         if 'Config' in globals() and self.uuid == Config.assets.current.uuid:
@@ -198,8 +197,8 @@ class Asset(BaseModel):
     @model_validator(mode='after')
     def run_update(self):
         if self.uuid in TIMERS:
-            #during __init__, validator gets called before timers are initialized
-            #and added to their dictionary, we don't need them yet
+            # during __init__, validator gets called before timers are initialized
+            # and added to their dictionary, we don't need them yet
             if self.ena_date != self._ena_date_old:
                 self._ena_date_old = self.ena_date
                 if self.ena_date is None:
@@ -230,7 +229,7 @@ class Asset(BaseModel):
 
     def __bool__(self):
         return bool(self.enabled)
-    
+
     def __add__(self, other):
         if isinstance(other, Asset):
             other = other.enabled
@@ -249,9 +248,7 @@ class Asset(BaseModel):
         validate_assignment = True
 
 
-
-
-class AssetsList(list[Asset]): #, Iterator[Asset]):
+class AssetsList(list[Asset]):  # , Iterator[Asset]):
     __current: int = -1
     _last_time = 0
     _callback = None
@@ -261,14 +258,14 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
     _waiting_evt = asyncio.Event()
     _waiting_timer = Timer(None, None)
 
-    def __init__(self, iterable = []):
+    def __init__(self, iterable=[]):
         super().__init__([Asset.model_validate(e) for e in iterable])
         self.callback()
 
     def __setitem__(self, index, item):
         super().__setitem__(index, Asset.model_validate(item))
         self.callback()
-    
+
     def __getitem__(self, _id):
         if isinstance(_id, str):
             for asset in self:
@@ -278,9 +275,9 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
                 raise ValueError(f'No asset with uuid {_id} in list')
         else:
             return super().__getitem__(_id)
-        
-    def find(self, url:str|None = None):
-        return list(filter(lambda a: a.url==url, self))
+
+    def find(self, url: str | None = None):
+        return list(filter(lambda a: a.url == url, self))
 
     def insert(self, index, item):
         super().insert(index, Asset.model_validate(item))
@@ -295,27 +292,27 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         self.callback()
 
     def pop(self, index):
-        #see __delitem__ for explanation
+        # see __delitem__ for explanation
         curr_uuid = self.current.uuid
-        if index <= self.__current: self.__current-=1
+        if index <= self.__current: self.__current -= 1
         e = super().pop(index)
 
         if e.uuid == curr_uuid:
             self.next_a()
-        
+
         self.callback()
-        
+
         return e
 
     def remove(self, value):
-        #see __delitem__ for explanation        
+        # see __delitem__ for explanation
         curr_uuid = self.current.uuid
-        if self.index(value) <= self.__current: self.__current-=1
+        if self.index(value) <= self.__current: self.__current -= 1
         super().remove(value)
-        
+
         if value.uuid == curr_uuid:
             self.next_a()
-        
+
         self.callback()
 
     def __delitem__(self, _id):
@@ -327,22 +324,22 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
             else:
                 return
                 # raise ValueError(f'No asset with uuid {_id} in list')
-        
-        #save the uuid of the asset to remove
+
+        # save the uuid of the asset to remove
         uuid = self[_id].uuid
         curr_uuid = self.current.uuid
-        if _id <= self.__current: self.__current-=1
-        #remove the asset
+        if _id <= self.__current: self.__current -= 1
+        # remove the asset
         super().__delitem__(_id)
-        #NOW force asset change to avoid race conditions if the only enabled
-        #asset is the one we want to remove and the main controller
-        #is changing asset in this exact moment
+        # NOW force asset change to avoid race conditions if the only enabled
+        # asset is the one we want to remove and the main controller
+        # is changing asset in this exact moment
         if uuid == curr_uuid:
             self.next_a()
-        
+
         self.callback()
 
-    def move(self, from_i:int, to_i:int):
+    def move(self, from_i: int, to_i: int):
         super().insert(to_i, super().pop(from_i))
         self.callback()
         if self._current in [from_i, to_i]:
@@ -350,17 +347,17 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
 
     reset_asset_timer = _waiting_timer.reset
 
-    def next_a(self, force = False):
+    def next_a(self, force=False):
         if not (any(self) or force):
             temp_current = -1
         else:
             temp_current = (self._current + 1) % super().__len__()
             if not (self[temp_current] or force):
-                first = next(filter(lambda x: x.enabled, self[temp_current:] + self[:temp_current])) # type: ignore
+                first = next(filter(lambda x: x.enabled, self[temp_current:] + self[:temp_current]))  # type: ignore
                 temp_current = super().index(first)
         self._current = temp_current
 
-    async def iter_wait(self, *, force = False, waiter = asyncio.Event()):
+    async def iter_wait(self, *, force=False, waiter=asyncio.Event()):
         self._waiting_timer.cancel()
         self._waiting_timer = Timer(None, self.next_a)
         self.next_a(force=force)
@@ -368,17 +365,18 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
             yield self.current
             await self._waiting_evt.wait()
 
-    def prev_a(self, force = False):
+    def prev_a(self, force=False):
         if not (any(self) or force):
             temp_current = -1
         else:
             temp_current = (self._current - 1) % super().__len__()
             if not (self[temp_current] or force):
-                first = next(filter(lambda x: x.enabled, reversed(self[temp_current:] + self[:temp_current]))) # type: ignore
+                first = next(
+                    filter(lambda x: x.enabled, reversed(self[temp_current:] + self[:temp_current])))  # type: ignore
                 temp_current = super().index(first)
         self._current = temp_current
-        
-    def goto_a(self, index:Union[None,int,str] = __current):
+
+    def goto_a(self, index: Union[None, int, str] = __current):
         if index is None:
             self._current = self._current
             return
@@ -394,7 +392,7 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
     @property
     def _current(self):
         return self.__current
-    
+
     @_current.setter
     def _current(self, val):
         self.__current = val
@@ -402,57 +400,82 @@ class AssetsList(list[Asset]): #, Iterator[Asset]):
         self._waiting_evt.set()
         self._waiting_evt.clear()
         self._waiting_timer.set_timeout(self.current.duration or inf)
-    
+
     @property
     def current(self):
         if 0 <= self._current < super().__len__():
             return self[self._current]
         return self._first_boot if Config.first_boot else self._no_assets
-    
-    def set_callback(self, callback: Callable[[list, str|None], Coroutine], loop: asyncio.AbstractEventLoop):
+
+    def set_callback(self, callback: Callable[[list, str | None], Coroutine], loop: asyncio.AbstractEventLoop):
         self._callback = callback
         self._loop = loop
 
     def callback(self):
-        if self._callback != None and self._loop != None:
-            asyncio.run_coroutine_threadsafe(self._callback(self.serialize(), 
-                    self[self._current].uuid if self._current>=0 else None), self._loop)
+        if self._callback is not None and self._loop is not None:
+            asyncio.run_coroutine_threadsafe(self._callback(self.serialize(),
+                                                            self[self._current].uuid if self._current >= 0 else None),
+                                             self._loop)
 
     def serialize(self):
         return [a.model_dump(mode='json') for a in self]
 
 
+class UserData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    password: str = Field(alias='pass')
+    groups: list[str] = []
+    # perms: list[str] = []
 
 
+class GroupData(BaseModel):
+    perms: list[str] = []
 
-#TODO: replace with BaseSettings
+
+# TODO: replace with BaseSettings
 class _Config(BaseModel):
     model_config = ConfigDict(
-        populate_by_name = True,
+        populate_by_name=True,
         arbitrary_types_allowed=True
     )
-    #TODO: switch from Field assignment to Field annotation
-    assets:      AssetsList                = Field(AssetsList(), alias='urls')
-    def_duration:int                       = Field(const.def_duration, alias='default_duration', ge=0)
-    users:       dict[str, dict[str, str]] = {
-        'admin': { #default user: name=admin; password=admin (pre-hashed)
-            'pass': 'pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c'
-        }
+    # TODO: switch from Field assignment to Field annotation
+    assets: AssetsList = Field(AssetsList(), alias='urls')
+    def_duration: int = Field(const.def_duration, alias='default_duration', ge=0)
+    users: dict[str, UserData] = {
+        'admin': UserData( #default user: name=admin; password=admin (pre-hashed)
+            password='pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c',
+            groups=['admin']
+        )
     }
-    remote_server_ip:  Optional[IPv4Address]     = None
-    remote_server_port:PositiveInt                 = const.default_port_secure
-    remote_server_id:  Optional[str]               = None
-    remote_server_pk:  Optional[rsa.RSAPublicKey]  = None
-    rsa_pk:            rsa.RSAPrivateKey           = Field(default_factory=lambda: rsa.generate_private_key(65537,4096))
-    remote_clients:    dict[str,dict[str,str|int]] = {}
-    filename:          Union[str, Path]            = Field(const.default_config_file, exclude=True)
-    first_boot:        bool                        = Field(True, exclude=True)
+    groups: dict[str, GroupData] = {'admin': GroupData(perms=['*'])}
+    remote_server_ip: Optional[IPv4Address] = None
+    remote_server_port: PositiveInt = const.default_port_secure
+    remote_server_id: Optional[str] = None
+    remote_server_pk: Optional[rsa.RSAPublicKey] = None
+    rsa_pk: rsa.RSAPrivateKey = Field(default_factory=lambda: rsa.generate_private_key(65537, 4096))
+    remote_clients: dict[str, dict[str, str | int]] = {}
+    filename: Union[str, Path] = Field(const.default_config_file, exclude=True)
+    first_boot: bool = Field(True, exclude=True)
 
+    # noinspection PyNestedDecorators
     @field_validator('assets', mode='before')
     @classmethod
     def validate_assets(cls, val):
         return AssetsList(val)
-    
+
+    # noinspection PyNestedDecorators
+    @field_validator('users', mode='before')
+    @classmethod
+    def validate_users(cls, val: dict):
+        # needed when updating from versions below 3.0 that had only one user
+        if len(val) == 1 and 'admin' in val and 'groups' not in val['admin']:
+            val['admin']['groups'] = ['admin']
+
+        for k in val.keys():
+            val[k] = UserData(**val[k])
+        return val
+
+    # noinspection PyNestedDecorators
     @field_validator('rsa_pk', mode='before')
     @classmethod
     def validate_rsa_pk(cls, pk):
@@ -462,9 +485,10 @@ class _Config(BaseModel):
     @field_serializer('rsa_pk')
     def rsa_pk_serializer(self, rsa_pk: rsa.RSAPrivateKey):
         return rsa_pk.private_bytes(encoding=serialization.Encoding.PEM,
-                             format=serialization.PrivateFormat.TraditionalOpenSSL,
-                             encryption_algorithm=serialization.NoEncryption()).decode()
-    
+                                    format=serialization.PrivateFormat.TraditionalOpenSSL,
+                                    encryption_algorithm=serialization.NoEncryption()).decode()
+
+    # noinspection PyNestedDecorators
     @field_validator('remote_server_pk', mode='before')
     @classmethod
     def validate_remote_server_pk(cls, pk):
@@ -475,20 +499,21 @@ class _Config(BaseModel):
     def remote_server_pk_serializer(self, rsa_pk: rsa.RSAPublicKey):
         if rsa_pk:
             return rsa_pk.public_bytes(encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo).decode()
-    
-    def __call__(self, *, obj=None, filename = filename, first_boot = False):
-        if obj == None:
+                                       format=serialization.PublicFormat.SubjectPublicKeyInfo).decode()
+
+    def __call__(self, *, obj=None, filename=filename, first_boot=False):
+        if obj is None:
             self.filename = filename
             with open(filename) as o:
                 obj = o.read()
-        if isinstance(obj, (str,bytes,bytearray)):
+        if isinstance(obj, (str, bytes, bytearray)):
             obj = self.model_validate_json(obj)
         else:
             obj = self.model_validate(obj)
         self.assets = AssetsList(obj.assets)
         self.def_duration = obj.def_duration
         self.users = obj.users
+        self.groups = obj.groups
         self.remote_server_ip = obj.remote_server_ip
         self.remote_server_port = obj.remote_server_port
         self.remote_server_id = obj.remote_server_id
@@ -497,8 +522,7 @@ class _Config(BaseModel):
         self.remote_clients = obj.remote_clients
         self.first_boot = first_boot
 
-
-    def save(self, path:Union[None, str, Path] = None):
+    def save(self, path: Union[None, str, Path] = None):
         if path is None:
             path = self.filename
         with open(path, 'w') as conf_f:
@@ -506,20 +530,23 @@ class _Config(BaseModel):
         self.filename = path
         self.first_boot = False
 
-
     def reset(self):
         remove(self.filename)
-        self(_Config(), first_boot=True) # type: ignore
-    
-    # def add_user(self, user:str, password:str, administrator:bool = False):
-    #     self.users[user] = {'pass': generate_password_hash(password), 'adm': administrator}
+        # noinspection PyArgumentList
+        self(_Config(), first_boot=True)
 
-    def change_password(self, user:str, password:str):
-        self.users[user]['pass'] = generate_password_hash(password)
+    def add_user(self, user: str, password: str, groups=None):
+        if groups is None:
+            groups = []
+        self.users[user] = UserData(password=generate_password_hash(password), groups=groups)
 
-    def authenticate(self, user:str, password:str):
-        return check_password_hash(self.users.get(user, {}).get('pass', ''), password)
-    
+    def change_password(self, user: str, password: str):
+        self.users[user].password = generate_password_hash(password)
+
+    def authenticate(self, user: str, password: str):
+        if user in self.users:
+            return check_password_hash(self.users[user].password, password)
+
     def associate_client(self, pub_key: str, ip: str):
         _id = os.urandom(16).hex()
         self.remote_clients[_id] = {'pk': pub_key, 'ip': ip}
@@ -531,13 +558,7 @@ class _Config(BaseModel):
         return sum(self.assets)
 
 
-
-
-Config = _Config() # type: ignore
-
-
-
-
+Config = _Config()  # type: ignore
 
 
 class FileInfo(BaseModel):
@@ -549,15 +570,13 @@ class FileInfo(BaseModel):
     mime: Optional[str]
 
 
-
-
-
 class UploadManager(FileSystemEventHandler):
 
-    def __init__(self, folder: Path, scan_callback: Callable[[dict], Coroutine] | None = None, loop: asyncio.AbstractEventLoop | None = None):
+    def __init__(self, folder: Path, scan_callback: Callable[[dict], Coroutine] | None = None,
+                 loop: asyncio.AbstractEventLoop | None = None):
         self._folder = folder
-        self._files:list[Path] = []
-        self._files_info:dict[str, FileInfo] = {}
+        self._files: list[Path] = []
+        self._files_info: dict[str, FileInfo] = {}
         self._disk_used = 0
         self._disk_total = disk_usage(folder).total
         self._disk_totalh = human_readable_size(self._disk_total)
@@ -581,7 +600,7 @@ class UploadManager(FileSystemEventHandler):
         return self._files_info.copy()
 
     def serialize(self) -> dict[str, dict]:
-        return {k:v.model_dump() for k,v in self._files_info.items()}
+        return {k: v.model_dump() for k, v in self._files_info.items()}
 
     @property
     def disk_used(self) -> int:
@@ -594,7 +613,7 @@ class UploadManager(FileSystemEventHandler):
     @property
     def disk_total(self) -> int:
         return self._disk_total
-    
+
     @property
     def disk_totalh(self) -> str:
         return self._disk_totalh
@@ -613,7 +632,7 @@ class UploadManager(FileSystemEventHandler):
     def create_filename(self, filename: Union[str, Path, None]):
         if filename is None:
             filename = ''
-        
+
         if isinstance(filename, str):
             filename = Path(filename)
 
@@ -629,26 +648,26 @@ class UploadManager(FileSystemEventHandler):
                 filename = filename.with_stem(stem.format(i))
         return filename
 
-    async def save(self, infile, out_filename = None) -> Path:
+    async def save(self, infile, out_filename=None) -> Path:
         if not out_filename:
             if hasattr(infile, 'name'):
                 out_filename = infile.name
             elif hasattr(infile, 'filename'):
                 out_filename = infile.filename
-        
+
         out_filename = self.create_filename(out_filename)
         try:
             async with aopen(out_filename, 'wb') as out:
                 if iscoroutinefunction(infile.read):
-                    while buf := await infile.read(_buf_size): 
+                    while buf := await infile.read(_buf_size):
                         await out.write(buf)
                 else:
                     while buf := infile.read(_buf_size):
                         await out.write(buf)
         except FileNotFoundError:
-            self.mkdirs() #create directory if not exists
+            self.mkdirs()  # create directory if not exists
             return await self.save(infile, out_filename)
-        
+
         file_data = get_file_info(out_filename)
         Config.assets.append({
             'name': file_data.filename,
@@ -675,48 +694,45 @@ class UploadManager(FileSystemEventHandler):
     def on_closed(self, event):
         super().on_closed(event)
         self.scan_folder()
-    
+
     def on_created(self, event):
         super().on_created(event)
         self.scan_folder()
-    
+
     def on_deleted(self, event):
         super().on_deleted(event)
         self.scan_folder()
-    
+
     def on_moved(self, event):
         super().on_moved(event)
         self.scan_folder()
 
 
-
-
-
 def human_readable_size(size, decimal_places=2):
-    for unit in ['B','KiB','MiB','GiB','TiB']:
+    for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
         if size < 1024.0:
             break
         size /= 1024.0
-    return f"{size:.{decimal_places}f}{unit}" # type: ignore
+    return f"{size:.{decimal_places}f}{unit}"  # type: ignore
 
 
-def get_file_info(b, *f, def_dur = Config.def_duration):
+def get_file_info(b, *f, def_dur=Config.def_duration):
     dur = None
     dur_s = def_dur
     mime = None
     if isfile(f := join(b, *f)):
-        for track in MediaInfo.parse(f).general_tracks: # type: ignore
+        for track in MediaInfo.parse(f).general_tracks:  # type: ignore
             track_data = track.to_data()
             mime = track.internet_media_type
             if 'duration' in track_data:
                 dur = track_data.get('other_duration', [None])[0]
-                dur_s = ceil(int(track_data['duration'])/1000)
-            break #we only need the first general track
+                dur_s = ceil(int(track_data['duration']) / 1000)
+            break  # we only need the first general track
     return FileInfo(filename=basename(f), duration=dur, duration_s=dur_s,
-        size=human_readable_size(getsize(f)), mime=mime)
+                    size=human_readable_size(getsize(f)), mime=mime)
 
 
-def get_dominant_color(pil_img:Image.Image, palette_size=16): # https://stackoverflow.com/a/61730849/9655651
+def get_dominant_color(pil_img: Image.Image, palette_size=16):  # https://stackoverflow.com/a/61730849/9655651
     # Resize image to speed up processing
     img = pil_img.copy()
     img.thumbnail((100, 100))
@@ -726,8 +742,8 @@ def get_dominant_color(pil_img:Image.Image, palette_size=16): # https://stackove
     palette = paletted.getpalette()
     color_counts = sorted(paletted.getcolors(), reverse=True)
     palette_index = color_counts[0][1]
-    dominant_color = palette[palette_index*3:palette_index*3+3] #type: ignore [reportOptionalSubscript]
-    return hex((dominant_color[0]<<16) + (dominant_color[1]<<8) + dominant_color[2])
+    dominant_color = palette[palette_index * 3:palette_index * 3 + 3]
+    return hex((dominant_color[0] << 16) + (dominant_color[1] << 8) + dominant_color[2])
 
 
 class Settings(WSAPIBase):

@@ -110,44 +110,10 @@ class WSManager:
 
 class WSAPIBase:
 
-    __cal = {}
-    __gen = {}
-    __awa = {}
-
-    def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager, prefix: str = None):
+    def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
         self.ws = ws
         self.ui_ws = ui_ws
         self.remote_ws = remote_ws
-
-        classname = self.__class__.__name__
-        print("Class:", classname)
-        if prefix is None:
-            prefix = classname
-        else:
-            prefix = join(prefix, classname)
-
-        # self = self(self.__ws, self.__ui_ws, self.__remote_ws)
-
-        for att in dir(self):
-            if not att.startswith('__'):
-                a = self.__getattribute__(att)
-                if callable(a):
-                    if isclass(a):
-                        if issubclass(a, WSAPIBase):
-                            a = a(ws, ui_ws, remote_ws)
-                            self.__setattr__(att, a)
-                            self.__cal.update(a.__cal)
-                            self.__gen.update(a.__gen)
-                            self.__awa.update(a.__awa)
-                    elif isgeneratorfunction(a):
-                        print("Generator:", att)
-                        self.__gen[join(prefix, att).lower()] = a
-                    elif iscoroutinefunction(a):
-                        print("Awaitable:", att)
-                        self.__awa[join(prefix, att).lower()] = a
-                    else:
-                        print("Callable:", att)
-                        self.__cal[join(prefix, att).lower()] = a
 
 
 def api_props(*, allowed_users, allowed_roles, **validator_kwargs):
