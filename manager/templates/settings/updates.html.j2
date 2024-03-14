@@ -22,13 +22,13 @@
             </small>
         </div>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="apt_update" onclick="sendCommand('settings/update')"><i class="bi bi-arrow-clockwise"></i> Check updates</button>
-    <button type="button" class="btn btn-sm btn-outline-danger" id="apt_upgrade" onclick="sendCommand('settings/update', {do_upgrade: true})"><i class="bi bi-arrow-bar-up"></i> Do updates</button>
+    <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="apt_update" onclick="sendCommand('Settings/Update')"><i class="bi bi-arrow-clockwise"></i> Check updates</button>
+    <button type="button" class="btn btn-sm btn-outline-danger" id="apt_upgrade" onclick="sendCommand('Settings/Update', {do_upgrade: true})"><i class="bi bi-arrow-bar-up"></i> Do updates</button>
 </div>
 <div class="border rounded p-2" style="max-height: 30em; overflow-y: auto;" id="log_container"><small><code style="white-space: pre-wrap; color: grey;" id="log">No logs available</code></small></div>
 {% endblock content %}
 
-{% set init_cmds = ['settings/update/list', 'settings/update/status'] %}
+{% set init_cmds = ['Settings/Update/list', 'Settings/Update/status'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
@@ -42,23 +42,23 @@ const upgradeBtn = $('#apt_upgrade');
 
 
 {% block recv_cmds %}
-case 'settings/update/start':
+case 'Settings/Update/start':
     log_view.empty();
     break;
 
-case 'settings/update/progress':
+case 'Settings/Update/progress':
     log_view.append((data.is_stdout)?data.data:`<span style="color: red;">${data.data}</span>`);
     log_container.scrollTop = log_container.scrollHeight;
     break;
 
-case 'settings/update/end':
+case 'Settings/Update/end':
     updateBtn.prop('disabled', false)
         .html('<i class="bi bi-arrow-clockwise"></i> Check updates');
     upgradeBtn.prop('disabled', false)
         .html('<i class="bi bi-arrow-bar-up"></i> Do updates');
     break;
 
-case 'settings/update/list':
+case 'Settings/Update/list':
     var cnt = data.updates.length;
     tooltip.html(`${cnt==0?'No':cnt} update${cnt==1?'':'s'} available`);
     upd_table.empty();
@@ -73,7 +73,7 @@ case 'settings/update/list':
     });
     break;
 
-case 'settings/update/status':
+case 'Settings/Update/status':
     if (data.status == 'update'){
         updateBtn.prop('disabled', true);
         updateBtn.html('<span class="spinner-border spinner-border-sm" role="status"></span> Checking...');

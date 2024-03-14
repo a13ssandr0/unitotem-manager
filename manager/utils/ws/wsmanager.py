@@ -60,12 +60,10 @@ class WSManager:
         return text
 
     async def send(self, websocket: WebSocket, target: str, nocache=False, **kwargs):
-        target = target.lower()
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         await websocket.send_text(text)
 
     async def broadcast(self, target: str, nocache=False, **kwargs):
-        target = target.lower()
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         for connection in self.active_connections:
             await connection.send_text(text)

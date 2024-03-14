@@ -14,10 +14,10 @@ from utils.ws.wsmanager import api_props
 class Scheduler(WSAPIBase):
     @api_props(allowed_roles='alessandro', allowed_users='all')
     async def asset(self):
-        await self.ws.broadcast('scheduler/asset', items=Config.assets.serialize(), current=Config.assets.current.uuid)
+        await self.ws.broadcast('Scheduler/Asset', items=Config.assets.serialize(), current=Config.assets.current.uuid)
 
     async def file(self):
-        await self.ws.broadcast('scheduler/file', files=UPLOADS.serialize())
+        await self.ws.broadcast('Scheduler/file', files=UPLOADS.serialize())
 
     def add_url(self, items: list[str | dict] = []):
         for element in items:
@@ -44,7 +44,7 @@ class Scheduler(WSAPIBase):
                 invalid.append(element)
         Config.save()
         if invalid:
-            await self.ws.send(ws, 'scheduler/add_file', error='Invalid elements', extra=invalid)
+            await self.ws.send(ws, 'Scheduler/add_file', error='Invalid elements', extra=invalid)
 
     def edit(self,
                    uuid: str,
@@ -81,7 +81,7 @@ class Scheduler(WSAPIBase):
 
     async def current(self):
         if Config.enabled_asset_count:
-            await self.ws.broadcast('scheduler/current', uuid=Config.assets.current.uuid)
+            await self.ws.broadcast('Scheduler/current', uuid=Config.assets.current.uuid)
 
     def delete(self, uuid: str):
         del Config.assets[uuid]
@@ -95,12 +95,11 @@ class Scheduler(WSAPIBase):
     def goto(self, index: Union[None, int, str] = None):
         Config.assets.goto_a(index)
 
-    class Goto(WSAPIBase):
-        def back(self):
-            Config.assets.prev_a()
+    def back(self):
+        Config.assets.prev_a()
 
-        def next(self):
-            Config.assets.next_a()
+    def next(self):
+        Config.assets.next_a()
 
     def reorder(self, from_i: int, to_i: int):
         Config.assets.move(from_i, to_i)

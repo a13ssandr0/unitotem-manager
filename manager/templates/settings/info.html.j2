@@ -256,7 +256,7 @@ function human_readable_size(size, precision=3){
 
 
 {% block recv_cmds %}
-case 'settings/info':
+case 'Settings/info':
     uptime.html(`Uptime: ${data.uptime}`);
 
     barChartData.datasets.forEach(dataset => {dataset.data = []});

@@ -43,13 +43,13 @@
         <div class="mt-2 hstack gap-2">
             <button type="button" id="del-btn" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete ?" data-bs-positive-btn="Delete" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
             <button type="button" id="set-btn" class="btn btn-sm btn-outline-success ms-auto"><i class="bi bi-check2"></i> Save</button>
-            <button type="button" id="apply-btn" class="btn btn-sm btn-warning" onclick="sendCommand('settings/netplan/changeFile', {apply: true});"><i class="bi bi-gear"></i> Apply</button>
+            <button type="button" id="apply-btn" class="btn btn-sm btn-warning" onclick="sendCommand('Settings/Netplan/changeFile', {apply: true});"><i class="bi bi-gear"></i> Apply</button>
         </div>
     </div>
 {% endblock content %}
 
 {% set ext_scripts = ['ace.js'] %}
-{% set init_cmds = ['settings/hostname', 'settings/netplan/getFile'] %}
+{% set init_cmds = ['Settings/hostname', 'Settings/Netplan/getFile'] %}
 
 
 <script type="text/javascript" charset="utf-8">
@@ -74,7 +74,7 @@ aceEditor.session.on('change', (delta) => {
     }
 });
 set_btn.click(() => {
-    sendCommand('settings/netplan/changeFile', {filename: cur_file, content: aceEditor.getValue(), apply: false});
+    sendCommand('Settings/Netplan/changeFile', {filename: cur_file, content: aceEditor.getValue(), apply: false});
     netplan.original[cur_file] = aceEditor.getValue();
     delete netplan.modified[cur_file];
     set_btn.removeClass('btn-success').addClass('btn-outline-success');
@@ -96,11 +96,11 @@ inputHostname.on('input', () => {
     }
 });
 
-$('#add_file_btn').click(() => sendCommand('settings/netplan/newFile', {filename: $('#modal_input_filename').val()}));
-set_hostname.click(() => sendCommand('settings/hostname', {hostname: inputHostname.val()}));
+$('#add_file_btn').click(() => sendCommand('Settings/Netplan/newFile', {filename: $('#modal_input_filename').val()}));
+set_hostname.click(() => sendCommand('Settings/hostname', {hostname: inputHostname.val()}));
 var wifi_upd_timer = Number();
 $('#wifiDropBtn').on({
-    'show.bs.dropdown': () => {wifi_upd_timer=setInterval(sendCommand, 5000, 'settings/get_wifis')},
+    'show.bs.dropdown': () => {wifi_upd_timer=setInterval(sendCommand, 5000, 'Settings/get_wifis')},
     'hide.bs.dropdown': () => clearInterval(wifi_upd_timer)
 });
 
@@ -108,12 +108,12 @@ $('#wifiDropBtn').on({
 
 
 {% block recv_cmds %}
-case 'settings/hostname':
+case 'Settings/hostname':
     inputHostname.val(data.hostname).attr('def-val', data.hostname)
         .removeClass('btn-success').addClass('btn-outline-success');
     break;
 
-case 'settings/netplan/getfile':
+case 'Settings/Netplan/getFile':
     filesList.empty();
     netplan.original = data.files;
     Object.entries(data.files).forEach((pair, i) => {
@@ -126,14 +126,14 @@ case 'settings/netplan/getfile':
                 aceEditor.setValue(content, -1);
                 del_btn.attr('data-bs-title', `Do you want to delete ${filename}?`);
                 del_btn.attr('data-bs-positive-action',
-                    `sendCommand('settings/netplan/deleteFile', {filename: '${filename}'})`);
+                    `sendCommand('Settings/Netplan/deleteFile', {filename: '${filename}'})`);
             });
         if (i===0) btn.click();
         filesList.append($('<li></li>').append(btn));
     });
     break;
 
-case 'settings/get_wifis':
+case 'Settings/get_wifis':
     let wifi_low = data.wifis[0].signal_total/3;
     let wifi_high = data.wifis[0].signal_total*2/3;
     wifi_menu.empty();
@@ -146,7 +146,7 @@ case 'settings/get_wifis':
 
         wifi_menu.append(
             $('<li class="dropdown-item"></li>')
-                .click(() => sendCommand('settings/netplan/changeFile', {
+                .click(() => sendCommand('Settings/Netplan/changeFile', {
                     filename: `10-${network.essid ?? ('hidden' + network.mac.slice(-5))}.yaml`,
                     content: wifi_yaml(network.essid, network.encryption !== 'off'),
                     apply: false

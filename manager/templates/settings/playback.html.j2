@@ -13,11 +13,11 @@
 </div>
 {% endblock content %}
 
-{% set init_cmds = ['settings/default_duration'] %}
+{% set init_cmds = ['Settings/default_duration'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block recv_cmds %}
-case 'settings/default_duration':
+case 'Settings/default_duration':
     default_duration.attr('def-val', data.duration);
     default_duration.val(data.duration);
     set_default_duration.removeClass('btn-success').addClass('btn-outline-success').prop('disabled', true);
@@ -36,6 +36,6 @@ default_duration.change(() => {
     }
 });
 
-set_default_duration.click(() => sendCommand('settings/default_duration', {duration: default_duration.val()}));
+set_default_duration.click(() => sendCommand('Settings/default_duration', {duration: default_duration.val()}));
 {% endblock js %}
 </script>

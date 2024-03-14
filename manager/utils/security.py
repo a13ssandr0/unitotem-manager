@@ -127,7 +127,7 @@ async def set_pass(request: Request, response: Response, password: str, username
 
 class Security(WSAPIBase):
     async def getUsers(self):
-        await self.ws.broadcast('settings/security/getUsers', users=[(user, {'groups': data.groups}) for user, data in Config.users.items()])
+        await self.ws.broadcast('Settings/Security/getUsers', users=[(user, {'groups': data.groups}) for user, data in Config.users.items()])
 
     async def getGroups(self):
-        await self.ws.broadcast('settings/security/getGroups', groups=[(group, data.model_dump()) for group, data in Config.groups.items()])
+        await self.ws.broadcast('Settings/Security/getGroups', groups=[(group, data.model_dump()) for group, data in Config.groups.items()])

@@ -58,6 +58,7 @@
     {{messageModal()}}
     {{newFileModal() if (request.url|string).endswith('network')}}
     {{addPowerRuleModal() if (request.url|string).endswith('cron')}}
+    {%- block body_top %}{% endblock body_top -%}
 
     <nav class="navbar navbar-dark hdr">
         <div class="container-fluid gap-2">
@@ -157,8 +158,7 @@
             };
             _ws.onmessage = event => {
                 const data = JSON.parse(event.data);
-                data.target = data.target.toLowerCase();
-                if (data.target == 'settings/hostname'){
+                if (data.target === 'Settings/hostname'){
                     document.title = data.hostname + ' - UniTotem Manager';
                     navbar_hostname.html('&nbsp;@&nbsp;' + data.hostname);
                 }
@@ -198,7 +198,7 @@
                 connect_retry++;
                 notification('Disconnected', 'Attempting to reconnect...', );
                 console.log('Socket is closed. Reconnect will be attempted in', connect_retry, 'second(s).', e.reason);
-                if (e.reason == 'Not Authenticated') location.reload();
+                if (e.reason === 'Not Authenticated') location.reload();
                 setTimeout(() => ws=connect(), connect_retry*1000);
             };
 

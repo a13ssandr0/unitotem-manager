@@ -37,7 +37,7 @@
 
 {% endblock content %}
 
-{% set init_cmds = ['settings/remote/getMode'] %}
+{% set init_cmds = ['Settings/Remote/getMode'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
@@ -51,14 +51,14 @@ const client_container = $('#client_container');
 
 
 $('#server_ip_container button').click(()=>{
-    sendCommand('settings/remote/setMode', {
+    sendCommand('Settings/Remote/setMode', {
         remote_server:server_ip.val(),
         remote_port:server_port.val() || null
     });
 });
 
 $('#server_info_container button').click(()=>{
-    sendCommand('settings/remote/setMode', {remote_server:null});
+    sendCommand('Settings/Remote/setMode', {remote_server:null});
 });
 
 mode_selector.change(function(){
@@ -68,14 +68,14 @@ mode_selector.change(function(){
     } else {
         server_ip_container.hide();
         client_container.show();
-        sendCommand('settings/remote/setMode', {remote_server:null});
+        sendCommand('Settings/Remote/setMode', {remote_server:null});
     }
 });
 
 {% endblock js %}
 
 {% block recv_cmds %}
-case 'settings/remote/getMode':
+case 'Settings/Remote/getMode':
     if (data.remote_server) {
         mode_selector.val(1).change();
         if (data.remote_connected) {
@@ -100,7 +100,7 @@ case 'settings/remote/getMode':
                             $('<h5 class="card-title"></h5>').html(prop.hostname),
                             $('<h6 class="card-subtitle mb-2 text-body-secondary"></h6>').html(`${prop.ip}:${prop.port}`),
                             $('<button type="button" class="btn btn-sm btn-primary">Disconnect</button>').click(()=>{
-                                sendCommand('settings/remote/disconnect', {client:id});
+                                sendCommand('Settings/Remote/disconnect', {client:id});
                             }),
                             {# $('<a href="#" class="card-link">Disable</a>'), #}
                             $('<a type="button" class="btn btn-sm btn-primary ms-1" target="_blank" rel="noopener noreferrer">Manage</a>')

@@ -751,4 +751,4 @@ class Settings(WSAPIBase):
         if duration is not None:
             Config.def_duration = duration
             Config.save()
-        await self.ws.broadcast('settings/default_duration', duration=Config.def_duration)
+        await self.ws.broadcast('Settings/default_duration', duration=Config.def_duration)

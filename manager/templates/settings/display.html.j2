@@ -93,32 +93,32 @@ svg text {
 
 {% endblock content%}
 
-{% set init_cmds = ['settings/display/getBounds', 'settings/display/getOrientation', 'settings/display/getFlip'] %}
+{% set init_cmds = ['Settings/Display/getBounds', 'Settings/Display/getOrientation', 'Settings/Display/getFlip'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
 const window_bound_rect = $('#window_bound_rect');
 $('[name=screen]').each((i, e)=>{
     e = $(e);
-    e.click(() => sendCommand('settings/display/setBounds', {x:e.attr('x'), y:e.attr('y'), width:e.attr('width'), height:e.attr('height')}));
+    e.click(() => sendCommand('Settings/Display/setBounds', {x:e.attr('x'), y:e.attr('y'), width:e.attr('width'), height:e.attr('height')}));
 });
 
-$('input[name="orientation"]').on('change', (e) => sendCommand('settings/display/setOrientation', {orientation: e.target.value}));
-$('input[name="flip"]').on('change', (e) => sendCommand('settings/display/setFlip', {flip: e.target.value}));
+$('input[name="orientation"]').on('change', (e) => sendCommand('Settings/Display/setOrientation', {orientation: e.target.value}));
+$('input[name="flip"]').on('change', (e) => sendCommand('Settings/Display/setFlip', {flip: e.target.value}));
 {% endblock js %}
 
 {% block recv_cmds %}
-case 'settings/display/getbounds':
+case 'Settings/Display/getBounds':
     window_bound_rect.attr('x', data.x).attr('y', data.y)
         .attr('width', data.width).attr('height', data.height);
     break;
 
-case 'settings/display/getorientation':
+case 'Settings/Display/getOrientation':
     $('input[name="orientation"]:checked').removeAttr('checked');
     $(`input[name="orientation"][value="${data.orientation}"]`).prop('checked', true);
     break;
 
-case 'settings/display/getflip':
+case 'Settings/Display/getFlip':
     $('input[name="flip"]:checked').removeAttr('checked');
     $(`input[name="flip"][value="${data.flip}"]`).prop('checked', true);
     break;
