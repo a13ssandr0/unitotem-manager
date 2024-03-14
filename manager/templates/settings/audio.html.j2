@@ -31,25 +31,25 @@
 {% endfor -%}
 {% endblock content %}
 
-{% set init_cmds = ['settings/audio/devices'] %}
+{% set init_cmds = ['Settings/Audio/devices'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
 $('[name="audioRadio"]').each((i,e) => $(e).click(function() {
-    sendCommand('settings/audio/default', {device: e.id});
+    sendCommand('Settings/Audio/default', {device: e.id});
 }));
 $('button.btn.btn-link.p-0').each((i,e) => $(e).click(function() {
-    sendCommand('settings/audio/mute', {device: $(e).data('devname'), mute: !e.hasAttribute('mute')});
+    sendCommand('Settings/Audio/mute', {device: $(e).data('devname'), mute: !e.hasAttribute('mute')});
 }));
 $('input.form-range').each((i,e) => 
     $(e).on('input', () => { $(e.parentElement).siblings('p').html(Math.round(parseFloat(e.value)*100))})
-        .change(() => { sendCommand('settings/audio/volume', {device: $(e).data('devname'), volume: parseFloat(e.value)})})
+        .change(() => { sendCommand('Settings/Audio/volume', {device: $(e).data('devname'), volume: parseFloat(e.value)})})
 );
 {% endblock js %}
 
 
 {% block recv_cmds %}
-case 'settings/audio/devices':
+case 'Settings/Audio/devices':
     data.devices.forEach(device => {
         let dev = $(`div[name="${device.name}"]`);
         dev.find('.form-check-input').prop('checked', device.default);

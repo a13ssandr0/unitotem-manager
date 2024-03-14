@@ -10,6 +10,7 @@ from typing import Any, Literal, Union
 
 import urllib3
 import uvloop
+from benedict import benedict
 from fastapi import (Depends, FastAPI, Request, UploadFile, status)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -85,6 +86,8 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
             data['audio'] = getAudioDevices()
         case 'display':
             data['displays'] = DISPLAYS
+        case 'security':
+            data['api_tree'] = dict(benedict({k: {} for k in api.generators.keys()}).unflatten('/'))
         case 'info':
             data['cpu_count'] = cpu_count()
             data['ram_tot'] = human_readable_size(virtual_memory().total)
@@ -93,8 +96,10 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
             data['temp_devs'] = {k: [x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k, v in
                                  sensors_temperatures().items()}
             data['fan_devs'] = {k: [x._asdict() for x in v] for k, v in sensors_fans().items()}
-
-    return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
+    try:
+        return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
+    except Exception:
+        print_exc()
 
 
 @WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
@@ -156,7 +161,7 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.add_signal_handler(signal.SIGTERM, lambda *_: SHUTDOWN_EVENT.set())
 
-    Config.assets.set_callback(lambda assets, current: WS.broadcast('scheduler/asset', items=assets, current=current),
+    Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/Asset', items=assets, current=current),
                                loop)
 
     utils.commons.UPLOADS._evloop = loop
@@ -172,10 +177,10 @@ if __name__ == "__main__":
     #     loop.create_task(connect_to_server(cmdargs['remote']), name='remote_control')
     # el
     if Config.remote_server_ip:
-        loop.create_task(api.generators['settings/remote/_remote__connect_to_server'].__original_func__(
+        loop.create_task(api.generators['Settings/Remote/_Remote__connect_to_server'].__original_func__(
             Config.remote_server_ip, Config.remote_server_port), name='remote_control')
     elif not cmdargs.no_gui:
-        loop.create_task(api.generators['settings/remote/_remote__webview_control_main'].__original_func__(), name='page_controller')
+        loop.create_task(api.generators['Settings/Remote/_Remote__webview_control_main'].__original_func__(), name='page_controller')
 
 
     async def info_loop(_ws: WSManager, waiter: asyncio.Event):

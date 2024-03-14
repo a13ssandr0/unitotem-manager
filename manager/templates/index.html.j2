@@ -50,9 +50,9 @@
                 <h5>Playlist</h5>
                 <div class="ms-auto">
                     <div class="btn-group" role="group">
-                        <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/back')"><i class="bi bi-skip-backward"></i></button>
-                        <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto')"><i class="bi bi-arrow-clockwise"></i></button>
-                        <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('scheduler/goto/next')"><i class="bi bi-skip-forward"></i></button>
+                        <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/back')"><i class="bi bi-skip-backward"></i></button>
+                        <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/goto')"><i class="bi bi-arrow-clockwise"></i></button>
+                        <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/next')"><i class="bi bi-skip-forward"></i></button>
                     </div>
                 </div>
                 <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal" onclick="modal_input.label.text('New asset')"><i class="bi bi-plus-circle"></i> Add URL</button>
@@ -78,11 +78,11 @@
 {% set ext_scripts = ['Sortable.min.js', 'jquery.form.js'] %}
     
 {% set init_cmds = [
-    'scheduler/asset',
-    'scheduler/current',
-    'scheduler/file',
-    'settings/hostname',
-    'settings/default_duration'
+    'Scheduler/asset',
+    'Scheduler/current',
+    'Scheduler/file',
+    'Settings/hostname',
+    'Settings/default_duration'
 ] %}
 
 <script>
@@ -138,7 +138,7 @@
         });
     
     sortable_list = Sortable.create(asset_table[0], {
-        onUpdate: (event) => {sendCommand('scheduler/reorder', {from_i: event.oldIndex, to_i: event.newIndex});},
+        onUpdate: (event) => {sendCommand('Scheduler/reorder', {from_i: event.oldIndex, to_i: event.newIndex});},
         handle: ".asset-list-handle"
     });
 
@@ -150,7 +150,7 @@
     
     $('#delete_all_btn').click(() => {
         let checkedfiles = $('input[name="filecheck"]:checked');
-        sendCommand('scheduler/delete_file', {files: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
+        sendCommand('Scheduler/delete_file', {files: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
         checkedfiles.each((i, e) => {e.checked = false});
     })
     $('#download_all_btn').click(() => {
@@ -167,13 +167,13 @@
     })
     $('#add_all_btn').click(() => {
         let checkedfiles = $('input[name="filecheck"]:checked');
-        sendCommand('scheduler/add_file', {items: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
+        sendCommand('Scheduler/add_file', {items: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
         checkedfiles.each((i, e) => {e.checked = false});
     })
 
     modal_input.submit_btn.click(() => {
         if (modal_input.label.text().includes('New')){
-            sendCommand('scheduler/add_url', { items: [{
+            sendCommand('Scheduler/add_url', { items: [{
                 name: modal_input.name.val(),
                 url: modal_input.url.val(),
                 duration: modal_input.duration.val(),
@@ -183,7 +183,7 @@
                 dis_date: modal_input.dis_date.val()
             }]});
         } else {
-            sendCommand('scheduler/asset/edit', {
+            sendCommand('Scheduler/Asset/edit', {
                 name: modal_input.name.val(),
                 url: modal_input.url.val(),
                 duration: modal_input.duration.val(),
@@ -233,7 +233,7 @@
 
 
 {% block recv_cmds %}
-case 'scheduler/asset':
+case 'Scheduler/Asset':
     asset_table.empty();
     data.items.forEach((item, i) => {
         let icon = (()=>{
@@ -280,7 +280,7 @@ case 'scheduler/asset':
                                 $('<input class="form-check-input" type="checkbox" role="switch">')
                                     .attr('title', (item.enabled?'Dis':'En') + 'able asset')
                                     .prop('checked', item.enabled)
-                                    .change(() => sendCommand('scheduler/asset/edit', {uuid: item.uuid, enabled: !item.enabled})),
+                                    .change(() => sendCommand('Scheduler/Asset/edit', {uuid: item.uuid, enabled: !item.enabled})),
                                 (()=>{
                                     if (!item.ena_date && !item.dis_date) return;
                                     return $('<i class="position-absolute top-100 start-0 translate-middle bi bi-clock" style="font-size:0.75rem" data-bs-toggle="tooltip" data-bs-placement="bottom"></i>')
@@ -289,7 +289,7 @@ case 'scheduler/asset':
                             ),
                             $('<div class="btn-group" role="group"></div>').append(
                                 $('<button type="button" title="Delete asset" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>')
-                                    .click(() => sendCommand('scheduler/delete', {uuid: item.uuid})),
+                                    .click(() => sendCommand('Scheduler/delete', {uuid: item.uuid})),
                                 $('<button type="button" title="Edit asset" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></button>')
                                     .click(() => {
                                         modal_input.label.text('Edit asset');
@@ -323,7 +323,7 @@ case 'scheduler/asset':
                                         modal_input.parent.show();
                                     }),
                                 $('<button type="button" title="Show asset" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>')
-                                    .click(() => sendCommand('scheduler/goto', {index: item.uuid}))
+                                    .click(() => sendCommand('Scheduler/goto', {index: item.uuid}))
                             )
                         )
                     )
@@ -332,13 +332,13 @@ case 'scheduler/asset':
     });
     break;
 
-case 'scheduler/current':
+case 'Scheduler/current':
     asset_table.children().each((i,element) => {
         $(element).toggleClass('table-active', element.id === data.uuid);
     });
     break;
 
-case 'scheduler/file':
+case 'Scheduler/file':
     const list = $('#file-list');
     list.empty();
     Object.entries(data.files).forEach(([fname, fdata], i) => {
@@ -358,11 +358,11 @@ case 'scheduler/file':
     });
     break;
 
-case 'settings/default_duration':
+case 'Settings/default_duration':
     modal_input.duration.val(data.duration).attr('def-value', data.duration);
     break;
 
-case 'settings/display/getbounds':
+case 'Settings/Display/getBounds':
     $('#display_bounds').html( 
         (data.bounds.width && data.bounds.height)?
             `${data.bounds.width}x${data.bounds.height}`:

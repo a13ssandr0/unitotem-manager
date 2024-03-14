@@ -50,7 +50,7 @@ class Audio(WSAPIBase):
         await self.devices()
 
     async def devices(self):
-        await self.ws.broadcast('settings/audio/devices', devices=getAudioDevices())
+        await self.ws.broadcast('Settings/Audio/devices', devices=getAudioDevices())
 
     async def volume(self, device: Optional[str] = None, volume: Optional[float] = None):
         if volume is not None:

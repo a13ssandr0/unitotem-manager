@@ -1,4 +1,4 @@
-__all__ = [
+﻿__all__ = [
     "TEMPLATES",
     "UPLOADS",
     "cmdargs",
@@ -13,7 +13,7 @@ from .constants import templates_folder, Arguments, uploads_folder
 from .models import UploadManager
 from .objs import flatten
 
-TEMPLATES = Jinja2Templates(templates_folder, extensions=['jinja2.ext.do'])
+TEMPLATES = Jinja2Templates(templates_folder, extensions=['jinja2.ext.do', 'jinja2.ext.debug'])
 TEMPLATES.env.filters['flatten'] = flatten
 
 UPLOADS = UploadManager(uploads_folder)

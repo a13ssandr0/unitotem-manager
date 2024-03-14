@@ -26,7 +26,7 @@ REMOTE_CONNECTED = False
 
 class Remote(WSAPIBase):
     async def getMode(self):
-        await self.ws.broadcast('settings/remote/get',
+        await self.ws.broadcast('Settings/Remote/get',
                                 remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
                                 remote_connected=REMOTE_CONNECTED,
                                 remote_port=Config.remote_server_port,
@@ -63,7 +63,7 @@ class Remote(WSAPIBase):
     async def __webview_control_main(self):
         print('Starting webview controller')
         async for asset in Config.assets.iter_wait(waiter=SHUTDOWN_EVENT):
-            await self.ws.broadcast('scheduler/asset/current', uuid=asset.uuid)
+            await self.ws.broadcast('Scheduler/Asset/current', uuid=asset.uuid)
             url = asset.url
             if url.startswith('file:'):
                 url = 'https://localhost/uploaded/' + url.removeprefix('file:')

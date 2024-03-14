@@ -353,22 +353,22 @@ class Settings(WSAPIBase):
     async def hostname(self, hostname: Optional[str] = None):
         if hostname is not None:
             set_hostname(hostname)
-        await self.ws.broadcast('settings/hostname', hostname=get_hostname())
+        await self.ws.broadcast('Settings/hostname', hostname=get_hostname())
 
     async def get_wifis(self):
-        await self.ws.broadcast('settings/get_wifis', wifis=get_wifis())
+        await self.ws.broadcast('Settings/get_wifis', wifis=get_wifis())
 
     class Netplan(WSAPIBase):
         async def newFile(self, filename: str):
             create_netplan(filename)
-            await self.ws.broadcast('settings/netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+            await self.ws.broadcast('Settings/Netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
         async def getFile(self, filename: Optional[str] = None):
             netplan_files = get_netplan_file_list()
             if filename is not None:
                 if filename in netplan_files:
-                    await self.ws.broadcast('settings/netplan/getFile', files={filename: get_netplan_file(filename)})
-            await self.ws.broadcast('settings/netplan/getFile', files={f: get_netplan_file(f) for f in netplan_files})
+                    await self.ws.broadcast('Settings/Netplan/getFile', files={filename: get_netplan_file(filename)})
+            await self.ws.broadcast('Settings/Netplan/getFile', files={f: get_netplan_file(f) for f in netplan_files})
 
         async def changeFile(self, ws: WebSocket, filename: Optional[str] = None, content: str = '', apply: bool = True):
             global DEFAULT_AP
@@ -384,10 +384,10 @@ class Settings(WSAPIBase):
                     Config.assets.next_a()
             elif isinstance(res, str):
                 await self.ws.send(ws, 'error', error='Netplan error', extra=res)
-            await self.ws.broadcast('settings/netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+            await self.ws.broadcast('Settings/Netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
         async def deleteFile(self, ws: WebSocket, filename: Optional[str] = None, apply: bool = True):
             res = del_netplan_file(filename, apply)
             if isinstance(res, str):
                 await self.ws.send(ws, 'error', error='Netplan error', extra=res)
-            await self.ws.broadcast('settings/netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+            await self.ws.broadcast('Settings/Netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})

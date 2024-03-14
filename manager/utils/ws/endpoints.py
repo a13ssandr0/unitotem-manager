@@ -56,7 +56,7 @@ class WebSocketAPI:
                     if isclass(a):
                         gen.update(self.__treegen(a, prefix))
                     else:
-                        name = join(prefix, att).lower()
+                        name = join(prefix, att)
                         validator_kwargs = {'arbitrary_types_allowed': True}
                         try:
                             validator_kwargs.update(a.validator_kwargs)
@@ -115,19 +115,19 @@ from utils.models import Settings
 api.load_class(Settings)
 from utils.audio import Audio
 
-api.load_class(Audio, 'settings')
+api.load_class(Audio, 'Settings')
 from utils.remote import Remote
 
-api.load_class(Remote, 'settings')
+api.load_class(Remote, 'Settings')
 from utils.network import Settings
 
 api.load_class(Settings)
 from utils.system import Cron
 
-api.load_class(Cron, 'settings')
+api.load_class(Cron, 'Settings')
 from utils.security import Security
 
-api.load_class(Security, 'settings')
+api.load_class(Security, 'Settings')
 
 
 @router.websocket("/ws")
@@ -147,7 +147,7 @@ async def websocket_endpoint(websocket: WebSocket):
         # noinspection PyBroadException
         try:
             data: dict[str, Any] = await websocket.receive_json()
-            t = data.pop('target').lower()
+            t = data.pop('target')
             try:
                 async for ret in check_permissions(api.generators[t])(**data):
                     await send_response(websocket, ret, t)
@@ -246,15 +246,15 @@ async def ui_websocket(websocket: WebSocket):
                     DISPLAYS = data['displays']
                 case 'getBounds':
                     WINDOW['bounds'] = data['bounds']
-                    await WS.broadcast('settings/display/getBounds', **WINDOW['bounds'])
+                    await WS.broadcast('Settings/Display/getBounds', **WINDOW['bounds'])
                 case 'getOrientation':
                     WINDOW['orientation'] = data['orientation']
-                    await WS.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
+                    await WS.broadcast('Settings/Display/getOrientation', orientation=WINDOW['orientation'])
                 case 'getFlip':
                     WINDOW['flip'] = data['flip']
-                    await WS.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
+                    await WS.broadcast('Settings/Display/getFlip', flip=WINDOW['flip'])
                 case 'getAllowInsecureCerts':
-                    await WS.broadcast('settings/display/allowInsecureCerts', bounds=data['allow'])
+                    await WS.broadcast('Settings/Display/allowInsecureCerts', bounds=data['allow'])
                 case 'setContainer':
                     try:
                         Config.assets.current.media_type = data['media_type']
@@ -268,27 +268,27 @@ async def ui_websocket(websocket: WebSocket):
 
 class Display(WSAPIBase):
     async def getBounds(self):
-        await self.ws.broadcast('settings/display/getBounds', **WINDOW['bounds'])
+        await self.ws.broadcast('Settings/Display/getBounds', **WINDOW['bounds'])
 
     async def setBounds(self, x: int, y: int, width: int, height: int):
         await self.ui_ws.broadcast('setBounds', x=x, y=y, width=width, height=height)
 
     async def getOrientation(self):
-        await self.ws.broadcast('settings/display/getOrientation', orientation=WINDOW['orientation'])
+        await self.ws.broadcast('Settings/Display/getOrientation', orientation=WINDOW['orientation'])
 
     async def setOrientation(self, orientation: int):
         await self.ui_ws.broadcast('setOrientation', orientation=orientation)
 
     async def getFlip(self):
-        await self.ws.broadcast('settings/display/getFlip', flip=WINDOW['flip'])
+        await self.ws.broadcast('Settings/Display/getFlip', flip=WINDOW['flip'])
 
     async def setFlip(self, flip: int):
         await self.ui_ws.broadcast('setFlip', flip=flip)
 
 
-api.load_class(Display, 'settings')
+api.load_class(Display, 'Settings')
 
-UPLOADS._callback = lambda x: WS.broadcast('scheduler/file', files=x)
+UPLOADS._callback = lambda x: WS.broadcast('Scheduler/file', files=x)
 
 from pprint import pp
 pp(list(api.generators.keys()))
