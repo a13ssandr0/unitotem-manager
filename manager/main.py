@@ -2,6 +2,7 @@ import asyncio
 import signal
 import warnings
 from argparse import ArgumentParser
+from collections import OrderedDict
 from os.path import exists
 from platform import freedesktop_os_release as os_release
 from platform import node as get_hostname
@@ -10,7 +11,6 @@ from typing import Any, Literal, Union
 
 import urllib3
 import uvloop
-from benedict import benedict
 from fastapi import (Depends, FastAPI, Request, UploadFile, status)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -28,7 +28,8 @@ from watchdog.observers import Observer
 from utils import *
 from utils.constants import Arguments
 from utils.ws.endpoints import api
-
+from pprint import pp
+pp(api.tree)
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -87,7 +88,7 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
         case 'display':
             data['displays'] = DISPLAYS
         case 'security':
-            data['api_tree'] = dict(benedict({k: {} for k in api.generators.keys()}).unflatten('/'))
+            data['api_tree'] = api.tree
         case 'info':
             data['cpu_count'] = cpu_count()
             data['ram_tot'] = human_readable_size(virtual_memory().total)
