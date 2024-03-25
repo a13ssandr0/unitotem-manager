@@ -1,11 +1,13 @@
+from collections import OrderedDict
 from functools import wraps
 from inspect import isclass, isgeneratorfunction, iscoroutinefunction, isasyncgenfunction
 from json import dumps
 from os.path import join
 from subprocess import run as cmd_run
 from traceback import print_exc, format_exc
-from typing import Any
+from typing import Any, Tuple, AsyncGenerator
 
+from benedict import benedict
 from fastapi import APIRouter, WebSocketException, Request, status, WebSocket, WebSocketDisconnect
 from pydantic import validate_call
 
@@ -21,15 +23,37 @@ UI_WS = WSManager(True)
 WS = WSManager()
 
 
+def dict_sort(value):
+    def sorter(item: Tuple[str, Any]) -> str:
+        if item[0][0].islower():
+            return '.' + item[0]
+        return item[0]
+
+    result = OrderedDict()
+
+    for k, v in sorted(value.items(), key=sorter):
+        if isinstance(v, dict):
+            result.update([(k, dict_sort(v))])
+        else:
+            # result.append((k, v))
+            result[k] = v
+    return result
+
+
 # noinspection PyUnresolvedReferences
 class WebSocketAPI:
-    generators = {}
+    generators: dict[str, AsyncGenerator] = {}
 
     def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
         self.__ws = ws
         self.__ui_ws = ui_ws
         self.__remote_ws = remote_ws
         self.load_class(self.Power)
+
+    @property
+    def tree(self):
+        items = benedict({k: (f.__doc__ or '').strip() for k, f in self.generators.items() if '/_' not in k}).unflatten('/')
+        return dict_sort(items)
 
     def load_class(self, cls: type, prefix: str = None):
         if not issubclass(cls, WSAPIBase):
@@ -94,6 +118,9 @@ class WebSocketAPI:
         @staticmethod
         @api_props(allowed_users='all', allowed_roles='all')
         def test_method(txt='test'):
+            """
+            Useless test method
+            """
             print(txt)
             return txt
 
@@ -268,9 +295,15 @@ async def ui_websocket(websocket: WebSocket):
 
 class Display(WSAPIBase):
     async def getBounds(self):
+        """
+        Get viewer window bounds
+        """
         await self.ws.broadcast('Settings/Display/getBounds', **WINDOW['bounds'])
 
     async def setBounds(self, x: int, y: int, width: int, height: int):
+        """
+        Set viewer window bounds
+        """
         await self.ui_ws.broadcast('setBounds', x=x, y=y, width=width, height=height)
 
     async def getOrientation(self):
@@ -289,6 +322,3 @@ class Display(WSAPIBase):
 api.load_class(Display, 'Settings')
 
 UPLOADS._callback = lambda x: WS.broadcast('Scheduler/file', files=x)
-
-from pprint import pp
-pp(list(api.generators.keys()))

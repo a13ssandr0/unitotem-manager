@@ -6,30 +6,38 @@
 </style>
 
 {% block body_top %}
-    <div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal fade" id="groupModal" tabindex="-1">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="userModalLabel">New user</h5>
+                    <h5 class="modal-title" id="groupModalLabel">New group</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <fieldset class="nested-multiselect">
-                        <legend>Categories</legend>
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="groupNameInput" placeholder="Name">
+                        <label for="groupNameInput">Group name</label>
+                    </div>
+                    <fieldset class="nested-multiselect gap-2">
+                        <legend>Permissions</legend>
                         <label id="label-All" style="display: block;">
                             <input id="All" type="checkbox" name="categories" value="All" aria-owns="subcategories-All"
                                     data-children="{{ api_tree.keys()|join(' ') }}"/><span class="ms-2">All</span>
                         </label>
-                        <fieldset id="subcategories-All" name="All" aria-label="All subcategories" style="border: none; padding: 0 0 0 2ch;">
-                            {% for k,v in api_tree|dictsort(case_sensitive=True) recursive %}
-                            <label id="label-{{ k }}" style="display: block; {% if v %}margin-top:calc(2rem/{{ loop.depth }}){% endif %}">
+                        <fieldset id="subcategories-All" name="All" aria-label="All subcategories" style="border: none; margin: 0 0 0 2ch;">
+                            {% for k,v in api_tree.items() recursive %}
+                            <label id="label-{{ k }}" {% if v is mapping or not v %}class="d-block"{% endif %}
+                                   style="{% if v is mapping %}margin-top:0.4rem;{% endif %}">
                                 <input id="{{ k }}" type="checkbox" name="categories" value="{{ k }}"
-                                       aria-owns="subcategories-{{ k }}" {% if v %}data-children="{{ v.keys()|join(' ') }}"{% endif %}/><span class="ms-2">{{ k }}</span>
+                                       aria-owns="subcategories-{{ k }}" {% if v is mapping %}data-children="{{ v.keys()|join(' ') }}"{% endif %}/><span class="ms-2">{{ k }}</span>
                             </label>
-                            {% if v %}
-                            <fieldset id="subcategories-{{ k }}" name="{{ k }}" aria-label="{{ k }} subcategories" style="border: none; padding: 0 0 0 2ch;">
-                                {{ loop(v|dictsort) }}
+                            {% if v is mapping %}
+                            <fieldset id="subcategories-{{ k }}" name="{{ k }}" aria-label="{{ k }} subcategories"
+                                      style="border: none; margin: 0 0 calc(2rem/{{ loop.depth }}) 2ch">
+                                {{ loop(v.items()) }}
                             </fieldset>
+                            {% elif v %}
+                                <span class="text-muted ms-4">{{ v }}</span>
                             {% endif %}
                             {% endfor %}
                         </fieldset>
