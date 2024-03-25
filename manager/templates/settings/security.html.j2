@@ -6,6 +6,34 @@
 </style>
 
 {% block body_top %}
+    <div class="modal fade" id="userModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="userModalLabel">New user</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="userNameInput" placeholder="Name">
+                        <label for="userNameInput">Name</label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input type="password" class="form-control" id="userPasswordInput" placeholder="Password">
+                        <label for="userPasswordInput">Password</label>
+                    </div>
+                    <p class="ms-1">Groups</p>
+                    <div id="userModalGroups" class="ms-2"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <div class="modal fade" id="groupModal" tabindex="-1">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
@@ -20,24 +48,23 @@
                     </div>
                     <fieldset class="nested-multiselect gap-2">
                         <legend>Permissions</legend>
-                        <label id="label-All" style="display: block;">
-                            <input id="All" type="checkbox" name="categories" value="All" aria-owns="subcategories-All"
-                                    data-children="{{ api_tree.keys()|join(' ') }}"/><span class="ms-2">All</span>
-                        </label>
-                        <fieldset id="subcategories-All" name="All" aria-label="All subcategories" style="border: none; margin: 0 0 0 2ch;">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="" id="ck-All">
+                            <label class="form-check-label" for="ck-All">All</label>
+                        </div>
+                        <fieldset id="sub-All" name="All" class="m-0 ms-4">
                             {% for k,v in api_tree.items() recursive %}
-                            <label id="label-{{ k }}" {% if v is mapping or not v %}class="d-block"{% endif %}
-                                   style="{% if v is mapping %}margin-top:0.4rem;{% endif %}">
-                                <input id="{{ k }}" type="checkbox" name="categories" value="{{ k }}"
-                                       aria-owns="subcategories-{{ k }}" {% if v is mapping %}data-children="{{ v.keys()|join(' ') }}"{% endif %}/><span class="ms-2">{{ k }}</span>
-                            </label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="" id="ck-{{ k }}">
+                                <label class="form-check-label" for="ck-{{ k }}">{{ k }}</label>
+                            </div>
                             {% if v is mapping %}
-                            <fieldset id="subcategories-{{ k }}" name="{{ k }}" aria-label="{{ k }} subcategories"
-                                      style="border: none; margin: 0 0 calc(2rem/{{ loop.depth }}) 2ch">
+                            <fieldset id="sub-{{ k }}" name="{{ k }}" class="m-0 ms-4"
+                                      style="margin-bottom: calc(1.6rem/{{ loop.depth }})!important;">
                                 {{ loop(v.items()) }}
                             </fieldset>
                             {% elif v %}
-                                <span class="text-muted ms-4">{{ v }}</span>
+                            <span class="text-muted ms-4">{{ v }}</span>
                             {% endif %}
                             {% endfor %}
                         </fieldset>
@@ -45,23 +72,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">Yes</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="groupModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="groupModalLabel">New group</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body"></div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">No</button>
-                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">Yes</button>
+                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">Save</button>
                 </div>
             </div>
         </div>
@@ -136,60 +147,77 @@
 {#const sub = $('#set_passwd');#}
 {#pwd1.on('input', () => sub.prop('disabled', (pwd1.val() === '') || (pwd1.val() !== pwd2.val())));#}
 {#pwd2.on('input', () => sub.prop('disabled', (pwd1.val() === '') || (pwd1.val() !== pwd2.val())));#}
+const user_modal_groups = $('#userModalGroups');
 const user_table = $('#usertable');
 const group_table = $('#grouptable');
 
-const setInputState = (el, state) => {
+function setInputState(el, state) {
     if (state === 'indeterminate') {
-        el.indeterminate = true
+        el.indeterminate = true;
     } else {
-        el.indeterminate = false
-        el.checked = state
+        el.indeterminate = false;
+        el.checked = state;
     }
 }
 
-const updateOwned = (el) => {
-    if (el.hasAttribute('data-children')) {
-        let state = el.checked
-        el.getAttribute('data-children').split(' ').forEach(id => {
-            let owned = document.getElementById(id)
-            setInputState(owned, state)
-            updateOwned(owned)
-        })
-    }
+function updateOwned(el) {
+    let state = el.checked;
+    $(el).parent().next().find('>div>input').each((i,owned) => {
+        setInputState(owned, state);
+        updateOwned(owned);
+    });
 }
 
-const updateOwner = (el) => {
-    let owner = document.getElementById($(el).closest('fieldset[name]').attr('name'))
-    if (!!owner) {
-        {#let owner = document.getElementById(el.getAttribute('data-parent'))#}
-        let states = []
-        let collectiveState
-        owner.getAttribute('data-children').split(' ').every(id => {
-            let owned = document.getElementById(id)
-            let state = owned.indeterminate === true ? 'indeterminate' : owned.checked
+function updateOwner(el) {
+    let name = $(el).closest('fieldset[name]').attr('name');
+    let owner = $(`#ck-${name}`);
+    if (owner.length) {
+        let states = [];
+        let collectiveState;
+        $(el).parent().parent().find('>div>input').each((i,owned) => {
+            let state = owned.indeterminate === true ? 'indeterminate' : owned.checked;
             if (states.length > 0 && states.indexOf(state) === -1) {
-                collectiveState = 'indeterminate'
-                return false
+                collectiveState = 'indeterminate';
             } else {
-                states.push(state)
-                return true
+                states.push(state);
             }
         })
-        collectiveState = collectiveState || states[0]
-        setInputState(owner, collectiveState)
-        updateOwner(owner)
+        collectiveState = collectiveState || states[0];
+        setInputState(owner[0], collectiveState);
+        updateOwner(owner);
     }
 }
 
-document.querySelectorAll('.nested-multiselect').forEach(multiselect => {
-    multiselect.querySelectorAll('input[type="checkbox"]').forEach(input => {
+$('.nested-multiselect').each((i, multiselect) => {
+    $(multiselect).find('.form-check-input').each((j, input) => {
         input.addEventListener('change', event => {
-            updateOwned(event.currentTarget)
-            updateOwner(event.currentTarget)
-        })
-    })
-})
+            updateOwned(event.currentTarget);
+            updateOwner(event.currentTarget);
+        });
+    });
+});
+
+function list_selected(root){
+    let elems = [...$(root).find('>div>input')];
+    if (!elems.length) return false;
+    if (elems.every(el=>el.checked))
+        return '*';
+    else if (elems.every(el=>!el.checked && !el.indeterminate))
+        return '';
+    else {
+        return elems.filter(e => e.checked || e.indeterminate).map(e => {
+            let selected = list_selected($(e).parent().next());
+            if (Array.isArray(selected)){
+                return selected.map(s=>$(e).next().text() + (s?('/' + s):''))
+            } else if (selected === false){
+                return $(e).next().text()
+            } else {
+                return $(e).next().text() + '/' + selected;
+            }
+        }).flat(Infinity);
+    }
+}
+//list_selected($('#sub-All'));
 
 {% endblock js %}
 
@@ -214,7 +242,8 @@ case 'Settings/Security/getUsers':
 
 case 'Settings/Security/getGroups':
     group_table.empty();
-    data.groups.forEach(([group,data])=>{
+    user_modal_groups.empty();
+    data.groups.forEach(([group,data],i)=>{
         group_table.append(
             $('<tr></tr>').append(
                 $('<th scope="col"></th>').html(group),
@@ -225,6 +254,12 @@ case 'Settings/Security/getGroups':
                         $('<button type="button" title="Delete group" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>')
                     )
                 )
+            )
+        )
+        user_modal_groups.append(
+            $('<div class="form-check"></div>').append(
+                $('<input class="form-check-input" type="checkbox" value="">').attr('id', 'userGroupCheck' + i),
+                $('<label class="form-check-label"></label>').attr('for', 'userGroupCheck' + i).html(group)
             )
         )
     });
