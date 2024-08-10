@@ -1,4 +1,6 @@
 import utils.constants as const
+const.uploads_folder.mkdir(exist_ok=True)
+
 from utils.audio import *
 from utils.commons import *
 import utils.commons

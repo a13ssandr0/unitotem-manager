@@ -7,28 +7,7 @@
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/manager/uploaded" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.11 (unitotem-manager)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.12 (unitotem-manager)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
-  </component>
-  <component name="PackageRequirementsSettings">
-    <option name="requirementsPath" value="$MODULE_DIR$/manager/requirements.txt" />
-  </component>
-  <component name="PyDocumentationSettings">
-    <option name="format" value="EPYTEXT" />
-    <option name="myDocStringFormat" value="Epytext" />
-  </component>
-  <component name="PyNamespacePackagesService">
-    <option name="namespacePackageFolders">
-      <list>
-        <option value="$MODULE_DIR$/manager/utils" />
-      </list>
-    </option>
-  </component>
-  <component name="TemplatesService">
-    <option name="TEMPLATE_FOLDERS">
-      <list>
-        <option value="$MODULE_DIR$/manager/templates" />
-      </list>
-    </option>
   </component>
 </module>

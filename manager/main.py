@@ -1,12 +1,18 @@
+import logging
+import sys
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout) #, filename='myapp.log')
+
+
+
 import asyncio
 import signal
 import warnings
 from argparse import ArgumentParser
-from collections import OrderedDict
 from os.path import exists
 from platform import freedesktop_os_release as os_release
 from platform import node as get_hostname
-from traceback import print_exc
+from pprint import pformat
+from traceback import format_exc
 from typing import Any, Literal, Union
 
 import urllib3
@@ -28,8 +34,12 @@ from watchdog.observers import Observer
 from utils import *
 from utils.constants import Arguments
 from utils.ws.endpoints import api
-from pprint import pp
-pp(api.tree)
+
+
+logger = logging.getLogger(__name__)
+
+
+logger.debug(pformat(api.tree))
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -100,7 +110,7 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
     try:
         return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
     except Exception:
-        print_exc()
+        logger.error(format_exc())
 
 
 @WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
@@ -140,18 +150,18 @@ if __name__ == "__main__":
     try:
         Config(filename=cmdargs.config)
     except FileNotFoundError:
-        print('First boot or no configuration file found.')
+        logger.warning('First boot or no configuration file found.')
         # noinspection PyBroadException
         try:
             if not do_ip_addr(True) or exists(FALLBACK_AP_FILE):
                 # config file doesn't exist, and we are not connected, maybe it's first boot
                 hotspot = start_hotspot()
                 DEFAULT_AP = dict(ssid=hotspot[0], password=hotspot[1], qrcode=wifi_qr(hotspot[0], hotspot[1]))
-                print(
+                logger.info(
                     f'Not connected to any network, started fallback hotspot {hotspot[0]} with password {hotspot[1]}.')
         except Exception:
-            print("Couldn't start wifi hotspot.")
-            print_exc()
+            logger.error("Couldn't start wifi hotspot.")
+            logger.error(format_exc())
 
     REMOTE_WS.pk = Config.rsa_pk
 
@@ -159,7 +169,7 @@ if __name__ == "__main__":
 
     uvloop.install()
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
     loop.add_signal_handler(signal.SIGTERM, lambda *_: SHUTDOWN_EVENT.set())
 
     Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/Asset', items=assets, current=current),
