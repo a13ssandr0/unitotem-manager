@@ -1,10 +1,11 @@
+import logging
 from collections import OrderedDict
 from functools import wraps
 from inspect import isclass, isgeneratorfunction, iscoroutinefunction, isasyncgenfunction
 from json import dumps
 from os.path import join
 from subprocess import run as cmd_run
-from traceback import print_exc, format_exc
+from traceback import format_exc
 from typing import Any, Tuple, AsyncGenerator
 
 from benedict import benedict
@@ -12,10 +13,13 @@ from fastapi import APIRouter, WebSocketException, Request, status, WebSocket, W
 from pydantic import validate_call
 
 import utils.constants as const
+from utils.commons import UPLOADS
 from utils.models import Config
 from utils.security import LOGMAN, NotAuthenticatedException
 from .wsmanager import WSManager, WSAPIBase, api_props
-from utils.commons import UPLOADS
+
+logger = logging.getLogger(__name__)
+
 
 router = APIRouter()
 REMOTE_WS = WSManager(True)
@@ -63,7 +67,7 @@ class WebSocketAPI:
 
     def __treegen(self, Cls: type, prefix: str = None):
         classname = Cls.__name__
-        print("Class:", classname)
+        logger.debug("Class: " + classname)
         if prefix is None:
             prefix = classname
         else:
@@ -121,7 +125,7 @@ class WebSocketAPI:
             """
             Useless test method
             """
-            print(txt)
+            logger.debug(txt)
             return txt
 
         @staticmethod
@@ -185,17 +189,17 @@ async def websocket_endpoint(websocket: WebSocket):
             break
         except Exception:
             await WS.send(websocket, 'error', error='Exception', extra=format_exc())
-            print_exc()
+            logger.error(format_exc())
     WS.disconnect(websocket)
 
 
 def check_permissions(func):
     try:
-        print(func.allowed_users)
+        logger.debug(func.allowed_users)
     except:
         pass
     try:
-        print(func.allowed_roles)
+        logger.debug(func.allowed_roles)
     except:
         pass
     return func
@@ -245,12 +249,12 @@ async def remote_websocket(websocket: WebSocket):
         # noinspection PyBroadException
         try:
             data = await websocket.receive_text()
-            print(data)
+            logger.debug(data)
         except WebSocketDisconnect:
             REMOTE_WS.disconnect(websocket)
             break
         except Exception:
-            print_exc()
+            logger.error(format_exc())
 
 
 DISPLAYS: list[dict] = []

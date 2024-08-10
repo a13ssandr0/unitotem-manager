@@ -6,6 +6,7 @@ __all__ = [
     "NotAuthenticatedException"
 ]
 
+import logging
 from datetime import timedelta
 from os import environ, urandom
 from platform import freedesktop_os_release as os_release, node as get_hostname
@@ -28,6 +29,8 @@ from .models import Config
 from .network import do_ip_addr
 from .ws.wsmanager import WSAPIBase
 
+logger = logging.getLogger(__name__)
+
 load_dotenv(const.envfile)
 
 if 'auth_token' not in environ:
@@ -41,7 +44,7 @@ class NotAuthenticatedException(Exception):
 
 
 async def login_redir(request, exc):
-    print(exc)
+    logger.error(exc)
     return RedirectResponse('/login?src=' + quote_plus(request.scope.get('path', '/')))
 
 
@@ -66,7 +69,7 @@ class LoginForm(OAuth2PasswordRequestForm):
         self.remember_me = remember_me
 
 
-LOGMAN = LoginManager(environ['auth_token'], custom_exception=NotAuthenticatedException,
+LOGMAN = LoginManager(environ['auth_token'], not_authenticated_exception=NotAuthenticatedException,
                       token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(days=7))
 
 
@@ -78,7 +81,7 @@ async def load_user(username: str):
 login_router = APIRouter()
 
 
-@login_router.post(LOGMAN.tokenUrl)
+@login_router.post(LOGMAN.model.flows.password.tokenUrl)
 async def login(data: LoginForm = Depends()):
     if not Config.authenticate(data.username, data.password):
         raise InvalidCredentialsException

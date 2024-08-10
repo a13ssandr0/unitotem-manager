@@ -1,10 +1,11 @@
 import asyncio
 import base64
+import logging
 from ipaddress import IPv4Address
 from json import loads
 from os import environ
 from platform import node as get_hostname
-from traceback import print_exc
+from traceback import format_exc
 from typing import Optional, cast
 
 import asyncwebsockets
@@ -17,9 +18,11 @@ from wsproto.events import CloseConnection
 
 import utils.constants as const
 from utils.commons import SHUTDOWN_EVENT
-from utils.ws.wsmanager import WSManager
 from utils.models import Config
 from utils.ws.endpoints import WSAPIBase
+
+logger = logging.getLogger(__name__)
+
 
 REMOTE_CONNECTED = False
 
@@ -61,7 +64,7 @@ class Remote(WSAPIBase):
                 await self.getMode()
 
     async def __webview_control_main(self):
-        print('Starting webview controller')
+        logger.info('Starting webview controller')
         async for asset in Config.assets.iter_wait(waiter=SHUTDOWN_EVENT):
             await self.ws.broadcast('Scheduler/Asset/current', uuid=asset.uuid)
             url = asset.url
@@ -87,7 +90,7 @@ class Remote(WSAPIBase):
         while not SHUTDOWN_EVENT.is_set():
             # noinspection PyBroadException
             try:
-                print('Connecting to', url)
+                logging.info('Connecting to', url)
                 if Config.remote_server_pk is None:
                     server_pk = requests.get(f'https://{ip}:{port}/remote/public_key', verify=False).content
                     Config.remote_server_pk = cast(rsa.RSAPublicKey, serialization.load_pem_public_key(server_pk))
@@ -95,7 +98,7 @@ class Remote(WSAPIBase):
                 # noinspection PyArgumentList
                 async with asyncwebsockets.open_websocket(url, list(headers.items())) as ws:
                     REMOTE_CONNECTED = True
-                    print('Connected to', url)
+                    logging.info('Connected to', url)
                     while True:
                         # noinspection PyProtectedMember
                         msg = await ws._next_event()
@@ -121,17 +124,17 @@ class Remote(WSAPIBase):
                         if SHUTDOWN_EVENT.is_set():
                             break
             except asyncio.exceptions.CancelledError:
-                print('Disconnected from remote server')
+                logging.info('Disconnected from remote server')
                 break
             except InvalidSignature:
-                print('Invalid signature, disconnected from server')
+                logging.error('Invalid signature, disconnected from server')
                 await asyncio.sleep(5)
             except OSError as e:
                 if e.args[0] == 'All connection attempts failed':
-                    print('Server unavailable, retrying in 5 seconds...')
+                    logging.warning('Server unavailable, retrying in 5 seconds...')
                 else:
-                    print_exc()
+                    logger.error(format_exc())
                 await asyncio.sleep(5)
             except Exception:
-                print_exc()
+                logger.error(format_exc())
             REMOTE_CONNECTED = False
