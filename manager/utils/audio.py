@@ -11,6 +11,7 @@ from typing import Optional
 # from rpyc import classic as rpyc
 from pulsectl import Pulse
 
+from utils.ws.responses import WSBroadcast
 from utils.ws.wsmanager import WSAPIBase
 
 
@@ -44,20 +45,20 @@ def setMute(dev: str | None, mute: bool):
 
 
 class Audio(WSAPIBase):
-    async def default(self, device: Optional[str] = None):
+    def devices(self):
+        return WSBroadcast(self.devices, devices=getAudioDevices())
+
+    def default(self, device: Optional[str] = None):
         if device is not None:
             setDefaultAudioDevice(device)
-        await self.devices()
+        return self.devices()
 
-    async def devices(self):
-        await self.ws.broadcast('Settings/Audio/devices', devices=getAudioDevices())
-
-    async def volume(self, device: Optional[str] = None, volume: Optional[float] = None):
+    def volume(self, device: Optional[str] = None, volume: Optional[float] = None):
         if volume is not None:
             setVolume(device, volume)
-        await self.devices()
+        return self.devices()
 
-    async def mute(self, device: Optional[str] = None, mute: Optional[bool] = None):
+    def mute(self, device: Optional[str] = None, mute: Optional[bool] = None):
         if mute is not None:
             setMute(device, mute)
-        await self.devices()
+        return self.devices()

@@ -8,16 +8,17 @@ from pydantic.color import Color
 from utils.commons import UPLOADS
 from utils.models import Config, FitEnum, validate_date, MediaType
 from utils.ws.endpoints import WSAPIBase
+from utils.ws.responses import WSBroadcast, WSResponse
 from utils.ws.wsmanager import api_props
 
 
 class Scheduler(WSAPIBase):
-    @api_props(allowed_roles='alessandro', allowed_users='all')
-    async def asset(self):
-        await self.ws.broadcast('Scheduler/Asset', items=Config.assets.serialize(), current=Config.assets.current.uuid)
+    #@api_props(allowed_roles='alessandro', allowed_users='all')
+    def asset(self):
+        return WSBroadcast(self.asset, items=Config.assets.serialize(), current=Config.assets.current.uuid)
 
-    async def file(self):
-        await self.ws.broadcast('Scheduler/file', files=UPLOADS.serialize())
+    def file(self):
+        return WSBroadcast(self.file, files=UPLOADS.serialize())
 
     def add_url(self, items: list[str | dict] = []):
         for element in items:
@@ -27,7 +28,7 @@ class Scheduler(WSAPIBase):
             Config.assets.append(element)
         Config.save()
 
-    async def add_file(self, ws: WebSocket, items: list[str | dict] = []):
+    def add_file(self, items: list[str | dict] = []):
         invalid = []
         for element in items:
             if isinstance(element, str):
@@ -44,7 +45,7 @@ class Scheduler(WSAPIBase):
                 invalid.append(element)
         Config.save()
         if invalid:
-            await self.ws.send(ws, 'Scheduler/add_file', error='Invalid elements', extra=invalid)
+            return WSResponse(self.add_file, error='Invalid elements', extra=invalid)
 
     def edit(self,
                    uuid: str,
@@ -79,9 +80,9 @@ class Scheduler(WSAPIBase):
                 asset.disable()
         Config.save()
 
-    async def current(self):
+    def current(self):
         if Config.enabled_asset_count:
-            await self.ws.broadcast('Scheduler/current', uuid=Config.assets.current.uuid)
+            return WSBroadcast(self.current, uuid=Config.assets.current.uuid)
 
     def delete(self, uuid: str):
         del Config.assets[uuid]

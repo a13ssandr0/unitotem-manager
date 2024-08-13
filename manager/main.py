@@ -196,7 +196,7 @@ if __name__ == "__main__":
 
     async def info_loop(_ws: WSManager, waiter: asyncio.Event):
         while not waiter.is_set():
-            await broadcast_sysinfo(_ws)
+            await _ws.broadcast('Settings/info', **get_sysinfo())
             await asyncio.sleep(3)
 
 

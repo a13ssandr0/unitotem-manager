@@ -6,12 +6,15 @@ from inspect import isawaitable, isclass, isgeneratorfunction, iscoroutinefuncti
 from json import dumps
 from os.path import join
 from typing import Optional
+import logging
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from fastapi import WebSocket
 from pydantic import validate_call
+
+logger = logging.getLogger(__name__)
 
 
 class WSManager:
@@ -27,7 +30,7 @@ class WSManager:
         # was sent (i.e. the manager finishes starting before the viewer, or the 
         # viewer for whatever reason restarts)
         #
-        # if we need caching, last is initialized to something different from None
+        # if we need caching, self.last is initialized to something different from None
         # this way we avoid using two variables: one for setting and the other
         # for actual caching
 
@@ -112,6 +115,14 @@ class WSAPIBase:
         self.ws = ws
         self.ui_ws = ui_ws
         self.remote_ws = remote_ws
+
+    # def __init_subclass__(cls, **kwargs):
+    #     for att, value in cls.__dict__.items():
+    #         if callable(value):
+    #             logger.debug(f"{cls.__name__}.{att}={value}")
+    #             value.api_path = ""
+    #             setattr(cls, att, api_props(allowed_users=None, allowed_roles=None)(value))
+    #     super().__init_subclass__(**kwargs)
 
 
 def api_props(*, allowed_users, allowed_roles, **validator_kwargs):
