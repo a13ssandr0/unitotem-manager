@@ -20,6 +20,7 @@ import utils.constants as const
 from utils.commons import SHUTDOWN_EVENT
 from utils.models import Config
 from utils.ws.endpoints import WSAPIBase
+from utils.ws.responses import WSBroadcast
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +29,14 @@ REMOTE_CONNECTED = False
 
 
 class Remote(WSAPIBase):
-    async def getMode(self):
-        await self.ws.broadcast('Settings/Remote/get',
-                                remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
-                                remote_connected=REMOTE_CONNECTED,
-                                remote_port=Config.remote_server_port,
-                                remote_clients=list(Config.remote_clients.items()))
+    def getMode(self):
+        return WSBroadcast(self.getMode,
+                            remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+                            remote_connected=REMOTE_CONNECTED,
+                            remote_port=Config.remote_server_port,
+                            remote_clients=list(Config.remote_clients.items()))
 
-    async def setMode(self, remote_server: Optional[IPv4Address],
+    def setMode(self, remote_server: Optional[IPv4Address],
                       remote_port: Optional[PositiveInt] = const.default_port_secure):
         remote_port = remote_port or const.default_port_secure
         if Config.remote_server_ip == remote_server and Config.remote_server_port == remote_port:
@@ -53,7 +54,7 @@ class Remote(WSAPIBase):
         else:
             # noinspection PyAsyncCall
             asyncio.create_task(self.__webview_control_main(), name='page_controller')
-        await self.getMode()
+        return self.getMode()
 
     async def disconnect(self, client: str):
         for remote in self.remote_ws.active_connections:
@@ -61,7 +62,7 @@ class Remote(WSAPIBase):
                 await remote.close(code=4023, reason="Server forced disconnection")
                 self.remote_ws.disconnect(remote)
                 del Config.remote_clients[remote.headers['instance_id']]
-                await self.getMode()
+                return self.getMode()
 
     async def __webview_control_main(self):
         logger.info('Starting webview controller')

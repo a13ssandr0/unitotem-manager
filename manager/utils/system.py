@@ -2,7 +2,7 @@ __all__ = [
     "CRONTAB",
     "apt_list_upgrades",
     "apt_update",
-    "broadcast_sysinfo",
+    "get_sysinfo",
     "get_apt_log",
     "reboot_required",
 ]
@@ -22,6 +22,7 @@ from starlette.websockets import WebSocket
 
 from utils.ws.wsmanager import WSManager
 from .cpu import cpu_times_percent
+from .ws.responses import WSBroadcast, WSResponse
 from .ws.wsmanager import WSAPIBase
 
 upgradableRe = compile(
@@ -112,22 +113,22 @@ def reboot_required():
 
 
 # noinspection PyProtectedMember
-async def broadcast_sysinfo(ws: WSManager):
+def get_sysinfo():
     cpu_percent = []
     for x in cpu_times_percent(None):
         y = x._asdict()
         y['total'] = round(sum(x) - x.idle - x.guest - x.guest_nice - x.iowait, 1)
         cpu_percent.append(y)
-    await ws.broadcast('Settings/info',
-                       uptime=str(datetime.fromtimestamp(time()) - datetime.fromtimestamp(boot_time())).split('.')[0],
-                       cpu=cpu_percent,
-                       battery=sensors_battery()._asdict() if sensors_battery() else None,
-                       fans=[(f'fan-{k}-{x.label or n}'.replace(" ", ""), x.current) for k, v in sensors_fans().items()
-                             for n, x in enumerate(v)],
-                       temperatures=[(f'temp-{k}-{x.label or n}'.replace(" ", ""), x.current) for k, v in
-                                     sensors_temperatures().items() for n, x in enumerate(v)],
-                       vmem=virtual_memory()._asdict(),
-                       )
+    return dict(
+        uptime=str(datetime.fromtimestamp(time()) - datetime.fromtimestamp(boot_time())).split('.')[0],
+        cpu=cpu_percent,
+        battery=sensors_battery()._asdict() if sensors_battery() else None,
+        fans=[(f'fan-{k}-{x.label or n}'.replace(" ", ""), x.current) for k, v in sensors_fans().items()
+              for n, x in enumerate(v)],
+        temperatures=[(f'temp-{k}-{x.label or n}'.replace(" ", ""), x.current) for k, v in
+                      sensors_temperatures().items() for n, x in enumerate(v)],
+        vmem=virtual_memory()._asdict(),
+    )
 
 
 # class APT(WSAPIBase):
@@ -150,45 +151,45 @@ async def broadcast_sysinfo(ws: WSManager):
 #
 #             APT_THREAD = Thread(target=apt, name=('upgrade' if do_upgrade else 'update'))
 #             APT_THREAD.start()
-#             await self.ws.broadcast('Settings/Update/status', status=APT_THREAD.name, log=get_apt_log())
+#             return WSBroadcast('Settings/Update/status', status=APT_THREAD.name, log=get_apt_log())
 #
 #     async def list(self):
-#         await self.ws.broadcast('Settings/Update/list', updates=apt_list_upgrades())
+#         return WSBroadcast('Settings/Update/list', updates=apt_list_upgrades())
 #
 #     async def reboot_required(self):
-#         await self.ws.broadcast('Settings/Update/reboot_required', reboot=reboot_required())
+#         return WSBroadcast('Settings/Update/reboot_required', reboot=reboot_required())
 #
 #     async def status(self):
-#         await self.ws.broadcast('Settings/Update/status',
+#         return WSBroadcast('Settings/Update/status',
 #                   status=APT_THREAD.name if APT_THREAD.is_alive() else None, log=get_apt_log())
 
 class Cron(WSAPIBase):
-    async def getJobs(self):
+    def getJobs(self):
         CRONTAB.read()
-        await self.ws.broadcast('Settings/Cron/getjobs', jobs=CRONTAB.serialize())
+        return WSBroadcast(self.getJobs, jobs=CRONTAB.serialize())
 
-    async def addJob(self, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
+    def addJob(self, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
         CRONTAB.read()
         if CRONTAB.new(cmd, m, h, dom, mon, dow):
             CRONTAB.write()
-        await self.ws.broadcast('Settings/Cron/getjobs', jobs=CRONTAB.serialize())
+        return self.getJobs()
 
-    async def setJobEnabled(self, ws: WebSocket, job: str, state: bool):
+    def setJobEnabled(self, job: str, state: bool):
         CRONTAB.read()
         try:
             next(CRONTAB.find_comment(job)).enable(state)
             CRONTAB.write()
         except StopIteration:
-            await self.ws.send(ws, 'error', error='Not found', extra='Requested job does not exist')
-        await self.ws.broadcast('Settings/Cron/getjobs', jobs=CRONTAB.serialize())
+            yield WSResponse(self.setJobEnabled, error='Not found', extra='Requested job does not exist')
+        yield self.getJobs()
 
-    async def deleteJob(self, job: str):
+    def deleteJob(self, job: str):
         CRONTAB.read()
         CRONTAB.remove_all(comment=job)
         CRONTAB.write()
-        await self.ws.broadcast('Settings/Cron/getjobs', jobs=CRONTAB.serialize())
+        return self.getJobs()
 
-    async def changeJob(self, ws: WebSocket, job: str, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
+    def changeJob(self, job: str, cmd: str = '', m=None, h=None, dom=None, mon=None, dow=None):
         CRONTAB.read()
         try:
             _job = next(CRONTAB.find_comment(job))
@@ -200,5 +201,5 @@ class Cron(WSAPIBase):
                 _job.set_command('/usr/sbin/reboot')
             CRONTAB.write()
         except StopIteration:
-            await self.ws.send(ws, 'error', error='Not found', extra='Requested job does not exist')
-        await self.ws.broadcast('Settings/Cron/getjobs', jobs=CRONTAB.serialize())
+            yield WSResponse(self.changeJob, error='Not found', extra='Requested job does not exist')
+        yield self.getJobs()

@@ -11,11 +11,13 @@ from typing import Any, Tuple, AsyncGenerator
 from benedict import benedict
 from fastapi import APIRouter, WebSocketException, Request, status, WebSocket, WebSocketDisconnect
 from pydantic import validate_call
+from wsproto import WSConnection
 
 import utils.constants as const
 from utils.commons import UPLOADS
 from utils.models import Config
 from utils.security import LOGMAN, NotAuthenticatedException
+from .responses import WSBroadcast, WSResponse
 from .wsmanager import WSManager, WSAPIBase, api_props
 
 logger = logging.getLogger(__name__)
@@ -81,6 +83,7 @@ class WebSocketAPI:
             if not (att.startswith('__') and att.endswith('__')):
                 a = cls.__getattribute__(att)
                 if callable(a):
+                    logger.debug(f"{classname}.{att}: {a}")
                     if isclass(a):
                         gen.update(self.__treegen(a, prefix))
                     else:
@@ -90,6 +93,9 @@ class WebSocketAPI:
                             validator_kwargs.update(a.validator_kwargs)
                         except AttributeError:
                             pass
+                        # assign to each function an attribute with its full API path
+                        setattr(getattr(Cls, att), 'api_path', name)
+                        # transform each function in an async generator
                         gen[name] = self.__make_async_gen(a, validator_kwargs)
 
         return gen
@@ -120,7 +126,7 @@ class WebSocketAPI:
 
     class Power(WSAPIBase):
         @staticmethod
-        @api_props(allowed_users='all', allowed_roles='all')
+        #@api_props(allowed_users='all', allowed_roles='all')
         def test_method(txt='test'):
             """
             Useless test method
@@ -136,29 +142,51 @@ class WebSocketAPI:
         def poweroff():
             cmd_run(['/usr/bin/systemctl', 'poweroff', '-i'])
 
-
+logger.debug("WebSocketAPI initialization")
 api = WebSocketAPI(WS, UI_WS, REMOTE_WS)
+logger.debug("WebSocketAPI initialized")
+
+
 from utils.scheduler import Scheduler
-
+logger.debug("Imported scheduler")
 api.load_class(Scheduler)
+logger.debug("Loaded scheduler")
+
+
 from utils.models import Settings
-
+logger.debug("Imported settings")
 api.load_class(Settings)
+logger.debug("Loaded settings")
+
+
 from utils.audio import Audio
-
+logger.debug("Imported audio")
 api.load_class(Audio, 'Settings')
+logger.debug("Loaded audio")
+
+
 from utils.remote import Remote
-
+logger.debug("Imported remote")
 api.load_class(Remote, 'Settings')
+logger.debug("Loaded remote")
+
+
 from utils.network import Settings
-
+logger.debug("Imported network")
 api.load_class(Settings)
+logger.debug("Loaded network")
+
+
 from utils.system import Cron
-
+logger.debug("Imported cron")
 api.load_class(Cron, 'Settings')
-from utils.security import Security
+logger.debug("Loaded cron")
 
+
+from utils.security import Security
+logger.debug("Imported security")
 api.load_class(Security, 'Settings')
+logger.debug("Loaded security")
 
 
 @router.websocket("/ws")
@@ -166,13 +194,14 @@ async def websocket_endpoint(websocket: WebSocket):
     request = Request({'type': 'http'})
     request._cookies = websocket.cookies
     try:
-        await LOGMAN(request)
+        user:str = await LOGMAN(request)
     except NotAuthenticatedException:
         await websocket.accept()
         await websocket.close(1008, 'Not Authenticated')
         return
 
     await WS.connect(websocket)
+    websocket.username = user
     await WS.send(websocket, 'connected')
     while True:
         # noinspection PyBroadException
@@ -181,7 +210,11 @@ async def websocket_endpoint(websocket: WebSocket):
             t = data.pop('target')
             try:
                 async for ret in check_permissions(api.generators[t])(**data):
-                    await send_response(websocket, ret, t)
+                    if isinstance(ret, WSBroadcast):
+                        await WS.broadcast(ret.target, nocache=False, **ret.kwargs)
+                    elif isinstance(ret, WSResponse):
+                        await WS.send(websocket, ret.target, nocache=False, **ret.kwargs)
+                    # await send_response(websocket, ret, t)
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
 
@@ -194,6 +227,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 def check_permissions(func):
+    try:
+        logger.debug(func.api_path)
+    except:
+        pass
+
+
     try:
         logger.debug(func.allowed_users)
     except:
@@ -298,11 +337,11 @@ async def ui_websocket(websocket: WebSocket):
 
 
 class Display(WSAPIBase):
-    async def getBounds(self):
+    def getBounds(self):
         """
         Get viewer window bounds
         """
-        await self.ws.broadcast('Settings/Display/getBounds', **WINDOW['bounds'])
+        return WSBroadcast(self.getBounds, **WINDOW['bounds'])
 
     async def setBounds(self, x: int, y: int, width: int, height: int):
         """
@@ -310,14 +349,14 @@ class Display(WSAPIBase):
         """
         await self.ui_ws.broadcast('setBounds', x=x, y=y, width=width, height=height)
 
-    async def getOrientation(self):
-        await self.ws.broadcast('Settings/Display/getOrientation', orientation=WINDOW['orientation'])
+    def getOrientation(self):
+        return WSBroadcast(self.getOrientation, orientation=WINDOW['orientation'])
 
     async def setOrientation(self, orientation: int):
         await self.ui_ws.broadcast('setOrientation', orientation=orientation)
 
-    async def getFlip(self):
-        await self.ws.broadcast('Settings/Display/getFlip', flip=WINDOW['flip'])
+    def getFlip(self):
+        return WSBroadcast(self.getFlip, flip=WINDOW['flip'])
 
     async def setFlip(self, flip: int):
         await self.ui_ws.broadcast('setFlip', flip=flip)

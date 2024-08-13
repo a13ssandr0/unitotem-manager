@@ -22,11 +22,13 @@ from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.websockets import WebSocket
 
 import utils.constants as const
 from .commons import TEMPLATES
 from .models import Config
 from .network import do_ip_addr
+from .ws.responses import WSBroadcast, WSResponse
 from .ws.wsmanager import WSAPIBase
 
 logger = logging.getLogger(__name__)
@@ -128,9 +130,33 @@ async def set_pass(request: Request, response: Response, password: str, username
     if 'Referer' in request.headers:
         response.headers['location'] = request.headers['Referer']
 
-class Security(WSAPIBase):
-    async def getUsers(self):
-        await self.ws.broadcast('Settings/Security/getUsers', users=[(user, {'groups': data.groups}) for user, data in Config.users.items()])
 
-    async def getGroups(self):
-        await self.ws.broadcast('Settings/Security/getGroups', groups=[(group, data.model_dump()) for group, data in Config.groups.items()])
+class Security(WSAPIBase):
+    def getUsers(self):
+        return WSBroadcast(self.getUsers, users=[(user, {'groups': data.groups}) for user, data in Config.users.items()])
+
+    def delUser(self, ws:WebSocket, user:str):
+        if ws.username == user or len(Config.users) == 1:
+            return WSResponse(self.delUser, error="Cannot delete current user")
+        elif user in Config.users:
+            del Config.users[user]
+            Config.save()
+        return self.getUsers()
+
+    def setUserGroups(self, user:str, groups:list[str]):
+        groups = [grp for grp in groups if grp in Config.groups.keys()]
+        Config.users[user].groups = groups
+        Config.save()
+        return self.getUsers()
+
+    def getGroups(self):
+        return WSBroadcast(self.getGroups, groups=[(group, data.model_dump()) for group, data in Config.groups.items()])
+
+    # async def delGroup(self, ws:WebSocket, group:str):
+    #     if group in Config.groups:
+    #         if group in Config.users[ws.username].groups:
+
+    def setGroupPerms(self, group:str, perms:list[str]):
+        Config.groups[group].perms = perms
+        Config.save()
+        return self.getGroups()
