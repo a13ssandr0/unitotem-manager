@@ -10,7 +10,7 @@ from starlette import status
 from starlette.responses import Response
 
 import utils.constants as const
-from utils.audio import getDefaultAudioDevice, setDefaultAudioDevice
+from utils.audio import get_default_audio_device, set_default_audio_device
 from utils.commons import UPLOADS
 from utils.models import Config
 from utils.network import get_netplan_file_list, get_netplan_file, set_netplan, set_hostname, generate_netplan
@@ -27,7 +27,7 @@ async def create_backup(include_uploaded: bool = False):
         "version": const.__version__,
         "CONFIG": Config.model_dump_json(),
         "hostname": get_hostname(),
-        "def_audio_dev": getDefaultAudioDevice(),
+        "def_audio_dev": get_default_audio_device(),
         "netplan": {fname: get_netplan_file(fname) for fname in get_netplan_file_list()},
         "cron": CRONTAB.serialize()
     }
@@ -71,7 +71,7 @@ async def load_backup(backup_file: UploadFile,
                 if 'def_audio_dev' in config_json and def_audio_dev:
                     if bkp_ver >= Version('3.0.0'):
                         # with version 3.0.0 audio controls changed from alsa to pulseaudio
-                        setDefaultAudioDevice(config_json['def_audio_dev'])
+                        set_default_audio_device(config_json['def_audio_dev'])
 
                 if 'netplan' in config_json and netplan:
                     set_netplan(filename=None, file_content=config_json['netplan'], apply=False)
