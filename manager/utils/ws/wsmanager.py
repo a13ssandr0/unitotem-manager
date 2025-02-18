@@ -1,4 +1,4 @@
-__all__ = ['WSManager']
+__all__ = ['WSManager', 'Context', 'WSAPIBase']
 
 from base64 import b64encode
 from functools import wraps
@@ -115,14 +115,22 @@ class WSAPIBase:
         self.ws = ws
         self.ui_ws = ui_ws
         self.remote_ws = remote_ws
+        print(self.session)
 
-    # def __init_subclass__(cls, **kwargs):
-    #     for att, value in cls.__dict__.items():
-    #         if callable(value):
-    #             logger.debug(f"{cls.__name__}.{att}={value}")
-    #             value.api_path = ""
-    #             setattr(cls, att, api_props(allowed_users=None, allowed_roles=None)(value))
-    #     super().__init_subclass__(**kwargs)
+    def __init_subclass__(cls, **kwargs):
+        print(cls.__name__, kwargs)
+        setattr(cls, 'session', kwargs.get('session', None))
+        # for att, value in cls.__dict__.items():
+        #     if callable(value):
+        #         logger.debug(f"{cls.__name__}.{att}={value}")
+        #         value.api_path = ""
+        #         setattr(cls, att, api_props(allowed_users=None, allowed_roles=None)(value))
+        # super().__init_subclass__(**kwargs)
+
+
+class Context:
+    def __init__(self, username:str):
+        self.username = username
 
 
 def api_props(*, allowed_users, allowed_roles, **validator_kwargs):

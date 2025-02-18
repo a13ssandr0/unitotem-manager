@@ -443,7 +443,7 @@ class _Config(BaseModel):
     assets: AssetsList = Field(AssetsList(), alias='urls')
     def_duration: int = Field(const.def_duration, alias='default_duration', ge=0)
     users: dict[str, UserData] = {
-        'admin': UserData( #default user: name=admin; password=admin (pre-hashed)
+        'admin': UserData(  # default user: name=admin; password=admin (pre-hashed)
             password='pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c',
             groups=['admin']
         )
@@ -539,7 +539,8 @@ class _Config(BaseModel):
     def add_user(self, user: str, password: str, groups=None):
         if groups is None:
             groups = []
-        self.users[user] = UserData(password=generate_password_hash(password), groups=groups)
+        self.users[user] = UserData(password=generate_password_hash(password),
+                                    groups=[grp for grp in groups if grp in Config.groups])
 
     def change_password(self, user: str, password: str):
         self.users[user].password = generate_password_hash(password)

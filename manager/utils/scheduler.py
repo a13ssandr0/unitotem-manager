@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Optional, Union, Annotated, Literal
 
-from fastapi import WebSocket
 from pydantic import BeforeValidator
 from pydantic.color import Color
 

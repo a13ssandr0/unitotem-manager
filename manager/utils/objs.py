@@ -41,7 +41,7 @@ def find_by_attribute(l:list, key, value, default:Optional[int]=None):
         if key in elem and elem[key] == value:
             return index
     else:
-        if default == None:
+        if default is None:
             raise ValueError(f'No element with {repr(key)}: {repr(value)} in list')
         else:
             return default

@@ -1,3 +1,6 @@
+Pillow
+PyJWT
+Werkzeug
 aiofiles
 aiohttp
 asyncwebsockets
@@ -6,17 +9,16 @@ fastapi
 fastapi-login
 hypercorn
 jinja2
+loguru
 natsort
 packaging
-Pillow
 psutil
 pulsectl
-pydantic==2.6.3
 pydantic-extra-types
-PyJWT
+pydantic==2.6.3
 pymediainfo
-python-crontab
 python-benedict
+python-crontab
 python-dotenv
 python-multipart
 qrcode
@@ -27,4 +29,3 @@ uvloop
 validators
 watchdog
 wcmatch
-Werkzeug
