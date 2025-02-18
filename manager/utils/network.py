@@ -36,7 +36,6 @@ from qrcode import make as make_qr
 from qrcode.constants import ERROR_CORRECT_Q
 from qrcode.image.svg import SvgPathFillImage
 from ruamel.yaml import YAML
-from starlette.websockets import WebSocket
 from werkzeug.utils import secure_filename
 
 from utils import Config

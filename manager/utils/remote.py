@@ -89,7 +89,6 @@ class Remote(WSAPIBase):
         headers.setdefault("hostname", get_hostname())
         headers.setdefault("port", const.default_port_secure)
         while not SHUTDOWN_EVENT.is_set():
-            # noinspection PyBroadException
             try:
                 logging.info('Connecting to', url)
                 if Config.remote_server_pk is None:

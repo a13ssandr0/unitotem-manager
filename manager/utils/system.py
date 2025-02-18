@@ -18,7 +18,6 @@ from time import time
 from crontab import CronTab
 from psutil import (boot_time, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
-from starlette.websockets import WebSocket
 
 from utils.ws.wsmanager import WSManager
 from .cpu import cpu_times_percent

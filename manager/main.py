@@ -94,7 +94,7 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
     )
     match tab:
         case 'audio':
-            data['audio'] = getAudioDevices()
+            data['audio'] = get_audio_devices()
         case 'display':
             data['displays'] = DISPLAYS
         case 'security':
@@ -151,7 +151,6 @@ if __name__ == "__main__":
         Config(filename=cmdargs.config)
     except FileNotFoundError:
         logger.warning('First boot or no configuration file found.')
-        # noinspection PyBroadException
         try:
             if not do_ip_addr(True) or exists(FALLBACK_AP_FILE):
                 # config file doesn't exist, and we are not connected, maybe it's first boot

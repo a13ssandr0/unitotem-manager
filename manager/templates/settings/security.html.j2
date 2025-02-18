@@ -27,7 +27,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">Save</button>
+                    <button type="button" class="btn btn-success" data-bs-dismiss="modal" id="user-modal-save">Save</button>
                 </div>
             </div>
         </div>
@@ -147,9 +147,23 @@
 {#const sub = $('#set_passwd');#}
 {#pwd1.on('input', () => sub.prop('disabled', (pwd1.val() === '') || (pwd1.val() !== pwd2.val())));#}
 {#pwd2.on('input', () => sub.prop('disabled', (pwd1.val() === '') || (pwd1.val() !== pwd2.val())));#}
+const user_modal = $('#userModal');
+const userNameInput = $('#userNameInput');
+const userPasswordInput = $('#userPasswordInput');
 const user_modal_groups = $('#userModalGroups');
 const user_table = $('#usertable');
 const group_table = $('#grouptable');
+
+
+$('#user-modal-save').click(()=>{
+    //user_modal.dismiss();
+    let name = userNameInput.val();
+    let passwd = userPasswordInput.val();
+    let groups = [... user_modal_groups.find("input:checked").map(function() { return this.name })];
+    sendCommand('Settings/Security/addUser', {name:name, password:passwd, groups:groups});
+});
+
+
 
 function setInputState(el, state) {
     if (state === 'indeterminate') {
@@ -232,7 +246,9 @@ case 'Settings/Security/getUsers':
                 $('<td></td>').append(
                     $('<div class="btn-group" role="group"></div>').append(
                         $('<button type="button" title="Edit user" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></button>'),
-                        $('<button type="button" title="Delete user" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>')
+                        $('<button type="button" title="Delete user" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>').click(()=>{
+                            sendCommand('Settings/Security/delUser', {user: user})
+                        })
                     )
                 )
             )
@@ -258,7 +274,7 @@ case 'Settings/Security/getGroups':
         )
         user_modal_groups.append(
             $('<div class="form-check"></div>').append(
-                $('<input class="form-check-input" type="checkbox" value="">').attr('id', 'userGroupCheck' + i),
+                $('<input class="form-check-input" type="checkbox">').attr('name', group).attr('id', 'userGroupCheck' + i),
                 $('<label class="form-check-label"></label>').attr('for', 'userGroupCheck' + i).html(group)
             )
         )

@@ -1,4 +1,4 @@
-__all__ = ["Audio"]
+__all__ = ["Audio", "get_audio_devices", "get_default_audio_device", "set_default_audio_device", "set_volume", "set_mute"]
 
 from typing import Optional
 

@@ -1,24 +1,28 @@
+import inspect
 import logging
+import types
 from collections import OrderedDict
 from functools import wraps
+from importlib import import_module
 from inspect import isclass, isgeneratorfunction, iscoroutinefunction, isasyncgenfunction
 from json import dumps
 from os.path import join
 from subprocess import run as cmd_run
 from traceback import format_exc
-from typing import Any, Tuple, AsyncGenerator
+from typing import Any, Tuple
 
 from benedict import benedict
-from fastapi import APIRouter, WebSocketException, Request, status, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocketException, Request, status, WebSocketDisconnect
+from fastapi import WebSocket
 from pydantic import validate_call
-from wsproto import WSConnection
 
 import utils.constants as const
 from utils.commons import UPLOADS
 from utils.models import Config
 from utils.security import LOGMAN, NotAuthenticatedException
+from utils.ws.wsmanager import Context
 from .responses import WSBroadcast, WSResponse
-from .wsmanager import WSManager, WSAPIBase, api_props
+from .wsmanager import WSManager, WSAPIBase
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +52,7 @@ def dict_sort(value):
 
 # noinspection PyUnresolvedReferences
 class WebSocketAPI:
-    generators: dict[str, AsyncGenerator] = {}
+    generators: dict[str, types.FunctionType] = {}
 
     def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
         self.__ws = ws
@@ -61,12 +65,19 @@ class WebSocketAPI:
         items = benedict({k: (f.__doc__ or '').strip() for k, f in self.generators.items() if '/_' not in k}).unflatten('/')
         return dict_sort(items)
 
+    def import_class(self, path: str, name: str, prefix: str = None):
+        logger.debug(f'Importing {name} from {path}')
+        cls = import_module(path).__getattribute__(name)
+        self.load_class(cls, prefix=prefix)
+        logger.info(f'Imported {name} from {path}')
+
     def load_class(self, cls: type, prefix: str = None):
         if not issubclass(cls, WSAPIBase):
             raise ValueError("Class is not a subclass of WSAPIBase")
 
         self.generators.update(self.__treegen(cls, prefix))
 
+    # noinspection PyPep8Naming
     def __treegen(self, Cls: type, prefix: str = None):
         classname = Cls.__name__
         logger.debug("Class: " + classname)
@@ -146,47 +157,13 @@ logger.debug("WebSocketAPI initialization")
 api = WebSocketAPI(WS, UI_WS, REMOTE_WS)
 logger.debug("WebSocketAPI initialized")
 
-
-from utils.scheduler import Scheduler
-logger.debug("Imported scheduler")
-api.load_class(Scheduler)
-logger.debug("Loaded scheduler")
-
-
-from utils.models import Settings
-logger.debug("Imported settings")
-api.load_class(Settings)
-logger.debug("Loaded settings")
-
-
-from utils.audio import Audio
-logger.debug("Imported audio")
-api.load_class(Audio, 'Settings')
-logger.debug("Loaded audio")
-
-
-from utils.remote import Remote
-logger.debug("Imported remote")
-api.load_class(Remote, 'Settings')
-logger.debug("Loaded remote")
-
-
-from utils.network import Settings
-logger.debug("Imported network")
-api.load_class(Settings)
-logger.debug("Loaded network")
-
-
-from utils.system import Cron
-logger.debug("Imported cron")
-api.load_class(Cron, 'Settings')
-logger.debug("Loaded cron")
-
-
-from utils.security import Security
-logger.debug("Imported security")
-api.load_class(Security, 'Settings')
-logger.debug("Loaded security")
+api.import_class('utils.scheduler', 'Scheduler')
+api.import_class('utils.models', 'Settings')
+api.import_class('utils.audio', 'Audio', 'Settings')
+api.import_class('utils.remote', 'Remote', 'Settings')
+api.import_class('utils.network', 'Settings')
+api.import_class('utils.system', 'Cron', 'Settings')
+api.import_class('utils.security', 'Security', 'Settings')
 
 
 @router.websocket("/ws")
@@ -201,20 +178,19 @@ async def websocket_endpoint(websocket: WebSocket):
         return
 
     await WS.connect(websocket)
-    websocket.username = user
     await WS.send(websocket, 'connected')
     while True:
-        # noinspection PyBroadException
         try:
             data: dict[str, Any] = await websocket.receive_json()
             t = data.pop('target')
             try:
-                async for ret in check_permissions(api.generators[t])(**data):
+                async for ret in handle_call(target=t, username=user, request_data=data):
                     if isinstance(ret, WSBroadcast):
                         await WS.broadcast(ret.target, nocache=False, **ret.kwargs)
                     elif isinstance(ret, WSResponse):
                         await WS.send(websocket, ret.target, nocache=False, **ret.kwargs)
-                    # await send_response(websocket, ret, t)
+                    elif isinstance(ret, dict):
+                        await WS.send(websocket, ret.pop('target', t), nocache=False, **ret)
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
 
@@ -226,7 +202,26 @@ async def websocket_endpoint(websocket: WebSocket):
     WS.disconnect(websocket)
 
 
-def check_permissions(func):
+async def handle_call(target, username, request_data):
+    func = api.generators[target]
+    check_permissions(func, username)
+
+    signature = inspect.signature(func)
+
+    ctx_param = None
+    for param_name, param in signature.parameters.items():
+        if param.annotation is Context:
+            ctx_param = param_name
+            break
+
+    if ctx_param:
+        request_data[ctx_param] = Context(username=username)
+
+    async for ret in func(**request_data):
+        yield ret
+
+
+def check_permissions(func, username):
     try:
         logger.debug(func.api_path)
     except:
@@ -241,18 +236,6 @@ def check_permissions(func):
         logger.debug(func.allowed_roles)
     except:
         pass
-    return func
-
-
-async def send_response(websocket, ret, target):
-    if ret is None: return
-    if isinstance(ret, list | tuple | set) and len(ret) == 2 and isinstance(ret[0], str) and isinstance(
-            ret[1], dict):
-        await WS.send(websocket, ret[0], **ret[1])
-    elif isinstance(ret, dict):
-        await WS.send(websocket, target, **ret)
-    else:
-        raise ValueError("Invalid response type")
 
 
 @router.websocket("/remote")
@@ -285,7 +268,6 @@ async def remote_websocket(websocket: WebSocket):
     Config.save()
 
     while True:
-        # noinspection PyBroadException
         try:
             data = await websocket.receive_text()
             logger.debug(data)
@@ -336,7 +318,7 @@ async def ui_websocket(websocket: WebSocket):
             break
 
 
-class Display(WSAPIBase):
+class Display(WSAPIBase, name='boh', debug=True):
     def getBounds(self):
         """
         Get viewer window bounds

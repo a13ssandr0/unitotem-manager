@@ -22,11 +22,11 @@ from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
 from starlette.requests import Request
 from starlette.responses import Response
-from starlette.websockets import WebSocket
+from utils.ws.wsmanager import Context
 
 import utils.constants as const
 from .commons import TEMPLATES
-from .models import Config
+from .models import Config, UserData
 from .network import do_ip_addr
 from .ws.responses import WSBroadcast, WSResponse
 from .ws.wsmanager import WSAPIBase
@@ -122,6 +122,12 @@ async def login_page(request: Request, src: Optional[str] = '/'):
         hostname=get_hostname()
     ))
 
+@login_router.get('/logout')
+async def logout():
+    resp = RedirectResponse('/')
+    resp.set_cookie(key=LOGMAN.cookie_name, value='', httponly=True, samesite='strict', max_age=0)
+    return resp
+
 
 @login_router.post("/api/settings/set_passwd")
 async def set_pass(request: Request, response: Response, password: str, username: str = Depends(LOGMAN)):
@@ -135,8 +141,15 @@ class Security(WSAPIBase):
     def getUsers(self):
         return WSBroadcast(self.getUsers, users=[(user, {'groups': data.groups}) for user, data in Config.users.items()])
 
-    def delUser(self, ws:WebSocket, user:str):
-        if ws.username == user or len(Config.users) == 1:
+    def addUser(self, name:str, password:str, groups:list[str] = None):
+        if name in Config.users:
+            return WSResponse(self.addUser, error="User already exists")
+        Config.add_user(user=name, password=password, groups=groups)
+        Config.save()
+        return self.getUsers()
+
+    def delUser(self, ctx:Context, user:str):
+        if ctx.username == user or len(Config.users) == 1:
             return WSResponse(self.delUser, error="Cannot delete current user")
         elif user in Config.users:
             del Config.users[user]
@@ -152,9 +165,12 @@ class Security(WSAPIBase):
     def getGroups(self):
         return WSBroadcast(self.getGroups, groups=[(group, data.model_dump()) for group, data in Config.groups.items()])
 
-    # async def delGroup(self, ws:WebSocket, group:str):
-    #     if group in Config.groups:
-    #         if group in Config.users[ws.username].groups:
+    def delGroup(self, ctx:Context, group:str):
+        if group in Config.groups:
+            # if group in Config.users[ctx.username].groups:
+            del Config.groups[group]
+            Config.save()
+        return self.getGroups()
 
     def setGroupPerms(self, group:str, perms:list[str]):
         Config.groups[group].perms = perms
