@@ -19,6 +19,21 @@ svg text {
     dominant-baseline: middle;
     fill: var(--bs-emphasis-color);
 }
+
+.r-90 {
+    display: block;
+    transform: rotate(90deg);
+}
+
+.r-180 {
+    display: block;
+    transform: rotate(180deg);
+}
+
+.r-270 {
+    display: block;
+    transform: rotate(270deg);
+}
 {% endblock custom_style %}
 </style>
 
@@ -48,7 +63,7 @@ svg text {
 <div class="row d-flex justify-content-center" id="screen_container">
     <svg viewBox="0 0 {{svg.w}} {{svg.h}}" height="200px" xmlns="http://www.w3.org/2000/svg"{{svg.dis}}>
         {{svg.content|join('\n    ')|safe}}
-        <rect id="window_bound_rect" fill="#00ff0055"/>
+        <rect id="window_bound_rect" fill="#00ff0055" height="0" width="0"></rect>
     </svg>
 </div>
 
@@ -62,13 +77,13 @@ svg text {
                     <label class="btn btn-outline-primary" for="orientation0"><i class="bi bi-display"></i></label>
 
                     <input type="radio" class="btn-check" name="orientation" id="orientation1" value="1" autocomplete="off"{{svg.dis}}>
-                    <label class="btn btn-outline-primary" for="orientation1"><div style="transform: rotate(270deg);"><i class="bi bi-display"></i></div></label>
+                    <label class="btn btn-outline-primary" for="orientation1"><i class="bi bi-display r-270"></i></label>
 
                     <input type="radio" class="btn-check" name="orientation" id="orientation2" value="2" autocomplete="off"{{svg.dis}}>
-                    <label class="btn btn-outline-primary" for="orientation2"><div style="transform: rotate(180deg);"><i class="bi bi-display"></i></div></label>
+                    <label class="btn btn-outline-primary" for="orientation2"><i class="bi bi-display r-180"></i></label>
 
                     <input type="radio" class="btn-check" name="orientation" id="orientation3" value="3" autocomplete="off"{{svg.dis}}>
-                    <label class="btn btn-outline-primary" for="orientation3"><div style="transform: rotate(90deg);"><i class="bi bi-display"></i></div></label>
+                    <label class="btn btn-outline-primary" for="orientation3"><i class="bi bi-display r-90"></i></label>
                 </div>
             </div>
         </div>
