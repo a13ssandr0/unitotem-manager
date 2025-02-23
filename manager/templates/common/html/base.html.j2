@@ -47,6 +47,7 @@
     {{_add_stylesheets("/bootstrap.min.css", "/bootstrap-icons.css") -}}
     <style>html {font-size: 14px} .hdr { background-color: #7431F9; color: white; }</style>
     <style>
+        @media (min-width: 1200px) { .fs-1 {font-size: 2.7rem !important;} }
         {%- block custom_style %}{% endblock custom_style -%}
     </style>
 </head>
@@ -60,7 +61,7 @@
     {{addPowerRuleModal() if (request.url|string).endswith('cron')}}
     {%- block body_top %}{% endblock body_top -%}
 
-    <nav class="navbar navbar-dark hdr">
+    <nav class="navbar navbar-dark hdr p-0">
         <div class="container-fluid gap-2">
             <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasResponsive"><span class="navbar-toggler-icon"></span></button>
             <a class="navbar-brand p-0" href="/"><span class="my-auto fw-bold fs-1">U<span class="d-none d-md-inline">niTotem<span id="navbar_hostname" class="fs-3"></span></span></span></a>
