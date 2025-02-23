@@ -259,7 +259,9 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
     _waiting_evt = asyncio.Event()
     _waiting_timer = Timer(None, None)
 
-    def __init__(self, iterable=[]):
+    def __init__(self, iterable=None):
+        if iterable is None:
+            iterable = []
         super().__init__([Asset.model_validate(e) for e in iterable])
         self.callback()
 
@@ -292,7 +294,7 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
         super().extend([Asset.model_validate(item) for item in other])
         self.callback()
 
-    def pop(self, index):
+    def pop(self, index=-1):
         # see __delitem__ for explanation
         curr_uuid = self.current.uuid
         if index <= self.__current: self.__current -= 1
@@ -425,12 +427,12 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
 class UserData(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     password: str = Field(alias='pass')
-    groups: list[str] = []
-    # perms: list[str] = []
+    groups: list[str] = Field(default_factory=list)
+    # perms: list[str] = Field(default_factory=list)
 
 
 class GroupData(BaseModel):
-    perms: list[str] = []
+    perms: list[str] = Field(default_factory=list)
 
 
 # TODO: replace with BaseSettings
@@ -442,19 +444,19 @@ class _Config(BaseModel):
     # TODO: switch from Field assignment to Field annotation
     assets: AssetsList = Field(AssetsList(), alias='urls')
     def_duration: int = Field(const.def_duration, alias='default_duration', ge=0)
-    users: dict[str, UserData] = {
+    users: dict[str, UserData] = Field(default_factory=lambda: {
         'admin': UserData(  # default user: name=admin; password=admin (pre-hashed)
             password='pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c',
             groups=['admin']
         )
-    }
-    groups: dict[str, GroupData] = {'admin': GroupData(perms=['*'])}
+    })
+    groups: dict[str, GroupData] = Field(default_factory=lambda: {'admin': GroupData(perms=['*'])})
     remote_server_ip: Optional[IPv4Address] = None
     remote_server_port: PositiveInt = const.default_port_secure
     remote_server_id: Optional[str] = None
     remote_server_pk: Optional[rsa.RSAPublicKey] = None
     rsa_pk: rsa.RSAPrivateKey = Field(default_factory=lambda: rsa.generate_private_key(65537, 4096))
-    remote_clients: dict[str, dict[str, str | int]] = {}
+    remote_clients: dict[str, dict[str, str | int]] = Field(default_factory=dict)
     filename: Union[str, Path] = Field(const.default_config_file, exclude=True)
     first_boot: bool = Field(True, exclude=True)
 
@@ -739,7 +741,7 @@ def get_dominant_color(pil_img: Image.Image, palette_size=16):  # https://stacko
     img = pil_img.copy()
     img.thumbnail((100, 100))
     # Reduce colors (uses k-means internally)
-    paletted = img.convert('P', palette=Image.ADAPTIVE, colors=palette_size)
+    paletted = img.convert('P', palette=Image.Palette.ADAPTIVE, colors=palette_size)
     # Find the color that occurs most often
     palette = paletted.getpalette()
     color_counts = sorted(paletted.getcolors(), reverse=True)
