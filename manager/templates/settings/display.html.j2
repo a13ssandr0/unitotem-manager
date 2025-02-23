@@ -120,22 +120,22 @@ $('[name=screen]').each((i, e)=>{
 
 $('input[name="orientation"]').on('change', (e) => sendCommand('Settings/Display/setOrientation', {orientation: e.target.value}));
 $('input[name="flip"]').on('change', (e) => sendCommand('Settings/Display/setFlip', {flip: e.target.value}));
-{% endblock js %}
 
-{% block recv_cmds %}
-case 'Settings/Display/getBounds':
+
+handle('Settings/Display/getBounds', data => {
     window_bound_rect.attr('x', data.x).attr('y', data.y)
         .attr('width', data.width).attr('height', data.height);
-    break;
+})
 
-case 'Settings/Display/getOrientation':
+handle('Settings/Display/getOrientation', data => {
     $('input[name="orientation"]:checked').removeAttr('checked');
     $(`input[name="orientation"][value="${data.orientation}"]`).prop('checked', true);
-    break;
+})
 
-case 'Settings/Display/getFlip':
+handle('Settings/Display/getFlip', data => {
     $('input[name="flip"]:checked').removeAttr('checked');
     $(`input[name="flip"][value="${data.flip}"]`).prop('checked', true);
-    break;
-{% endblock recv_cmds %}
+})
+
+{% endblock js %}
 </script>

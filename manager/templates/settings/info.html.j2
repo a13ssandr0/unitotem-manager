@@ -252,15 +252,13 @@ function human_readable_size(size, precision=3){
     return size.toPrecision(precision) + unit;
 }
 
-{% endblock js %}
-
-
-{% block recv_cmds %}
-case 'Settings/info':
+handle('Settings/info', data => {
     uptime.html(`Uptime: ${data.uptime}`);
 
-    barChartData.datasets.forEach(dataset => {dataset.data = []});
-    data.cpu.forEach((val, i) =>{
+    barChartData.datasets.forEach(dataset => {
+        dataset.data = []
+    });
+    data.cpu.forEach((val, i) => {
         barChartData.datasets[0].data.push(val.nice);
         barChartData.datasets[1].data.push(val.user);
         barChartData.datasets[2].data.push(val.system);
@@ -270,36 +268,36 @@ case 'Settings/info':
     })
     window.myBar.update();
 
-    prog_used.css('width', data.vmem.used/data.vmem.total*100 + '%');
+    prog_used.css('width', data.vmem.used / data.vmem.total * 100 + '%');
     pill_used.html(human_readable_size(data.vmem.used));
 
-    prog_buffer.css('width', data.vmem.buffers/data.vmem.total*100 + '%');
+    prog_buffer.css('width', data.vmem.buffers / data.vmem.total * 100 + '%');
     pill_buffer.html(human_readable_size(data.vmem.buffers));
 
-    prog_cache.css('width', data.vmem.cached/data.vmem.total*100 + '%');
+    prog_cache.css('width', data.vmem.cached / data.vmem.total * 100 + '%');
     pill_cache.html(human_readable_size(data.vmem.cached));
-    
+
     {% if has_battery %}
-    bat_perc.css('width', data.battery.percent + '%');
-    bat_perc.html(new Intl.NumberFormat('en-EN', {maximumSignificantDigits: 3}).format(data.battery.percent) + '%');
-    bat_perc.toggleClass('bg-danger', !data.battery.power_plugged && data.battery.percent<=15)
-    bat_perc.toggleClass('bg-warning text-dark', !data.battery.power_plugged && 15<data.battery.percent && data.battery.percent<=25)
-    bat_perc.toggleClass('progress-bar-striped progress-bar-animated', data.battery.power_plugged && data.battery.percent<100)
-    bat_perc.toggleClass('bg-success', data.battery.power_plugged && data.battery.percent===100)
+        bat_perc.css('width', data.battery.percent + '%');
+        bat_perc.html(new Intl.NumberFormat('en-EN', {maximumSignificantDigits: 3}).format(data.battery.percent) + '%');
+        bat_perc.toggleClass('bg-danger', !data.battery.power_plugged && data.battery.percent <= 15)
+        bat_perc.toggleClass('bg-warning text-dark', !data.battery.power_plugged && 15 < data.battery.percent && data.battery.percent <= 25)
+        bat_perc.toggleClass('progress-bar-striped progress-bar-animated', data.battery.power_plugged && data.battery.percent < 100)
+        bat_perc.toggleClass('bg-success', data.battery.power_plugged && data.battery.percent === 100)
 
-    bat_time.html(new Date(data.battery.secsleft*1000).toISOString().substring(11, 19));
+        bat_time.html(new Date(data.battery.secsleft * 1000).toISOString().substring(11, 19));
 
-    bat_chg.html((data.battery.power_plugged && data.battery.percent===100)?'Charged':data.battery.power_plugged?'Charging':'Discharging');
+        bat_chg.html((data.battery.power_plugged && data.battery.percent === 100) ? 'Charged' : data.battery.power_plugged ? 'Charging' : 'Discharging');
     {% endif %}
 
     {% if fan_devs %}
-    data.fans.forEach((fan, i) => $('#' + fan[0]).html(fan[1] + ' rpm'));
+        data.fans.forEach((fan, i) => $('#' + fan[0]).html(fan[1] + ' rpm'));
     {% endif %}
 
     data.temperatures.forEach((temp, i) => {
         let row = $('#' + temp[0]).html(Math.round(temp[1]) + ' °C');
         row.toggleClass('text-danger', temp[1] > row.data('th'));
     });
-    break;
-{% endblock recv_cmds %}
+})
+{% endblock js %}
 </script>

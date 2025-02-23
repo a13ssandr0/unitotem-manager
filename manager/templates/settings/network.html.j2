@@ -104,23 +104,20 @@ $('#wifiDropBtn').on({
     'hide.bs.dropdown': () => clearInterval(wifi_upd_timer)
 });
 
-{% endblock js %}
 
-
-{% block recv_cmds %}
-case 'Settings/hostname':
+handle('Settings/hostname', data => {
     inputHostname.val(data.hostname).attr('def-val', data.hostname)
         .removeClass('btn-success').addClass('btn-outline-success');
-    break;
+})
 
-case 'Settings/Netplan/getFile':
+handle('Settings/Netplan/getFile', data => {
     filesList.empty();
     netplan.original = data.files;
     Object.entries(data.files).forEach((pair, i) => {
         const [filename, content] = pair;
         const btn = $('<button class="dropdown-item" type="button"></button>')
             .html(filename)
-            .click(()=>{
+            .click(() => {
                 file_selector_btn.html(filename);
                 cur_file = filename;
                 aceEditor.setValue(content, -1);
@@ -128,21 +125,21 @@ case 'Settings/Netplan/getFile':
                 del_btn.attr('data-bs-positive-action',
                     `sendCommand('Settings/Netplan/deleteFile', {filename: '${filename}'})`);
             });
-        if (i===0) btn.click();
+        if (i === 0) btn.click();
         filesList.append($('<li></li>').append(btn));
     });
-    break;
+})
 
-case 'Settings/get_wifis':
-    let wifi_low = data.wifis[0].signal_total/3;
-    let wifi_high = data.wifis[0].signal_total*2/3;
+handle('Settings/get_wifis', data => {
+    let wifi_low = data.wifis[0].signal_total / 3;
+    let wifi_high = data.wifis[0].signal_total * 2 / 3;
     wifi_menu.empty();
     data.wifis.forEach(network => {
         if (network.essid === '') network.essid = null;
-        
-        if (network.signal_quality >= wifi_high)     var wifi_icon = 'bi-wifi';
+
+        if (network.signal_quality >= wifi_high) var wifi_icon = 'bi-wifi';
         else if (network.signal_quality >= wifi_low) var wifi_icon = 'bi-wifi-2';
-        else                                         var wifi_icon = 'bi-wifi-1';
+        else var wifi_icon = 'bi-wifi-1';
 
         wifi_menu.append(
             $('<li class="dropdown-item"></li>')
@@ -160,7 +157,7 @@ case 'Settings/get_wifis':
                         $('<small class="text-muted"></small>').html(network.mac),
                         $('<span class="float-end line-height-1 ps-2"></span>').append(
                             $('<span class="badge text-bg-info"></span>')
-                                .html(((network.frequency>=5)?'5':'2.4') + 'GHz'),
+                                .html(((network.frequency >= 5) ? '5' : '2.4') + 'GHz'),
                             $('<span class="badge text-bg-warning"></span>').append(
                                 $('<i></i>').addClass('bi bi-' + (network.encryption !== 'off' ? 'lock' : 'unlock')),
                                 ' ' + (network.encryption !== 'off' ? network.encryption : 'open')
@@ -170,6 +167,6 @@ case 'Settings/get_wifis':
                 )
         );
     });
-    break;
-{% endblock recv_cmds %}
+})
+{% endblock js %}
 </script>

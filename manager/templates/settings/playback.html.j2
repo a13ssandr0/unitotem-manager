@@ -16,14 +16,6 @@
 {% set init_cmds = ['Settings/default_duration'] %}
 
 <script type="text/javascript" charset="utf-8">
-{% block recv_cmds %}
-case 'Settings/default_duration':
-    default_duration.attr('def-val', data.duration);
-    default_duration.val(data.duration);
-    set_default_duration.removeClass('btn-success').addClass('btn-outline-success').prop('disabled', true);
-    break;
-{% endblock recv_cmds %}
-
 {% block js %}
 const default_duration = $('#default_duration');
 const set_default_duration = $('#set_def_duration');
@@ -37,5 +29,11 @@ default_duration.change(() => {
 });
 
 set_default_duration.click(() => sendCommand('Settings/default_duration', {duration: default_duration.val()}));
+
+handle('Settings/default_duration', data => {
+    default_duration.attr('def-val', data.duration);
+    default_duration.val(data.duration);
+    set_default_duration.removeClass('btn-success').addClass('btn-outline-success').prop('disabled', true);
+})
 {% endblock js %}
 </script>

@@ -110,8 +110,8 @@
     <div class="toast-container position-absolute bottom-0 end-0 p-3"></div>
 
     {% set display = (disp_size.width|string + 'x' + disp_size.height|string) if disp_size else 'Not connected' -%}
-    <footer class="fixed-bottom text-center border-top bg-body" style="width:100%; z-index:1000;">
-        <h6 class="my-1" width="100%">
+    <footer class="fixed-bottom text-center border-top bg-body w-100 zindex-fixed">
+        <h6 class="my-1">
             <small class="text-muted">
                 <a href="https://github.com/a13ssandr0/unitotem">
                 <i class="bi bi-github"></i> Unitotem</a> {{ ut_vers }} by a13ssandr0 | Logged in as {{ logged_user }} | Display: <span id="display_bounds">{{ display }}</span> | Used {{disk_used}} of {{disk_total}}
@@ -124,6 +124,8 @@
     <script>
         const toast_container = $('.toast-container');
         const navbar_hostname = $('#navbar_hostname');
+
+        let ws;
 
         function sendCommand(target, args) {
             if(args === undefined) args = {};
@@ -145,13 +147,36 @@
             new bootstrap.Toast(toast, {autohide: !!duration, delay: duration}).show();
         }
 
-        {% block js %}{% endblock js %}
+        const handlers = {
+            /*error: () => {
+                messageModal.find('.modal-title').text('Error');
+                messageModal.find('.modal-body h6').text('Request returned ' + data.error);
+                messageModal.find('.modal-body code').text(data.extra);
+                new bootstrap.Modal(messageModal).show();
+            },*/
 
-        var connect_retry = 0;
+            connected: () => {
+                connect_retry = 0;
+            },
+
+            reload: () => {
+                location.reload();
+            }
+        }
+
+        function handle(evt, callbackFn) {
+            if (["error", "connected", "reload"].includes(evt)){
+                console.error(`Cannot shadow protected handler %c"${evt}"`, "font-style: italic; font-weight: bolder;");
+                return
+            }
+            handlers[evt] = callbackFn;
+        }
+
+        let connect_retry = 0;
 
         function connect() {
             const loc = window.location;
-            var _ws = new WebSocket(`w${(loc.protocol === 'https:')?'s':''}s://${loc.host}/ws`);
+            const _ws = new WebSocket(`w${(loc.protocol === 'https:') ? 's' : ''}s://${loc.host}/ws`);
             _ws.onopen = event => {
                 // PAGE INIT
                 {{ init_cmds|flatten|safe }}
@@ -170,29 +195,7 @@
                     new bootstrap.Modal(messageModal).show();
                     return;
                 }
-                switch (data.target) {
-                    
-                    {% block recv_cmds %}{% endblock recv_cmds %}
-
-                    case 'error':
-                        messageModal.find('.modal-title').text('Error');
-                        messageModal.find('.modal-body h6').text('Request returned ' + data.error);
-                        messageModal.find('.modal-body code').text(data.extra);
-                        new bootstrap.Modal(messageModal).show();
-                        break;
-
-                    case 'connected':
-                        connect_retry=0;
-                        break;
-
-                    case 'reload':
-                        location.reload();
-                        break;
-
-                    default:
-                        break;
-                }
-                
+                handlers[data.target]?.(data);
             };
 
             _ws.onclose = e => {
@@ -211,7 +214,9 @@
             return _ws;
         }
 
-        var ws = connect();
+        {% block js %}{% endblock js %}
+
+        ws = connect();
 
         const messageModal = $('#messageModal');
         const messageModalTitle = $('#messageModal .modal-title');
