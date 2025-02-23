@@ -166,11 +166,33 @@ class Security(WSAPIBase):
         return WSBroadcast(self.getGroups, groups=[(group, data.model_dump()) for group, data in Config.groups.items()])
 
     def delGroup(self, ctx:Context, group:str):
+        if Config.groups[group].perms == ['*']:
+            # check if the group that will be deleted is the only one with full privileges
+            for grp, gprop in Config.groups.items():
+                if grp != group and gprop.perms == ['*']:
+                    # there is another group with full privileges
+                    for usr, prop in Config.users.items():
+                        if grp in prop.groups:
+                            #the group has users we can safely complete deletion of requested group
+                            break #break here
+                    else:
+                        #the group has no users, deletion could likely leave the system without any administrative user
+                        continue
+                    break #then immediately break here to exit loop
+            else:
+                # the loop was never broken -> there are no groups with full privileges that have users
+                yield WSResponse(self.delGroup, error="Cannot delete current group")
+                return
+
+        # if group in Config.users[ctx.username].groups:
         if group in Config.groups:
-            # if group in Config.users[ctx.username].groups:
             del Config.groups[group]
+            for prop in Config.users.values():
+                try: prop.groups.remove(group)
+                except ValueError: pass
             Config.save()
-        return self.getGroups()
+        yield self.getUsers()
+        yield self.getGroups()
 
     def setGroupPerms(self, group:str, perms:list[str]):
         Config.groups[group].perms = perms

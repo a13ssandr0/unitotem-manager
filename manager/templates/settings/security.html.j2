@@ -242,7 +242,7 @@ case 'Settings/Security/getUsers':
         user_table.append(
             $('<tr></tr>').append(
                 $('<th scope="col"></th>').html(user),
-                $('<td></td>').html(data.groups),
+                $('<td></td>').html(data.groups.join(', ')),
                 $('<td></td>').append(
                     $('<div class="btn-group" role="group"></div>').append(
                         $('<button type="button" title="Edit user" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></button>'),
@@ -267,7 +267,9 @@ case 'Settings/Security/getGroups':
                 $('<td></td>').append(
                     $('<div class="btn-group" role="group"></div>').append(
                         $('<button type="button" title="Edit group" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></button>'),
-                        $('<button type="button" title="Delete group" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>')
+                        $('<button type="button" title="Delete group" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>').click(()=>{
+                            sendCommand('Settings/Security/delGroup', {group: group})
+                        })
                     )
                 )
             )
