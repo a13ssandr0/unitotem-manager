@@ -229,11 +229,11 @@
         }
     }); */
 
-{% endblock js %}
+{#{% endblock js %}#}
 
 
-{% block recv_cmds %}
-case 'Scheduler/asset':
+{#{% block recv_cmds %}#}
+handle('Scheduler/asset', data => {
     asset_table.empty();
     data.items.forEach((item, i) => {
         let icon = (()=>{
@@ -248,7 +248,7 @@ case 'Scheduler/asset':
             else
                 return 'bi-globe';
         })();
-        
+
         asset_table.append(
             $('<tr style="min-height:3rem;max-height:3rem;"></tr>').attr('id', item.uuid)
                 .toggleClass('table-active', item.uuid === data.current)
@@ -330,15 +330,15 @@ case 'Scheduler/asset':
                 )
         )
     });
-    break;
+})
 
-case 'Scheduler/current':
+handle('Scheduler/current', data => {
     asset_table.children().each((i,element) => {
         $(element).toggleClass('table-active', element.id === data.uuid);
     });
-    break;
+})
 
-case 'Scheduler/file':
+handle('Scheduler/file', data => {
     const list = $('#file-list');
     list.empty();
     Object.entries(data.files).forEach(([fname, fdata], i) => {
@@ -356,17 +356,19 @@ case 'Scheduler/file':
             )
         );
     });
-    break;
+})
 
-case 'Settings/default_duration':
+handle('Settings/default_duration', data => {
     modal_input.duration.val(data.duration).attr('def-value', data.duration);
-    break;
+})
 
-case 'Settings/Display/getBounds':
+handle('Settings/Display/getBounds', data => {
     $('#display_bounds').html( 
         (data.bounds.width && data.bounds.height)?
             `${data.bounds.width}x${data.bounds.height}`:
             'Not connected');
-    break;
-{% endblock recv_cmds %}
+})
+{#{% endblock recv_cmds %}#}
+{% endblock js %}
+
 </script>

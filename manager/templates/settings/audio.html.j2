@@ -45,11 +45,9 @@ $('input.form-range').each((i,e) =>
     $(e).on('input', () => { $(e.parentElement).siblings('p').html(Math.round(parseFloat(e.value)*100))})
         .change(() => { sendCommand('Settings/Audio/volume', {device: $(e).data('devname'), volume: parseFloat(e.value)})})
 );
-{% endblock js %}
 
 
-{% block recv_cmds %}
-case 'Settings/Audio/devices':
+handle('Settings/Audio/devices', data => {
     data.devices.forEach(device => {
         let dev = $(`div[name="${device.name}"]`);
         dev.find('.form-check-input').prop('checked', device.default);
@@ -57,6 +55,6 @@ case 'Settings/Audio/devices':
         dev.find('.d-flex input').val(device.volume);
         dev.find('.d-flex p').html(Math.round(device.volume*100));
     })
-    break;
-{% endblock recv_cmds %}
+})
+{% endblock js %}
 </script>

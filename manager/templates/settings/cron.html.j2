@@ -32,11 +32,9 @@
         mon: $('#month_selector').val(),
         dow: $('#weekday_selector').val()
     }));
-{% endblock js %}
 
 
-{% block recv_cmds %}
-case 'Settings/Cron/getJobs':
+handle('Settings/Cron/getJobs', data => {
     table.empty();
     data.jobs.forEach(job => {
         table.append(
@@ -50,9 +48,12 @@ case 'Settings/Cron/getJobs':
                 $('<td class="my-auto"></td>').append(
                     $('<div class="form-check form-switch"></div>').append(
                         $('<input class="form-check-input" type="checkbox" role="switch">')
-                            .attr('title', ((job.enabled)?'Dis':'En') + 'able job')
+                            .attr('title', ((job.enabled) ? 'Dis' : 'En') + 'able job')
                             .prop('checked', job.enabled)
-                            .change(() => sendCommand('Settings/Cron/setJobEnabled', {job: job.comment, state: !job.enabled}))
+                            .change(() => sendCommand('Settings/Cron/setJobEnabled', {
+                                job: job.comment,
+                                state: !job.enabled
+                            }))
                     )
                 ),
                 $('<td class="my-auto"></td>').append(
@@ -62,6 +63,6 @@ case 'Settings/Cron/getJobs':
             )
         );
     });
-    break;
-{% endblock recv_cmds %}
+})
+{% endblock js %}
 </script>

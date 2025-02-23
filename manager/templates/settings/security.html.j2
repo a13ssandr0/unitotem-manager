@@ -233,10 +233,8 @@ function list_selected(root){
 }
 //list_selected($('#sub-All'));
 
-{% endblock js %}
 
-{% block recv_cmds %}
-case 'Settings/Security/getUsers':
+handle('Settings/Security/getUsers', data => {
     user_table.empty();
     data.users.forEach(([user,data])=>{
         user_table.append(
@@ -254,9 +252,9 @@ case 'Settings/Security/getUsers':
             )
         )
     });
-    break
+})
 
-case 'Settings/Security/getGroups':
+handle('Settings/Security/getGroups', data => {
     group_table.empty();
     user_modal_groups.empty();
     data.groups.forEach(([group,data],i)=>{
@@ -281,6 +279,6 @@ case 'Settings/Security/getGroups':
             )
         )
     });
-    break
-{% endblock recv_cmds %}
+})
+{% endblock js %}
 </script>

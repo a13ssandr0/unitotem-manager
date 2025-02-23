@@ -72,10 +72,8 @@ mode_selector.change(function(){
     }
 });
 
-{% endblock js %}
 
-{% block recv_cmds %}
-case 'Settings/Remote/getMode':
+handle('Settings/Remote/getMode', data => {
     if (data.remote_server) {
         mode_selector.val(1).change();
         if (data.remote_connected) {
@@ -92,19 +90,19 @@ case 'Settings/Remote/getMode':
         mode_selector.val(0).change();
         server_info_container.hide();
         if (data.remote_clients.length) client_container.empty();
-        data.remote_clients.forEach(([id, prop])=>{
+        data.remote_clients.forEach(([id, prop]) => {
             client_container.append(
                 $('<div class="col mb-3"></div>').append(
                     $('<div class="card">').append(
                         $('<div class="card-body">').append(
                             $('<h5 class="card-title"></h5>').html(prop.hostname),
                             $('<h6 class="card-subtitle mb-2 text-body-secondary"></h6>').html(`${prop.ip}:${prop.port}`),
-                            $('<button type="button" class="btn btn-sm btn-primary">Disconnect</button>').click(()=>{
-                                sendCommand('Settings/Remote/disconnect', {client:id});
+                            $('<button type="button" class="btn btn-sm btn-primary">Disconnect</button>').click(() => {
+                                sendCommand('Settings/Remote/disconnect', {client: id});
                             }),
                             {# $('<a href="#" class="card-link">Disable</a>'), #}
                             $('<a type="button" class="btn btn-sm btn-primary ms-1" target="_blank" rel="noopener noreferrer">Manage</a>')
-                                    .prop('href', `https://${prop.ip}:${prop.port}/settings`)
+                                .prop('href', `https://${prop.ip}:${prop.port}/settings`)
                         ),
                         $('<div class="card-footer text-body-secondary m-0 p-0 px-1 text-truncate"></div>').append($('<small></small>').html(id))
                     )
@@ -112,6 +110,6 @@ case 'Settings/Remote/getMode':
             )
         })
     }
-    break
-{% endblock recv_cmds %}
+})
+{% endblock js %}
 </script>
