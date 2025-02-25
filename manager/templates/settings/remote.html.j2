@@ -62,7 +62,7 @@ $('#server_info_container button').click(()=>{
 });
 
 mode_selector.change(function(){
-    if (this.value==1){
+    if (this.value===1){
         server_ip_container.show();
         client_container.hide();
     } else {

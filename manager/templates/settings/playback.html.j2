@@ -21,7 +21,7 @@ const default_duration = $('#default_duration');
 const set_default_duration = $('#set_def_duration');
 
 default_duration.change(() => {
-    if (default_duration.val() != default_duration.attr('def-val')) {
+    if (default_duration.val() !== default_duration.attr('def-val')) {
        set_default_duration.removeClass('btn-outline-success').addClass('btn-success').prop('disabled', false);
     } else {
        set_default_duration.removeClass('btn-success').addClass('btn-outline-success').prop('disabled', true);
