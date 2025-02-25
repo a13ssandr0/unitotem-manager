@@ -1,21 +1,21 @@
 {% extends "settings.html.j2" %}
 {% block content %}
-    <div class="hstack gap-2">
-        <h4>Power scheduling</h4>
-        <button class="btn btn-sm btn-primary ms-auto" type="button" data-bs-toggle="modal" data-bs-target="#addPowerRuleModal"><i class="bi bi-plus-circle"></i> Add rule</button>
-    </div>
-    <div class="m-3 mt-1 row">
-        <table>
-            <thead>
-                <tr>
-                    {% for name in ['Action', 'Hour', 'Minute', 'Day of the month', 'Month', 'Day of the week', '', '']%}
-                    <th scope="col">{{name}}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody id="asset_table"></tbody>
-        </table>
-    </div>
+<div class="hstack gap-2">
+    <h4>Power scheduling</h4>
+    <button class="btn btn-sm btn-primary ms-auto" type="button" data-bs-toggle="modal" data-bs-target="#addPowerRuleModal"><i class="bi bi-plus-circle"></i> Add rule</button>
+</div>
+<div class="m-3 mt-1 row">
+    <table>
+        <thead>
+            <tr>
+                {% for name in ['Action', 'Hour', 'Minute', 'Day of the month', 'Month', 'Day of the week', '', '']%}
+                <th scope="col">{{name}}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody id="asset_table"></tbody>
+    </table>
+</div>
 {% endblock content %}
 
 {% set init_cmds = ['Settings/Cron/getJobs'] %}
@@ -23,15 +23,15 @@
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
-    const table = $('#asset_table');
-    $('#add_schedule').click(() => sendCommand('Settings/Cron/addJob', {
-        cmd: $('#action_selector').val(),
-        m: $('#minute_selector').val(),
-        h: $('#hour_selector').val(),
-        dom: $('#monthday_selector').val(),
-        mon: $('#month_selector').val(),
-        dow: $('#weekday_selector').val()
-    }));
+const table = $('#asset_table');
+$('#add_schedule').click(() => sendCommand('Settings/Cron/addJob', {
+    cmd: $('#action_selector').val(),
+    m: $('#minute_selector').val(),
+    h: $('#hour_selector').val(),
+    dom: $('#monthday_selector').val(),
+    mon: $('#month_selector').val(),
+    dow: $('#weekday_selector').val()
+}));
 
 
 handle('Settings/Cron/getJobs', data => {

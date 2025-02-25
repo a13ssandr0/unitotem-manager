@@ -2,80 +2,78 @@
 
 
 <style>
-    {% block custom_style %}
-        table { table-layout: fixed; word-wrap: break-word; }
-        .asset-list-handle { cursor: move; cursor: -webkit-grabbing; }
-        .overlay { position: fixed; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0;}
-        .dim { background-color: rgba(0,0,0,0.5);}
-        .hover-shake {animation: shake 2s; animation-iteration-count: infinite; animation-direction: alternate;}
-        .anim-rev {animation-direction: alternate-reverse !important;}
-        @keyframes shake { 0%{ transform: translate(1px, 1px) rotate(0deg); } 10%{ transform: translate(-1px, -2px) rotate(-1deg); } 20%{ transform: translate(-3px, 0px) rotate(1deg); } 30%{ transform: translate(3px, 2px) rotate(0deg); } 40%{ transform: translate(1px, -1px) rotate(1deg); } 50%{ transform: translate(-1px, 2px) rotate(-1deg); } 60%{ transform: translate(-3px, 1px) rotate(0deg); } 70%{ transform: translate(3px, 1px) rotate(-1deg); } 80%{ transform: translate(-1px, -1px) rotate(1deg); } 90%{ transform: translate(1px, 2px) rotate(0deg); } 100%{ transform: translate(1px, -2px) rotate(-1deg); }}
-    {% endblock custom_style %}
+{% block custom_style %}
+table { table-layout: fixed; word-wrap: break-word; }
+.asset-list-handle { cursor: move; cursor: -webkit-grabbing; }
+.overlay { position: fixed; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0;}
+.dim { background-color: rgba(0,0,0,0.5);}
+.hover-shake {animation: shake 2s; animation-iteration-count: infinite; animation-direction: alternate;}
+.anim-rev {animation-direction: alternate-reverse !important;}
+@keyframes shake { 0%{ transform: translate(1px, 1px) rotate(0deg); } 10%{ transform: translate(-1px, -2px) rotate(-1deg); } 20%{ transform: translate(-3px, 0px) rotate(1deg); } 30%{ transform: translate(3px, 2px) rotate(0deg); } 40%{ transform: translate(1px, -1px) rotate(1deg); } 50%{ transform: translate(-1px, 2px) rotate(-1deg); } 60%{ transform: translate(-3px, 1px) rotate(0deg); } 70%{ transform: translate(3px, 1px) rotate(-1deg); } 80%{ transform: translate(-1px, -1px) rotate(1deg); } 90%{ transform: translate(1px, 2px) rotate(0deg); } 100%{ transform: translate(1px, -2px) rotate(-1deg); }}
+{% endblock custom_style %}
 </style>
 
-   
-<main>
-    {% block main_content %}
-    <div id="overlay" class="overlay dim" style="z-index: 10000; display: none;">
-        <div id="dnd-interceptor" class="overlay" ondragleave="$('#overlay').hide()"></div>
-        <div class="position-absolute top-50 start-50 translate-middle">
-            <div class="row">
-                <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: rotate(-30deg);"><div class="hover-shake"><i class="bi bi-image"></i></div></div>
-                <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: translateY(-3vh);"><div class="hover-shake anim-rev"><i class="bi bi-music-note-beamed"></i></div></div>
-                <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: rotate( 30deg);"><div class="hover-shake"><i class="bi bi-film"></i></div></div>
+
+{% block main_content %}
+<div id="overlay" class="overlay dim" style="z-index: 10000; display: none;">
+    <div id="dnd-interceptor" class="overlay" ondragleave="$('#overlay').hide()"></div>
+    <div class="position-absolute top-50 start-50 translate-middle">
+        <div class="row">
+            <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: rotate(-30deg);"><div class="hover-shake"><i class="bi bi-image"></i></div></div>
+            <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: translateY(-3vh);"><div class="hover-shake anim-rev"><i class="bi bi-music-note-beamed"></i></div></div>
+            <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: rotate( 30deg);"><div class="hover-shake"><i class="bi bi-film"></i></div></div>
+        </div>
+        <div class="row mt-3"><h4 class="text-center text-light"><b>Drop file(s) here to upload</b></h4></div>
+    </div>
+</div>
+<div class="row">
+    <div class="col-lg-4 pe-lg-2 order-1 order-lg-12">
+        <div class="hstack gap-2 mb-1">
+            <h5>Files</h5>
+            <div class="ms-auto">
+                <div class="btn-group" role="group">
+                    <button type="button" title="Delete files" id="delete_all_btn" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    <button type="button" title="Download files" id="download_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></button>
+                    <button type="button" title="Add to list" id="add_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
+                </div>
             </div>
-            <div class="row mt-3"><h4 class="text-center text-light"><b>Drop file(s) here to upload</b></h4></div>
+            <label for="file-upload" class="btn btn-sm btn-success" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</label>
+            <input id="file-upload" class="d-none" type="file" multiple/>
+        </div>
+        <div class="progress" id="upload-progress" style="display: none;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" style="width: 0">0%</div>
+        </div>
+        <ol id="file-list" class="list-group list-group-flush border-top border-bottom mt-lg-5"></ol>
+    </div>
+    <div class="col-lg-8 mt-4 mt-lg-0 order-12 order-lg-1">
+        <div class="hstack gap-2">
+            <h5>Playlist</h5>
+            <div class="ms-auto">
+                <div class="btn-group" role="group">
+                    <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/back')"><i class="bi bi-skip-backward"></i></button>
+                    <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/goto')"><i class="bi bi-arrow-clockwise"></i></button>
+                    <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/next')"><i class="bi bi-skip-forward"></i></button>
+                </div>
+            </div>
+            <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal" onclick="modal_input.label.text('New asset')"><i class="bi bi-plus-circle"></i> Add URL</button>
+        </div>
+        <div class="row">
+            <table class="table table-hover mt-2">
+                <thead class="border-bottom">
+                    <tr>
+                        <th scope="col" style="width: 2em;"></th>
+                        <th scope="col">URL</th>
+                        <th scope="col" style="width: 8rem;">Duration</th>
+                        <th scope="col" style="width: 10em;"></th>
+                    </tr>
+                </thead>
+                <tbody id="asset_table"></tbody>
+            </table>
         </div>
     </div>
-    <div class="row">
-        <div class="col-lg-4 pe-lg-2 order-1 order-lg-12">
-            <div class="hstack gap-2 mb-1">
-                <h5>Files</h5>
-                <div class="ms-auto">
-                    <div class="btn-group" role="group">
-                        <button type="button" title="Delete files" id="delete_all_btn" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                        <button type="button" title="Download files" id="download_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i></button>
-                        <button type="button" title="Add to list" id="add_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
-                    </div>
-                </div>
-                <label for="file-upload" class="btn btn-sm btn-success" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</label>
-                <input id="file-upload" class="d-none" type="file" multiple/>
-            </div>
-            <div class="progress" id="upload-progress" style="display: none;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" style="width: 0">0%</div>
-            </div>
-            <ol id="file-list" class="list-group list-group-flush border-top border-bottom mt-lg-5"></ol>
-        </div>
-        <div class="col-lg-8 mt-4 mt-lg-0 order-12 order-lg-1">
-            <div class="hstack gap-2">
-                <h5>Playlist</h5>
-                <div class="ms-auto">
-                    <div class="btn-group" role="group">
-                        <button type="button" title="Previous asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/back')"><i class="bi bi-skip-backward"></i></button>
-                        <button type="button" title="Reload asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/goto')"><i class="bi bi-arrow-clockwise"></i></button>
-                        <button type="button" title="Next asset" class="btn btn-sm btn-outline-primary" onclick="sendCommand('Scheduler/next')"><i class="bi bi-skip-forward"></i></button>
-                    </div>
-                </div>
-                <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#newAssetModal" onclick="modal_input.label.text('New asset')"><i class="bi bi-plus-circle"></i> Add URL</button>
-            </div>
-            <div class="row">
-                <table class="table table-hover mt-2">
-                    <thead class="border-bottom">
-                        <tr>
-                            <th scope="col" style="width: 2em;"></th>
-                            <th scope="col">URL</th>
-                            <th scope="col" style="width: 8rem;">Duration</th>
-                            <th scope="col" style="width: 10em;"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="asset_table"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% endblock main_content %}
-</main>
-    
+</div>
+{% endblock main_content %}
+
 {% set ext_scripts = ['Sortable.min.js', 'jquery.form.js'] %}
     
 {% set init_cmds = [
@@ -88,107 +86,107 @@
 
 <script>
 {% block js %}
-    const asset_table = $('#asset_table');
-    const modal_input = {
-        parent: new bootstrap.Modal('#newAssetModal'),
-        parentEl: $('#newAssetModal'),
-        label: $('#newAssetModalLabel'),
-        name: $('#modal_input_name'),
-        url: $('#modal_input_url'),
-        duration: $('#modal_input_duration'),
-        fit_contain: $('#modal_fit_contain'),
-        fit_contain_img: $('img.object-fit-contain'),
-        fit_cover: $('#modal_fit_cover'),
-        fit_fill: $('#modal_fit_fill'),
-        bg_color: $('#modal_input_bg_color'),
-        color_auto: $('#modal_input_color_auto'),
-        ena_date: $('#modal_input_start'),
-        dis_date: $('#modal_input_stop'),
-        submit_btn: $('#add_asset_btn')
-    }
-    const upload_progress = $("#upload-progress");
-    const progressbar = $("#upload-progress-bar");
-    const fileSelector = $('#file-upload')
-        .on('change', () => {
-            let files = fileSelector.prop('files');
-            if (files.length > 0) uploadForm(makeFormData(files))
+const asset_table = $('#asset_table');
+const modal_input = {
+    parent: new bootstrap.Modal('#newAssetModal'),
+    parentEl: $('#newAssetModal'),
+    label: $('#newAssetModalLabel'),
+    name: $('#modal_input_name'),
+    url: $('#modal_input_url'),
+    duration: $('#modal_input_duration'),
+    fit_contain: $('#modal_fit_contain'),
+    fit_contain_img: $('img.object-fit-contain'),
+    fit_cover: $('#modal_fit_cover'),
+    fit_fill: $('#modal_fit_fill'),
+    bg_color: $('#modal_input_bg_color'),
+    color_auto: $('#modal_input_color_auto'),
+    ena_date: $('#modal_input_start'),
+    dis_date: $('#modal_input_stop'),
+    submit_btn: $('#add_asset_btn')
+}
+const upload_progress = $("#upload-progress");
+const progressbar = $("#upload-progress-bar");
+const fileSelector = $('#file-upload')
+    .on('change', () => {
+        let files = fileSelector.prop('files');
+        if (files.length > 0) uploadForm(makeFormData(files))
+    });
+
+sortable_list = Sortable.create(asset_table[0], {
+    onUpdate: (event) => {sendCommand('Scheduler/reorder', {from_i: event.oldIndex, to_i: event.newIndex});},
+    handle: ".asset-list-handle"
+});
+
+$('#delete_all_btn').click(() => {
+    let checkedfiles = $('input[name="filecheck"]:checked');
+    sendCommand('Scheduler/delete_file', {files: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
+    checkedfiles.each((i, e) => {e.checked = false});
+})
+$('#download_all_btn').click(() => {
+    $('input[name="filecheck"]:checked').each((i,elem) => {
+        let fname = $(elem).attr('data-filename');
+        var link = document.createElement("a");
+        link.download = fname;
+        link.href = "/uploaded/" + fname;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        elem.checked = false;
+    })
+})
+$('#add_all_btn').click(() => {
+    let checkedfiles = $('input[name="filecheck"]:checked');
+    sendCommand('Scheduler/add_file', {items: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
+    checkedfiles.each((i, e) => {e.checked = false});
+})
+
+modal_input.submit_btn.click(() => {
+    if (modal_input.label.text().includes('New')){
+        sendCommand('Scheduler/add_url', { items: [{
+            name: modal_input.name.val(),
+            url: modal_input.url.val(),
+            duration: modal_input.duration.val(),
+            fit: $("[name=modal_fit_radio]:checked").val(),
+            bg_color: modal_input.color_auto[0].checked?null:modal_input.bg_color.val(),
+            ena_date: modal_input.ena_date.val(),
+            dis_date: modal_input.dis_date.val()
+        }]});
+    } else {
+        sendCommand('Scheduler/Asset/edit', {
+            name: modal_input.name.val(),
+            url: modal_input.url.val(),
+            duration: modal_input.duration.val(),
+            fit: $("[name=modal_fit_radio]:checked").val(),
+            bg_color: modal_input.color_auto[0].checked?null:modal_input.bg_color.val(),
+            ena_date: modal_input.ena_date.val(),
+            dis_date: modal_input.dis_date.val(),
+            uuid: modal_input.submit_btn.attr('data-uuid')
         });
-    
-    sortable_list = Sortable.create(asset_table[0], {
-        onUpdate: (event) => {sendCommand('Scheduler/reorder', {from_i: event.oldIndex, to_i: event.newIndex});},
-        handle: ".asset-list-handle"
-    });
-    
-    $('#delete_all_btn').click(() => {
-        let checkedfiles = $('input[name="filecheck"]:checked');
-        sendCommand('Scheduler/delete_file', {files: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
-        checkedfiles.each((i, e) => {e.checked = false});
-    })
-    $('#download_all_btn').click(() => {
-        $('input[name="filecheck"]:checked').each((i,elem) => {
-            let fname = $(elem).attr('data-filename');
-            var link = document.createElement("a");
-            link.download = fname;
-            link.href = "/uploaded/" + fname;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            elem.checked = false;
-        })
-    })
-    $('#add_all_btn').click(() => {
-        let checkedfiles = $('input[name="filecheck"]:checked');
-        sendCommand('Scheduler/add_file', {items: [... checkedfiles.map((i,x) => $(x).attr('data-filename'))]});
-        checkedfiles.each((i, e) => {e.checked = false});
-    })
+    }
+});
+modal_input.parentEl[0].addEventListener('hidden.bs.modal', ()=>{
+    modal_input.name.val('');
+    modal_input.url.val('');
+    modal_input.duration.val(modal_input.duration.attr('def-value'));
+    modal_input.fit_contain[0].checked=true;
+    modal_input.fit_contain_img.css('background-color', '#000000');
+    modal_input.bg_color.val('#000000').enable(true);
+    modal_input.color_auto[0].checked=false;
+    modal_input.ena_date.val('');
+    modal_input.dis_date.val('');
+    modal_input.submit_btn.attr('data-uuid', '');
+})
 
-    modal_input.submit_btn.click(() => {
-        if (modal_input.label.text().includes('New')){
-            sendCommand('Scheduler/add_url', { items: [{
-                name: modal_input.name.val(),
-                url: modal_input.url.val(),
-                duration: modal_input.duration.val(),
-                fit: $("[name=modal_fit_radio]:checked").val(),
-                bg_color: modal_input.color_auto[0].checked?null:modal_input.bg_color.val(),
-                ena_date: modal_input.ena_date.val(),
-                dis_date: modal_input.dis_date.val()
-            }]});
-        } else {
-            sendCommand('Scheduler/Asset/edit', {
-                name: modal_input.name.val(),
-                url: modal_input.url.val(),
-                duration: modal_input.duration.val(),
-                fit: $("[name=modal_fit_radio]:checked").val(),
-                bg_color: modal_input.color_auto[0].checked?null:modal_input.bg_color.val(),
-                ena_date: modal_input.ena_date.val(),
-                dis_date: modal_input.dis_date.val(),
-                uuid: modal_input.submit_btn.attr('data-uuid')
-            });
-        }
-    });
-    modal_input.parentEl[0].addEventListener('hidden.bs.modal', ()=>{
-        modal_input.name.val('');
-        modal_input.url.val('');
-        modal_input.duration.val(modal_input.duration.attr('def-value'));
-        modal_input.fit_contain[0].checked=true;
-        modal_input.fit_contain_img.css('background-color', '#000000');
-        modal_input.bg_color.val('#000000').enable(true);
-        modal_input.color_auto[0].checked=false;
-        modal_input.ena_date.val('');
-        modal_input.dis_date.val('');
-        modal_input.submit_btn.attr('data-uuid', '');
-    })
-
-    $('body').addClass("vh-100").on('dragover', event => {
-        event.preventDefault();
-        event.stopPropagation();
-    }).on('dragenter', () => {
-        $('#overlay').show();
-    }).on('drop', async (event) => {
-        event.preventDefault();
-        $('#overlay').hide();
-        uploadForm(makeFormData(event.originalEvent.dataTransfer.files), true)
-    });
+$('body').addClass("vh-100").on('dragover', event => {
+    event.preventDefault();
+    event.stopPropagation();
+}).on('dragenter', () => {
+    $('#overlay').show();
+}).on('drop', async (event) => {
+    event.preventDefault();
+    $('#overlay').hide();
+    uploadForm(makeFormData(event.originalEvent.dataTransfer.files), true)
+});
 
 function makeFormData(files){
     let fd = new FormData();

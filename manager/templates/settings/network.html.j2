@@ -1,51 +1,51 @@
 {% extends "settings.html.j2" %}
 {% block content %}
-    <h4>Network</h4>
-    <div class="mb-3 row" style="max-width: 30em;">
-        <label for="inputHostname" class="col-sm-5 col-form-label">Hostname</label>
-        <div class="col-sm-7">
-            <div class="input-group">
-                <input type="text" class="form-control" id="inputHostname" ws-edit-needs-reboot>
-                <button type="button" class="btn btn-sm btn-outline-success ms-auto" id="set_hostname"><i class="bi bi-check2"></i> Apply</button>
-            </div>
+<h4>Network</h4>
+<div class="mb-3 row" style="max-width: 30em;">
+    <label for="inputHostname" class="col-sm-5 col-form-label">Hostname</label>
+    <div class="col-sm-7">
+        <div class="input-group">
+            <input type="text" class="form-control" id="inputHostname" ws-edit-needs-reboot>
+            <button type="button" class="btn btn-sm btn-outline-success ms-auto" id="set_hostname"><i class="bi bi-check2"></i> Apply</button>
         </div>
     </div>
-    <div class="mt-3 row">
-        <p class="mb-1"><a href="https://netplan.io/reference/">Netplan</a> config files:</p>
-        <ul class="nav nav-tabs" id="netplan_tabs" role="tablist" hidden>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" title="New file" id="add-file" data-bs-toggle="modal" data-bs-target="#newFileModal" type="button" role="tab"><i class="bi bi-plus-square"></i></button>
-            </li>
-        </ul>
-        <div class="btn-group mb-2" role="group">
-            <div class="dropdown">
-                <button type="button" id="file-selector-btn" class="btn btn-{{bs_theme}} dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="true">Netplan configuration file</button>
-                <ul class="dropdown-menu" style="min-width: 30rem;">
-                    <span id="files-list"></span>
-                    <li><hr class="dropdown-divider"></li>
-                    <li>
-                        <div class="input-group input-group-sm px-2">
-                            <input type="text" class="form-control" id="new-file-text" placeholder="New configuration file">
-                            <span class="input-group-text" id="file-ext">.yaml</span>
-                            <button class="btn btn-outline-secondary" type="button" id="button-addon2">Create</button>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-            <div class="dropdown ms-auto my-auto">
-                <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" id="wifiDropBtn" data-bs-toggle="dropdown" data-bs-auto-close="inside"><i class="bi bi-wifi"></i></button>
-                <ul class="dropdown-menu dropdown-menu-end" id="wifi-menu" style="min-width: 20rem;">
-                    <li class="dropdown-item disabled">Scanning...</li>
-                </ul>
-            </div>
+</div>
+<div class="mt-3 row">
+    <p class="mb-1"><a href="https://netplan.io/reference/">Netplan</a> config files:</p>
+    <ul class="nav nav-tabs" id="netplan_tabs" role="tablist" hidden>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" title="New file" id="add-file" data-bs-toggle="modal" data-bs-target="#newFileModal" type="button" role="tab"><i class="bi bi-plus-square"></i></button>
+        </li>
+    </ul>
+    <div class="btn-group mb-2" role="group">
+        <div class="dropdown">
+            <button type="button" id="file-selector-btn" class="btn btn-{{bs_theme}} dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="true">Netplan configuration file</button>
+            <ul class="dropdown-menu" style="min-width: 30rem;">
+                <span id="files-list"></span>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <div class="input-group input-group-sm px-2">
+                        <input type="text" class="form-control" id="new-file-text" placeholder="New configuration file">
+                        <span class="input-group-text" id="file-ext">.yaml</span>
+                        <button class="btn btn-outline-secondary" type="button" id="button-addon2">Create</button>
+                    </div>
+                </li>
+            </ul>
         </div>
-        <div id="editor" style="width:95%; height:30em; margin-left:auto; margin-right:auto;"></div>
-        <div class="mt-2 hstack gap-2">
-            <button type="button" id="del-btn" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete ?" data-bs-positive-btn="Delete" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
-            <button type="button" id="set-btn" class="btn btn-sm btn-outline-success ms-auto"><i class="bi bi-check2"></i> Save</button>
-            <button type="button" id="apply-btn" class="btn btn-sm btn-warning" onclick="sendCommand('Settings/Netplan/changeFile', {apply: true});"><i class="bi bi-gear"></i> Apply</button>
+        <div class="dropdown ms-auto my-auto">
+            <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" id="wifiDropBtn" data-bs-toggle="dropdown" data-bs-auto-close="inside"><i class="bi bi-wifi"></i></button>
+            <ul class="dropdown-menu dropdown-menu-end" id="wifi-menu" style="min-width: 20rem;">
+                <li class="dropdown-item disabled">Scanning...</li>
+            </ul>
         </div>
     </div>
+    <div id="editor" style="width:95%; height:30em; margin-left:auto; margin-right:auto;"></div>
+    <div class="mt-2 hstack gap-2">
+        <button type="button" id="del-btn" class="btn btn-sm btn-danger" data-bs-title="Do you want to delete ?" data-bs-positive-btn="Delete" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal"><i class="bi bi-trash"></i> Delete</button>
+        <button type="button" id="set-btn" class="btn btn-sm btn-outline-success ms-auto"><i class="bi bi-check2"></i> Save</button>
+        <button type="button" id="apply-btn" class="btn btn-sm btn-warning" onclick="sendCommand('Settings/Netplan/changeFile', {apply: true});"><i class="bi bi-gear"></i> Apply</button>
+    </div>
+</div>
 {% endblock content %}
 
 {% set ext_scripts = ['ace.js'] %}
@@ -62,12 +62,12 @@ const del_btn = $('#del-btn');
 const inputHostname = $('#inputHostname');
 const set_hostname = $('#set_hostname');
 const wifi_menu = $('#wifi-menu');
-var netplan = { original: {}, modified: {} };
-var cur_file = null;
+const netplan = {original: {}, modified: {}};
+let cur_file = null;
 
 aceEditor.session.on('change', (delta) => {
     netplan.modified[cur_file] = aceEditor.getValue();
-    if (aceEditor.getValue() != netplan.original[cur_file]){
+    if (aceEditor.getValue() !== netplan.original[cur_file]){
         set_btn.removeClass('btn-outline-success').addClass('btn-success');
     } else {
         set_btn.removeClass('btn-success').addClass('btn-outline-success');
@@ -137,9 +137,9 @@ handle('Settings/get_wifis', data => {
     data.wifis.forEach(network => {
         if (network.essid === '') network.essid = null;
 
-        if (network.signal_quality >= wifi_high) var wifi_icon = 'bi-wifi';
-        else if (network.signal_quality >= wifi_low) var wifi_icon = 'bi-wifi-2';
-        else var wifi_icon = 'bi-wifi-1';
+        let wifi_icon = 'bi-wifi-1'
+        if (network.signal_quality >= wifi_high) wifi_icon = 'bi-wifi';
+        else if (network.signal_quality >= wifi_low) wifi_icon = 'bi-wifi-2';
 
         wifi_menu.append(
             $('<li class="dropdown-item"></li>')
