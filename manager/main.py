@@ -171,7 +171,7 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     loop.add_signal_handler(signal.SIGTERM, lambda *_: SHUTDOWN_EVENT.set())
 
-    Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/Asset', items=assets, current=current),
+    Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current),
                                loop)
 
     utils.commons.UPLOADS._evloop = loop

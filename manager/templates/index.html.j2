@@ -17,13 +17,12 @@
 <main>
     {% block main_content %}
     <div id="overlay" class="overlay dim" style="z-index: 10000; display: none;">
-{#        <div id="dnd-interceptor" class="overlay"></div>#}
         <div id="dnd-interceptor" class="overlay" ondragleave="$('#overlay').hide()"></div>
         <div class="position-absolute top-50 start-50 translate-middle">
             <div class="row">
-                <div class="col" style="font-size: 10vw; color: white; margin: -0.5vw; transform: rotate(-30deg);"><div class="hover-shake"><i class="bi bi-image"></i></div></div>
-                <div class="col" style="font-size: 10vw; color: white; margin: -0.5vw; transform: translateY(-3vh);"><div class="hover-shake anim-rev"><i class="bi bi-music-note-beamed"></i></div></div>
-                <div class="col" style="font-size: 10vw; color: white; margin: -0.5vw; transform: rotate( 30deg);"><div class="hover-shake"><i class="bi bi-film"></i></div></div>
+                <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: rotate(-30deg);"><div class="hover-shake"><i class="bi bi-image"></i></div></div>
+                <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: translateY(-3vh);"><div class="hover-shake anim-rev"><i class="bi bi-music-note-beamed"></i></div></div>
+                <div class="col" style="font-size: 10vw; color: white; margin: 0; transform: rotate( 30deg);"><div class="hover-shake"><i class="bi bi-film"></i></div></div>
             </div>
             <div class="row mt-3"><h4 class="text-center text-light"><b>Drop file(s) here to upload</b></h4></div>
         </div>
@@ -39,10 +38,11 @@
                         <button type="button" title="Add to list" id="add_all_btn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-right"></i></button>
                     </div>
                 </div>
-                <button type="button" class="btn btn-sm btn-success" onclick="fileSelector.click()" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</button>
+                <label for="file-upload" class="btn btn-sm btn-success" style="width: 6.7em;"><i class="bi bi-file-earmark-arrow-up"></i> Upload</label>
+                <input id="file-upload" class="d-none" type="file" multiple/>
             </div>
             <div class="progress" id="upload-progress" style="display: none;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" style="width: 0%">0%</div>
+                <div class="progress-bar progress-bar-striped progress-bar-animated" id="upload-progress-bar" role="progressbar" style="width: 0">0%</div>
             </div>
             <ol id="file-list" class="list-group list-group-flush border-top border-bottom mt-lg-5"></ol>
         </div>
@@ -61,7 +61,7 @@
             <div class="row">
                 <table class="table table-hover mt-2">
                     <thead class="border-bottom">
-                        <tr name="asset-row">
+                        <tr>
                             <th scope="col" style="width: 2em;"></th>
                             <th scope="col">URL</th>
                             <th scope="col" style="width: 8rem;">Duration</th>
@@ -108,46 +108,16 @@
     }
     const upload_progress = $("#upload-progress");
     const progressbar = $("#upload-progress-bar");
-    const fileSelector = $('<input type="file" name="files" multiple>')
+    const fileSelector = $('#file-upload')
         .on('change', () => {
             let files = fileSelector.prop('files');
-            if (files.length > 0){
-                $('<form></form>')
-                    .append(fileSelector).ajaxSubmit({
-                        url: "/api/scheduler/upload",
-                        type: "POST",
-                        dataType: "json",
-                        beforeSend: function() {
-                            upload_progress.show();
-                            progressbar.css('width', '0%').html( '0%');
-                        },
-                        uploadProgress: function(event, position, total, perc) {
-                            progressbar.css('width', perc + '%').html( perc + '%');
-                        },
-                        complete: function(xhr) {
-                            upload_progress.hide();
-                            progressbar.css('width', '0%').html( '0%');
-                        },
-                        error: function(xhr, textStatus, error){
-                            messageModal.find('.modal-title').text(textStatus);
-                            messageModal.find('.modal-body h6').text(`Request returned ${error}`);
-                            messageModal.find('.modal-body code').text(JSON.stringify(xhr.responseJSON, null, 4));
-                            new bootstrap.Modal(messageModal).show();
-                        }
-                    });
-            }
+            if (files.length > 0) uploadForm(makeFormData(files))
         });
     
     sortable_list = Sortable.create(asset_table[0], {
         onUpdate: (event) => {sendCommand('Scheduler/reorder', {from_i: event.oldIndex, to_i: event.newIndex});},
         handle: ".asset-list-handle"
     });
-
-    function sendCommand(target, args) {
-        if(args === undefined) args = {};
-        args.target = target
-        ws.send(JSON.stringify(args));
-    }
     
     $('#delete_all_btn').click(() => {
         let checkedfiles = $('input[name="filecheck"]:checked');
@@ -214,31 +184,67 @@
         event.stopPropagation();
     }).on('dragenter', () => {
         $('#overlay').show();
-    }).on('drop', event => {
+    }).on('drop', async (event) => {
         event.preventDefault();
-
-        event = event.originalEvent;
-
-        let fd = new FormData()
-        fd.append('files', event.dataTransfer.files)
-        //TODO: handle files and send ajax upload
-
-        /*if (event.dataTransfer.items) {
-            // Use DataTransferItemList interface to access the file(s)
-            $(event.dataTransfer.items).each((i, item) => {
-                // If dropped items aren't files, reject them
-                if (item.kind === 'file') {
-                    const file = item.getAsFile();
-                    console.log(`… file[${i}].name = ${file.name}`);
-                }
-            });
-        } else {
-            // Use DataTransfer interface to access the file(s)
-            $(event.dataTransfer.files).each((i, file) => {
-                console.log(`… file[${i}].name = ${file.name}`);
-            });
-        }*/
+        $('#overlay').hide();
+        uploadForm(makeFormData(event.originalEvent.dataTransfer.files), true)
     });
+
+function makeFormData(files){
+    let fd = new FormData();
+    for (const file of files) fd.append('files', file)
+    return fd;
+}
+
+function uploadForm(formData, dnd=false){
+    $.ajax({
+        data: formData,
+        url: "/api/scheduler/upload",
+        type: "POST",
+        processData: false,
+        contentType: false,
+        beforeSend: () => {
+            upload_progress.show();
+            progressbar.css('width', '0').html( '0%');
+        },
+        xhr: () => {
+            const xhr = new XMLHttpRequest();
+            xhr.upload.addEventListener("progress", (e) => {
+                const perc = (e.loaded / e.total) * 100;
+                progressbar.css('width', perc + '%').html( perc + '%');
+            }, false);
+            return xhr;
+        },
+        complete: () => {
+            upload_progress.hide();
+            progressbar.css('width', '0').html( '0%');
+        },
+        error: (xhr, textStatus, error) => {
+            if (dnd && xhr.readyState === 0 && textStatus === 'error' && error === ''){
+                messageModal.find('.modal-title').text("Upload error");
+                messageModal.find('.modal-body h6').html(`
+                    An error occurred while dragging and dropping files, this seems to be a
+                    <a href="https://forum.vivaldi.net/topic/77865/drag-and-drop-issue/3">known error</a>
+                    in Vivaldi browser on Linux.<br>
+                    If this happened to you, check the developer console of your browser, if the error is something like
+                    <pre class="m-0 p-1 bg-danger-subtle text-light-emphasis" style="white-space: collapse">
+                        <i class="bi bi-x-circle-fill text-danger"></i> <i class="bi bi-caret-right-fill"></i>
+                        POST <a href class="pe-none">https://ip.addr.of.unitotem/api/scheduler/upload</a> net::ERR_FILE_NOT_FOUND
+                    </pre> you are experiencing said error, otherwise please file an issue
+                    <a href="https://github.com/a13ssandr0/unitotem/issues">here</a>.
+                `);
+                messageModal.find('.modal-body code').text("");
+            } else {
+                messageModal.find('.modal-title').text(textStatus);
+                messageModal.find('.modal-body h6').text(`Request returned ${error}`);
+                messageModal.find('.modal-body code').text(JSON.stringify(xhr.responseJSON, null, 4));
+            }
+            new bootstrap.Modal(messageModal).show();
+        }
+    });
+}
+
+
 
 handle('Scheduler/asset', data => {
     asset_table.empty();

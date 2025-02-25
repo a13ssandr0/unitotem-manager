@@ -627,8 +627,15 @@ class UploadManager(FileSystemEventHandler):
         self._files_info.clear()
         for file in self._folder.iterdir():
             if file.is_file():
-                self._files.append(file)
-                self._files_info[file.name] = get_file_info(file)
+                try:
+                    f_info = get_file_info(file)
+                    self._files.append(file)
+                    self._files_info[file.name] = f_info
+                except FileNotFoundError:
+                    # when deleting multiple files while a scan is running, a race condition might occur so that file
+                    # is present on disk both when iterating the folder and checking if file still exixst, but it might
+                    # be deleted for when `get_file_info` is starting to process the file
+                    pass
         self._disk_used = disk_usage(self._folder).used
         if self._callback is not None and self._evloop is not None:
             asyncio.run_coroutine_threadsafe(self._callback(self.serialize()), self._evloop)

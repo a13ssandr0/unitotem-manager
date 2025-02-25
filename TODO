@@ -28,7 +28,7 @@
 <!-- Split file upload in helper functions: file save, file load in assets/config -->
 <!-- Allow asset enabling schedule (date/time) -->
 <!-- Handle 'reset' command in electron -->
-Allow drag-n-drop files
+<!-- Allow drag-n-drop files -->
 Show confirmation on command execution (success popup/notification)
 <!-- Cache MediaInfo metadata -->
 <!-- Check for command redundancy (init_cmds) -->
