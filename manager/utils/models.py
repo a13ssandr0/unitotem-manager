@@ -15,7 +15,7 @@ import asyncio
 import os
 from asyncio import iscoroutinefunction
 from datetime import datetime
-from enum import IntEnum
+from enum import IntEnum, Enum
 from ipaddress import IPv4Address
 from math import ceil, inf
 from os import environ, remove
@@ -28,6 +28,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 from aiofiles import open as aopen
+from benedict import benedict
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from dotenv import load_dotenv, set_key
@@ -40,6 +41,7 @@ from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+from utils import commons
 from . import constants as const
 from .async_timer import Timer
 from .ws.responses import WSBroadcast
@@ -424,15 +426,26 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
         return [a.model_dump(mode='json') for a in self]
 
 
+class UserPerms(str, Enum):
+    scheduler = "scheduler"
+    power = "power"
+    audio = "audio"
+    admin = "admin"
+
+
 class UserData(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-    password: str = Field(alias='pass')
-    groups: list[str] = Field(default_factory=list)
-    # perms: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(populate_by_name=True, validate_assignment=True)
+    password: str = Field(validation_alias='pass')
+    perms: set[UserPerms]
 
-
-class GroupData(BaseModel):
-    perms: list[str] = Field(default_factory=list)
+    # noinspection PyNestedDecorators
+    @field_validator('perms', mode='after')
+    @classmethod
+    def validate_perms(cls, val: set[UserPerms]):
+        if UserPerms.admin in val:
+            return {UserPerms.admin}
+        else:
+            return val
 
 
 # TODO: replace with BaseSettings
@@ -447,10 +460,9 @@ class _Config(BaseModel):
     users: dict[str, UserData] = Field(default_factory=lambda: {
         'admin': UserData(  # default user: name=admin; password=admin (pre-hashed)
             password='pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c',
-            groups=['admin']
+            perms={UserPerms.admin},
         )
     })
-    groups: dict[str, GroupData] = Field(default_factory=lambda: {'admin': GroupData(perms=['*'])})
     remote_server_ip: Optional[IPv4Address] = None
     remote_server_port: PositiveInt = const.default_port_secure
     remote_server_id: Optional[str] = None
@@ -516,7 +528,6 @@ class _Config(BaseModel):
         self.assets = AssetsList(obj.assets)
         self.def_duration = obj.def_duration
         self.users = obj.users
-        self.groups = obj.groups
         self.remote_server_ip = obj.remote_server_ip
         self.remote_server_port = obj.remote_server_port
         self.remote_server_id = obj.remote_server_id
@@ -536,13 +547,12 @@ class _Config(BaseModel):
     def reset(self):
         remove(self.filename)
         # noinspection PyArgumentList
-        self(_Config(), first_boot=True)
+        self(obj = _Config(), first_boot=True)
 
-    def add_user(self, user: str, password: str, groups=None):
-        if groups is None:
-            groups = []
-        self.users[user] = UserData(password=generate_password_hash(password),
-                                    groups=[grp for grp in groups if grp in Config.groups])
+    def add_user(self, user: str, password: str, perms:set[UserPerms]=None):
+        if perms is None:
+            perms = {}
+        self.users[user] = UserData(password=generate_password_hash(password), perms=perms)
 
     def change_password(self, user: str, password: str):
         self.users[user].password = generate_password_hash(password)

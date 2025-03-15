@@ -7,6 +7,7 @@ from json import dumps
 from os.path import join
 from typing import Optional
 import logging
+from collections import defaultdict
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -19,10 +20,13 @@ logger = logging.getLogger(__name__)
 
 class WSManager:
     pk: Optional[RSAPrivateKey] = None
+    active_connections: list[WebSocket] = []
+    active_users: defaultdict[str, list[WebSocket]] = defaultdict(list)
+    last: Optional[dict] = None
 
     def __init__(self, cache_last=False):
-        self.active_connections: list[WebSocket] = []
-        self.last = {} if cache_last else None
+        if cache_last:
+            self.last = {}
         # if last is not None we are using command cache.
         # this means every time a client connects will receive
         # the last command sent for each target.
@@ -34,16 +38,20 @@ class WSManager:
         # this way we avoid using two variables: one for setting and the other
         # for actual caching
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, user: Optional[str] = None):
         await websocket.accept()
         self.active_connections.append(websocket)
+        if user:
+            self.active_users[user].append(websocket)
         if self.last is not None:
             for cmd in self.last.values():
                 await websocket.send_text(cmd)
 
-    def disconnect(self, websocket: WebSocket):
+    def disconnect(self, websocket: WebSocket, user: Optional[str] = None):
         try:
             self.active_connections.remove(websocket)
+            if user:
+                self.active_users[user].remove(websocket)
         except ValueError:
             pass  # it's not necessary to crash if not present
 
@@ -65,6 +73,16 @@ class WSManager:
     async def send(self, websocket: WebSocket, target: str, nocache=False, **kwargs):
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         await websocket.send_text(text)
+
+    async def multicast(self, users: str|list[str], target: str, nocache=False, **kwargs):
+        text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
+        if isinstance(users, str):
+            for websocket in self.active_users[users]:
+                await websocket.send_text(text)
+        else:
+            for user in users:
+                for websocket in self.active_users[user]:
+                    await websocket.send_text(text)
 
     async def broadcast(self, target: str, nocache=False, **kwargs):
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)

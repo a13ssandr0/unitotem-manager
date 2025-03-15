@@ -209,7 +209,7 @@ function uploadForm(formData, dnd=false){
             const xhr = new XMLHttpRequest();
             xhr.upload.addEventListener("progress", (e) => {
                 const perc = (e.loaded / e.total) * 100;
-                progressbar.css('width', perc + '%').html( perc + '%');
+                progressbar.css('width', perc + '%').html( Math.round(perc) + '%');
             }, false);
             return xhr;
         },

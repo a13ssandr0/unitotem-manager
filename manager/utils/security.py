@@ -7,6 +7,7 @@ __all__ = [
 ]
 
 import logging
+import time
 from datetime import timedelta
 from os import environ, urandom
 from platform import freedesktop_os_release as os_release, node as get_hostname
@@ -26,9 +27,9 @@ from utils.ws.wsmanager import Context
 
 import utils.constants as const
 from .commons import TEMPLATES
-from .models import Config, UserData
+from .models import Config, UserData, UserPerms
 from .network import do_ip_addr
-from .ws.responses import WSBroadcast, WSResponse
+from .ws.responses import WSBroadcast, WSResponse, WSMulticast
 from .ws.wsmanager import WSAPIBase
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ login_router = APIRouter()
 async def login(data: LoginForm = Depends()):
     if not Config.authenticate(data.username, data.password):
         raise InvalidCredentialsException
-    access_token = LOGMAN.create_access_token(data={'sub': data.username})
+    access_token = LOGMAN.create_access_token(data={'sub': data.username, 'cre': time.monotonic()})
     resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
     resp.set_cookie(key=LOGMAN.cookie_name, value=access_token,
                     httponly=True, samesite='strict',
@@ -139,16 +140,45 @@ async def set_pass(request: Request, response: Response, password: str, username
 
 class Security(WSAPIBase):
     def getUsers(self):
-        return WSBroadcast(self.getUsers, users=[(user, {'groups': data.groups}) for user, data in Config.users.items()])
+        return WSBroadcast(self.getUsers, users=[(user, {'perms': list(data.perms)}) for user, data in Config.users.items()])
 
-    def addUser(self, name:str, password:str, groups:list[str] = None):
+    def addUser(self, name:str, password:str, perms:set[UserPerms] = None):
         if name in Config.users:
             return WSResponse(self.addUser, error="User already exists")
-        Config.add_user(user=name, password=password, groups=groups)
+        Config.add_user(user=name, password=password, perms=perms)
         Config.save()
         return self.getUsers()
 
+    def setUserPass(self, ctx:Context, username:str, password:str):
+        if username not in Config.users:
+            return WSResponse(self.setUserPass, error=f"User {username} does not exist")
+        Config.change_password(username, password)
+        Config.save()
+        return WSMulticast(ctx.username, 'logout')
+
+    def setUserPerms(self, ctx:Context, username:str, perms:set[UserPerms]):
+        if username not in Config.users:
+            yield WSResponse(self.setUserPerms, error=f"User {username} does not exist")
+            return
+        if ctx.username == username and UserPerms.admin in Config.users[username].perms and UserPerms.admin not in perms:
+            for user, userdata in Config.users.items():
+                if user != ctx.username and UserPerms.admin in userdata.perms:
+                    break
+            else:
+                # we have no other user with user management capabilities cannot continue
+                yield WSResponse(self.setUserPerms, error="Cannot remove permissions from the only admin")
+                yield self.getUsers()
+                return
+
+        Config.users[username].perms = perms
+        Config.save()
+        yield WSMulticast(ctx.username, 'reload')
+        yield self.getUsers()
+
+
     def delUser(self, ctx:Context, user:str):
+        #Only users with "settings" permissions can manage users and access this method, this means we just have
+        #to check that the user is not trying to delete itself and the user is not the only one in the system (maybe redundant)
         if ctx.username == user or len(Config.users) == 1:
             return WSResponse(self.delUser, error="Cannot delete current user")
         elif user in Config.users:
@@ -156,45 +186,3 @@ class Security(WSAPIBase):
             Config.save()
         return self.getUsers()
 
-    def setUserGroups(self, user:str, groups:list[str]):
-        groups = [grp for grp in groups if grp in Config.groups.keys()]
-        Config.users[user].groups = groups
-        Config.save()
-        return self.getUsers()
-
-    def getGroups(self):
-        return WSBroadcast(self.getGroups, groups=[(group, data.model_dump()) for group, data in Config.groups.items()])
-
-    def delGroup(self, ctx:Context, group:str):
-        if Config.groups[group].perms == ['*']:
-            # check if the group that will be deleted is the only one with full privileges
-            for grp, gprop in Config.groups.items():
-                if grp != group and gprop.perms == ['*']:
-                    # there is another group with full privileges
-                    for usr, prop in Config.users.items():
-                        if grp in prop.groups:
-                            #the group has users we can safely complete deletion of requested group
-                            break #break here
-                    else:
-                        #the group has no users, deletion could likely leave the system without any administrative user
-                        continue
-                    break #then immediately break here to exit loop
-            else:
-                # the loop was never broken -> there are no groups with full privileges that have users
-                yield WSResponse(self.delGroup, error="Cannot delete current group")
-                return
-
-        # if group in Config.users[ctx.username].groups:
-        if group in Config.groups:
-            del Config.groups[group]
-            for prop in Config.users.values():
-                try: prop.groups.remove(group)
-                except ValueError: pass
-            Config.save()
-        yield self.getUsers()
-        yield self.getGroups()
-
-    def setGroupPerms(self, group:str, perms:list[str]):
-        Config.groups[group].perms = perms
-        Config.save()
-        return self.getGroups()
