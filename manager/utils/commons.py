@@ -8,6 +8,7 @@
 import asyncio
 from typing import Mapping, List, Tuple, Any
 
+from benedict import benedict
 from jinja2.filters import K, V, ignore_case
 from starlette.templating import Jinja2Templates
 
@@ -46,3 +47,5 @@ cmdargs: Arguments = None
 
 
 SHUTDOWN_EVENT = asyncio.Event()
+
+API_TREE = benedict()

@@ -17,20 +17,21 @@ from fastapi import WebSocket
 from pydantic import validate_call
 
 import utils.constants as const
+from utils import commons
 from utils.commons import UPLOADS
 from utils.models import Config
 from utils.security import LOGMAN, NotAuthenticatedException
 from utils.ws.wsmanager import Context
-from .responses import WSBroadcast, WSResponse
+from .responses import WSBroadcast, WSResponse, WSMulticast
 from .wsmanager import WSManager, WSAPIBase
 
 logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
-REMOTE_WS = WSManager(True)
-UI_WS = WSManager(True)
-WS = WSManager()
+REMOTE_WS = WSManager(cache_last=True)
+UI_WS = WSManager(cache_last=True)
+WS = WSManager(cache_last=False)
 
 
 def dict_sort(value):
@@ -45,7 +46,6 @@ def dict_sort(value):
         if isinstance(v, dict):
             result.update([(k, dict_sort(v))])
         else:
-            # result.append((k, v))
             result[k] = v
     return result
 
@@ -73,9 +73,11 @@ class WebSocketAPI:
 
     def load_class(self, cls: type, prefix: str = None):
         if not issubclass(cls, WSAPIBase):
-            raise ValueError("Class is not a subclass of WSAPIBase")
+            raise ValueError(f"Class {cls.__name__} is not a subclass of WSAPIBase")
 
         self.generators.update(self.__treegen(cls, prefix))
+        # update tree for permission management
+        commons.API_TREE = benedict({k: k for k in self.generators.keys() if '/_' not in k})
 
     # noinspection PyPep8Naming
     def __treegen(self, Cls: type, prefix: str = None):
@@ -186,11 +188,13 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 async for ret in handle_call(target=t, username=user, request_data=data):
                     if isinstance(ret, WSBroadcast):
-                        await WS.broadcast(ret.target, nocache=False, **ret.kwargs)
+                        await WS.broadcast(ret.target, **ret.kwargs)
+                    elif isinstance(ret, WSMulticast):
+                        await WS.multicast(ret.users, ret.target, **ret.kwargs)
                     elif isinstance(ret, WSResponse):
-                        await WS.send(websocket, ret.target, nocache=False, **ret.kwargs)
+                        await WS.send(websocket, ret.target, **ret.kwargs)
                     elif isinstance(ret, dict):
-                        await WS.send(websocket, ret.pop('target', t), nocache=False, **ret)
+                        await WS.send(websocket, ret.pop('target', t), **ret)
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
 

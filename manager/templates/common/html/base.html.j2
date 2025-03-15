@@ -155,17 +155,15 @@
                 new bootstrap.Modal(messageModal).show();
             },*/
 
-            connected: () => {
-                connect_retry = 0;
-            },
-
-            reload: () => {
-                location.reload();
-            }
+            connected: () => connect_retry = 0,
+            reload:    () => location.reload(),
+            logout:    () => location.assign("{{ url_for('logout') }}")
         }
 
+        const protected_handlers = Object.keys(handlers);
+
         function handle(evt, callbackFn) {
-            if (["error", "connected", "reload"].includes(evt)){
+            if (protected_handlers.includes(evt)){
                 console.error(`Cannot shadow protected handler %c"${evt}"`, "font-style: italic; font-weight: bolder;");
                 return
             }
