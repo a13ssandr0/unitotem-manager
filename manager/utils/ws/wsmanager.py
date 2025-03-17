@@ -1,21 +1,19 @@
 __all__ = ['WSManager', 'Context', 'WSAPIBase']
 
 from base64 import b64encode
-from functools import wraps
-from inspect import isawaitable, isclass, isgeneratorfunction, iscoroutinefunction
-from json import dumps
-from os.path import join
-from typing import Optional
-import logging
 from collections import defaultdict
+from functools import wraps
+from inspect import isawaitable
+from json import dumps
+from typing import Optional
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from fastapi import WebSocket
+from loguru import logger
 from pydantic import validate_call
 
-logger = logging.getLogger(__name__)
 
 
 class WSManager:
@@ -133,10 +131,10 @@ class WSAPIBase:
         self.ws = ws
         self.ui_ws = ui_ws
         self.remote_ws = remote_ws
-        print(self.session)
+        logger.debug(self.session)
 
     def __init_subclass__(cls, **kwargs):
-        print(cls.__name__, kwargs)
+        logger.debug(f"{cls.__name__}({kwargs})")
         setattr(cls, 'session', kwargs.get('session', None))
         # for att, value in cls.__dict__.items():
         #     if callable(value):

@@ -1,5 +1,4 @@
 import inspect
-import logging
 import types
 from collections import OrderedDict
 from functools import wraps
@@ -14,18 +13,17 @@ from typing import Any, Tuple
 from benedict import benedict
 from fastapi import APIRouter, WebSocketException, Request, status, WebSocketDisconnect
 from fastapi import WebSocket
+from loguru import logger
 from pydantic import validate_call
 
 import utils.constants as const
 from utils import commons
 from utils.commons import UPLOADS
-from utils.models import Config
+from utils.models import Config, UserPerms
 from utils.security import LOGMAN, NotAuthenticatedException
 from utils.ws.wsmanager import Context
 from .responses import WSBroadcast, WSResponse, WSMulticast
 from .wsmanager import WSManager, WSAPIBase
-
-logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -139,7 +137,8 @@ class WebSocketAPI:
 
     class Power(WSAPIBase):
         @staticmethod
-        #@api_props(allowed_users='all', allowed_roles='all')
+        @UserPerms.requires.admin
+        @UserPerms.requires.power
         def test_method(txt='test'):
             """
             Useless test method
@@ -226,20 +225,23 @@ async def handle_call(target, username, request_data):
 
 
 def check_permissions(func, username):
-    try:
-        logger.debug(func.api_path)
-    except:
-        pass
+    name = func.__name__
+    try: name = func.api_path
+    except AttributeError: pass
 
+    perms = {UserPerms.admin}
+    try:
+        logger.debug(f'{name} requires {' or '.join(func.perms)} permission to be executed')
+        perms = func.perms
+    except AttributeError:
+        logger.debug(f'{name} has no permissions set, assuming admin')
 
-    try:
-        logger.debug(func.allowed_users)
-    except:
-        pass
-    try:
-        logger.debug(func.allowed_roles)
-    except:
-        pass
+    userperms = Config.users[username].perms
+    if userperms & perms:
+        logger.debug(f'User {username} is allowed to execute {name}')
+    else:
+        logger.critical(f'User {username} is not allowed to execute {name}')
+
 
 
 @router.websocket("/remote")

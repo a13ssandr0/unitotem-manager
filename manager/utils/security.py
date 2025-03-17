@@ -6,7 +6,6 @@ __all__ = [
     "NotAuthenticatedException"
 ]
 
-import logging
 import time
 from datetime import timedelta
 from os import environ, urandom
@@ -21,18 +20,17 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
+from loguru import logger
 from starlette.requests import Request
 from starlette.responses import Response
-from utils.ws.wsmanager import Context
 
 import utils.constants as const
+from utils.ws.wsmanager import Context
 from .commons import TEMPLATES
-from .models import Config, UserData, UserPerms
+from .models import Config, UserPerms
 from .network import do_ip_addr
 from .ws.responses import WSBroadcast, WSResponse, WSMulticast
 from .ws.wsmanager import WSAPIBase
-
-logger = logging.getLogger(__name__)
 
 load_dotenv(const.envfile)
 

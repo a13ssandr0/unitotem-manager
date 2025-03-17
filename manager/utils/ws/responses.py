@@ -1,8 +1,6 @@
 import traceback
-import logging
-import sys
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class WSResponse:
@@ -19,7 +17,7 @@ class WSResponse:
         #     x = frame.f_globals[frame.f_code.co_name]
         # except (AttributeError, KeyError):
         #     x = frame.f_globals[frame.f_code.co_qualname.split('.')[0]].__getattribute__(frame.f_code.co_name)
-        logger.debug(f'Response: {self.target} Called from: {traceback.extract_stack(limit=(2+self.__depth))[-(2+self.__depth)][2]}')
+        logger.trace(f'Response: {self.target} Called from: {traceback.extract_stack(limit=(2+self.__depth))[-(2+self.__depth)][2]}')
 
 class WSMulticast(WSResponse):
     __depth = 1

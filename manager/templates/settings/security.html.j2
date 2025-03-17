@@ -26,8 +26,8 @@
                     <input type="password" class="form-control" id="userPasswordInput" placeholder="Password">
                     <label for="userPasswordInput">Password</label>
                 </div>
-                <p class="ms-1">Groups</p>
-                <div id="userModalGroups" class="ms-2"></div>
+{#                <p class="ms-1">Groups</p>#}
+{#                <div id="userModalGroups" class="ms-2"></div>#}
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -107,8 +107,8 @@ $('#user-modal-save').click(()=>{
     //user_modal.dismiss();
     let name = userNameInput.val();
     let passwd = userPasswordInput.val();
-    let groups = [... user_modal_groups.find("input:checked").map(function() { return this.name })];
-    sendCommand('Settings/Security/addUser', {name:name, password:passwd, groups:groups});
+    {#let groups = [... user_modal_groups.find("input:checked").map(function() { return this.name })];#}
+    sendCommand('Settings/Security/addUser', {name:name, password:passwd, perms:[]});
 });
 
 
