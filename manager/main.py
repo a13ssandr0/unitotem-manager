@@ -1,9 +1,3 @@
-import logging
-import sys
-logging.basicConfig(level=logging.DEBUG, stream=sys.stdout) #, filename='myapp.log')
-
-
-
 import asyncio
 import signal
 import warnings
@@ -26,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
+from loguru import logger
 from natsort import natsorted
 from psutil import (cpu_count, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
@@ -34,10 +29,6 @@ from watchdog.observers import Observer
 from utils import *
 from utils.constants import Arguments
 from utils.ws.endpoints import api
-
-
-logger = logging.getLogger(__name__)
-
 
 logger.debug(pformat(api.tree))
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)

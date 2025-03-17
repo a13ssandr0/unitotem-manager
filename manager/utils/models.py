@@ -29,6 +29,7 @@ from urllib.parse import urlsplit
 from PIL import Image
 from aiofiles import open as aopen
 from benedict import benedict
+from loguru import logger
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from dotenv import load_dotenv, set_key
@@ -426,11 +427,31 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
         return [a.model_dump(mode='json') for a in self]
 
 
+class RequiresMeta(type):
+    def __getattr__(cls, name):
+        logger.trace(f'UserPerms.requires: {name}')
+        def set_perm(func):
+            try:
+                logger.trace(f'Adding permission {name} to {func.__name__}')
+                func.perms.add(UserPerms[name])
+            except AttributeError:
+                func.perms = {UserPerms[name]}
+            # noinspection PyTypeChecker
+            logger.debug(f'{func.__name__} requires {' or '.join(func.perms)} permission to be executed')
+            return func
+        return set_perm
+
+
 class UserPerms(str, Enum):
     scheduler = "scheduler"
     power = "power"
     audio = "audio"
     admin = "admin"
+
+    # noinspection PyPep8Naming
+    @staticmethod
+    class requires(metaclass=RequiresMeta):
+        pass
 
 
 class UserData(BaseModel):

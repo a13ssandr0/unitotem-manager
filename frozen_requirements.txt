@@ -6,6 +6,7 @@ fastapi==0.112.0
 fastapi-login==1.10.1
 Hypercorn==0.17.3
 Jinja2==3.1.4
+loguru
 natsort==8.4.0
 packaging==24.1
 pillow==10.4.0

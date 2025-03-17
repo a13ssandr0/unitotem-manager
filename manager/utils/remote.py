@@ -13,6 +13,7 @@ import requests
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from loguru import logger
 from pydantic import PositiveInt
 from wsproto.events import CloseConnection
 
@@ -21,8 +22,6 @@ from utils.commons import SHUTDOWN_EVENT
 from utils.models import Config
 from utils.ws.endpoints import WSAPIBase
 from utils.ws.responses import WSBroadcast
-
-logger = logging.getLogger(__name__)
 
 
 REMOTE_CONNECTED = False
