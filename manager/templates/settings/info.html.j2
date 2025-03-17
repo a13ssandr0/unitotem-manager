@@ -3,57 +3,17 @@
 {% block content %}
 <h4>System Info <span class="ms-4 text-muted" style="font-size: 12px;" id="uptime"></span></h4>
 
-<div class="row">
-    <div class="col-12 col-lg-6 mb-2">
+<div class="row row-cols-1 row-cols-lg-2 row-cols-xl-3" id="masonry-container">
+    <div class="col mb-2">
         <h5 class="mt-3 mb-1">CPU</h5>
         <canvas id="cpu-canvas"></canvas>
-        
-        
-        <h5 class="mt-3 mb-1">Temperatures</h5>
-        <small>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th class="ps-3" scope="col">Sensor</th>
-                        <th scope="col" class="col-1 text-end">Actual</th>
-                        <th scope="col" class="col-1 text-end">High</th>
-                        <th scope="col" class="col-1 text-end">Critical</th>
-                    </tr>
-                </thead>
-                <tbody id="temp-table">
-                    {% for dev, sensors in temp_devs.items() %}
-                    <tr>
-                        <th scope="row" colspan="5" class="table-active">{{dev}}</th>
-                    </tr>
-                    {% for temp in sensors %}
-                    {# I don't think we need to display threshold values higher than
-                     # solder reflow temperature, let alone temperatures hotter than
-                     # THE SUN!
-                     # Samsung nvme ssds report a high/critical temperature of 65261.85 °C
-                     # Considering the Sun is at 5500 °C, we would have a problem if we
-                     # reached this temperature, actually 59761.85 problems.
-                    #}
-                    {% set th, tc = temp.high, temp.critical %}
-                    {% if th == None or th > 300 %}{% set th = '' %}{% endif %}
-                    {% if tc == None or tc > 300 %}{% set tc = '' %}{% endif %}
-                    <tr>
-                        <td class="ps-3">{{temp.label}}</td>
-                        <td class="text-end text-nowrap" id="temp-{{dev|replace(' ','')}}-{{temp.label|replace(' ','') or loop.index0}}" data-th="{{th or 'NaN'}}"></td>
-                        <td class="text-end text-nowrap">{{th|round|int~' °C' if th}}</td>
-                        <td class="text-end text-nowrap">{{tc|round|int~' °C' if tc}}</td>
-                    </tr>
-                    {% endfor %}
-                    {% endfor %}
-                </tbody>
-            </table>
-        </small>
     </div>
-    <div class="col-12 col-lg-6 mb-2">
+    <div class="col mb-2">
         <h5 class="mt-3 mb-1">RAM</h5>
         <div class="progress">
-            <div id="progress-used" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
-            <div id="progress-buffer" class="progress-bar" role="progressbar" style="width: 0%"></div>
-            <div id="progress-cache" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
+            <div id="progress-used" class="progress-bar bg-success" role="progressbar" style="width: 0"></div>
+            <div id="progress-buffer" class="progress-bar" role="progressbar" style="width: 0"></div>
+            <div id="progress-cache" class="progress-bar bg-warning" role="progressbar" style="width: 0"></div>
         </div>
         <div class="row">
             <div class="col-3">
@@ -128,10 +88,51 @@
         {% if has_battery %}    
         <h5 class="mt-3 mb-1">Battery</h5>
         <div class="progress">
-            <div id="bat-perc" class="progress-bar" role="progressbar" style="width: 0%"></div>
+            <div id="bat-perc" class="progress-bar" role="progressbar" style="width: 0"></div>
         </div>
         <small>Time left: <span id="bat-time"></span> | <span id="bat-chg"></span></small>
         {% endif %}
+    </div>
+
+    <div class="col mb-2">
+        <h5 class="mt-3 mb-1">Temperatures</h5>
+        <small>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="ps-3">Sensor</th>
+                        <th scope="col" class="col-1 text-end">Actual</th>
+                        <th scope="col" class="col-1 text-end">High</th>
+                        <th scope="col" class="col-1 text-end">Critical</th>
+                    </tr>
+                </thead>
+                <tbody id="temp-table">
+                    {% for dev, sensors in temp_devs.items() %}
+                    <tr>
+                        <th scope="row" colspan="5" class="table-active">{{dev}}</th>
+                    </tr>
+                    {% for temp in sensors %}
+                    {# I don't think we need to display threshold values higher than
+                     # solder reflow temperature, let alone temperatures hotter than
+                     # THE SUN!
+                     # Samsung nvme ssds report a high/critical temperature of 65261.85 °C
+                     # Considering the Sun is at 5500 °C, we would have a problem if we
+                     # reached this temperature, actually 59761.85 problems.
+                    #}
+                    {% set th, tc = temp.high, temp.critical %}
+                    {% if th == None or th > 300 %}{% set th = '' %}{% endif %}
+                    {% if tc == None or tc > 300 %}{% set tc = '' %}{% endif %}
+                    <tr>
+                        <td class="ps-3">{{temp.label}}</td>
+                        <td class="text-end text-nowrap" id="temp-{{dev|replace(' ','')}}-{{temp.label|replace(' ','') or loop.index0}}" data-th="{{th or 'NaN'}}"></td>
+                        <td class="text-end text-nowrap">{{th|round|int~' °C' if th}}</td>
+                        <td class="text-end text-nowrap">{{tc|round|int~' °C' if tc}}</td>
+                    </tr>
+                    {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </small>
     </div>
 </div>
 
@@ -139,7 +140,7 @@
 {% endblock content %}
 
 
-{% set ext_scripts = ['chart.umd.min.js'] %}
+{% set ext_scripts = ['chart.umd.min.js', 'masonry.pkgd.min.js'] %}
 
 <script type="text/javascript" charset="utf-8">
 {% block js %}
@@ -240,10 +241,11 @@ window.onload = () => {
             scales: { y: { min: 0, max: 100 } }
         }
     });
+    /*var msnry = */new Masonry( '#masonry-container', {percentPosition: true});
 };
 
 function human_readable_size(size, precision=3){
-    var unit;
+    let unit;
     for(unit of ['B','KiB','MiB','GiB','TiB']){
         if (size < 1024.0)
             break;
@@ -291,10 +293,10 @@ handle('Settings/info', data => {
     {% endif %}
 
     {% if fan_devs %}
-        data.fans.forEach((fan, i) => $('#' + fan[0]).html(fan[1] + ' rpm'));
+        data.fans.forEach(fan => $('#' + fan[0]).html(fan[1] + ' rpm'));
     {% endif %}
 
-    data.temperatures.forEach((temp, i) => {
+    data.temperatures.forEach(temp => {
         let row = $('#' + temp[0]).html(Math.round(temp[1]) + ' °C');
         row.toggleClass('text-danger', temp[1] > row.data('th'));
     });
