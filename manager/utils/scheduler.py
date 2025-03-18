@@ -5,20 +5,21 @@ from pydantic import BeforeValidator
 from pydantic.color import Color
 
 from utils.commons import UPLOADS
-from utils.models import Config, FitEnum, validate_date, MediaType
+from utils.models import Config, FitEnum, validate_date, MediaType, UserPerms
 from utils.ws.endpoints import WSAPIBase
 from utils.ws.responses import WSBroadcast, WSResponse
-from utils.ws.wsmanager import api_props
 
 
 class Scheduler(WSAPIBase):
-    #@api_props(allowed_roles='alessandro', allowed_users='all')
+    @UserPerms.requires.scheduler
     def asset(self):
         return WSBroadcast(self.asset, items=Config.assets.serialize(), current=Config.assets.current.uuid)
 
+    @UserPerms.requires.scheduler
     def file(self):
         return WSBroadcast(self.file, files=UPLOADS.serialize())
 
+    @UserPerms.requires.scheduler
     def add_url(self, items: list[str | dict] = []):
         for element in items:
             if isinstance(element, str):
@@ -27,6 +28,7 @@ class Scheduler(WSAPIBase):
             Config.assets.append(element)
         Config.save()
 
+    @UserPerms.requires.scheduler
     def add_file(self, items: list[str | dict] = []):
         invalid = []
         for element in items:
@@ -46,6 +48,7 @@ class Scheduler(WSAPIBase):
         if invalid:
             return WSResponse(self.add_file, error='Invalid elements', extra=invalid)
 
+    @UserPerms.requires.scheduler
     def edit(self,
                    uuid: str,
                    name: Optional[str] = None,
@@ -79,28 +82,35 @@ class Scheduler(WSAPIBase):
                 asset.disable()
         Config.save()
 
+    @UserPerms.requires.scheduler
     def current(self):
         if Config.enabled_asset_count:
             return WSBroadcast(self.current, uuid=Config.assets.current.uuid)
 
+    @UserPerms.requires.scheduler
     def delete(self, uuid: str):
         del Config.assets[uuid]
         Config.save()
 
+    @UserPerms.requires.scheduler
     def delete_file(self, files: list[str]):
         for file in files:
             UPLOADS.remove(file)
         Config.save()
 
+    @UserPerms.requires.scheduler
     def goto(self, index: Union[None, int, str] = None):
         Config.assets.goto_a(index)
 
+    @UserPerms.requires.scheduler
     def back(self):
         Config.assets.prev_a()
 
+    @UserPerms.requires.scheduler
     def next(self):
         Config.assets.next_a()
 
+    @UserPerms.requires.scheduler
     def reorder(self, from_i: int, to_i: int):
         Config.assets.move(from_i, to_i)
         Config.save()
