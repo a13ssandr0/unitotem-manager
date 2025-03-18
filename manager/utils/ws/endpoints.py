@@ -137,8 +137,7 @@ class WebSocketAPI:
 
     class Power(WSAPIBase):
         @staticmethod
-        @UserPerms.requires.admin
-        @UserPerms.requires.power
+        @UserPerms.requires.none
         def test_method(txt='test'):
             """
             Useless test method
@@ -147,10 +146,12 @@ class WebSocketAPI:
             return txt
 
         @staticmethod
+        @UserPerms.requires.power
         def reboot():
             cmd_run(['/usr/bin/systemctl', 'reboot', '-i'])
 
         @staticmethod
+        @UserPerms.requires.power
         def poweroff():
             cmd_run(['/usr/bin/systemctl', 'poweroff', '-i'])
 

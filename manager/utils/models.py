@@ -42,7 +42,6 @@ from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from utils import commons
 from . import constants as const
 from .async_timer import Timer
 from .ws.responses import WSBroadcast
@@ -429,15 +428,29 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
 
 class RequiresMeta(type):
     def __getattr__(cls, name):
-        logger.trace(f'UserPerms.requires: {name}')
+        try:
+            logger.trace(f'UserPerms.requires: {UserPerms[name].value}')
+            if name == 'admin':
+                logger.debug('Explicitly setting admin permission is redundant as it is assumed by default')
+        except KeyError:
+            if name != 'none':
+                raise KeyError(f'Permission "{name}" does not exist in {UserPerms.__name__}')
+
         def set_perm(func):
-            try:
-                logger.trace(f'Adding permission {name} to {func.__name__}')
-                func.perms.add(UserPerms[name])
-            except AttributeError:
+            logger.trace(f'Adding permission {name} to {func.__name__}')
+            if hasattr(func, 'perms') and isinstance(func.perms, set):
+                if name!="none":
+                    func.perms.add(UserPerms[name])
+                    # noinspection PyTypeChecker
+                    logger.debug(f'{func.__name__} requires {' or '.join(func.perms)} permission to be executed')
+                else:
+                    logger.debug('{func.__name__} already has stricter permissions, ignoring "none"')
+            elif name != "none":
                 func.perms = {UserPerms[name]}
-            # noinspection PyTypeChecker
-            logger.debug(f'{func.__name__} requires {' or '.join(func.perms)} permission to be executed')
+                logger.debug(f'{func.__name__} requires {name} permission to be executed')
+            else:
+                func.perms = None
+                logger.debug(f'{func.__name__} requires no permission to be executed')
             return func
         return set_perm
 
@@ -789,6 +802,7 @@ def get_dominant_color(pil_img: Image.Image, palette_size=16):  # https://stacko
 
 
 class Settings(WSAPIBase):
+    @UserPerms.requires.scheduler
     def default_duration(self, duration: Optional[int] = None):
         if duration is not None:
             Config.def_duration = duration
