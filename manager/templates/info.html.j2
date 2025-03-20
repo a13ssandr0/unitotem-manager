@@ -1,6 +1,6 @@
-{% extends "settings.html.j2" %}
+{% extends 'common/html/base.html.j2' -%}
 
-{% block content %}
+{% block main_content %}
 <h4>System Info <span class="ms-4 text-muted" style="font-size: 12px;" id="uptime"></span></h4>
 
 <div class="row row-cols-1 row-cols-lg-2 row-cols-xl-3" id="masonry-container">
@@ -137,8 +137,9 @@
 </div>
 
 
-{% endblock content %}
+{% endblock main_content %}
 
+{% set init_cmds = ['Settings/hostname'] %}
 
 {% set ext_scripts = ['chart.umd.min.js', 'masonry.pkgd.min.js'] %}
 

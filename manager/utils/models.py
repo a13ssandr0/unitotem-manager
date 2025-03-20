@@ -12,8 +12,10 @@ __all__ = [
 ]
 
 import asyncio
+import dataclasses
 import os
 from asyncio import iscoroutinefunction
+from collections import namedtuple
 from datetime import datetime
 from enum import IntEnum, Enum
 from ipaddress import IPv4Address
@@ -466,6 +468,10 @@ class UserPerms(str, Enum):
     class requires(metaclass=RequiresMeta):
         pass
 
+    @classmethod
+    def namedtuple(cls, *args, **kwargs):
+        return namedtuple(cls.__name__, [e.value for e in cls], defaults=[False for _ in cls])(*args, **kwargs)
+
 
 class UserData(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_assignment=True)
@@ -480,6 +486,16 @@ class UserData(BaseModel):
             return {UserPerms.admin}
         else:
             return val
+
+
+@dataclasses.dataclass
+class User:
+    name: str
+    perms: set[UserPerms]
+
+    @property
+    def has_perm(self):
+        return UserPerms.namedtuple(**{p.value:(p in self.perms or UserPerms.admin in self.perms) for p in UserPerms})
 
 
 # TODO: replace with BaseSettings
@@ -587,6 +603,10 @@ class _Config(BaseModel):
         if perms is None:
             perms = {}
         self.users[user] = UserData(password=generate_password_hash(password), perms=perms)
+
+    def get_user(self, name: str):
+        if name in self.users:
+            return User(name, self.users[name].perms)
 
     def change_password(self, user: str, password: str):
         self.users[user].password = generate_password_hash(password)

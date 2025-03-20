@@ -26,8 +26,6 @@
                     <input type="password" class="form-control" id="userPasswordInput" placeholder="Password">
                     <label for="userPasswordInput">Password</label>
                 </div>
-{#                <p class="ms-1">Groups</p>#}
-{#                <div id="userModalGroups" class="ms-2"></div>#}
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -62,14 +60,21 @@
             <tbody id="usertable"></tbody>
             <tfoot>
                 <tr>
-                    <td colspan="6"><div class="d-grid"><button type="button" class="btn" data-bs-toggle="modal" data-bs-target="#userModal"><i class="bi bi-person-add"></i> New user</button></div></td>
+                    <td colspan="6">
+                        <div class="d-grid">
+                            <button type="button" class="btn" data-bs-toggle="modal" data-bs-target="#userModal"
+                                    data-bs-title="New user">
+                                <i class="bi bi-person-add"></i> New user
+                            </button>
+                        </div>
+                    </td>
                 </tr>
             </tfoot>
         </table>
     </div>
 </div>
 {#<div class="form-floating mb-3" style="max-width: 30em;">
-    <input type="email" class="form-control" id="loggedUser" placeholder="admin" value="{{logged_user}}" disabled>
+    <input type="email" class="form-control" id="loggedUser" placeholder="admin" value="{{logged_user.name}}" disabled>
     <label for="loggedUser">Username</label>
 </div>
 <div class="form-floating mb-3" style="max-width: 30em;">
@@ -108,7 +113,7 @@ $('#user-modal-save').click(()=>{
     let name = userNameInput.val();
     let passwd = userPasswordInput.val();
     {#let groups = [... user_modal_groups.find("input:checked").map(function() { return this.name })];#}
-    sendCommand('Settings/Security/addUser', {name:name, password:passwd, perms:[]});
+    sendCommand('Settings/Security/addUser', {name:name, password:passwd});
 });
 
 
@@ -148,7 +153,8 @@ handle('Settings/Security/getUsers', data => {
                 ),
                 $('<td class="d-flex justify-content-center"></td>').append(
                     $('<div class="btn-group" role="group"></div>').append(
-                        $('<button type="button" title="Edit user" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil"></i></button>'),
+                        $('<button type="button" title="Edit user" class="btn btn-sm btn-outline-warning" ' +
+                            'data-bs-toggle="modal" data-bs-target="#userModal"><i class="bi bi-pencil"></i></button>'),
                         $('<button type="button" title="Delete user" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>').click(()=>{
                             sendCommand('Settings/Security/delUser', {user: user})
                         })

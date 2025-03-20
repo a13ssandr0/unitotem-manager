@@ -27,7 +27,7 @@ from starlette.responses import Response
 import utils.constants as const
 from utils.ws.wsmanager import Context
 from .commons import TEMPLATES
-from .models import Config, UserPerms
+from .models import Config, UserPerms, User
 from .network import do_ip_addr
 from .ws.responses import WSBroadcast, WSResponse, WSMulticast
 from .ws.wsmanager import WSAPIBase
@@ -74,9 +74,9 @@ LOGMAN = LoginManager(environ['auth_token'], not_authenticated_exception=NotAuth
                       token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(days=7))
 
 
-@LOGMAN.user_loader()  # type: ignore
-async def load_user(username: str):
-    return username if username in Config.users else None
+@LOGMAN.user_loader()
+def load_user(username: str):
+    return Config.get_user(username)
 
 
 login_router = APIRouter()
@@ -112,8 +112,7 @@ async def login_page(request: Request, src: Optional[str] = '/'):
         pass
 
     ip = do_ip_addr(get_default=True)
-    return TEMPLATES.TemplateResponse('login.html.j2', dict(
-        request=request,
+    return TEMPLATES.TemplateResponse(request, 'login.html.j2', dict(
         src=src,
         ut_vers=const.__version__,
         os_vers=os_release()['PRETTY_NAME'],
@@ -129,8 +128,8 @@ async def logout():
 
 
 @login_router.post("/api/settings/set_passwd")
-async def set_pass(request: Request, response: Response, password: str, username: str = Depends(LOGMAN)):
-    Config.change_password(username, password)
+async def set_pass(request: Request, response: Response, password: str, user: User = Depends(LOGMAN)):
+    Config.change_password(user.name, password)
     Config.save()
     if 'Referer' in request.headers:
         response.headers['location'] = request.headers['Referer']
@@ -140,7 +139,7 @@ class Security(WSAPIBase):
     def getUsers(self):
         return WSBroadcast(self.getUsers, users=[(user, {'perms': list(data.perms)}) for user, data in Config.users.items()])
 
-    def addUser(self, name:str, password:str, perms:set[UserPerms] = None):
+    def addUser(self, name:str, password:str):
         if name in Config.users:
             return WSResponse(self.addUser, error="User already exists")
         Config.add_user(user=name, password=password, perms=perms)

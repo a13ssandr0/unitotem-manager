@@ -11,7 +11,7 @@ from typing import Any, Literal, Union
 
 import urllib3
 import uvloop
-from fastapi import (Depends, FastAPI, Request, UploadFile, status)
+from fastapi import (Depends, FastAPI, Request, UploadFile, status, HTTPException)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse
@@ -26,8 +26,10 @@ from psutil import (cpu_count, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
 from watchdog.observers import Observer
 
+from routers.error import http_exception_handler
 from utils import *
 from utils.constants import Arguments
+from utils.models import UserPerms, User
 from utils.ws.endpoints import api
 
 logger.debug(pformat(api.tree))
@@ -44,25 +46,30 @@ WWW = FastAPI(
     ],
     exception_handlers={
         InvalidSignatureError: login_redir,
-        NotAuthenticatedException: login_redir
+        NotAuthenticatedException: login_redir,
+        HTTPException: http_exception_handler,
     }
 )
 WWW.include_router(login_router)
 WWW.include_router(ws_endpoints_router)
 
 
-@WWW.post("/api/scheduler/upload", status_code=status.HTTP_201_CREATED, dependencies=[Depends(LOGMAN)])
-async def media_upload(files: list[UploadFile]):
+@WWW.post("/api/scheduler/upload", status_code=status.HTTP_201_CREATED)
+async def media_upload(files: list[UploadFile], user: User = Depends(LOGMAN)):
+    if not user.has_perm.scheduler:
+        raise HTTPException(status_code=403)
+
     for infile in files:
         await UPLOADS.save(infile)
 
 
 @WWW.get("/", response_class=HTMLResponse)
-async def scheduler(request: Request, username: str = Depends(LOGMAN)):
-    return TEMPLATES.TemplateResponse('index.html.j2', dict(
-        request=request,
+async def scheduler(request: Request, user: User = Depends(LOGMAN)):
+    template = 'index.html.j2' if user.has_perm.scheduler else 'common/html/base.html.j2'
+
+    return TEMPLATES.TemplateResponse(request, template, dict(
         ut_vers=const.__version__,
-        logged_user=username,
+        logged_user=user,
         hostname=get_hostname(),
         disp_size=WINDOW['bounds'],
         disk_used=UPLOADS.disk_usedh,  # type: ignore
@@ -72,11 +79,15 @@ async def scheduler(request: Request, username: str = Depends(LOGMAN)):
 
 @WWW.get("/settings", response_class=HTMLResponse)
 @WWW.get("/settings/{tab}", response_class=HTMLResponse)
-async def settings(request: Request, tab: str = 'main_menu', username: str = Depends(LOGMAN)):
+async def settings(request: Request, tab: str = 'main_menu', user: User = Depends(LOGMAN)):
+    if not (user.has_perm.admin or
+            user.has_perm.scheduler and tab in ['playback', 'main_menu'] or
+            user.has_perm.audio and tab in ['audio', 'main_menu']):
+        raise HTTPException(status_code=403)
+
     data: dict[str, Any] = dict(
-        request=request,
         ut_vers=const.__version__,
-        logged_user=username,
+        logged_user=user,
         cur_tab=tab,
         disp_size=WINDOW['bounds'],
         disk_used=UPLOADS.disk_usedh,  # type: ignore
@@ -90,25 +101,32 @@ async def settings(request: Request, tab: str = 'main_menu', username: str = Dep
             data['displays'] = DISPLAYS
         case 'security':
             data['api_tree'] = api.tree
-        case 'info':
-            data['cpu_count'] = cpu_count()
-            data['ram_tot'] = human_readable_size(virtual_memory().total)
-            data['disks'] = [blk.model_dump() for blk in lsblk()]
-            data['has_battery'] = sensors_battery() is not None
-            data['temp_devs'] = {k: [x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k, v in
-                                 sensors_temperatures().items()}
-            data['fan_devs'] = {k: [x._asdict() for x in v] for k, v in sensors_fans().items()}
     try:
-        return TEMPLATES.TemplateResponse(f'settings/{tab}.html.j2', data)
+        return TEMPLATES.TemplateResponse(request, f'settings/{tab}.html.j2', data)
     except Exception:
         logger.error(format_exc())
 
 
+@WWW.get('/info', response_class=HTMLResponse)
+def info(request: Request, user: User = Depends(LOGMAN)):
+    return TEMPLATES.TemplateResponse(request, 'info.html.j2', dict(
+        ut_vers=const.__version__,
+        logged_user=user,
+        disp_size=WINDOW['bounds'],
+        disk_used=UPLOADS.disk_usedh,  # type: ignore
+        disk_total=UPLOADS.disk_totalh,  # type: ignore
+        cpu_count=cpu_count(),
+        ram_tot=human_readable_size(virtual_memory().total),
+        disks=[blk.model_dump() for blk in lsblk()],
+        has_battery=sensors_battery() is not None,
+        temp_devs={k: [x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k, v in sensors_temperatures().items()},
+        fan_devs={k: [x._asdict() for x in v] for k, v in sensors_fans().items()},
+    ))
+
 @WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
 async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
     ip = do_ip_addr(get_default=True)
-    return TEMPLATES.TemplateResponse(f'{page}.html.j2', dict(
-        request=request,
+    return TEMPLATES.TemplateResponse(request, f'{page}.html.j2', dict(
         ut_vers=const.__version__,
         os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,

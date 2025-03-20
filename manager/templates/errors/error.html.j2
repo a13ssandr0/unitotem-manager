@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Error {{ code }} - {{ hostname }} - UniTotem Manager</title>
+    <style>
+        html {
+            {% if code != 418 %}
+            background-color: #fefefe;
+            {% else %}
+            {% include 'teapot.j2' %}
+            background-image:url("{{ teapot }}");
+			background-size: cover;
+			background-position: 50% 50%;
+            {% endif %}
+        }
+
+        body {
+            font-family: Arial, serif;
+            color: #454545;
+            font-size: 16px;
+            margin: 2em auto;
+            max-width: 800px;
+            padding: 1em;
+            line-height: 1.4;
+            text-align: justify
+        }
+
+        html.contrast body {
+            color: #050505
+        }
+
+        html.inverted body {
+            color: #bababa
+        }
+
+
+        @media screen and (max-width: 500px) {
+            body {
+                text-align: left
+            }
+        }
+
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        html {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .error-middle {
+            display: block;
+            vertical-align: middle;
+        }
+
+        html {
+            background-color: #e74c3c;
+        }
+
+        body {
+            color: #fefefe;
+        }
+
+        body>div.overlay{
+			position: absolute;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			top: 0;
+			left: 0;
+			bottom: 0;
+			right: 0;
+			height: 100vh;
+			width: 100vw;
+			background-color: rgba(20,20,20, 0.5);
+		}
+
+		body>div.overlay>.error-middle{
+			position: relative;
+		}
+    </style>
+</head>
+
+<body>
+{% if code == 418 %}<div class="overlay">{% endif %}
+<div class="error-middle">
+    <h1>Error {{ code }} - {{ short_desc }}</h1>
+    <p>{{ long_desc }}</p>
+</div>
+{% if code == 418 %}</div>{% endif %}
+</body>
+</html>
