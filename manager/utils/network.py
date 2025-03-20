@@ -39,6 +39,7 @@ from ruamel.yaml import YAML
 from werkzeug.utils import secure_filename
 
 from utils import Config
+from utils.models import UserPerms
 from utils.ws.responses import WSBroadcast, WSResponse
 from utils.ws.wsmanager import WSAPIBase
 
@@ -350,6 +351,7 @@ def do_ip_addr(get_default=False):
 
 
 class Settings(WSAPIBase):
+    @UserPerms.requires.none
     async def hostname(self, hostname: Optional[str] = None):
         if hostname is not None:
             set_hostname(hostname)

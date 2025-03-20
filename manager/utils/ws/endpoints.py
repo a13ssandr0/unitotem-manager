@@ -19,7 +19,7 @@ from pydantic import validate_call
 import utils.constants as const
 from utils import commons
 from utils.commons import UPLOADS
-from utils.models import Config, UserPerms
+from utils.models import Config, UserPerms, User
 from utils.security import LOGMAN, NotAuthenticatedException
 from utils.ws.wsmanager import Context
 from .responses import WSBroadcast, WSResponse, WSMulticast
@@ -173,7 +173,7 @@ async def websocket_endpoint(websocket: WebSocket):
     request = Request({'type': 'http'})
     request._cookies = websocket.cookies
     try:
-        user:str = await LOGMAN(request)
+        user:User = await LOGMAN(request)
     except NotAuthenticatedException:
         await websocket.accept()
         await websocket.close(1008, 'Not Authenticated')
@@ -186,7 +186,7 @@ async def websocket_endpoint(websocket: WebSocket):
             data: dict[str, Any] = await websocket.receive_json()
             t = data.pop('target')
             try:
-                async for ret in handle_call(target=t, username=user, request_data=data):
+                async for ret in handle_call(target=t, user=user, request_data=data):
                     if isinstance(ret, WSBroadcast):
                         await WS.broadcast(ret.target, **ret.kwargs)
                     elif isinstance(ret, WSMulticast):
@@ -197,6 +197,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         await WS.send(websocket, ret.pop('target', t), **ret)
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
+            except PermissionError:
+                await WS.send(websocket, 'error', error=f'Permission error: not allowed to execute {t}')
 
         except WebSocketDisconnect:
             break
@@ -206,10 +208,12 @@ async def websocket_endpoint(websocket: WebSocket):
     WS.disconnect(websocket)
 
 
-async def handle_call(target, username, request_data):
+async def handle_call(target, user, request_data):
     func = api.generators[target]
-    check_permissions(func, username)
+    # noinspection PyTypeChecker
+    check_permissions(func, user)
 
+    #Inspect function signature to check if it has a Context parameter
     signature = inspect.signature(func)
 
     ctx_param = None
@@ -219,29 +223,33 @@ async def handle_call(target, username, request_data):
             break
 
     if ctx_param:
-        request_data[ctx_param] = Context(username=username)
+        request_data[ctx_param] = Context(username=user.name)
 
     async for ret in func(**request_data):
         yield ret
 
 
-def check_permissions(func, username):
+def check_permissions(func, user):
     name = func.__name__
     try: name = func.api_path
     except AttributeError: pass
 
     perms = {UserPerms.admin}
     try:
+        if func.perms is None:
+            logger.debug(f'{name} requires no permissions to be executed')
+            return
+
         logger.debug(f'{name} requires {' or '.join(func.perms)} permission to be executed')
         perms = func.perms
     except AttributeError:
         logger.debug(f'{name} has no permissions set, assuming admin')
 
-    userperms = Config.users[username].perms
-    if userperms & perms:
-        logger.debug(f'User {username} is allowed to execute {name}')
+    if user.has_perm.admin or user.perms & perms:
+        logger.debug(f'User {user.name} is allowed to execute {name}')
     else:
-        logger.critical(f'User {username} is not allowed to execute {name}')
+        logger.critical(f'User {user.name} is not allowed to execute {name}')
+        raise PermissionError
 
 
 
@@ -325,7 +333,7 @@ async def ui_websocket(websocket: WebSocket):
             break
 
 
-class Display(WSAPIBase, name='boh', debug=True):
+class Display(WSAPIBase):
     def getBounds(self):
         """
         Get viewer window bounds

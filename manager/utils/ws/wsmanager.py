@@ -1,9 +1,8 @@
 __all__ = ['WSManager', 'Context', 'WSAPIBase']
 
+import dataclasses
 from base64 import b64encode
 from collections import defaultdict
-from functools import wraps
-from inspect import isawaitable
 from json import dumps
 from typing import Optional
 
@@ -11,9 +10,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from fastapi import WebSocket
-from loguru import logger
-from pydantic import validate_call
-
 
 
 class WSManager:
@@ -87,42 +83,6 @@ class WSManager:
         for connection in self.active_connections:
             await connection.send_text(text)
 
-    handlers = {}
-
-    def add(self, target: str, **validator_kwargs):
-        validator_kwargs.setdefault('arbitrary_types_allowed', True)
-
-        def decorator(func):
-
-            if WebSocket in func.__annotations__.values() or \
-                    (callable(func) and func.__name__ == "<lambda>" and func.__code__.co_posonlyargcount):
-                # lambda functions with websocket parameter must declare it as the
-                # first positional only argument
-                func = validate_call(func, config=validator_kwargs)  # type: ignore
-
-                @wraps(func)
-                async def wrapper(caller_ws, *args, **kwargs):  # type: ignore
-                    f = func(caller_ws, *args, **kwargs)
-                    if isawaitable(f):
-                        return await f
-                    else:
-                        return f
-            else:
-                func = validate_call(func, config=validator_kwargs)  # type: ignore
-
-                @wraps(func)
-                async def wrapper(_, *args, **kwargs):
-                    f = func(*args, **kwargs)
-                    if isawaitable(f):
-                        return await f
-                    else:
-                        return f
-
-            self.handlers[target] = wrapper
-
-            return wrapper
-
-        return decorator
 
 
 class WSAPIBase:
@@ -131,22 +91,11 @@ class WSAPIBase:
         self.ws = ws
         self.ui_ws = ui_ws
         self.remote_ws = remote_ws
-        logger.debug(self.session)
-
-    def __init_subclass__(cls, **kwargs):
-        logger.debug(f"{cls.__name__}({kwargs})")
-        setattr(cls, 'session', kwargs.get('session', None))
-        # for att, value in cls.__dict__.items():
-        #     if callable(value):
-        #         logger.debug(f"{cls.__name__}.{att}={value}")
-        #         value.api_path = ""
-        #         setattr(cls, att, api_props(allowed_users=None, allowed_roles=None)(value))
-        # super().__init_subclass__(**kwargs)
 
 
+@dataclasses.dataclass
 class Context:
-    def __init__(self, username:str):
-        self.username = username
+    username: str
 
 
 def api_props(*, allowed_users, allowed_roles, **validator_kwargs):

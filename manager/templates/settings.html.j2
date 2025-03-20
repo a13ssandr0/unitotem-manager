@@ -4,7 +4,7 @@
 <nav>
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="/settings"><i class="bi bi-sliders"></i> Settings</a></li>
-        <li class="breadcrumb-item active">{% for name, tab, _, icon in tabs %}{% if tab==cur_tab %}<i class="bi bi-{{icon}}"></i> {{name}}{% endif %}{% endfor %}</li>
+        <li class="breadcrumb-item active">{% for name, tab, _, icon, __ in tabs %}{% if tab==cur_tab %}<i class="bi bi-{{icon}}"></i> {{name}}{% endif %}{% endfor %}</li>
     </ol>
 </nav>
 <div class="row">
