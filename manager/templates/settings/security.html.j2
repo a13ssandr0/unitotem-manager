@@ -104,8 +104,22 @@
 const user_modal = $('#userModal');
 const userNameInput = $('#userNameInput');
 const userPasswordInput = $('#userPasswordInput');
-const user_modal_groups = $('#userModalGroups');
+const user_modal_title = $('#userModalLabel');
 const user_table = $('#usertable');
+
+user_modal.on('show.bs.modal', e => {
+    const button = e.relatedTarget;
+    const title = button.getAttribute('data-bs-title');
+    const user = button.getAttribute('data-bs-user');
+
+    user_modal_title.html(title);
+    if (user !== null){
+        userNameInput.attr('disabled', true).attr('value', user);
+    } else {
+        userNameInput.attr('disabled', false).attr('value', '');
+    }
+})
+
 
 
 $('#user-modal-save').click(()=>{
@@ -154,7 +168,9 @@ handle('Settings/Security/getUsers', data => {
                 $('<td class="d-flex justify-content-center"></td>').append(
                     $('<div class="btn-group" role="group"></div>').append(
                         $('<button type="button" title="Edit user" class="btn btn-sm btn-outline-warning" ' +
-                            'data-bs-toggle="modal" data-bs-target="#userModal"><i class="bi bi-pencil"></i></button>'),
+                            'data-bs-toggle="modal" data-bs-target="#userModal"><i class="bi bi-pencil"></i></button>')
+                                .attr('data-bs-title', "Edit user")
+                                .attr('data-bs-user', user),
                         $('<button type="button" title="Delete user" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>').click(()=>{
                             sendCommand('Settings/Security/delUser', {user: user})
                         })
