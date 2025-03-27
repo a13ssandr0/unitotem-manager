@@ -138,12 +138,15 @@ class WebSocketAPI:
     class Power(WSAPIBase):
         @staticmethod
         @UserPerms.requires.none
-        def test_method(txt='test'):
+        def test_method(ctx: Context, txt='test'):
             """
-            Useless test method
+            Debug method
             """
             logger.debug(txt)
-            return txt
+            yield WSResponse(message='Response message test', extra=txt)
+            yield WSMulticast(users=ctx.username,  message='Multicast message test', extra=txt)
+            yield WSBroadcast(message='Broadcast message test', extra=txt)
+            yield {'message': 'Plain dict test', 'extra': txt}
 
         @staticmethod
         @UserPerms.requires.power
@@ -179,7 +182,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(1008, 'Not Authenticated')
         return
 
-    await WS.connect(websocket)
+    await WS.connect(websocket, user.name)
     await WS.send(websocket, 'connected')
     while True:
         try:
@@ -188,11 +191,11 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 async for ret in handle_call(target=t, user=user, request_data=data):
                     if isinstance(ret, WSBroadcast):
-                        await WS.broadcast(ret.target, **ret.kwargs)
+                        await WS.broadcast(ret.target or t, **ret.kwargs)
                     elif isinstance(ret, WSMulticast):
-                        await WS.multicast(ret.users, ret.target, **ret.kwargs)
+                        await WS.multicast(ret.users, ret.target or t, **ret.kwargs)
                     elif isinstance(ret, WSResponse):
-                        await WS.send(websocket, ret.target, **ret.kwargs)
+                        await WS.send(websocket, ret.target or t, **ret.kwargs)
                     elif isinstance(ret, dict):
                         await WS.send(websocket, ret.pop('target', t), **ret)
             except KeyError:

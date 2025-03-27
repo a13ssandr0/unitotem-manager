@@ -1,13 +1,15 @@
 __all__ = [
+    "do_dictsort",
     "find_by_attribute",
     "flatten",
 ]
 
 
 
-from typing import Optional
+from typing import Optional, Mapping, List, Tuple, Any
 
 from jinja2 import Undefined
+from jinja2.filters import K, V
 
 
 # https://github.com/ansible/ansible/blob/0830b6905996fb02eefcba79a9b055961e251078/lib/ansible/plugins/filter/core.py#L476
@@ -45,3 +47,19 @@ def find_by_attribute(l:list, key, value, default:Optional[int]=None):
         else:
             return default
 
+
+def do_dictsort(
+    value: Mapping[K, V],
+    case_sensitive: bool = False,
+    reverse: bool = False,
+) -> List[Tuple[K, V]]:
+
+    def sort_func(item: Tuple[Any, Any]) -> Any:
+        value = item[0]
+
+        if not case_sensitive and isinstance(value, str):
+            value = value.lower()
+
+        return value
+
+    return sorted(value.items(), key=sort_func, reverse=reverse)

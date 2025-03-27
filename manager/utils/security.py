@@ -1,5 +1,5 @@
 __all__ = [
-    "login_redir",
+    "login_redirect",
     "login_router",
     "LoginForm",
     "LOGMAN",
@@ -44,7 +44,7 @@ class NotAuthenticatedException(Exception):
     pass
 
 
-async def login_redir(request, exc):
+async def login_redirect(request, exc):
     logger.error(exc)
     return RedirectResponse('/login?src=' + quote_plus(request.scope.get('path', '/')))
 
@@ -70,13 +70,17 @@ class LoginForm(OAuth2PasswordRequestForm):
         self.remember_me = remember_me
 
 
-LOGMAN = LoginManager(environ['auth_token'], not_authenticated_exception=NotAuthenticatedException,
-                      token_url='/auth/token', use_cookie=True, use_header=False, default_expiry=timedelta(days=7))
+LOGMAN = LoginManager(
+    secret=environ['auth_token'],
+    token_url='/auth/token',
+    use_cookie=True,
+    use_header=False,
+    not_authenticated_exception=NotAuthenticatedException,
+    default_expiry=timedelta(days=7)
+)
+LOGMAN.user_loader()(Config.get_user)
 
 
-@LOGMAN.user_loader()
-def load_user(username: str):
-    return Config.get_user(username)
 
 
 login_router = APIRouter()
@@ -139,11 +143,12 @@ class Security(WSAPIBase):
     def getUsers(self):
         return WSBroadcast(self.getUsers, users=[(user, {'perms': list(data.perms)}) for user, data in Config.users.items()])
 
-    def addUser(self, name:str, password:str):
-        if name in Config.users:
+    def addUser(self, username:str, password:str):
+        if username in Config.users:
             return WSResponse(self.addUser, error="User already exists")
-        Config.add_user(user=name, password=password, perms=perms)
+        Config.add_user(user=username, password=password)
         Config.save()
+        logger.info(f'Created new user: {username}')
         return self.getUsers()
 
     def setUserPass(self, ctx:Context, username:str, password:str):
@@ -151,7 +156,8 @@ class Security(WSAPIBase):
             return WSResponse(self.setUserPass, error=f"User {username} does not exist")
         Config.change_password(username, password)
         Config.save()
-        return WSMulticast(ctx.username, 'logout')
+        logger.info(f'Password changed for {username}')
+        return WSMulticast(username, 'logout')
 
     def setUserPerms(self, ctx:Context, username:str, perms:set[UserPerms]):
         if username not in Config.users:
@@ -169,6 +175,7 @@ class Security(WSAPIBase):
 
         Config.users[username].perms = perms
         Config.save()
+        logger.info(f'Changed permissions for {username}: {perms}')
         yield WSMulticast(ctx.username, 'reload')
         yield self.getUsers()
 

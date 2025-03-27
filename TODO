@@ -37,7 +37,7 @@ Show confirmation on command execution (success popup/notification)
 
 Screensaver for touch panels
 
-Allow Multiuser
+<!-- Allow Multiuser -->
 <!-- Create a server that controls multiple clients -->
 
 Add display power control:
