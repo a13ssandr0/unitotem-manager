@@ -1,6 +1,5 @@
 import inspect
 import types
-from collections import OrderedDict
 from functools import wraps
 from importlib import import_module
 from inspect import isclass, isgeneratorfunction, iscoroutinefunction, isasyncgenfunction
@@ -8,7 +7,7 @@ from json import dumps
 from os.path import join
 from subprocess import run as cmd_run
 from traceback import format_exc
-from typing import Any, Tuple
+from typing import Any
 
 from benedict import benedict
 from fastapi import APIRouter, WebSocketException, Request, status, WebSocketDisconnect
@@ -20,32 +19,16 @@ import utils.constants as const
 from utils import commons
 from utils.commons import UPLOADS
 from utils.models import Config, UserPerms, User
+from utils.objs import dict_sort
 from utils.security import LOGMAN, NotAuthenticatedException
 from utils.ws.wsmanager import Context
 from .responses import WSBroadcast, WSResponse, WSMulticast
 from .wsmanager import WSManager, WSAPIBase
 
-
 router = APIRouter()
 REMOTE_WS = WSManager(cache_last=True)
 UI_WS = WSManager(cache_last=True)
 WS = WSManager(cache_last=False)
-
-
-def dict_sort(value):
-    def sorter(item: Tuple[str, Any]) -> str:
-        if item[0][0].islower():
-            return '.' + item[0]
-        return item[0]
-
-    result = OrderedDict()
-
-    for k, v in sorted(value.items(), key=sorter):
-        if isinstance(v, dict):
-            result.update([(k, dict_sort(v))])
-        else:
-            result[k] = v
-    return result
 
 
 # noinspection PyUnresolvedReferences

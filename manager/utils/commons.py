@@ -16,7 +16,6 @@ from .objs import flatten, do_dictsort
 
 TEMPLATES = Jinja2Templates(templates_folder, extensions=['jinja2.ext.do', 'jinja2.ext.debug'])
 TEMPLATES.env.filters['flatten'] = flatten
-TEMPLATES.env.filters['dictsort2'] = do_dictsort
 
 UPLOADS = UploadManager(uploads_folder)
 
