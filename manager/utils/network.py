@@ -38,8 +38,7 @@ from qrcode.image.svg import SvgPathFillImage
 from ruamel.yaml import YAML
 from werkzeug.utils import secure_filename
 
-from utils import Config
-from utils.models import UserPerms
+from utils.models import Config, UserPerms
 from utils.ws.responses import WSBroadcast, WSResponse
 from utils.ws.wsmanager import WSAPIBase
 
@@ -94,13 +93,15 @@ def set_hostname(to_h: str, from_h: str = get_hostname()):
             etc_hosts.write(sub(f'127.0.1.1.*{from_h}', f'127.0.1.1\t{to_h}', hosts))
 
 
-def get_ifaces(filter=IF_ALL, exclude=['lo']):
+def get_ifaces(if_filter=IF_ALL, exclude=None):
+    if exclude is None:
+        exclude = ['lo']
     wired = []
     wireless = []
     for i in listdir('/sys/class/net/'):
         if i not in exclude and isdir(join('/sys/class/net/', i)):
             (wireless if exists(join('/sys/class/net/', i, 'wireless')) else wired).append(i)
-    return (wired if filter&IF_WIRED else []) + (wireless if filter&IF_WIRELESS else [])
+    return (wired if if_filter & IF_WIRED else []) + (wireless if if_filter & IF_WIRELESS else [])
 
 def get_dns_list():
     with open(ETC_RESOLV_CONF, 'r') as resolv_conf:
@@ -336,6 +337,7 @@ def do_ip_addr(get_default=False):
                             break
                     except OSError:
                         pass # ipv6 address
+            # noinspection PyTypeChecker
             current["addr"].append({
                 "addr": addr,
                 "mask": mask,
@@ -367,9 +369,8 @@ class Settings(WSAPIBase):
         
         async def getFile(self, filename: Optional[str] = None):
             netplan_files = get_netplan_file_list()
-            if filename is not None:
-                if filename in netplan_files:
-                    return WSBroadcast(self.getFile, files={filename: get_netplan_file(filename)})
+            if filename is not None and filename in netplan_files:
+                return WSBroadcast(self.getFile, files={filename: get_netplan_file(filename)})
             return WSBroadcast(self.getFile, files={f: get_netplan_file(f) for f in netplan_files})
 
         async def changeFile(self, filename: Optional[str] = None, content: str = '', apply: bool = True):
@@ -385,11 +386,13 @@ class Settings(WSAPIBase):
                     DEFAULT_AP = None
                     Config.assets.next_a()
             elif isinstance(res, str):
-                return WSResponse('error', error='Netplan error', extra=res)
-            return WSBroadcast('Settings/Netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+                return WSResponse(self.changeFile, error='Netplan error', extra=res)
+            return self.getFile()
+            #return WSBroadcast('Settings/Netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
 
         async def deleteFile(self, filename: Optional[str] = None, apply: bool = True):
             res = del_netplan_file(filename, apply)
             if isinstance(res, str):
-                return WSResponse('error', error='Netplan error', extra=res)
-            return WSBroadcast('Settings/Netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})
+                return WSResponse(self.deleteFile, error='Netplan error', extra=res)
+            return self.getFile()
+            #return WSBroadcast('Settings/Netplan/getFile', files={f: get_netplan_file(f) for f in get_netplan_file_list()})

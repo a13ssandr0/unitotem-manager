@@ -23,13 +23,20 @@
                     <label for="userNameInput">Name</label>
                 </div>
                 <div class="form-floating mb-3">
-                    <input type="password" class="form-control" id="userPasswordInput" placeholder="Password">
-                    <label for="userPasswordInput">Password</label>
+                    <input type="password" class="form-control" id="userPasswordInputA" placeholder="Password">
+                    <label for="userPasswordInputA">Password</label>
+                </div>
+                <div class="form-floating mb-3">
+                    <input type="password" class="form-control" id="userPasswordInputB" placeholder="Repeat password">
+                    <label for="userPasswordInputB">Repeat password</label>
+                    <div class="invalid-feedback">
+                        Passwords do not match.
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" data-bs-dismiss="modal" id="user-modal-save">Save</button>
+                <button type="button" class="btn btn-success" id="user-modal-save">Save</button>
             </div>
         </div>
     </div>
@@ -41,7 +48,7 @@
 
 {% block content %}
 <div class="row">
-    <div class="col col-xl-8 col-xxl-5">
+    <div class="col col-xl-8 col-xxl-6">
         <h4>Users</h4>
         <table class="table">
             <thead>
@@ -101,13 +108,14 @@
 {#const sub = $('#set_passwd');#}
 {#pwd1.on('input', () => sub.prop('disabled', (pwd1.val() === '') || (pwd1.val() !== pwd2.val())));#}
 {#pwd2.on('input', () => sub.prop('disabled', (pwd1.val() === '') || (pwd1.val() !== pwd2.val())));#}
-const user_modal = $('#userModal');
+const user_modal = new bootstrap.Modal('#userModal');
 const userNameInput = $('#userNameInput');
-const userPasswordInput = $('#userPasswordInput');
+const userPasswordInput = $('#userPasswordInputA');
+const userPasswordInput2 = $('#userPasswordInputB');
 const user_modal_title = $('#userModalLabel');
 const user_table = $('#usertable');
 
-user_modal.on('show.bs.modal', e => {
+$('#userModal').on('show.bs.modal', e => {
     const button = e.relatedTarget;
     const title = button.getAttribute('data-bs-title');
     const user = button.getAttribute('data-bs-user');
@@ -120,14 +128,36 @@ user_modal.on('show.bs.modal', e => {
     }
 })
 
-
+userPasswordInput.on('input', ()=>{
+    userPasswordInput.removeClass('is-invalid');
+    userPasswordInput2.removeClass('is-invalid');
+})
+userPasswordInput2.on('input', ()=>{
+    userPasswordInput.removeClass('is-invalid');
+    userPasswordInput2.removeClass('is-invalid');
+})
 
 $('#user-modal-save').click(()=>{
     //user_modal.dismiss();
     let name = userNameInput.val();
     let passwd = userPasswordInput.val();
-    {#let groups = [... user_modal_groups.find("input:checked").map(function() { return this.name })];#}
-    sendCommand('Settings/Security/addUser', {name:name, password:passwd});
+    let passwd2 = userPasswordInput2.val();
+
+    if (passwd!==passwd2){
+        userPasswordInput.addClass('is-invalid');
+        userPasswordInput2.addClass('is-invalid');
+    } else if (userNameInput.attr('disabled') === undefined) {
+        user_modal.hide();
+        userPasswordInput.val('');
+        userPasswordInput2.val('');
+        sendCommand('Settings/Security/addUser', {username:name, password:passwd});
+    } else {
+        user_modal.hide();
+        userPasswordInput.val('');
+        userPasswordInput2.val('');
+        sendCommand('Settings/Security/setUserPass', {username:name, password:passwd});
+    }
+
 });
 
 

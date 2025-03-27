@@ -3,6 +3,7 @@ __all__ = [
     "Config",
     "FileInfo",
     "FitEnum",
+    "User",
     "get_dominant_color",
     "get_file_info",
     "human_readable_size",
@@ -257,7 +258,7 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
     __current: int = -1
     _last_time = 0
     _callback = None
-    _loop = None
+    # _loop = None
     _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0, media_type=MediaType.web)
     _first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0, media_type=MediaType.web)
     _waiting_evt = asyncio.Event()
@@ -267,6 +268,7 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
         if iterable is None:
             iterable = []
         super().__init__([Asset.model_validate(e) for e in iterable])
+        # self._loop = asyncio.get_event_loop()
         self.callback()
 
     def __setitem__(self, index, item):
@@ -414,15 +416,13 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
             return self[self._current]
         return self._first_boot if Config.first_boot else self._no_assets
 
-    def set_callback(self, callback: Callable[[list, str | None], Coroutine], loop: asyncio.AbstractEventLoop):
+    def set_callback(self, callback: Callable[[list, str | None], Coroutine]):
         self._callback = callback
-        self._loop = loop
 
     def callback(self):
-        if self._callback is not None and self._loop is not None:
-            asyncio.run_coroutine_threadsafe(self._callback(self.serialize(),
-                                                            self[self._current].uuid if self._current >= 0 else None),
-                                             self._loop)
+        if self._callback is not None:
+            asyncio.get_event_loop().create_task(self._callback(self.serialize(),
+                                                            self[self._current].uuid if self._current >= 0 else None))
 
     def serialize(self):
         return [a.model_dump(mode='json') for a in self]
@@ -640,16 +640,17 @@ class FileInfo(BaseModel):
 
 class UploadManager(FileSystemEventHandler):
 
-    def __init__(self, folder: Path, scan_callback: Callable[[dict], Coroutine] | None = None,
-                 loop: asyncio.AbstractEventLoop | None = None):
+    def __init__(self, folder: Path, scan_callback: Callable[[dict], Coroutine] | None = None):
         self._folder = folder
+        self._folder.mkdir(exist_ok=True)
+
         self._files: list[Path] = []
         self._files_info: dict[str, FileInfo] = {}
         self._disk_used = 0
         self._disk_total = disk_usage(folder).total
         self._disk_totalh = human_readable_size(self._disk_total)
         self._callback = scan_callback
-        self._evloop = loop
+        self._evloop = asyncio.get_event_loop()
 
     @property
     def folder(self) -> Path:
