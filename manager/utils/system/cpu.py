@@ -7,12 +7,13 @@ __all__ = [
 
 from time import sleep
 
-from psutil import _cpu_times_deltas, _cpu_tot_time  # type: ignore
-from psutil._common import LINUX, get_procfs_path, open_binary
+# noinspection PyProtectedMember,PyUnresolvedReferences
+from psutil import _cpu_times_deltas, _cpu_tot_time
+from psutil._common import get_procfs_path, open_binary
 from psutil._pslinux import CLOCK_TICKS, scputimes, set_scputimes_ntuple
 
 # reimplementation of psutil CPU related functions to get all CPU data at once
-# orginal implementation https://github.com/giampaolo/psutil
+# original implementation https://github.com/giampaolo/psutil
 
 
 # =====================================================================
@@ -52,6 +53,7 @@ def cpu_times():
         for line in f:
             if line.startswith(b'cpu'):
                 values = line.split()
+                # noinspection PyProtectedMember
                 fields = values[1:len(scputimes._fields) + 1]
                 fields = [float(x) / CLOCK_TICKS for x in fields]
                 entry = scputimes(*fields)
@@ -156,7 +158,6 @@ except Exception:
 # independent from cpu_percent() and they can both be used within
 # the same program.
 _last_cpu_times_2 = _last_cpu_times
-# _last_per_cpu_times_2 = _last_per_cpu_times
 
 
 def cpu_times_percent(interval=None):
@@ -173,11 +174,11 @@ def cpu_times_percent(interval=None):
     cpu_percent().
     """
     global _last_cpu_times_2
-    global _last_per_cpu_times_2
     blocking = interval is not None and interval > 0.0
     if interval is not None and interval < 0:
         raise ValueError("interval is not positive (got %r)" % interval)
 
+    # noinspection PyShadowingNames
     def calculate(t1, t2):
         nums = []
         times_delta = _cpu_times_deltas(t1, t2)

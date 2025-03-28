@@ -1,0 +1,56 @@
+__all__ = ["lsblk"]
+
+
+
+from json import loads
+from subprocess import PIPE, run
+from typing import Optional
+
+from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+
+class Blk(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    name:str                       = Field(description='device name')
+    rm:bool                        = Field(description='removable device')
+    size:int                       = Field(description='size of the device')
+    ro:bool                        = Field(description='read-only device')
+    type:str                       = Field(description='device type')
+    hotplug:bool                   = Field(description='removable or hotplug device (usb, pcmcia, ...)')
+    mountpoint:Optional[str]       = Field(description='where the device is mounted')
+    fssize:Optional[int]           = Field(description='filesystem size')
+    fstype:Optional[str]           = Field(description='filesystem type')
+    fsused:Optional[int]           = Field(description='filesystem size used')
+    fsuse_perc:Optional[int]       = Field(description='filesystem use percentage', alias='fsuse%')
+    fsavail:Optional[int]          = Field(description='filesystem size available')
+    children:'Optional[list[Blk]]' = []
+
+    # noinspection PyNestedDecorators
+    @field_validator('fsuse_perc', mode='before')
+    @classmethod
+    def validate_percentage(cls, v:str):
+        if not v:
+            return None
+        return int(v.split('%')[0])
+
+
+
+def lsblk():
+    return [Blk.model_validate(dev) for dev in loads(run([
+            '/usr/bin/lsblk', '-JMbe7',
+            '-oNAME,RM,SIZE,RO,TYPE,HOTPLUG,MOUNTPOINT,FSSIZE,FSTYPE,FSUSED,FSUSE%,FSAVAIL'
+        ], stdout=PIPE).stdout.decode())['blockdevices']]
+
+
+
+
+
+# if __name__ == '__main__':
+#     from subprocess import run, PIPE
+#     from json import loads, dumps
+#     # from utils.lsblk import Blk
+#     blks = []
+#     for dev in loads(run(['/usr/bin/lsblk', '-JMbe7', '-oNAME,RM,SIZE,RO,TYPE,HOTPLUG,MOUNTPOINT,FSSIZE,FSTYPE,FSUSED,FSUSE%,FSAVAIL'], stdout=PIPE).stdout.decode())['blockdevices']:
+#         b= Blk.model_validate(dev)
+#         blks.append(b.model_dump())
+#     print(dumps(blks, indent=4))

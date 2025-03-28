@@ -2,7 +2,7 @@ import asyncio
 
 import uvloop
 from loguru import logger
-import utils.constants as const
+import api.constants as const
 
 logger.info('Starting UniTotem Manager {}', const.__version__)
 
