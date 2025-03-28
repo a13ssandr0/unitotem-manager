@@ -2,25 +2,27 @@ from datetime import datetime
 from typing import Optional, Union, Annotated, Literal
 
 from pydantic import BeforeValidator
-from pydantic.color import Color
+from pydantic_extra_types.color import Color
 
-from utils.commons import UPLOADS
-from utils.models import Config, FitEnum, validate_date, MediaType, UserPerms
-from utils.ws.endpoints import WSAPIBase
-from utils.ws.responses import WSBroadcast, WSResponse
+from commons import UPLOADS
+from models import Config, FitEnum, validate_date, MediaType, UserPerms
+from ws.endpoints import WSAPIBase
+from ws.responses import WSBroadcast, WSResponse
 
 
 class Scheduler(WSAPIBase):
     @UserPerms.requires.scheduler
     def asset(self):
-        return WSBroadcast(self.asset, items=Config.assets.serialize(), current=Config.assets.current.uuid)
+        return WSBroadcast(items=Config.assets.serialize(), current=Config.assets.current.uuid)
 
     @UserPerms.requires.scheduler
     def file(self):
-        return WSBroadcast(self.file, files=UPLOADS.serialize())
+        return WSBroadcast(files=UPLOADS.serialize())
 
     @UserPerms.requires.scheduler
-    def add_url(self, items: list[str | dict] = []):
+    def add_url(self, items=None):
+        if items is None:
+            items = []
         for element in items:
             if isinstance(element, str):
                 element = {'url': element}
@@ -29,7 +31,9 @@ class Scheduler(WSAPIBase):
         Config.save()
 
     @UserPerms.requires.scheduler
-    def add_file(self, items: list[str | dict] = []):
+    def add_file(self, items=None):
+        if items is None:
+            items = []
         invalid = []
         for element in items:
             if isinstance(element, str):
@@ -46,19 +50,19 @@ class Scheduler(WSAPIBase):
                 invalid.append(element)
         Config.save()
         if invalid:
-            return WSResponse(self.add_file, error='Invalid elements', extra=invalid)
+            return WSResponse(error='Invalid elements', extra=invalid)
 
     @UserPerms.requires.scheduler
     def edit(self,
-                   uuid: str,
-                   name: Optional[str] = None,
-                   url: Optional[str] = None,
-                   duration: Optional[Union[int, float]] = None,
-                   fit: Optional[FitEnum] = None,
-                   bg_color: Union[Color, None, Literal[-1]] = -1,
-                   ena_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
-                   dis_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
-                   enabled: Optional[bool] = None):
+             uuid: str,
+             name: Optional[str] = None,
+             url: Optional[str] = None,
+             duration: Optional[Union[int, float]] = None,
+             fit: Optional[FitEnum] = None,
+             bg_color: Union[Color, None, Literal[-1]] = -1,
+             ena_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
+             dis_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
+             enabled: Optional[bool] = None):
         asset = Config.assets[uuid]
         if name is not None and asset.name != name:
             asset.name = name
@@ -85,7 +89,7 @@ class Scheduler(WSAPIBase):
     @UserPerms.requires.scheduler
     def current(self):
         if Config.enabled_asset_count:
-            return WSBroadcast(self.current, uuid=Config.assets.current.uuid)
+            return WSBroadcast(uuid=Config.assets.current.uuid)
 
     @UserPerms.requires.scheduler
     def delete(self, uuid: str):

@@ -2,7 +2,7 @@ from platform import node as get_hostname
 
 from fastapi import Request, HTTPException
 
-from utils.commons import TEMPLATES
+from ..templates import TEMPLATES
 from .descriptions import descriptions
 
 

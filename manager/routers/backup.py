@@ -9,13 +9,15 @@ from fastapi import APIRouter, Depends, UploadFile, Body, HTTPException
 from starlette import status
 from starlette.responses import Response
 
-import utils.constants as const
-from utils.audio import get_default_audio_device, set_default_audio_device
-from utils.commons import UPLOADS
-from utils.models import Config
-from utils.network import get_netplan_file_list, get_netplan_file, set_netplan, set_hostname, generate_netplan
-from utils.security import LOGMAN
-from utils.system import CRONTAB
+import api.constants as const
+from api.commons import UPLOADS
+from api.models import Config
+from routers.login import LOGMAN
+from utils.system.crontab import CRONTAB
+from api.ws.endpoints import UI_WS
+from utils.system.audio import get_default_audio_device, set_default_audio_device
+from utils.system.network.misc import set_hostname
+from utils.system.network.netplan import set_netplan, generate_netplan, get_netplan_file, get_netplan_file_list
 
 router = APIRouter()
 
@@ -99,7 +101,7 @@ async def factory_reset():
     CRONTAB.remove_all(comment=CRONTAB._cron_re)
     CRONTAB.write()
 
-    await const.UI_WS.broadcast('reset', nocache=True)
+    await UI_WS.broadcast('reset', nocache=True)
 
     for file in UPLOADS.files:
         UPLOADS.remove(file)

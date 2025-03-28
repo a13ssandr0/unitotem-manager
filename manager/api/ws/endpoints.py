@@ -15,13 +15,12 @@ from fastapi import WebSocket
 from loguru import logger
 from pydantic import validate_call
 
-import utils.constants as const
-from utils import commons
-from utils.commons import UPLOADS
-from utils.models import Config, UserPerms, User
+import api.constants as const
+from api.commons import UPLOADS
+from api.models import Config, UserPerms, User
 from utils.objs import dict_sort
-from utils.security import LOGMAN, NotAuthenticatedException
-from utils.ws.wsmanager import Context
+from routers.login import LOGMAN, NotAuthenticatedException
+from api.ws.wsmanager import Context
 from .responses import WSBroadcast, WSResponse, WSMulticast
 from .wsmanager import WSManager, WSAPIBase
 
@@ -57,8 +56,6 @@ class WebSocketAPI:
             raise ValueError(f"Class {cls.__name__} is not a subclass of WSAPIBase")
 
         self.generators.update(self.__treegen(cls, prefix))
-        # update tree for permission management
-        commons.API_TREE = benedict({k: k for k in self.generators.keys() if '/_' not in k})
 
     # noinspection PyPep8Naming
     def __treegen(self, Cls: type, prefix: str = None):

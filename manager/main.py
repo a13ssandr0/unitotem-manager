@@ -25,19 +25,22 @@ from psutil import (cpu_count, sensors_battery, sensors_fans,
                     sensors_temperatures, virtual_memory)
 from watchdog.observers import Observer
 
-import utils.commons
-import utils.constants as const
+import api.constants as const
 from routers.error import http_exception_handler
-from utils.audio import get_audio_devices
-from utils.commons import SHUTDOWN_EVENT, UPLOADS, TEMPLATES
-from utils.constants import Arguments
-from utils.lsblk import lsblk
-from utils.models import User, Config, human_readable_size
-from utils.security import login_redirect, NotAuthenticatedException, login_router, LOGMAN
-from utils.system import get_sysinfo
-from utils.ws.endpoints import api, DISPLAYS, WINDOW, REMOTE_WS, WS, router as ws_endpoints_router
-from utils.ws.wsmanager import WSManager
-from utils.network import get_ifaces, IF_WIRELESS, do_ip_addr, FALLBACK_AP_FILE, start_hotspot, wifi_qr, stop_hostpot
+from utils.system.audio import get_audio_devices
+from api.commons import SHUTDOWN_EVENT, UPLOADS
+from routers.templates import TEMPLATES
+from api.constants import Arguments
+from utils.system.lsblk import lsblk
+from api.models import User, Config, human_readable_size
+from routers.login import login_redirect, NotAuthenticatedException, login_router, LOGMAN
+from utils.system.sysinfo import get_sysinfo
+from api.ws.endpoints import api, DISPLAYS, WINDOW, REMOTE_WS, WS, router as ws_endpoints_router
+from api.ws.wsmanager import WSManager
+from api.network import IF_WIRELESS
+from utils.system.network.ip import do_ip_addr
+from utils.system.network.misc import get_ifaces
+from utils.system.network.hotspot import start_hotspot, stop_hostpot, wifi_qr, FALLBACK_AP_FILE
 
 logger.debug(pformat(api.tree))
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)

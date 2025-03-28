@@ -17,12 +17,11 @@ from loguru import logger
 from pydantic import PositiveInt
 from wsproto.events import CloseConnection
 
-import utils.constants as const
-from utils.commons import SHUTDOWN_EVENT
-from utils.models import Config
-from utils.ws.endpoints import WSAPIBase
-from utils.ws.responses import WSBroadcast
-
+import constants as const
+from commons import SHUTDOWN_EVENT
+from models import Config
+from ws.endpoints import WSAPIBase
+from ws.responses import WSBroadcast
 
 REMOTE_CONNECTED = False
 
@@ -30,13 +29,13 @@ REMOTE_CONNECTED = False
 class Remote(WSAPIBase):
     def getMode(self):
         return WSBroadcast(self.getMode,
-                            remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
-                            remote_connected=REMOTE_CONNECTED,
-                            remote_port=Config.remote_server_port,
-                            remote_clients=list(Config.remote_clients.items()))
+                           remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+                           remote_connected=REMOTE_CONNECTED,
+                           remote_port=Config.remote_server_port,
+                           remote_clients=list(Config.remote_clients.items()))
 
     def setMode(self, remote_server: Optional[IPv4Address],
-                      remote_port: Optional[PositiveInt] = const.default_port_secure):
+                remote_port: Optional[PositiveInt] = const.default_port_secure):
         remote_port = remote_port or const.default_port_secure
         if Config.remote_server_ip == remote_server and Config.remote_server_port == remote_port:
             return
@@ -104,7 +103,8 @@ class Remote(WSAPIBase):
                         if isinstance(msg, CloseConnection):
                             if msg.code == 4023:  # Server forced disconnection for unpairing
                                 REMOTE_CONNECTED = False
-                                await self.setMode(remote_server=None, remote_port=None)
+                                # TODO: this should be broadcast
+                                self.setMode(remote_server=None, remote_port=None)
                                 return
                             break
                         data = loads(getattr(msg, 'data', '{}'))
