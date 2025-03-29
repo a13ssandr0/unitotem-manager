@@ -24,6 +24,8 @@ from PyQt5.QtWebEngineWidgets import QWebEngineSettings, QWebEngineView
 from PyQt5.QtWidgets import QApplication
 from requests import get
 
+import routers.settings
+
 BUS = DBusServiceIdentifier(
     namespace=("org", "unitotem", "viewer"),
     message_bus=SystemMessageBus()
@@ -131,7 +133,7 @@ if __name__ == "__main__":
 
 
     web.load(QUrl('file://' + abspath(join(dirname(sys.argv[0]), 'templates', 'boot-screen.html'))))
-    web.settings().setAttribute(QWebEngineSettings.PlaybackRequiresUserGesture, False)
+    routers.settings.settings().setAttribute(QWebEngineSettings.PlaybackRequiresUserGesture, False)
     web.setWindowFlags(Qt.FramelessWindowHint)
     web.setGeometry(*app.screens()[1].geometry().getRect())
     web.show()

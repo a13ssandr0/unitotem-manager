@@ -1,38 +1,27 @@
 __all__ = [
     "Asset",
     "Config",
-    "FileInfo",
     "FitEnum",
-    "User",
-    "UserPerms",
-    "get_dominant_color",
-    "get_file_info",
-    "human_readable_size",
     "MediaType",
     "UploadManager",
     "validate_date"
 ]
 
 import asyncio
-import dataclasses
 import os
 from asyncio import iscoroutinefunction
-from collections import namedtuple
 from datetime import datetime
-from enum import IntEnum, Enum
+from enum import IntEnum
 from ipaddress import IPv4Address
-from math import ceil, inf
+from math import inf
 from os import environ, remove
-from os.path import basename, getsize, isfile, join
 from pathlib import Path
 from shutil import disk_usage
 from time import time
 from typing import Annotated, Callable, Coroutine, Optional, Union
 from urllib.parse import urlsplit
 
-from PIL import Image
 from aiofiles import open as aopen
-from loguru import logger
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from dotenv import load_dotenv, set_key
@@ -40,15 +29,15 @@ from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field,
                       PositiveInt, PrivateAttr, field_serializer,
                       field_validator, model_validator)
 from pydantic_extra_types.color import Color
-from pymediainfo import MediaInfo
 from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from api import constants as const
 from utils.async_timer import Timer
-from api.ws import WSBroadcast
-from api.ws import WSAPIBase
+from utils.models.user import User, UserData, UserPerms
+from utils.storage.file_info import get_file_info, FileInfo
+from utils.units import human_readable_size
 
 load_dotenv(const.envfile)
 
@@ -151,6 +140,7 @@ class Asset(BaseModel):
         TIMERS[self.uuid]['dis'].cancel()
         del TIMERS[self.uuid]
 
+    # noinspection PyNestedDecorators
     @field_validator('url')
     @classmethod
     def url_guesser(cls, v):
@@ -163,6 +153,7 @@ class Asset(BaseModel):
                 scheme = 'http://'
         return scheme + v
 
+    # noinspection PyNestedDecorators
     @field_validator('duration')
     @classmethod
     def duration_default(cls, v, info):
@@ -174,6 +165,7 @@ class Asset(BaseModel):
                 Config.assets.next_a()
         return v
 
+    # noinspection PyNestedDecorators
     @field_validator('media_type', mode='before')
     @classmethod
     def mime_validator(cls, v):
@@ -428,76 +420,6 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
         return [a.model_dump(mode='json') for a in self]
 
 
-class RequiresMeta(type):
-    def __getattr__(cls, name):
-        try:
-            logger.trace(f'UserPerms.requires: {UserPerms[name].value}')
-            if name == 'admin':
-                logger.debug('Explicitly setting admin permission is redundant as it is assumed by default')
-        except KeyError:
-            if name != 'none':
-                raise KeyError(f'Permission "{name}" does not exist in {UserPerms.__name__}')
-
-        def set_perm(func):
-            logger.trace(f'Adding permission {name} to {func.__name__}')
-            if hasattr(func, 'perms') and isinstance(func.perms, set):
-                if name!="none":
-                    func.perms.add(UserPerms[name])
-                    # noinspection PyTypeChecker
-                    logger.debug(f'{func.__name__} requires {' or '.join(func.perms)} permission to be executed')
-                else:
-                    logger.debug('{func.__name__} already has stricter permissions, ignoring "none"')
-            elif name != "none":
-                func.perms = {UserPerms[name]}
-                logger.debug(f'{func.__name__} requires {name} permission to be executed')
-            else:
-                func.perms = None
-                logger.debug(f'{func.__name__} requires no permission to be executed')
-            return func
-        return set_perm
-
-
-class UserPerms(str, Enum):
-    scheduler = "scheduler"
-    power = "power"
-    audio = "audio"
-    admin = "admin"
-
-    # noinspection PyPep8Naming
-    @staticmethod
-    class requires(metaclass=RequiresMeta):
-        pass
-
-    @classmethod
-    def namedtuple(cls, *args, **kwargs):
-        return namedtuple(cls.__name__, [e.value for e in cls], defaults=[False for _ in cls])(*args, **kwargs)
-
-
-class UserData(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, validate_assignment=True)
-    password: str = Field(validation_alias='pass')
-    perms: set[UserPerms]
-
-    # noinspection PyNestedDecorators
-    @field_validator('perms', mode='after')
-    @classmethod
-    def validate_perms(cls, val: set[UserPerms]):
-        if UserPerms.admin in val:
-            return {UserPerms.admin}
-        else:
-            return val
-
-
-@dataclasses.dataclass
-class User:
-    name: str
-    perms: set[UserPerms]
-
-    @property
-    def has_perm(self):
-        return UserPerms.namedtuple(**{p.value:(p in self.perms or UserPerms.admin in self.perms) for p in UserPerms})
-
-
 # TODO: replace with BaseSettings
 class _Config(BaseModel):
     model_config = ConfigDict(
@@ -627,15 +549,6 @@ class _Config(BaseModel):
 
 
 Config = _Config()  # type: ignore
-
-
-class FileInfo(BaseModel):
-    model_config = ConfigDict(validate_assignment=True, frozen=True)
-    filename: str
-    duration: Optional[str]
-    duration_s: int = Config.def_duration
-    size: str
-    mime: Optional[str]
 
 
 class UploadManager(FileSystemEventHandler):
@@ -784,48 +697,3 @@ class UploadManager(FileSystemEventHandler):
         self.scan_folder()
 
 
-def human_readable_size(size, decimal_places=2):
-    for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
-        if size < 1024.0:
-            break
-        size /= 1024.0
-    return f"{size:.{decimal_places}f}{unit}"  # type: ignore
-
-
-def get_file_info(b, *f, def_dur=Config.def_duration):
-    dur = None
-    dur_s = def_dur
-    mime = None
-    if isfile(f := join(b, *f)):
-        for track in MediaInfo.parse(f).general_tracks:  # type: ignore
-            track_data = track.to_data()
-            mime = track.internet_media_type
-            if 'duration' in track_data:
-                dur = track_data.get('other_duration', [None])[0]
-                dur_s = ceil(int(track_data['duration']) / 1000)
-            break  # we only need the first general track
-    return FileInfo(filename=basename(f), duration=dur, duration_s=dur_s,
-                    size=human_readable_size(getsize(f)), mime=mime)
-
-
-def get_dominant_color(pil_img: Image.Image, palette_size=16):  # https://stackoverflow.com/a/61730849/9655651
-    # Resize image to speed up processing
-    img = pil_img.copy()
-    img.thumbnail((100, 100))
-    # Reduce colors (uses k-means internally)
-    paletted = img.convert('P', palette=Image.Palette.ADAPTIVE, colors=palette_size)
-    # Find the color that occurs most often
-    palette = paletted.getpalette()
-    color_counts = sorted(paletted.getcolors(), reverse=True)
-    palette_index = color_counts[0][1]
-    dominant_color = palette[palette_index * 3:palette_index * 3 + 3]
-    return hex((dominant_color[0] << 16) + (dominant_color[1] << 8) + dominant_color[2])
-
-
-class Settings(WSAPIBase):
-    @UserPerms.requires.scheduler
-    def default_duration(self, duration: Optional[int] = None):
-        if duration is not None:
-            Config.def_duration = duration
-            Config.save()
-        return WSBroadcast('Settings/default_duration', duration=Config.def_duration)

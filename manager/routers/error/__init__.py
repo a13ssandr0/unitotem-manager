@@ -2,12 +2,12 @@ from platform import node as get_hostname
 
 from fastapi import Request, HTTPException
 
-from ..templates import TEMPLATES
-from .descriptions import descriptions
+from routers.error.descriptions import descriptions
+from templates import templates
 
 
 def http_exception_handler(request: Request, exc: HTTPException):
-    return TEMPLATES.TemplateResponse(request, 'errors/error.html.j2', context={
+    return templates.TemplateResponse(request, 'errors/error.html.j2', context={
         'hostname': get_hostname(),
         'code': exc.status_code,
         'short_desc': exc.detail,

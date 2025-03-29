@@ -2,7 +2,7 @@ __all__ = ["Audio"]
 
 from typing import Optional
 
-from api.models import UserPerms
+from utils.models.user import UserPerms
 from api.ws.responses import WSBroadcast
 from api.ws.wsmanager import WSAPIBase
 from utils.system.audio import get_audio_devices, set_default_audio_device, set_volume, set_mute

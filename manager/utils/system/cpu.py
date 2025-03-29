@@ -12,6 +12,7 @@ from psutil import _cpu_times_deltas, _cpu_tot_time
 from psutil._common import get_procfs_path, open_binary
 from psutil._pslinux import CLOCK_TICKS, scputimes, set_scputimes_ntuple
 
+
 # reimplementation of psutil CPU related functions to get all CPU data at once
 # original implementation https://github.com/giampaolo/psutil
 

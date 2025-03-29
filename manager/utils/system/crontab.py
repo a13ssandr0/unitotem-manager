@@ -19,7 +19,7 @@ class UniCron(CronTab):
         else:
             return False
 
-    def read(self, filename=...) -> 'UniCron':
+    def read(self, filename=None) -> 'UniCron':
         super().read(filename)
         return self
 

@@ -1,4 +1,5 @@
 __all__ = [
+    "dict_sort",
     "find_by_attribute",
     "flatten",
 ]

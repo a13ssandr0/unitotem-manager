@@ -4,10 +4,11 @@ from typing import Optional, Union, Annotated, Literal
 from pydantic import BeforeValidator
 from pydantic_extra_types.color import Color
 
-from commons import UPLOADS
-from models import Config, FitEnum, validate_date, MediaType, UserPerms
-from ws.endpoints import WSAPIBase
-from ws.responses import WSBroadcast, WSResponse
+from api.commons import UPLOADS
+from api.models import Config, FitEnum, validate_date, MediaType
+from utils.models.user import UserPerms
+from api.ws.endpoints import WSAPIBase
+from api.ws.responses import WSBroadcast, WSResponse
 
 
 class Scheduler(WSAPIBase):
@@ -118,3 +119,12 @@ class Scheduler(WSAPIBase):
     def reorder(self, from_i: int, to_i: int):
         Config.assets.move(from_i, to_i)
         Config.save()
+
+
+class Settings(WSAPIBase):
+    @UserPerms.requires.scheduler
+    def default_duration(self, duration: Optional[int] = None):
+        if duration is not None:
+            Config.def_duration = duration
+            Config.save()
+        return WSBroadcast(duration=Config.def_duration)
