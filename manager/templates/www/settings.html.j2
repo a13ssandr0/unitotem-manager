@@ -3,7 +3,7 @@
 {% block main_content %}
 <nav>
     <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="/settings"><i class="bi bi-sliders"></i> Settings</a></li>
+        <li class="breadcrumb-item"><a href="/templates/www/settingss/www/settings"><i class="bi bi-sliders"></i> Settings</a></li>
         <li class="breadcrumb-item active">{% for name, tab, _, icon, __ in tabs %}{% if tab==cur_tab %}<i class="bi bi-{{icon}}"></i> {{name}}{% endif %}{% endfor %}</li>
     </ol>
 </nav>

@@ -17,11 +17,11 @@ from loguru import logger
 from pydantic import PositiveInt
 from wsproto.events import CloseConnection
 
-import constants as const
-from commons import SHUTDOWN_EVENT
-from models import Config
-from ws.endpoints import WSAPIBase
-from ws.responses import WSBroadcast
+import api.constants as const
+from api.commons import SHUTDOWN_EVENT
+from api.models import Config
+from api.ws.endpoints import WSAPIBase
+from api.ws.responses import WSBroadcast
 
 REMOTE_CONNECTED = False
 

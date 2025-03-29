@@ -3,14 +3,12 @@ import signal
 import warnings
 from argparse import ArgumentParser
 from os.path import exists
-from platform import freedesktop_os_release as os_release
-from platform import node as get_hostname
-from pprint import pformat
+from platform import freedesktop_os_release as os_release, node as get_hostname
 from traceback import format_exc
-from typing import Any, Literal, Union
+from typing import Literal, Union
 
 import urllib3
-from fastapi import (Depends, FastAPI, Request, UploadFile, status, HTTPException)
+from fastapi import (FastAPI, HTTPException, Request)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse
@@ -20,29 +18,23 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
 from loguru import logger
-from natsort import natsorted
-from psutil import (cpu_count, sensors_battery, sensors_fans,
-                    sensors_temperatures, virtual_memory)
 from watchdog.observers import Observer
 
 import api.constants as const
-from routers.error import http_exception_handler
-from utils.system.audio import get_audio_devices
+import routers
 from api.commons import SHUTDOWN_EVENT, UPLOADS
-from routers.templates import TEMPLATES
 from api.constants import Arguments
-from utils.system.lsblk import lsblk
-from api.models import User, Config, human_readable_size
-from routers.login import login_redirect, NotAuthenticatedException, login_router, LOGMAN
-from utils.system.sysinfo import get_sysinfo
-from api.ws.endpoints import api, DISPLAYS, WINDOW, REMOTE_WS, WS, router as ws_endpoints_router
+from api.models import Config
+from api.ws.endpoints import REMOTE_WS, WS, api
 from api.ws.wsmanager import WSManager
-from api.network import IF_WIRELESS
+from routers.error import http_exception_handler
+from routers.login import NotAuthenticatedException, login_redirect
+from templates import templates
+from utils.logging import Logger
+from utils.system.network.hotspot import FALLBACK_AP_FILE, start_hotspot, stop_hostpot, wifi_qr
 from utils.system.network.ip import do_ip_addr
-from utils.system.network.misc import get_ifaces
-from utils.system.network.hotspot import start_hotspot, stop_hostpot, wifi_qr, FALLBACK_AP_FILE
+from utils.system.sysinfo import get_sysinfo
 
-logger.debug(pformat(api.tree))
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
 # noinspection PyTypeChecker
@@ -59,85 +51,19 @@ WWW = FastAPI(
         HTTPException: http_exception_handler,
     }
 )
-WWW.include_router(login_router)
-WWW.include_router(ws_endpoints_router)
-
-
-@WWW.post("/api/scheduler/upload", status_code=status.HTTP_201_CREATED)
-async def media_upload(files: list[UploadFile], user: User = Depends(LOGMAN)):
-    if not user.has_perm.scheduler:
-        raise HTTPException(status_code=403)
-
-    for infile in files:
-        await UPLOADS.save(infile)
-
-
-@WWW.get("/", response_class=HTMLResponse)
-async def scheduler(request: Request, user: User = Depends(LOGMAN)):
-    template = 'index.html.j2' if user.has_perm.scheduler else 'common/html/base.html.j2'
-
-    return TEMPLATES.TemplateResponse(request, template, dict(
-        ut_vers=const.__version__,
-        logged_user=user,
-        hostname=get_hostname(),
-        disp_size=WINDOW['bounds'],
-        disk_used=UPLOADS.disk_usedh,  # type: ignore
-        disk_total=UPLOADS.disk_totalh  # type: ignore
-    ))
-
-
-@WWW.get("/settings", response_class=HTMLResponse)
-@WWW.get("/settings/{tab}", response_class=HTMLResponse)
-async def settings(request: Request, tab: str = 'main_menu', user: User = Depends(LOGMAN)):
-    if not (user.has_perm.admin or
-            user.has_perm.scheduler and tab in ['playback', 'main_menu'] or
-            user.has_perm.audio and tab in ['audio', 'main_menu']):
-        raise HTTPException(status_code=403)
-
-    data: dict[str, Any] = dict(
-        ut_vers=const.__version__,
-        logged_user=user,
-        cur_tab=tab,
-        disp_size=WINDOW['bounds'],
-        disk_used=UPLOADS.disk_usedh,  # type: ignore
-        disk_total=UPLOADS.disk_totalh,  # type: ignore
-        def_wifi=get_ifaces(IF_WIRELESS)[0]
-    )
-    match tab:
-        case 'audio':
-            data['audio'] = get_audio_devices()
-        case 'display':
-            data['displays'] = DISPLAYS
-        case 'security':
-            data['api_tree'] = api.tree
-    try:
-        return TEMPLATES.TemplateResponse(request, f'settings/{tab}.html.j2', data)
-    except Exception:
-        logger.error(format_exc())
-
-
-@WWW.get('/info', response_class=HTMLResponse)
-def info(request: Request, user: User = Depends(LOGMAN)):
-    return TEMPLATES.TemplateResponse(request, 'info.html.j2', dict(
-        ut_vers=const.__version__,
-        logged_user=user,
-        disp_size=WINDOW['bounds'],
-        disk_used=UPLOADS.disk_usedh,  # type: ignore
-        disk_total=UPLOADS.disk_totalh,  # type: ignore
-        cpu_count=cpu_count(),
-        ram_tot=human_readable_size(virtual_memory().total),
-        disks=[blk.model_dump() for blk in lsblk()],
-        has_battery=sensors_battery() is not None,
-        temp_devs={k: [x._asdict() for x in natsorted(v, key=lambda x: x.label)] for k, v in
-                   sensors_temperatures().items()},
-        fan_devs={k: [x._asdict() for x in v] for k, v in sensors_fans().items()},
-    ))
+WWW.include_router(routers.login.router)
+WWW.include_router(routers.websocket.remote.router)
+WWW.include_router(routers.websocket.webview_controller.router)
+WWW.include_router(routers.websocket.web_ui.router)
+WWW.include_router(routers.scheduler.router)
+WWW.include_router(routers.settings.router)
+WWW.include_router(routers.backup.router)
 
 
 @WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
 async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
     ip = do_ip_addr(get_default=True)
-    return TEMPLATES.TemplateResponse(request, f'{page}.html.j2', dict(
+    return templates.TemplateResponse(request, f'{page}.html.j2', dict(
         ut_vers=const.__version__,
         os_vers=os_release()['PRETTY_NAME'],
         ip_addr=ip['addr'][0]['addr'] if ip else None,
@@ -179,8 +105,7 @@ REMOTE_WS.pk = Config.rsa_pk
 loop = asyncio.get_event_loop()
 loop.add_signal_handler(signal.SIGTERM, SHUTDOWN_EVENT.set, ())
 
-Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current))#,
-
+Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current))  # ,
 
 observer = Observer()
 # noinspection PyTypeChecker
@@ -210,8 +135,7 @@ loop.create_task(info_loop(WS, SHUTDOWN_EVENT), name='info_loop')
 
 loop.create_task(serve(WWW, HyperConfig().from_mapping(  # type: ignore
     bind=f'{cmdargs.https_bind}:{cmdargs.https_port}', insecure_bind=f'{cmdargs.http_bind}:{cmdargs.http_port}',
-    certfile=const.certfile, keyfile=const.keyfile,
-    accesslog='-', errorlog='-', loglevel='INFO'
+    certfile=const.certfile, keyfile=const.keyfile, logger_class=Logger
 ), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server')  # type: ignore
 
 loop.run_forever()

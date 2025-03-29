@@ -19,7 +19,6 @@ certfile = '/etc/ssl/unitotem.pem'
 keyfile = '/etc/ssl/unitotem.pem'
 
 uploads_folder = __file__.joinpath('../../uploaded').resolve()
-templates_folder = __file__.joinpath('../../templates').resolve()
 static_folder = __file__.joinpath('../../static').resolve()
 
 def_duration = 30

@@ -1,6 +1,6 @@
 __all__ = [
     "login_redirect",
-    "login_router",
+    "router",
     "LoginForm",
     "LOGMAN",
     "NotAuthenticatedException"
@@ -25,8 +25,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 import api.constants as const
-from routers.templates import TEMPLATES
-from api.models import Config, User
+from api.models import Config
+from utils.models.user import User
+from templates import templates
 from utils.system.network.ip import do_ip_addr
 
 load_dotenv(const.envfile)
@@ -77,10 +78,10 @@ LOGMAN = LoginManager(
 )
 LOGMAN.user_loader()(Config.get_user)
 
-login_router = APIRouter()
+router = APIRouter()
 
 
-@login_router.post(LOGMAN.model.flows.password.tokenUrl)
+@router.post(LOGMAN.model.flows.password.tokenUrl)
 async def login(data: LoginForm = Depends()):
     if not Config.authenticate(data.username, data.password):
         raise InvalidCredentialsException
@@ -92,7 +93,7 @@ async def login(data: LoginForm = Depends()):
     return resp
 
 
-@login_router.get("/remote/public_key")
+@router.get("/remote/public_key")
 async def get_public_key():
     return Response(Config.rsa_pk.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
@@ -100,7 +101,7 @@ async def get_public_key():
     ), media_type="text/plain")
 
 
-@login_router.get('/login')
+@router.get('/login')
 async def login_page(request: Request, src: Optional[str] = '/'):
     try:
         await LOGMAN(request)
@@ -110,7 +111,7 @@ async def login_page(request: Request, src: Optional[str] = '/'):
         pass
 
     ip = do_ip_addr(get_default=True)
-    return TEMPLATES.TemplateResponse(request, 'login.html.j2', dict(
+    return templates.TemplateResponse(request, 'login.html.j2', dict(
         src=src,
         ut_vers=const.__version__,
         os_vers=os_release()['PRETTY_NAME'],
@@ -119,14 +120,14 @@ async def login_page(request: Request, src: Optional[str] = '/'):
     ))
 
 
-@login_router.get('/logout')
+@router.get('/logout')
 async def logout():
     resp = RedirectResponse('/')
     resp.set_cookie(key=LOGMAN.cookie_name, value='', httponly=True, samesite='strict', max_age=0)
     return resp
 
 
-@login_router.post("/api/settings/set_passwd")
+@router.post("/api/settings/set_passwd")
 async def set_pass(request: Request, response: Response, password: str, user: User = Depends(LOGMAN)):
     Config.change_password(user.name, password)
     Config.save()

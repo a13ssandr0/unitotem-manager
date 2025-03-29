@@ -1,9 +1,10 @@
 from loguru import logger
 
-from models import Config, UserPerms
-from ws.responses import WSBroadcast, WSResponse, WSMulticast
-from ws.wsmanager import Context
-from ws.wsmanager import WSAPIBase
+from api.models import Config
+from utils.models.user import UserPerms
+from api.ws.responses import WSBroadcast, WSResponse, WSMulticast
+from api.ws.wsmanager import Context
+from api.ws.wsmanager import WSAPIBase
 
 
 class Security(WSAPIBase):

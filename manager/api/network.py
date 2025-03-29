@@ -4,15 +4,16 @@ from typing import Optional
 from werkzeug.utils import secure_filename
 
 import utils.system.network.hotspot
-from models import Config, UserPerms
+from api.models import Config
+from utils.models.user import UserPerms
+from api.ws.responses import WSBroadcast, WSResponse
+from api.ws.wsmanager import WSAPIBase
 from utils.system.network.hotspot import stop_hostpot
 from utils.system.network.ip import do_ip_addr
 from utils.system.network.misc import set_hostname
 from utils.system.network.netplan import set_netplan, generate_netplan, create_netplan, del_netplan_file, \
     get_netplan_file, get_netplan_file_list
 from utils.system.network.wifi import get_wifis
-from ws.responses import WSBroadcast, WSResponse
-from ws.wsmanager import WSAPIBase
 
 
 # from https://github.com/RedHatInsights/insights-core
