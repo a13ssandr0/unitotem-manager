@@ -3,25 +3,21 @@ __all__ = [
     "Config",
     "FitEnum",
     "MediaType",
-    "UploadManager",
     "validate_date"
 ]
 
 import asyncio
 import os
-from asyncio import iscoroutinefunction
 from datetime import datetime
 from enum import IntEnum
 from ipaddress import IPv4Address
 from math import inf
-from os import environ, remove
+from os import environ, environ as env, remove
 from pathlib import Path
-from shutil import disk_usage
 from time import time
 from typing import Annotated, Callable, Coroutine, Optional, Union
 from urllib.parse import urlsplit
 
-from aiofiles import open as aopen
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from dotenv import load_dotenv, set_key
@@ -29,15 +25,12 @@ from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field,
                       PositiveInt, PrivateAttr, field_serializer,
                       field_validator, model_validator)
 from pydantic_extra_types.color import Color
-from watchdog.events import FileSystemEventHandler
 from werkzeug.security import check_password_hash, generate_password_hash
-from werkzeug.utils import secure_filename
 
 from api import constants as const
 from utils.async_timer import Timer
+from utils.extras import strtobool
 from utils.models.user import User, UserData, UserPerms
-from utils.storage.file_info import get_file_info, FileInfo
-from utils.units import human_readable_size
 
 load_dotenv(const.envfile)
 
@@ -45,8 +38,6 @@ if 'instance_id' not in environ:
     environ['instance_id'] = os.urandom(16).hex()
     const.envfile.touch(mode=0o600)
     set_key(const.envfile, 'instance_id', environ['instance_id'])
-
-_buf_size = 64 * 1024 * 1024  # 64MB buffer
 
 TIMERS: dict[str, dict[str, Timer]] = {}
 
@@ -74,6 +65,7 @@ class MediaType(IntEnum):
 
 
 class Asset(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
     name: str = ''
     url: str
     duration: Union[int, float] = Field(
@@ -226,15 +218,7 @@ class Asset(BaseModel):
         return dt.strftime('%4Y-%m-%dT%H:%M')
 
     def __bool__(self):
-        return bool(self.enabled)
-
-    def __add__(self, other):
-        if isinstance(other, Asset):
-            other = other.enabled
-        return self.enabled + other
-
-    def __radd__(self, other):
-        return self.__add__(other)
+        return self.enabled
 
     def __eq__(self, __value) -> bool:
         try:
@@ -242,15 +226,12 @@ class Asset(BaseModel):
         except:
             return False
 
-    class Config:
-        validate_assignment = True
 
 
 class AssetsList(list[Asset]):  # , Iterator[Asset]):
     __current: int = -1
     _last_time = 0
     _callback = None
-    # _loop = None
     _no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0, media_type=MediaType.web)
     _first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0, media_type=MediaType.web)
     _waiting_evt = asyncio.Event()
@@ -260,7 +241,6 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
         if iterable is None:
             iterable = []
         super().__init__([Asset.model_validate(e) for e in iterable])
-        # self._loop = asyncio.get_event_loop()
         self.callback()
 
     def __setitem__(self, index, item):
@@ -406,7 +386,7 @@ class AssetsList(list[Asset]):  # , Iterator[Asset]):
     def current(self):
         if 0 <= self._current < super().__len__():
             return self[self._current]
-        return self._first_boot if Config.first_boot else self._no_assets
+        return self._first_boot if strtobool(env['unitotem_first_boot']) else self._no_assets
 
     def set_callback(self, callback: Callable[[list, str | None], Coroutine]):
         self._callback = callback
@@ -427,11 +407,11 @@ class _Config(BaseModel):
         arbitrary_types_allowed=True
     )
     # TODO: switch from Field assignment to Field annotation
-    assets: AssetsList = Field(AssetsList(), alias='urls')
+    assets: AssetsList = Field(default_factory=AssetsList, alias='urls')
     def_duration: int = Field(const.def_duration, alias='default_duration', ge=0)
     users: dict[str, UserData] = Field(default_factory=lambda: {
-        'admin': UserData(  # default user: name=admin; password=admin (pre-hashed)
-            password='pbkdf2:sha256:260000$Q9SjfHgne5TOB3rb$f2c264b00585135a0c19930ea60e35d45ed862e8c6245d513c45f3f42df51d4c',
+        'admin': UserData(  # default user: name=admin; password=admin
+            password=generate_password_hash('admin'),
             perms={UserPerms.admin},
         )
     })
@@ -442,7 +422,6 @@ class _Config(BaseModel):
     rsa_pk: rsa.RSAPrivateKey = Field(default_factory=lambda: rsa.generate_private_key(65537, 4096))
     remote_clients: dict[str, dict[str, str | int]] = Field(default_factory=dict)
     filename: Union[str, Path] = Field(const.default_config_file, exclude=True)
-    first_boot: bool = Field(True, exclude=True)
 
     # noinspection PyNestedDecorators
     @field_validator('assets', mode='before')
@@ -488,7 +467,7 @@ class _Config(BaseModel):
             return rsa_pk.public_bytes(encoding=serialization.Encoding.PEM,
                                        format=serialization.PublicFormat.SubjectPublicKeyInfo).decode()
 
-    def __call__(self, *, obj=None, filename=filename, first_boot=False):
+    def __call__(self, *, obj=None, filename=filename):
         if obj is None:
             self.filename = filename
             with open(filename) as o:
@@ -506,7 +485,6 @@ class _Config(BaseModel):
         self.remote_server_pk = obj.remote_server_pk
         self.rsa_pk = obj.rsa_pk
         self.remote_clients = obj.remote_clients
-        self.first_boot = first_boot
 
     def save(self, path: Union[None, str, Path] = None):
         if path is None:
@@ -514,12 +492,13 @@ class _Config(BaseModel):
         with open(path, 'w') as conf_f:
             conf_f.write(self.model_dump_json(indent=4))
         self.filename = path
-        self.first_boot = False
+        env['unitotem_first_boot'] = 'False'
 
     def reset(self):
         remove(self.filename)
+        env['unitotem_first_boot'] = 'True'
         # noinspection PyArgumentList
-        self(obj = _Config(), first_boot=True)
+        self(obj = _Config())
 
     def add_user(self, user: str, password: str, perms:set[UserPerms]=None):
         if perms is None:
@@ -549,151 +528,5 @@ class _Config(BaseModel):
 
 
 Config = _Config()  # type: ignore
-
-
-class UploadManager(FileSystemEventHandler):
-
-    def __init__(self, folder: Path, scan_callback: Callable[[dict], Coroutine] | None = None):
-        self._folder = folder
-        self._folder.mkdir(exist_ok=True)
-
-        self._files: list[Path] = []
-        self._files_info: dict[str, FileInfo] = {}
-        self._disk_used = 0
-        self._disk_total = disk_usage(folder).total
-        self._disk_totalh = human_readable_size(self._disk_total)
-        self._callback = scan_callback
-        self._evloop = asyncio.get_event_loop()
-
-    @property
-    def folder(self) -> Path:
-        return self._folder
-
-    @property
-    def files(self) -> list[Path]:
-        return self._files.copy()
-
-    @property
-    def filenames(self) -> list[str]:
-        return [f.name for f in self._files]
-
-    @property
-    def files_info(self) -> dict[str, FileInfo]:
-        return self._files_info.copy()
-
-    def serialize(self) -> dict[str, dict]:
-        return {k: v.model_dump() for k, v in self._files_info.items()}
-
-    @property
-    def disk_used(self) -> int:
-        return self._disk_used
-
-    @property
-    def disk_usedh(self) -> str:
-        return human_readable_size(self._disk_used)
-
-    @property
-    def disk_total(self) -> int:
-        return self._disk_total
-
-    @property
-    def disk_totalh(self) -> str:
-        return self._disk_totalh
-
-    def scan_folder(self):
-        self._files.clear()
-        self._files_info.clear()
-        for file in self._folder.iterdir():
-            if file.is_file():
-                try:
-                    f_info = get_file_info(file)
-                    self._files.append(file)
-                    self._files_info[file.name] = f_info
-                except FileNotFoundError:
-                    # when deleting multiple files while a scan is running, a race condition might occur so that file
-                    # is present on disk both when iterating the folder and checking if file still exixst, but it might
-                    # be deleted for when `get_file_info` is starting to process the file
-                    pass
-        self._disk_used = disk_usage(self._folder).used
-        if self._callback is not None and self._evloop is not None:
-            asyncio.run_coroutine_threadsafe(self._callback(self.serialize()), self._evloop)
-
-    def create_filename(self, filename: Union[str, Path, None]):
-        if filename is None:
-            filename = ''
-
-        if isinstance(filename, str):
-            filename = Path(filename)
-
-        filename = self._folder.joinpath(
-            secure_filename(filename.name) or os.urandom(4).hex()
-        )
-        # allow files with duplicate filenames, simply add a number at the end
-        if filename.exists():
-            stem = filename.stem + '_{}'
-            i = 1
-            while filename.exists():
-                i += 1
-                filename = filename.with_stem(stem.format(i))
-        return filename
-
-    async def save(self, infile, out_filename=None) -> Path:
-        if not out_filename:
-            if hasattr(infile, 'name'):
-                out_filename = infile.name
-            elif hasattr(infile, 'filename'):
-                out_filename = infile.filename
-
-        out_filename = self.create_filename(out_filename)
-        try:
-            async with aopen(out_filename, 'wb') as out:
-                if iscoroutinefunction(infile.read):
-                    while buf := await infile.read(_buf_size):
-                        await out.write(buf)
-                else:
-                    while buf := infile.read(_buf_size):
-                        await out.write(buf)
-        except FileNotFoundError:
-            self.mkdirs()  # create directory if not exists
-            return await self.save(infile, out_filename)
-
-        file_data = get_file_info(out_filename)
-        Config.assets.append({
-            'name': file_data.filename,
-            'url': 'file:' + file_data.filename,
-            'duration': file_data.duration_s,
-            'enabled': False,
-            'media_type': file_data.mime
-        })
-        Config.save()
-
-        return out_filename
-
-    def mkdirs(self):
-        self._folder.mkdir(parents=True, exist_ok=True)
-
-    def exists(self, file):
-        return self._folder.joinpath(file).exists()
-
-    def remove(self, file):
-        for asset in Config.assets.find('file:' + file):
-            Config.assets.remove(asset)
-        self._folder.joinpath(file).unlink(True)
-
-    def on_closed(self, event):
-        super().on_closed(event)
-        self.scan_folder()
-
-    def on_created(self, event):
-        super().on_created(event)
-        self.scan_folder()
-
-    def on_deleted(self, event):
-        super().on_deleted(event)
-        self.scan_folder()
-
-    def on_moved(self, event):
-        super().on_moved(event)
-        self.scan_folder()
 
 

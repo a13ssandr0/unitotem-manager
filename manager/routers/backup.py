@@ -82,7 +82,7 @@ async def load_backup(backup_file: UploadFile,
                 for filename in files:
                     if filename.startswith('uploaded/'):
                         with zip_file.open(filename) as infile:
-                            filename = await UPLOADS.save(infile, filename)
+                            _ = await UPLOADS.save(infile, filename)
 
             res = generate_netplan()
             if isinstance(res, str):
