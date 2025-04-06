@@ -220,6 +220,14 @@ class Asset(BaseModel):
     def __bool__(self):
         return self.enabled
 
+    def __add__(self, other):
+        if isinstance(other, Asset):
+            other = other.enabled
+        return self.enabled + other
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
     def __eq__(self, __value) -> bool:
         try:
             return self.uuid == __value.uuid
