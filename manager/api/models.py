@@ -220,6 +220,7 @@ class Asset(BaseModel):
     def __bool__(self):
         return self.enabled
 
+    #needed for easy calculation of total enabled asset count DO NOT REMOVE
     def __add__(self, other):
         if isinstance(other, Asset):
             other = other.enabled
