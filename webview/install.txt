@@ -1,0 +1,10 @@
+Installing node.js modules requires rebuilding them for electron.
+Rebuild module is installed with
+        npm install --save-dev @electron/rebuild
+Rebuilding is done with
+        ./node_modules/.bin/electron-rebuild
+
+
+Dbus library requires
+        npm install -g node-gyp
+        sudo apt-get install libdbus-1-dev libglib2.0-dev

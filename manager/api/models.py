@@ -494,6 +494,7 @@ class _Config(BaseModel):
         self.remote_server_pk = obj.remote_server_pk
         self.rsa_pk = obj.rsa_pk
         self.remote_clients = obj.remote_clients
+        env['unitotem_first_boot'] = 'False'
 
     def save(self, path: Union[None, str, Path] = None):
         if path is None:

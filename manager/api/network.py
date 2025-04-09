@@ -27,7 +27,8 @@ class Settings(WSAPIBase):
             set_hostname(hostname)
         return WSBroadcast(hostname=get_hostname())
 
-    async def get_wifis(self):
+    @staticmethod
+    async def get_wifis():
         return WSBroadcast(wifis=get_wifis())
 
     class Netplan(WSAPIBase):
@@ -35,7 +36,8 @@ class Settings(WSAPIBase):
             create_netplan(filename)
             return self.getFile()
 
-        async def getFile(self, filename: Optional[str] = None):
+        @staticmethod
+        async def getFile(filename: Optional[str] = None):
             netplan_files = get_netplan_file_list()
             if filename is not None and filename in netplan_files:
                 return WSBroadcast(files={filename: get_netplan_file(filename)})

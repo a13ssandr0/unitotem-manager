@@ -18,7 +18,7 @@ class WSResponse:
                 # noinspection PyUnresolvedReferences
                 self.target = target.api_path
             elif target is None:
-                # noinspection PyProtectedMember,PyUnresolvedReferences
+                # noinspection PyUnresolvedReferences
                 frame = sys._getframe(1 + self._depth)
                 try:
                     x = frame.f_globals[frame.f_code.co_name]

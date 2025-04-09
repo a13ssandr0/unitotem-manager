@@ -2,8 +2,21 @@ const { app, BrowserWindow, screen, ipcMain} = require('electron');
 const path = require('path');
 const {readFileSync, writeFileSync, unlinkSync} = require('fs');
 const {homedir} = require("os");
+const DBus = require('dbus');
 
 const cfg_file_path = path.join(homedir(), '.unitotem-viewer.conf');
+
+
+
+// Create a new service, object and interface
+const iface = DBus.registerService('session', 'unitotem.WebView')
+					.createObject('/unitotem/WebView')
+					.createInterface('unitotem.WebView');
+
+
+const containers = [null, 'web', 'image', 'video', 'audio'];
+const media_fits = ['contain', 'cover', 'fill'];
+
 
 app.whenReady().then(() => {
     const screens = screen.getAllDisplays();
@@ -19,7 +32,7 @@ app.whenReady().then(() => {
         flip: 0,
         orientation: 0
     };
-    var file = {};
+    let file = {};
     try {
         file = JSON.parse(readFileSync(cfg_file_path));
     } catch (err) {
@@ -51,35 +64,84 @@ app.whenReady().then(() => {
         height:          config.bounds.height
     });
     mainWindow.loadFile('boot-screen.html');
-    ipcMain.handle('screen:getAllDisplays', screen.getAllDisplays);
-    ipcMain.handle('mainWindow:getBounds', () => {return config.bounds});
-    ipcMain.handle('mainWindow:setBounds', (e, x, y, w, h) => {
-        mainWindow.setBounds({x:x, y:y, width:w, height:h});
-        config.bounds = {x:x, y:y, width:w, height:h};
-        writeFileSync(cfg_file_path, JSON.stringify(config));
-    });
-    ipcMain.handle('mainWindow:saveOrientation', (e, orientation) => {
-        config.orientation = orientation;
-        writeFileSync(cfg_file_path, JSON.stringify(config));
-    });
-    ipcMain.handle('mainWindow:loadOrientation', () => {return config.orientation});
-    ipcMain.handle('mainWindow:saveFlip', (e, flip) => {
-        config.flip = flip;
-        writeFileSync(cfg_file_path, JSON.stringify(config));
-    });
-    ipcMain.handle('mainWindow:loadFlip', () => {return config.flip});
-    ipcMain.handle('config:getAllowInsecureCerts', () => {return config.allowInsecureCerts});
-    ipcMain.handle('config:setAllowInsecureCerts', (e, allow) => {
-        config.allowInsecureCerts = allow;
-        writeFileSync(cfg_file_path, JSON.stringify(config));
-    });
 
-    ipcMain.handle('config:reset', () => {
-        unlinkSync(cfg_file_path);
+	const session = mainWindow.webContents.session;
+	session.on('will-download', e => e.preventDefault());
+
+	iface.addMethod('Show', {
+		in: [
+			DBus.Define(String,"src"),
+			{type: 'y', name: "container"},
+			{type: 'y', name: "fit"},
+			DBus.Define(String,"bg_color"),
+		]
+	}, function (src, container, fit, bg_color, callback) {
+		container = containers[container];
+		fit = media_fits[fit];
+		mainWindow.webContents.executeJavaScript(`show("${src}", "${container}", "${fit}", "${bg_color}")`);
+		callback(null);
+	})
+
+	iface.addMethod('GetAllDisplays', {out: DBus.Define(Array, "displays")},
+		function (callback) {callback(null, screen.getAllDisplays())})
+
+	iface.addProperty('bounds', {
+		type: {type: 'a{si}'},
+		getter: function (callback) {callback(null, config.bounds)},
+		setter: function (v, complete) {
+        	config.bounds = {x:v.x, y:v.y, width:v.width, height:v.height};
+			mainWindow.setBounds(config.bounds);
+        	writeFileSync(cfg_file_path, JSON.stringify(config));
+			complete();
+		}
+	})
+
+	iface.addProperty('orientation', {
+		type: {type: 'i'},
+		getter: function (callback) {callback(null, config.orientation)},
+		setter: function (orientation, complete) {
+			config.orientation = orientation;
+			mainWindow.webContents.executeJavaScript(`setOrientation(${orientation})`);
+        	writeFileSync(cfg_file_path, JSON.stringify(config));
+			complete();
+		}
+	})
+
+	iface.addProperty('flip', {
+		type: {type: 'i'},
+		getter: function (callback) {callback(null, config.flip)},
+		setter: function (flip, complete) {
+			config.flip = flip;
+			mainWindow.webContents.executeJavaScript(`setFlip(${flip})`);
+        	writeFileSync(cfg_file_path, JSON.stringify(config));
+			complete();
+		}
+	})
+
+	// noinspection JSCheckFunctionSignatures
+	iface.addProperty('allowInsecureCerts', {
+		type: DBus.Define(Boolean),
+		getter: function (callback) {callback(null, config.allowInsecureCerts)},
+		setter: function (allowInsecureCerts, complete) {
+			config.allowInsecureCerts = allowInsecureCerts;
+        	writeFileSync(cfg_file_path, JSON.stringify(config));
+			complete();
+		}
+	})
+
+	iface.addMethod('Reset', {}, function (callback) {
+		unlinkSync(cfg_file_path);
         // app.relaunch(); // systemd should handle it
         app.exit();
-    })
-    
+		callback(null);
+	})
+
+	iface.update();
+
+
+    ipcMain.handle('mainWindow:getOrientation', () => {return config.orientation});
+    ipcMain.handle('mainWindow:getFlip', () => {return config.flip});
+
     app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
         if (config.allowInsecureCerts || url.match('(?:http|ws)s?://localhost')) {
             event.preventDefault();

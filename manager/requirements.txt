@@ -16,6 +16,8 @@ psutil
 pulsectl
 pydantic-extra-types
 pydantic==2.6.3
+pydbus
+pygobject==3.50.0
 pymediainfo
 python-benedict
 python-crontab
@@ -23,7 +25,6 @@ python-dotenv
 python-multipart
 qrcode
 requests
-rpyc
 ruamel.yaml
 uvloop
 validators

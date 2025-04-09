@@ -1,6 +1,6 @@
-import backup
-import error
-import login
-import scheduler
-import settings
-import websocket
+import routers.backup
+import routers.error
+import routers.login
+import routers.scheduler
+import routers.settings
+import routers.websocket

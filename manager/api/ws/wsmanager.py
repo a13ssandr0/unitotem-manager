@@ -87,9 +87,8 @@ class WSManager:
 
 class WSAPIBase:
 
-    def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
+    def __init__(self, ws: WSManager, remote_ws: WSManager):
         self.ws = ws
-        self.ui_ws = ui_ws
         self.remote_ws = remote_ws
 
 

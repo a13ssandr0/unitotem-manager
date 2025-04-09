@@ -1,8 +1,6 @@
 from api.ws.responses import WSBroadcast
 from api.ws.wsmanager import WSAPIBase
-
-DISPLAYS: list[dict] = []
-WINDOW = {'bounds': {}, 'orientation': -2, 'flip': -2}
+from webview_controller.controller import controller
 
 
 class Display(WSAPIBase):
@@ -11,24 +9,30 @@ class Display(WSAPIBase):
         """
         Get viewer window bounds
         """
-        return WSBroadcast(**WINDOW['bounds'])
+        try:
+            return WSBroadcast(**controller.bounds)
+        except TypeError:
+            pass
 
-    async def setBounds(self, x: int, y: int, width: int, height: int):
+    def setBounds(self, x: int, y: int, width: int, height: int):
         """
         Set viewer window bounds
         """
-        await self.ui_ws.broadcast('setBounds', x=x, y=y, width=width, height=height)
+        controller.bounds = {'x': x, 'y': y, 'width': width, 'height': height}
+        return self.getBounds()
 
     @staticmethod
     def getOrientation():
-        return WSBroadcast(orientation=WINDOW['orientation'])
+        return WSBroadcast(orientation=controller.orientation)
 
-    async def setOrientation(self, orientation: int):
-        await self.ui_ws.broadcast('setOrientation', orientation=orientation)
+    def setOrientation(self, orientation: int):
+        controller.orientation = orientation
+        return self.getOrientation()
 
     @staticmethod
     def getFlip():
-        return WSBroadcast(flip=WINDOW['flip'])
+        return WSBroadcast(flip=controller.flip)
 
-    async def setFlip(self, flip: int):
-        await self.ui_ws.broadcast('setFlip', flip=flip)
+    def setFlip(self, flip: int):
+        controller.flip = flip
+        return self.getFlip()

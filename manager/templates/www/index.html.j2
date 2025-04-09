@@ -152,7 +152,7 @@ modal_input.submit_btn.click(() => {
             dis_date: modal_input.dis_date.val()
         }]});
     } else {
-        sendCommand('Scheduler/Asset/edit', {
+        sendCommand('Scheduler/edit', {
             name: modal_input.name.val(),
             url: modal_input.url.val(),
             duration: modal_input.duration.val(),
@@ -291,7 +291,7 @@ handle('Scheduler/asset', data => {
                                 $('<input class="form-check-input" type="checkbox" role="switch">')
                                     .attr('title', (item.enabled?'Dis':'En') + 'able asset')
                                     .prop('checked', item.enabled)
-                                    .change(() => sendCommand('Scheduler/Asset/edit', {uuid: item.uuid, enabled: !item.enabled})),
+                                    .change(() => sendCommand('Scheduler/edit', {uuid: item.uuid, enabled: !item.enabled})),
                                 (()=>{
                                     if (!item.ena_date && !item.dis_date) return;
                                     return $('<i class="position-absolute top-100 start-0 translate-middle bi bi-clock" style="font-size:0.75rem" data-bs-toggle="tooltip" data-bs-placement="bottom"></i>')

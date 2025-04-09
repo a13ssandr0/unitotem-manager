@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import logging
 from ipaddress import IPv4Address
 from json import loads
 from os import environ
@@ -22,6 +21,7 @@ from api.commons import SHUTDOWN_EVENT
 from api.models import Config
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
+from webview_controller.controller import controller
 
 REMOTE_CONNECTED = False
 
@@ -71,11 +71,12 @@ class Remote(WSAPIBase):
                 url = 'https://localhost/uploaded/' + url.removeprefix('file:')
             data = dict(
                 src=url,
-                container=[None, 'web', 'image', 'video', 'audio'][asset.media_type + 1],
-                fit=['contain', 'cover', 'fill'][asset.fit],
-                bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None
+                container=asset.media_type + 1,     #[None, 'web', 'image', 'video', 'audio'][asset.media_type + 1],
+                fit=asset.fit,                      #['contain', 'cover', 'fill'][asset.fit],
+                bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
             )
-            await self.ui_ws.broadcast('Show', False, **data)
+            # await self.ui_ws.broadcast('Show', False, **data)
+            controller.Show(**data)
             await self.remote_ws.broadcast('Show', False, **data)
 
     async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = const.default_port_secure, headers=None):
@@ -88,7 +89,7 @@ class Remote(WSAPIBase):
         headers.setdefault("port", const.default_port_secure)
         while not SHUTDOWN_EVENT.is_set():
             try:
-                logging.info('Connecting to', url)
+                logger.info('Connecting to', url)
                 if Config.remote_server_pk is None:
                     server_pk = requests.get(f'https://{ip}:{port}/remote/public_key', verify=False).content
                     Config.remote_server_pk = cast(rsa.RSAPublicKey, serialization.load_pem_public_key(server_pk))
@@ -96,9 +97,8 @@ class Remote(WSAPIBase):
                 # noinspection PyArgumentList
                 async with asyncwebsockets.open_websocket(url, list(headers.items())) as ws:
                     REMOTE_CONNECTED = True
-                    logging.info('Connected to', url)
+                    logger.success('Connected to', url)
                     while True:
-                        # noinspection PyProtectedMember
                         msg = await ws._next_event()
                         if isinstance(msg, CloseConnection):
                             if msg.code == 4023:  # Server forced disconnection for unpairing
@@ -119,18 +119,18 @@ class Remote(WSAPIBase):
                                 hashes.SHA256()
                             )
                         if data.pop('target') == 'Show':
-                            await self.ui_ws.broadcast('Show', False, **data)
+                            controller.Show(**data)
                         if SHUTDOWN_EVENT.is_set():
                             break
             except asyncio.exceptions.CancelledError:
-                logging.info('Disconnected from remote server')
+                logger.info('Disconnected from remote server')
                 break
             except InvalidSignature:
-                logging.error('Invalid signature, disconnected from server')
+                logger.error('Invalid signature, disconnected from server')
                 await asyncio.sleep(5)
             except OSError as e:
                 if e.args[0] == 'All connection attempts failed':
-                    logging.warning('Server unavailable, retrying in 5 seconds...')
+                    logger.warning('Server unavailable, retrying in 5 seconds...')
                 else:
                     logger.error(format_exc())
                 await asyncio.sleep(5)

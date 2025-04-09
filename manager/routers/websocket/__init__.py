@@ -1,3 +1,2 @@
-import remote
-import webview_controller
-import web_ui
+import routers.websocket.remote
+import routers.websocket.web_ui

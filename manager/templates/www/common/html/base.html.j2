@@ -44,9 +44,37 @@
     <link id="favicon" rel="icon" type="image/x-icon" href="/static/favicon.ico">
     {# <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" /> <!-- Font Awesome --> #}
     {{_add_stylesheets("/bootstrap.min.css", "/bootstrap-icons.css") -}}
-    <style>html {font-size: 14px} .hdr { background-color: #7431F9; color: white; }</style>
     <style>
-        @media (min-width: 1200px) { .fs-1 {font-size: 2.7rem !important;} }
+        html {
+            font-size: 14px
+        }
+
+        .hdr {
+            background-color: #7431F9;
+            color: white;
+        }
+
+        @media (min-width: 1200px) {
+            .fs-1 {
+                font-size: 2.7rem !important;
+            }
+        }
+
+        .fade-in-out {
+            -webkit-animation: fadeinout 3s ease-in-out infinite;
+            animation: fadeinout 3s ease-in-out infinite;
+        }
+
+        @-webkit-keyframes fadeinout {
+            0%,100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        @keyframes fadeinout {
+            0%,100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
         {%- block custom_style %}{% endblock custom_style -%}
     </style>
 </head>
@@ -121,16 +149,30 @@
         </div>
     </div>
 
-    <div class="toast-container position-absolute bottom-0 end-0 p-3"></div>
+    <div class="toast-container position-absolute bottom-0 end-0 p-3 mb-md-3"></div>
 
-    {% set display = (disp_size.width|string + 'x' + disp_size.height|string) if disp_size else 'Not connected' -%}
-    <footer class="fixed-bottom text-center border-top bg-body w-100 zindex-fixed">
-        <h6 class="my-1">
-            <small class="text-muted">
-                <a href="https://github.com/a13ssandr0/unitotem">
-                <i class="bi bi-github"></i> Unitotem</a> {{ ut_vers }} by a13ssandr0 | Logged in as {{ logged_user.name }} | Display: <span id="display_bounds">{{ display }}</span> | Used {{disk_used}} of {{disk_total}}
-            </small>
-        </h6>
+    <footer class="d-flex flex-wrap justify-content-evenly text-muted text-center user-select-none fixed-bottom border-top bg-body w-100 zindex-fixed">
+        <small>
+            <a href="https://github.com/a13ssandr0/unitotem" target="_blank" rel="noopener noreferrer">
+            <i class="bi bi-github"></i> Unitotem</a> {{ ut_vers }} by a13ssandr0
+        </small>
+
+        <div class="vr d-none d-sm-inline-block"></div>
+
+        <small>Logged in as {{ logged_user.name }}</small>
+
+        <div class="vr d-none d-sm-inline-block"></div>
+
+        <small>Display: <span id="display_bounds">{{ disp_size.width~'x'~disp_size.height if disp_size is not none() else 'Not connected' }}</span></small>
+
+        <div class="vr d-none d-sm-inline-block"></div>
+
+        <small>Used {{disk_used}} of {{disk_total}}</small>
+
+        <div class="vr d-none d-sm-inline-block"></div>
+
+        <small id="status_disc" class="text-danger fade-in-out">Disconnected</small>
+        <small id="status_conn" class="text-success d-none">Connected</small>
     </footer>
 
     {{_add_scripts('bootstrap.bundle.min.js', 'jquery.min.js', *ext_scripts)}}
@@ -138,6 +180,8 @@
     <script>
         const toast_container = $('.toast-container');
         const navbar_hostname = $('#navbar_hostname');
+        const status_disc = $('#status_disc');
+        const status_conn = $('#status_conn');
 
         let ws;
 
@@ -148,7 +192,7 @@
         }
 
         function notification(title, message, duration=5000, subtitle=''){
-            let toast = 
+            let toast =
                 $('<div class="toast" role="alert"></div>').append(
                     $('<div class="toast-header"></div>').append(
                         $('<strong class="me-auto"></strong>').html(title),
@@ -169,7 +213,6 @@
                 new bootstrap.Modal(messageModal).show();
             },*/
 
-            connected: () => connect_retry = 0,
             reload:    () => location.reload(),
             logout:    () => location.assign("{{ url_for('logout') }}")
         }
@@ -184,16 +227,22 @@
             handlers[evt] = callbackFn;
         }
 
-        let connect_retry = 0;
-
         function connect() {
             const loc = window.location;
             const _ws = new WebSocket(`w${(loc.protocol === 'https:') ? 's' : ''}s://${loc.host}/ws`);
+            let connected = false;
+
             _ws.onopen = () => {
                 // PAGE INIT
                 {{ init_cmds|flatten|safe }}
                     .forEach(cmd => sendCommand(cmd));
+
+                connected = true;
+
+                status_conn.toggleClass('d-none', !connected);
+                status_disc.toggleClass('d-none', connected);
             };
+
             _ws.onmessage = event => {
                 const data = JSON.parse(event.data);
                 if (data.target === 'Settings/hostname'){
@@ -211,17 +260,19 @@
             };
 
             _ws.onclose = e => {
-                connect_retry++;
-                notification('Disconnected', 'Attempting to reconnect...', );
-                console.log('Socket is closed. Reconnect will be attempted in', connect_retry, 'second(s).', e.reason);
+                if (connected) {
+                    notification('Disconnected', 'Attempting to reconnect...',);
+                    console.log(`Websocket disconnected, attempting to reconnect...`)
+                }
+
+                connected=false;
+                status_conn.toggleClass('d-none', !connected);
+                status_disc.toggleClass('d-none', connected);
                 if (e.reason === 'Not Authenticated') location.reload();
-                setTimeout(() => ws=connect(), connect_retry*1000);
+                setTimeout(() => ws=connect(), 2000);
             };
 
-            _ws.onerror = err => {
-                console.error('Socket encountered error. Closing socket');
-                _ws.close();
-            };
+            _ws.onerror = () => _ws.close();
 
             return _ws;
         }
