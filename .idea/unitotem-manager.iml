@@ -22,7 +22,7 @@
     <option name="TEMPLATE_CONFIGURATION" value="Jinja2" />
     <option name="TEMPLATE_FOLDERS">
       <list>
-        <option value="$MODULE_DIR$/usr/share/unitotem-manager/templates" />
+        <option value="$MODULE_DIR$/manager/templates/www" />
       </list>
     </option>
   </component>

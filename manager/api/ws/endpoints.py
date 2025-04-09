@@ -16,7 +16,6 @@ from api.ws.wsmanager import WSManager, WSAPIBase
 from utils.objs import dict_sort
 
 REMOTE_WS = WSManager(cache_last=True)
-UI_WS = WSManager(cache_last=True)
 WS = WSManager(cache_last=False)
 
 
@@ -24,9 +23,8 @@ WS = WSManager(cache_last=False)
 class WebSocketAPI:
     generators: dict[str, types.FunctionType] = {}
 
-    def __init__(self, ws: WSManager, ui_ws: WSManager, remote_ws: WSManager):
+    def __init__(self, ws: WSManager, remote_ws: WSManager):
         self.__ws = ws
-        self.__ui_ws = ui_ws
         self.__remote_ws = remote_ws
 
     @property
@@ -57,7 +55,7 @@ class WebSocketAPI:
 
         gen = {}
 
-        cls = Cls(self.__ws, self.__ui_ws, self.__remote_ws)
+        cls = Cls(self.__ws, self.__remote_ws)
 
         for att in dir(cls):
             if not (att.startswith('__') and att.endswith('__')):
@@ -107,7 +105,7 @@ class WebSocketAPI:
 
 
 logger.debug("WebSocketAPI initialization")
-api = WebSocketAPI(WS, UI_WS, REMOTE_WS)
+api = WebSocketAPI(WS, REMOTE_WS)
 logger.info("WebSocketAPI initialized")
 
 api.import_class('api.scheduler', 'Scheduler')

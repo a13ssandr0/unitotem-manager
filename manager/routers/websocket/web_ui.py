@@ -24,10 +24,13 @@ async def websocket_endpoint(websocket: WebSocket):
     except NotAuthenticatedException:
         await websocket.accept()
         await websocket.close(1008, 'Not Authenticated')
+        logger.warning('An user tried connect without being logged in')
         return
 
     await WS.connect(websocket, user.name)
     await WS.send(websocket, 'connected')
+    logger.success('User {} connected', user.name)
+
     while True:
         try:
             data: dict[str, Any] = await websocket.receive_json()
@@ -44,10 +47,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         await WS.send(websocket, ret.pop('target', t), **ret)
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
+                logger.error('Invalid command: {}', {'target': t, **data})
             except PermissionError:
                 await WS.send(websocket, 'error', error=f'Permission error: not allowed to execute {t}')
+                logger.error('Permission error: not allowed to execute {}', t)
 
         except WebSocketDisconnect:
+            logger.success('User {} disconnected', user.name)
             break
         except Exception:
             await WS.send(websocket, 'error', error='Exception', extra=format_exc())

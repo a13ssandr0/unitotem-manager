@@ -146,8 +146,9 @@
     </main>
 </body>
 
+<!--suppress FallThroughInSwitchStatementJS -->
 <script type="text/javascript" charset="utf-8">
-    var lastCont      = 'boot';
+    let lastCont = 'boot';
     document.main     = document.getElementsByTagName('main')[0];
     const boot_screen = document.getElementById('boot_screen');
     const webview     = document.getElementById('webview');
@@ -161,145 +162,98 @@
     canvas.height = 1;
 
     window.onload = async () => {
-        document.body.setAttribute('r', await window.electronAPI.loadOrientation());
-        document.main.setAttribute('f', await window.electronAPI.loadFlip());
+        document.body.setAttribute('r', await window.electronAPI.getOrientation());
+        document.main.setAttribute('f', await window.electronAPI.getFlip());
     };
 
-    function connect() {
-        var _ws = new WebSocket(`wss://localhost:4433/ui_ws`);
-        _ws.onopen = async event => {
-            // PAGE INIT
-            sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
-            sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
-            sendCommand('getOrientation', {orientation: document.body.getAttribute('r') || 0});
-            sendCommand('getFlip', {flip: document.main.getAttribute('f') || 0});
-            sendCommand('getAllowInsecureCerts', {allow: await window.electronAPI.getAllowInsecureCerts()});
+    webview.addEventListener('did-fail-load', e => {
+        if (e.errorCode === -102 /*ERR_CONNECTION_REFUSED*/){
+            setTimeout(webview.reload(), 1000);
         }
-        _ws.onmessage = async event => {
-            const data = JSON.parse(event.data);
-            switch (data.target) {
-                
-                case 'Show':
-                    if (!data.container){
-                        var xhttp = new XMLHttpRequest();
-                        xhttp.open('HEAD', data.src, false);
-                        try {
-                            xhttp.send();
-                            var mime = xhttp.getResponseHeader('Content-Type') ?? '';
-                            if (mime.startsWith('audio')){
-                                data.container = 'audio';
-                            } else if (mime.startsWith('video')){
-                                data.container = 'video';
-                            } else if (mime.startsWith('image')){
-                                data.container = 'image';
-                            } else {
-                                data.container = 'web';
-                            }
-                            sendCommand('setContainer', {media_type: data.container});
-                        } catch (error) {
-                            console.log(error);
-                            data.container = 'web';
-                        }
-                    }
-                    console.log(data);
-                    if (data.container != lastCont){
-                        containers.forEach(container => container.style.display = 'none');
-                        webview.src = '';
-                        videoview.src = '';
-                        imageview.src = '';
-                    }
-                    switch (data.container){
-                        case 'image':
-                            imageview.src = data.src;
-                            if (!data.bg_color){
-                                imageview.onload = () => {
-                                    context.drawImage(imageview, 0, 0, 1, 1);
-                                    imageview.style.backgroundColor = `rgba(${context.getImageData(0, 0, 1, 1).data.join(',')})`;
-                                    imageview.onload = null;
-                                };
-                            } else {
-                                imageview.style.backgroundColor = data.bg_color;
-                            }
-                            imageview.style.display = 'flex';
-                            imageview.style.objectFit = data.fit ?? 'contain';
-                            lastCont = data.container;
-                            break;
-                        case 'video':
-                            videoview.src = data.src;
-                            videoview.style.display = 'flex';
-                            videoview.style.objectFit = data.fit ?? 'contain';
-                            videoview.style.backgroundColor = data.bg_color ?? '#000000';
-                            videoview.play();
-                            lastCont = data.container;
-                            break;
-                        case 'boot':
-                            boot_screen.style.display = 'flex';
-                            lastCont = data.container;
-                            break;
-                        case 'web':
-                        default:
-                            webview.src = data.src;
-                            webview.style.display = 'flex';
-                            lastCont = 'web';
-                            break;
-                    }
-                    break;
+    })
 
-                case 'getAllDisplays':
-                    sendCommand('getAllDisplays', {displays: await window.electronAPI.getAllDisplays()});
-                    break;
-                       
-                case 'setBounds':
-                    await window.electronAPI.setBounds(data.x, data.y, data.width, data.height);
-                    // echo new bounds for confirmation
-                case 'getBounds':
-                    sendCommand('getBounds', {bounds: await window.electronAPI.getBounds()});
-                    break;
-
-                case 'setOrientation':
-                    document.body.setAttribute('r', data.orientation);
-                    await window.electronAPI.saveOrientation(data.orientation);
-                    // echo new orientation for confirmation
-                case 'getOrientation':
-                    sendCommand('getOrientation', {orientation: document.body.getAttribute('r') || 0});
-                    break;
-
-                case 'setFlip':
-                    document.main.setAttribute('f', data.flip);
-                    await window.electronAPI.saveFlip(data.flip);
-                    // echo new flip for confirmation
-                case 'getFlip':
-                    sendCommand('getFlip', {flip: document.main.getAttribute('f') || 0});
-                    break;
-
-                case 'getAllowInsecureCerts':
-                    sendCommand('getAllowInsecureCerts', {allow: await window.electronAPI.getAllowInsecureCerts()});
-
-                case 'setAllowInsecureCerts':
-                    await window.electronAPI.setAllowInsecureCerts(data.allow);
-
-                case 'reset':
-                    await window.electronAPI.resetDefaults();
-
-                default:
-                    break;
+    function show(src, container, fit, bg_color){
+        if (!container){
+            const xhttp = new XMLHttpRequest();
+            xhttp.open('HEAD', src, false);
+            try {
+                xhttp.send();
+                const mime = xhttp.getResponseHeader('Content-Type') ?? '';
+                if (mime.startsWith('audio')){
+                    container = 'audio';
+                } else if (mime.startsWith('video')){
+                    container = 'video';
+                } else if (mime.startsWith('image')){
+                    container = 'image';
+                } else {
+                    container = 'web';
+                }
+            } catch (error) {
+                console.log(error);
+                container = 'web';
             }
-            
-        };
+        }
 
-        _ws.onclose = err => setTimeout(() => ws=connect(), 1000);
-        _ws.onerror = err => _ws.close();
+        if (container !== lastCont){
+            containers.forEach(container => container.style.display = 'none');
+            webview.src = '';
+            videoview.src = '';
+            imageview.src = '';
+        }
 
-        return _ws;
+        switch (container){
+            case 'image':
+                imageview.src = src;
+                if (!bg_color){
+                    imageview.onload = () => {
+                        context.drawImage(imageview, 0, 0, 1, 1);
+                        imageview.style.backgroundColor = `rgba(${context.getImageData(0, 0, 1, 1).data.join(',')})`;
+                        imageview.onload = null;
+                    };
+                } else {
+                    imageview.style.backgroundColor = bg_color;
+                }
+                imageview.style.display = 'flex';
+                imageview.style.objectFit = fit ?? 'contain';
+                lastCont = container;
+                break;
+            case 'video':
+                videoview.src = src;
+                videoview.style.display = 'flex';
+                videoview.style.objectFit = fit ?? 'contain';
+                videoview.style.backgroundColor = bg_color ?? '#000000';
+                videoview.play();
+                lastCont = container;
+                break;
+            case 'boot':
+                boot_screen.style.display = 'flex';
+                lastCont = container;
+                break;
+            case 'web':
+            default:
+                webview.src = src;
+                webview.style.display = 'flex';
+                lastCont = 'web';
+                break;
+        }
     }
 
-    var ws = connect();
-
-    function sendCommand(target, args) {
-        if(args === undefined) args = {};
-        args.target = target
-        ws.send(JSON.stringify(args));
+    function setOrientation(orientation){
+        document.body.setAttribute('r', orientation);
     }
+
+    function getOrientation(){
+        return document.body.getAttribute('r') || 0;
+    }
+
+    function setFlip(flip){
+        document.main.setAttribute('f', flip);
+    }
+
+    function getFlip(){
+        return document.main.getAttribute('f') || 0;
+    }
+
 </script>
 
 </html>

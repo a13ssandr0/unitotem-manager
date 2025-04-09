@@ -7,10 +7,10 @@ from starlette.responses import HTMLResponse
 
 from api import constants as const
 from api.commons import UPLOADS
-from api.display import WINDOW
 from utils.models.user import User
 from routers.login import LOGMAN
 from templates import templates
+from webview_controller.controller import controller
 
 router = APIRouter()
 
@@ -32,7 +32,7 @@ async def scheduler(request: Request, user: User = Depends(LOGMAN)):
             ut_vers=const.__version__,
             logged_user=user,
             hostname=get_hostname(),
-            disp_size=WINDOW['bounds'],
+            disp_size=controller.bounds,
             disk_used=UPLOADS.disk_usedh,  # type: ignore
             disk_total=UPLOADS.disk_totalh  # type: ignore
     ))

@@ -31,7 +31,7 @@ from routers.error import http_exception_handler
 from routers.login import NotAuthenticatedException, login_redirect
 from templates import templates
 from utils.logging import Logger
-from utils.system.network.hotspot import FALLBACK_AP_FILE, start_hotspot, stop_hostpot, wifi_qr
+from utils.system.network.hotspot import FALLBACK_AP_FILE, start_hotspot, stop_hostpot, wifi_qr, DEFAULT_AP
 from utils.system.network.ip import do_ip_addr
 from utils.system.sysinfo import get_sysinfo
 
@@ -53,7 +53,6 @@ WWW = FastAPI(
 )
 WWW.include_router(routers.login.router)
 WWW.include_router(routers.websocket.remote.router)
-WWW.include_router(routers.websocket.webview_controller.router)
 WWW.include_router(routers.websocket.web_ui.router)
 WWW.include_router(routers.scheduler.router)
 WWW.include_router(routers.settings.router)
@@ -138,7 +137,12 @@ loop.create_task(serve(WWW, HyperConfig().from_mapping(  # type: ignore
     certfile=const.certfile, keyfile=const.keyfile, logger_class=Logger
 ), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server')  # type: ignore
 
-loop.run_forever()
+try:
+    loop.run_forever()
+except KeyboardInterrupt:
+    logger.info('Shutdown requested.')
+    SHUTDOWN_EVENT.set()
+    pass
 
 stop_hostpot()
 

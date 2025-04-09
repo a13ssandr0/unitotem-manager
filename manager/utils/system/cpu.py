@@ -7,7 +7,7 @@ __all__ = [
 
 from time import sleep
 
-# noinspection PyProtectedMember,PyUnresolvedReferences
+# noinspection PyUnresolvedReferences
 from psutil import _cpu_times_deltas, _cpu_tot_time
 from psutil._common import get_procfs_path, open_binary
 from psutil._pslinux import CLOCK_TICKS, scputimes, set_scputimes_ntuple
@@ -54,7 +54,6 @@ def cpu_times():
         for line in f:
             if line.startswith(b'cpu'):
                 values = line.split()
-                # noinspection PyProtectedMember
                 fields = values[1:len(scputimes._fields) + 1]
                 fields = [float(x) / CLOCK_TICKS for x in fields]
                 entry = scputimes(*fields)
