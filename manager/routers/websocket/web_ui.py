@@ -7,6 +7,7 @@ from loguru import logger
 from starlette.requests import Request
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from api.ws.permissions import APIPermissionError
 from utils.models.user import User
 from api.ws.endpoints import WS, handle_call
 from api.ws.responses import WSBroadcast, WSMulticast, WSResponse
@@ -48,7 +49,7 @@ async def websocket_endpoint(websocket: WebSocket):
             except KeyError:
                 await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
                 logger.error('Invalid command: {}', {'target': t, **data})
-            except PermissionError:
+            except APIPermissionError:
                 await WS.send(websocket, 'error', error=f'Permission error: not allowed to execute {t}')
                 logger.error('Permission error: not allowed to execute {}', t)
 

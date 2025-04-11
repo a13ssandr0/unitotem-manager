@@ -14,7 +14,7 @@ logger.info('Creating event loop')
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 loop = asyncio.get_event_loop()
 asyncio.set_event_loop(loop)
-logger.success('Event loop ready')
+logger.success('Event loop (id: {}) ready', id(loop))
 
 # Initialization of environment variables
 
