@@ -102,6 +102,7 @@ REMOTE_WS.pk = Config.rsa_pk
 # APT_THREAD.start()
 
 loop = asyncio.get_event_loop()
+logger.debug('Got event loop {}', id(loop))
 loop.add_signal_handler(signal.SIGTERM, SHUTDOWN_EVENT.set, ())
 
 Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current))  # ,

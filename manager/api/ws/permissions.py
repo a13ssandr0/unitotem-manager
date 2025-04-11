@@ -23,4 +23,8 @@ def check_permissions(func, user):
         logger.info(f'User {user.name} is allowed to execute {name}')
     else:
         logger.critical(f'User {user.name} is not allowed to execute {name}')
-        raise PermissionError
+        raise APIPermissionError
+
+
+class APIPermissionError(Exception):
+    pass

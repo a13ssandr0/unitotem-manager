@@ -46,6 +46,7 @@ Add display power control:
 - GPIO
 - Serial
 
+RTC Wakeup (https://www.mythtv.org/wiki/ACPI_Wakeup)
 
 
 RSS feed reader

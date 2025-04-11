@@ -7,10 +7,10 @@
     ('Remote control', 'remote', 'Connect to a network of UniTotems', 'diagram-3', False),
     ('Security', 'security', 'Password', 'shield-lock', False),
     ('Scheduled actions', 'cron', 'Cron-based power scheduler', 'alarm', False),
+    ('Network', 'network', 'Hostname, Netplan', 'ethernet', False),
+    ('Updates', 'updates', 'APT', 'arrow-repeat', False),
     ('Backup and restore', 'backup', 'Backup, restore, reset system', 'clock-history', False)
 ] -%}
-{#    ('Network', 'network', 'Hostname, Netplan', 'ethernet', False),#}
-{#    ('Updates', 'updates', 'APT', 'arrow-repeat', False),#}
 
 {% macro _add_scripts() -%}
     {% for path in varargs -%}

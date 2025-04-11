@@ -115,7 +115,7 @@ api.import_class('api.remote', 'Remote', 'Settings')
 api.import_class('api.network', 'Settings')
 api.import_class('api.system.cron', 'Cron', 'Settings')
 api.import_class('api.system.power', 'Power')
-# api.import_class('api.system.apt', 'APT', 'Settings')
+api.import_class('api.system.apt', 'Update', 'Settings')
 api.import_class('api.security', 'Security', 'Settings')
 api.import_class('api.display', 'Display', 'Settings')
 
