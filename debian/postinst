@@ -10,6 +10,7 @@ if [ "$1" == "configure" ] && [ -z "$2" ]; then
 	# /var/unitotem-venv/bin/pip3 install python-crontab requests validators decorator qrcode PyChromeDevTools pymediainfo ruamel.yaml pillow
 	# fastapi, (starlette), uvicorn, python-multipart, jinja2, Werkzeug, websockets
 
+  groupadd unitotem
 
 	echo "Creating ssl key for UniTotem"
 	openssl req -x509 -nodes -newkey rsa:2048 -keyout "/etc/ssl/unitotem_key.pem" -out "/etc/ssl/unitotem_crt.pem" -days 365000 -subj "/C=../ST=./L=./O=a13ssandr0/OU=UniTotem/CN=UniTotem/emailAddress=."

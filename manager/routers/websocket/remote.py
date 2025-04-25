@@ -6,7 +6,7 @@ from loguru import logger
 from starlette import status
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from api import constants as const
+from utils import constants as const
 from api.models import Config
 from api.ws.endpoints import REMOTE_WS
 

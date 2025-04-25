@@ -3,7 +3,7 @@ import base64
 from ipaddress import IPv4Address
 from json import loads
 from os import environ
-from platform import node as get_hostname
+from socket import gethostname
 from traceback import format_exc
 from typing import Optional, cast
 
@@ -16,7 +16,7 @@ from loguru import logger
 from pydantic import PositiveInt
 from wsproto.events import CloseConnection
 
-import api.constants as const
+import utils.constants as const
 from api.commons import SHUTDOWN_EVENT
 from api.models import Config
 from api.ws.endpoints import WSAPIBase
@@ -27,12 +27,14 @@ REMOTE_CONNECTED = False
 
 
 class Remote(WSAPIBase):
-    def getMode(self):
-        return WSBroadcast(self.getMode,
-                           remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
-                           remote_connected=REMOTE_CONNECTED,
-                           remote_port=Config.remote_server_port,
-                           remote_clients=list(Config.remote_clients.items()))
+    @staticmethod
+    def getMode():
+        return WSBroadcast(
+                remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+                remote_connected=REMOTE_CONNECTED,
+                remote_port=Config.remote_server_port,
+                remote_clients=list(Config.remote_clients.items())
+        )
 
     def setMode(self, remote_server: Optional[IPv4Address],
                 remote_port: Optional[PositiveInt] = const.default_port_secure):
@@ -70,10 +72,10 @@ class Remote(WSAPIBase):
             if url.startswith('file:'):
                 url = 'https://localhost/uploaded/' + url.removeprefix('file:')
             data = dict(
-                src=url,
-                container=asset.media_type + 1,     #[None, 'web', 'image', 'video', 'audio'][asset.media_type + 1],
-                fit=asset.fit,                      #['contain', 'cover', 'fill'][asset.fit],
-                bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
+                    src=url,
+                    container=asset.media_type + 1,  # [None, 'web', 'image', 'video', 'audio'][asset.media_type + 1],
+                    fit=asset.fit,  # ['contain', 'cover', 'fill'][asset.fit],
+                    bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
             )
             # await self.ui_ws.broadcast('Show', False, **data)
             controller.Show(**data)
@@ -85,7 +87,7 @@ class Remote(WSAPIBase):
         global REMOTE_CONNECTED
         url = f'wss://{ip}:{port}/remote'
         headers.setdefault("instance_id", environ['instance_id'])
-        headers.setdefault("hostname", get_hostname())
+        headers.setdefault("hostname", gethostname())
         headers.setdefault("port", const.default_port_secure)
         while not SHUTDOWN_EVENT.is_set():
             try:
@@ -110,13 +112,13 @@ class Remote(WSAPIBase):
                         data = loads(getattr(msg, 'data', '{}'))
                         if 'target' in data and '__signature__' in data:
                             Config.remote_server_pk.verify(
-                                base64.b64decode(data['__signature__'].encode()),
-                                data['src'].encode(),
-                                padding.PSS(
-                                    mgf=padding.MGF1(hashes.SHA256()),
-                                    salt_length=padding.PSS.MAX_LENGTH
-                                ),
-                                hashes.SHA256()
+                                    base64.b64decode(data['__signature__'].encode()),
+                                    data['src'].encode(),
+                                    padding.PSS(
+                                            mgf=padding.MGF1(hashes.SHA256()),
+                                            salt_length=padding.PSS.MAX_LENGTH
+                                    ),
+                                    hashes.SHA256()
                             )
                         if data.pop('target') == 'Show':
                             controller.Show(**data)

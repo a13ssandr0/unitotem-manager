@@ -25,6 +25,7 @@ python-dotenv
 python-multipart
 qrcode
 requests
+rpyc
 ruamel.yaml
 uvloop
 validators

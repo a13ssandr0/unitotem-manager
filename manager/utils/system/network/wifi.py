@@ -1,70 +1,63 @@
-from re import compile
-from subprocess import PIPE, run
+from asyncio import sleep
+from contextlib import contextmanager
 
-from utils.system.network.misc import get_ifaces, IF_WIRELESS
-
-# from https://github.com/iancoleman/python-iwlist
-# NO license provided
-
+import sdbus
+from loguru import logger
+from sdbus_async.networkmanager import AccessPoint, DeviceType, NetworkDeviceWireless, NetworkManager
 
 
-cellNumberRe = compile(r"^Cell\s+(?P<cellnumber>.+)\s+-\s+Address:\s(?P<mac>.+)$")
-regexps = [
-    compile(r"^ESSID:\"(?P<essid>.*)\"$"),
-    compile(r"^Protocol:(?P<protocol>.+)$"),
-    compile(r"^Mode:(?P<mode>.+)$"),
-    compile(r"^Frequency:(?P<frequency>[\d.]+) (?P<frequency_units>.+) \(Channel (?P<channel>\d+)\)$"),
-    compile(r"^Encryption key:(?P<encryption>.+)$"),
-    compile(r"^Quality=(?P<signal_quality>\d+)/(?P<signal_total>\d+)\s+Signal level=(?P<signal_level_dBm>.+) d.+$"),
-    compile(r"^Signal level=(?P<signal_quality>\d+)/(?P<signal_total>\d+).*$"),
-]
-
-# Detect encryption type
-wpaRe = compile(r"IE: WPA Version 1$")
-wpa2Re = compile(r"IE: IEEE 802\.11i/WPA2 Version 1$")
+@contextmanager
+def open_system_bus():
+    bus = sdbus.sd_bus_open_system()
+    try:
+        yield bus
+    finally:
+        bus.close()
 
 
-# from https://github.com/iancoleman/python-iwlist
-# NO license provided
-def get_wifis(interface=get_ifaces(IF_WIRELESS)[0]):
-    #TODO sanity check on `interface`
+async def get_access_points():
+    with open_system_bus() as bus:
+        nm = NetworkManager(bus)
 
-    lines = run(["/usr/sbin/iwlist", interface, "scan"],
-            stdout=PIPE, stderr=PIPE, check=False).stdout.decode().splitlines()
-    cells = []
-    for line in lines:
-        line = line.strip()
-        cell_number = cellNumberRe.search(line)
-        if cell_number is not None:
-            cells.append(cell_number.groupdict())
-            continue
-        wpa = wpaRe.search(line)
-        if wpa is not None :
-            cells[-1].update({'encryption':'wpa'})
-        wpa2 = wpa2Re.search(line)
-        if wpa2 is not None :
-            cells[-1].update({'encryption':'wpa2'})
-        for expression in regexps:
-            result = expression.search(line)
-            if result is not None:
-                if 'encryption' in result.groupdict() :
-                    if result.groupdict()['encryption'] == 'on' :
-                        cells[-1].update({'encryption': 'wep'})
-                    else :
-                        cells[-1].update({'encryption': 'off'})
-                else :
-                    cells[-1].update(result.groupdict())
-                continue
-    for cell in cells:
-        if 'frequency' in cell:
-            cell['frequency'] = float(cell['frequency'])
-        for attr in ['cellnumber', 'channel', 'signal_quality', 'signal_total', 'signal_level_dBm']:
-            if attr in cell:
-                try:
-                    cell[attr] = int(cell[attr])
-                except ValueError:
-                    pass
-        if 'essid' in cell:
-            cell['essid'] = cell['essid'].replace(r'\x00', '')
-    cells = sorted(cells, key = lambda x: int(x['signal_quality']), reverse=True)
-    return cells
+        if not await nm.wireless_hardware_enabled:
+            raise RuntimeError('Wireless hardware not enabled')
+
+        if not await nm.wireless_enabled:
+            logger.info('Wireless not yet enabled')
+            await nm.wireless_enabled.set_async(True)
+
+        aps = set()
+
+        for device_path in await nm.get_devices():
+            device = NetworkDeviceWireless(device_path, bus)
+            if await device.device_type == DeviceType.WIFI:
+                logger.info('Getting access points discovered by {}', await device.interface)
+                aps.update(await device.get_all_access_points())
+
+        logger.info('{} access points discovered', len(aps))
+
+        aps = sorted([await AccessPoint(ap, bus).properties_get_all_dict('reuse') for ap in aps],
+                     key=lambda ap: ap['strength'], reverse=True)
+
+        for ap in aps: ap['ssid'] = ap['ssid'].decode()
+
+        return aps
+
+
+async def scan_access_points():
+    with open_system_bus() as bus:
+        nm = NetworkManager(bus)
+
+        if not await nm.wireless_hardware_enabled:
+            raise RuntimeError('Wireless hardware not enabled')
+
+        if not await nm.wireless_enabled:
+            logger.info('Wireless not yet enabled')
+            await nm.wireless_enabled.set_async(True)
+            await sleep(2)
+
+        for device_path in await nm.get_devices():
+            device = NetworkDeviceWireless(device_path, bus)
+            if await device.device_type == DeviceType.WIFI:
+                logger.info('Triggering scan on {}', await device.interface)
+                await device.request_scan({})

@@ -1,11 +1,11 @@
-from platform import node as get_hostname
+from socket import gethostname
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from starlette import status
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
-from api import constants as const
+from utils import constants as const
 from api.commons import UPLOADS
 from utils.models.user import User
 from routers.login import LOGMAN
@@ -29,9 +29,7 @@ async def scheduler(request: Request, user: User = Depends(LOGMAN)):
     template = 'index.html.j2' if user.has_perm.scheduler else 'common/html/base.html.j2'
 
     return templates.TemplateResponse(request, template, dict(
-            ut_vers=const.__version__,
             logged_user=user,
-            hostname=get_hostname(),
             disp_size=controller.bounds,
             disk_used=UPLOADS.disk_usedh,  # type: ignore
             disk_total=UPLOADS.disk_totalh  # type: ignore

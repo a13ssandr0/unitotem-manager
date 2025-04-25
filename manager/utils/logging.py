@@ -36,7 +36,7 @@ logging.basicConfig(handlers=[InterceptHandler()], level=0)
 def get_patcher(logger_name: str):
     def patcher(record: 'loguru.Record'):
         # noinspection PyTypedDict
-        record.update({'name': logger_name, 'function': '', 'line': ''})
+        record.update(name=logger_name, function='', line='')
 
     return patcher
 
@@ -57,6 +57,6 @@ class Logger(hypercorn.logging.Logger):
     async def info(self, message: str, *args: Any, **kwargs: Any) -> None:
         if self.error_logger is not None:
             if message.startswith('Running on'):
-                self.error_logger.success(message, *args, **kwargs)
+                self.error_logger.patch(lambda r: r.update(name='')).success(message, *args, **kwargs)
             else:
                 self.error_logger.info(message, *args, **kwargs)

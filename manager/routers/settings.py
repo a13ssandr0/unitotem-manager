@@ -8,14 +8,14 @@ from psutil import cpu_count, sensors_battery, sensors_fans, virtual_memory
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
-from api import constants as const
+from utils import constants as const
 from api.commons import UPLOADS
 from utils.models.user import User
 from routers.login import LOGMAN
 from templates import templates
 from utils.system.audio import get_audio_devices
 from utils.system.lsblk import lsblk
-from utils.system.network.misc import IF_WIRELESS, get_ifaces
+from utils.system.network.misc import get_default_wireless
 from utils.system.sensors import sensors_temperatures
 from utils.units import human_readable_size
 from webview_controller.controller import controller
@@ -32,29 +32,25 @@ async def settings(request: Request, tab: str = 'main_menu', user: User = Depend
         raise HTTPException(status_code=403)
 
     data: dict[str, Any] = dict(
-            ut_vers=const.__version__,
             logged_user=user,
             cur_tab=tab,
             disp_size=controller.bounds,
             disk_used=UPLOADS.disk_usedh,  # type: ignore
             disk_total=UPLOADS.disk_totalh,  # type: ignore
-            def_wifi=get_ifaces(IF_WIRELESS)[0]
+            def_wifi=get_default_wireless()
     )
-    match tab:
-        case 'audio':
-            data['audio'] = get_audio_devices()
-        case 'display':
-            data['displays'] = controller.GetAllDisplays()
-    try:
-        return templates.TemplateResponse(request, f'settings/{tab}.html.j2', data)
-    except Exception:
-        logger.error(format_exc())
+    if tab == 'audio':
+        data['audio'] = get_audio_devices()
+    elif tab == 'display':
+        data['displays'] = controller.GetAllDisplays()
+
+    return templates.TemplateResponse(request, f'settings/{tab}.html.j2', data)
+
 
 
 @router.get('/info', response_class=HTMLResponse)
 def info(request: Request, user: User = Depends(LOGMAN)):
     return templates.TemplateResponse(request, 'info.html.j2', dict(
-            ut_vers=const.__version__,
             logged_user=user,
             disp_size=controller.bounds,
             disk_used=UPLOADS.disk_usedh,  # type: ignore

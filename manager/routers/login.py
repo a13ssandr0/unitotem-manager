@@ -9,13 +9,12 @@ __all__ = [
 import time
 from datetime import timedelta
 from os import environ, urandom
-from platform import freedesktop_os_release as os_release, node as get_hostname
 from typing import Optional
 from urllib.parse import quote_plus
 
 from cryptography.hazmat.primitives import serialization
 from dotenv import load_dotenv, set_key
-from fastapi import APIRouter, Form, Depends, status
+from fastapi import APIRouter, Depends, Form, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_login import LoginManager
@@ -24,10 +23,10 @@ from loguru import logger
 from starlette.requests import Request
 from starlette.responses import Response
 
-import api.constants as const
+import utils.constants as const
 from api.models import Config
-from utils.models.user import User
 from templates import templates
+from utils.models.user import User
 from utils.system.network.ip import do_ip_addr
 
 load_dotenv(const.envfile)
@@ -58,23 +57,23 @@ class LoginForm(OAuth2PasswordRequestForm):
                  src: Optional[str] = Form(default=None),
                  remember_me: Optional[bool] = Form(default=False)):
         super().__init__(
-            grant_type=grant_type,
-            username=username,
-            password=password,
-            scope=scope,
-            client_id=client_id,
-            client_secret=client_secret)
+                grant_type=grant_type,
+                username=username,
+                password=password,
+                scope=scope,
+                client_id=client_id,
+                client_secret=client_secret)
         self.src = src or '/'
         self.remember_me = remember_me
 
 
 LOGMAN = LoginManager(
-    secret=environ['auth_token'],
-    token_url='/auth/token',
-    use_cookie=True,
-    use_header=False,
-    not_authenticated_exception=NotAuthenticatedException,
-    default_expiry=timedelta(days=7)
+        secret=environ['auth_token'],
+        token_url='/auth/token',
+        use_cookie=True,
+        use_header=False,
+        not_authenticated_exception=NotAuthenticatedException,
+        default_expiry=timedelta(days=7)
 )
 LOGMAN.user_loader()(Config.get_user)
 
@@ -96,8 +95,8 @@ async def login(data: LoginForm = Depends()):
 @router.get("/remote/public_key")
 async def get_public_key():
     return Response(Config.rsa_pk.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
     ), media_type="text/plain")
 
 
@@ -110,14 +109,7 @@ async def login_page(request: Request, src: Optional[str] = '/'):
     except NotAuthenticatedException:
         pass
 
-    ip = do_ip_addr(get_default=True)
-    return templates.TemplateResponse(request, 'login.html.j2', dict(
-        src=src,
-        ut_vers=const.__version__,
-        os_vers=os_release()['PRETTY_NAME'],
-        ip_addr=ip['addr'][0]['addr'] if ip else None,
-        hostname=get_hostname()
-    ))
+    return templates.TemplateResponse(request, 'login.html.j2', {'src': src})
 
 
 @router.get('/logout')
