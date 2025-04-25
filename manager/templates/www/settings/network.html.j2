@@ -32,12 +32,19 @@
                 </li>
             </ul>
         </div>
+        {% if def_wifi %}
         <div class="dropdown ms-auto my-auto">
-            <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" id="wifiDropBtn" data-bs-toggle="dropdown" data-bs-auto-close="inside"><i class="bi bi-wifi"></i></button>
+            <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" id="wifiDropBtn" data-bs-toggle="dropdown" data-bs-auto-close="inside">
+                <i class="bi bi-wifi"></i>
+                <div class="spinner-border" style="width: 0.8rem; height: 0.8rem; --bs-spinner-border-width: 0.10em; display: none" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </button>
             <ul class="dropdown-menu dropdown-menu-end" id="wifi-menu" style="min-width: 20rem;">
                 <li class="dropdown-item disabled">Scanning...</li>
             </ul>
         </div>
+        {% endif %}
     </div>
     <div id="editor" style="width:95%; height:30em; margin-left:auto; margin-right:auto;"></div>
     <div class="mt-2 hstack gap-2">
@@ -61,7 +68,6 @@ const set_btn = $('#set-btn');
 const del_btn = $('#del-btn');
 const inputHostname = $('#inputHostname');
 const set_hostname = $('#set_hostname');
-const wifi_menu = $('#wifi-menu');
 const netplan = {original: {}, modified: {}};
 let cur_file = null;
 
@@ -80,14 +86,6 @@ set_btn.click(() => {
     set_btn.removeClass('btn-success').addClass('btn-outline-success');
 });
 
-
-function wifi_yaml(wifi_name, password=true) {
-    var net = `network:\n  wifis:\n    {{def_wifi}}:\n      dhcp4: true\n      # addresses: [192.168.1.100/24]\n      # routes:\n      #   - to: 0.0.0.0/0\n      #     via: 192.168.1.1\n      # nameservers:\n      #   addresses: [192.168.1.1, 1.1.1.1, 8.8.8.8]\n      access-points:\n        "${wifi_name}":`;
-    if (password)
-        net += `\n          password: "<super-secure>"\n`;
-    return net;
-}
-
 inputHostname.on('input', () => {
     if (inputHostname.val() !== inputHostname.attr('def-val')) {
         set_hostname.removeClass('btn-outline-success').addClass('btn-success');
@@ -97,12 +95,7 @@ inputHostname.on('input', () => {
 });
 
 $('#add_file_btn').click(() => sendCommand('Settings/Netplan/newFile', {filename: $('#modal_input_filename').val()}));
-set_hostname.click(() => sendCommand('Settings/hostname', {hostname: inputHostname.val()}));
-var wifi_upd_timer = Number();
-$('#wifiDropBtn').on({
-    'show.bs.dropdown': () => {wifi_upd_timer=setInterval(sendCommand, 5000, 'Settings/get_wifis')},
-    'hide.bs.dropdown': () => clearInterval(wifi_upd_timer)
-});
+set_hostname.click(() => sendCommand('Settings/setHostname', {hostname: inputHostname.val()}));
 
 
 handle('Settings/hostname', data => {
@@ -116,6 +109,7 @@ handle('Settings/Netplan/getFile', data => {
     Object.entries(data.files).forEach((pair, i) => {
         const [filename, content] = pair;
         const btn = $('<button class="dropdown-item" type="button"></button>')
+            .attr('filename', filename)
             .html(filename)
             .click(() => {
                 file_selector_btn.html(filename);
@@ -130,43 +124,75 @@ handle('Settings/Netplan/getFile', data => {
     });
 })
 
+handle('Settings/Netplan/showFile', data => {
+    $(`button.dropdown-item[filename="${data.filename}"]`).click();
+})
+
+
+{% if def_wifi %}
+function wifi_yaml(wifi_name, password=true) {
+    let net = `network:\n  wifis:\n    {{def_wifi}}:\n      dhcp4: true\n      # addresses: [192.168.1.100/24]\n      # routes:\n      #   - to: 0.0.0.0/0\n      #     via: 192.168.1.1\n      # nameservers:\n      #   addresses: [192.168.1.1, 1.1.1.1, 8.8.8.8]\n      access-points:\n        "${wifi_name}":`;
+    if (password)
+        net += `\n          password: "<super-secure>"\n`;
+    else
+        net += ' {}';
+    return net;
+}
+
+let wifi_upd_timer = Number();
+$('#wifiDropBtn').on({
+    'show.bs.dropdown': () => {
+        sendCommand('Settings/get_wifis');
+        wifi_upd_timer=setInterval(sendCommand, 5000, 'Settings/get_wifis')
+        wifi_spinner.show();
+    },
+    'hide.bs.dropdown': () => {
+        clearInterval(wifi_upd_timer);
+        wifi_spinner.hide();
+    }
+});
+const wifi_menu = $('#wifi-menu');
+const wifi_spinner = $('.spinner-border');
+
 handle('Settings/get_wifis', data => {
-    let wifi_low = data.wifis[0].signal_total / 3;
-    let wifi_high = data.wifis[0].signal_total * 2 / 3;
     wifi_menu.empty();
-    data.wifis.forEach(network => {
-        if (network.essid === '') network.essid = null;
+    if (data.wifis.length)
+        data.wifis.forEach(network => {
+            if (network.ssid === '') network.ssid = null;
 
-        let wifi_icon = 'bi-wifi-1'
-        if (network.signal_quality >= wifi_high) wifi_icon = 'bi-wifi';
-        else if (network.signal_quality >= wifi_low) wifi_icon = 'bi-wifi-2';
+            let wifi_icon = 'bi-wifi-1'
+            if (network.strength >= 66) wifi_icon = 'bi-wifi';
+            else if (network.strength >= 33) wifi_icon = 'bi-wifi-2';
 
-        wifi_menu.append(
-            $('<li class="dropdown-item"></li>')
-                .click(() => sendCommand('Settings/Netplan/changeFile', {
-                    filename: `10-${network.essid ?? ('hidden' + network.mac.slice(-5))}.yaml`,
-                    content: wifi_yaml(network.essid, network.encryption !== 'off'),
-                    apply: false
-                }))
-                .append(
-                    $('<span></span>').append(
-                        $('<i class="bi"></i>').addClass(wifi_icon),
-                        ' ' + (network.essid ?? '<i><small class="text-muted">hidden</small></i>')
-                    ),
-                    $('<h6></h6>').append(
-                        $('<small class="text-muted"></small>').html(network.mac),
-                        $('<span class="float-end line-height-1 ps-2"></span>').append(
-                            $('<span class="badge text-bg-info"></span>')
-                                .html(((network.frequency >= 5) ? '5' : '2.4') + 'GHz'),
+            network.secure = !!(network.flags&1);
+            network.frequency = ((network.frequency >= 6000) ? '6' : (network.frequency >= 5000? '5' : '2.4'));
+
+            wifi_menu.append(
+                $('<li class="dropdown-item"></li>')
+                    .click(() => sendCommand('Settings/Netplan/changeFile', {
+                        filename: `10-${network.ssid ?? ('hidden' + network.hw_address.slice(-5))}.yaml`,
+                        content: wifi_yaml(network.ssid, network.secure),
+                        apply: false
+                    }))
+                    .append(
+                        $('<span></span>').append(
+                            $('<i class="bi"></i>').addClass(wifi_icon),
+                            ' ' + (network.ssid ?? '<i><small class="text-muted">hidden</small></i>')
+                        ),
+                        $('<div class="d-flex"></div>').append(
+                            $('<div class="me-auto small text-muted"></div>').html(network.hw_address),
+                            $('<span class="badge text-bg-info"></span>').html(network.frequency + 'GHz'),
                             $('<span class="badge text-bg-warning"></span>').append(
-                                $('<i></i>').addClass('bi bi-' + (network.encryption !== 'off' ? 'lock' : 'unlock')),
-                                ' ' + (network.encryption !== 'off' ? network.encryption : 'open')
+                                $('<i></i>').addClass('bi bi-' + (network.secure ? 'lock' : 'unlock')),
+                                ' ' + (network.secure ? 'secure' : 'open')
                             )
                         )
                     )
-                )
-        );
-    });
+            );
+        });
+    else
+        wifi_menu.html('<li class="dropdown-item disabled">Scanning...</li>')
 })
+{% endif %}
 {% endblock js %}
 </script>

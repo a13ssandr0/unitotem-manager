@@ -42,6 +42,7 @@ class Controller:
                 show_timer = Timer(2.0, cls.Show, (src, container, fit, bg_color))
                 show_timer.start()
                 connected = False
+            return None
 
     # noinspection PyPep8Naming
     @staticmethod
@@ -54,6 +55,7 @@ class Controller:
     def bounds(self) -> dict | None:
         if proxy := get_proxy():
             return proxy.bounds
+        return None
 
     @bounds.setter
     def bounds(self, value: dict):
@@ -64,6 +66,7 @@ class Controller:
     def orientation(self) -> int | None:
         if proxy := get_proxy():
             return proxy.orientation
+        return None
 
     @orientation.setter
     def orientation(self, value: int):
@@ -74,6 +77,7 @@ class Controller:
     def flip(self) -> int | None:
         if proxy := get_proxy():
             return proxy.flip()
+        return None
 
     @flip.setter
     def flip(self, value: int):
@@ -85,6 +89,7 @@ class Controller:
     def allowInsecureCerts(self) -> bool | None:
         if proxy := get_proxy():
             return proxy.allowInsecureCerts
+        return None
 
     # noinspection PyPep8Naming
     @allowInsecureCerts.setter
@@ -96,6 +101,7 @@ class Controller:
     def Reset(self):
         if proxy := get_proxy():
             return proxy.Reset()
+        return None
 
 
 controller = Controller()

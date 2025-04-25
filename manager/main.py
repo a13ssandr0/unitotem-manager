@@ -2,8 +2,6 @@ import asyncio
 import signal
 import warnings
 from argparse import ArgumentParser
-from os.path import exists
-from platform import freedesktop_os_release as os_release, node as get_hostname
 from traceback import format_exc
 from typing import Literal, Union
 
@@ -20,18 +18,18 @@ from jwt import InvalidSignatureError
 from loguru import logger
 from watchdog.observers import Observer
 
-import api.constants as const
 import routers
+import utils.constants as const
 from api.commons import SHUTDOWN_EVENT, UPLOADS
-from api.constants import Arguments
 from api.models import Config
 from api.ws.endpoints import REMOTE_WS, WS, api
 from api.ws.wsmanager import WSManager
 from routers.error import http_exception_handler
 from routers.login import NotAuthenticatedException, login_redirect
 from templates import templates
+from utils.constants import Arguments
 from utils.logging import Logger
-from utils.system.network.hotspot import FALLBACK_AP_FILE, start_hotspot, stop_hostpot, wifi_qr, DEFAULT_AP
+from utils.system.network.hotspot import get_hotspot_with_qr, is_hotspot_enabled, start_hotspot, stop_hotspot
 from utils.system.network.ip import do_ip_addr
 from utils.system.sysinfo import get_sysinfo
 
@@ -39,17 +37,17 @@ warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
 # noinspection PyTypeChecker
 WWW = FastAPI(
-    title='UniTotem', version=const.__version__,
-    middleware=[Middleware(HTTPSRedirectMiddleware)],
-    routes=[
-        Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
-        Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded')
-    ],
-    exception_handlers={
-        InvalidSignatureError: login_redirect,
-        NotAuthenticatedException: login_redirect,
-        HTTPException: http_exception_handler,
-    }
+        title='UniTotem', version=const.__version__,
+        middleware=[Middleware(HTTPSRedirectMiddleware)],
+        routes=[
+            Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
+            Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded')
+        ],
+        exception_handlers={
+            InvalidSignatureError    : login_redirect,
+            NotAuthenticatedException: login_redirect,
+            HTTPException            : http_exception_handler,
+        }
 )
 WWW.include_router(routers.login.router)
 WWW.include_router(routers.websocket.remote.router)
@@ -61,14 +59,8 @@ WWW.include_router(routers.backup.router)
 
 @WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
 async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
-    ip = do_ip_addr(get_default=True)
-    return templates.TemplateResponse(request, f'{page}.html.j2', dict(
-        ut_vers=const.__version__,
-        os_vers=os_release()['PRETTY_NAME'],
-        ip_addr=ip['addr'][0]['addr'] if ip else None,
-        hostname=get_hostname(),
-        wifi=DEFAULT_AP
-    ))
+    return templates.TemplateResponse(request, f'{page}.html.j2',
+                                      {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
 
 
 parser = ArgumentParser()
@@ -82,30 +74,29 @@ parser.add_argument('--config', default=const.default_config_file)
 parser.add_argument('--version', action='version', version='%(prog)s ' + const.__version__)
 cmdargs = Arguments.model_validate(vars(parser.parse_args()))
 
+loop = asyncio.get_event_loop()
+logger.debug('Got event loop {}', id(loop))
+loop.add_signal_handler(signal.SIGTERM, SHUTDOWN_EVENT.set, ())
+
 try:
     Config(filename=cmdargs.config)
 except FileNotFoundError:
     logger.warning('First boot or no configuration file found.')
     try:
-        if not do_ip_addr(True) or exists(FALLBACK_AP_FILE):
+        if not do_ip_addr(True):
             # config file doesn't exist, and we are not connected, maybe it's first boot
-            hotspot = start_hotspot()
-            DEFAULT_AP = dict(ssid=hotspot[0], password=hotspot[1], qrcode=wifi_qr(hotspot[0], hotspot[1]))
+            ssid, passwd = loop.run_until_complete(start_hotspot())
             logger.info(
-                f'Not connected to any network, started fallback hotspot {hotspot[0]} with password {hotspot[1]}.')
-    except Exception:
-        logger.error("Couldn't start wifi hotspot.")
-        logger.error(format_exc())
+                    f'Not connected to any network, started fallback hotspot {ssid} with password {passwd}.')
+    except Exception as e:
+        logger.error(f"Couldn't start wifi hotspot: {e}")
 
 REMOTE_WS.pk = Config.rsa_pk
 
 # APT_THREAD.start()
 
-loop = asyncio.get_event_loop()
-logger.debug('Got event loop {}', id(loop))
-loop.add_signal_handler(signal.SIGTERM, SHUTDOWN_EVENT.set, ())
 
-Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current))  # ,
+Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current))
 
 observer = Observer()
 # noinspection PyTypeChecker
@@ -119,7 +110,7 @@ UPLOADS.scan_folder()
 # el
 if Config.remote_server_ip:
     loop.create_task(api.generators['Settings/Remote/_Remote__connect_to_server'].__original_func__(
-        Config.remote_server_ip, Config.remote_server_port), name='remote_control')
+            Config.remote_server_ip, Config.remote_server_port), name='remote_control')
 elif not cmdargs.no_gui:
     loop.create_task(api.generators['Settings/Remote/_Remote__webview_control_main'].__original_func__(),
                      name='page_controller')
@@ -134,8 +125,8 @@ async def info_loop(_ws: WSManager, waiter: asyncio.Event):
 loop.create_task(info_loop(WS, SHUTDOWN_EVENT), name='info_loop')
 
 loop.create_task(serve(WWW, HyperConfig().from_mapping(  # type: ignore
-    bind=f'{cmdargs.https_bind}:{cmdargs.https_port}', insecure_bind=f'{cmdargs.http_bind}:{cmdargs.http_port}',
-    certfile=const.certfile, keyfile=const.keyfile, logger_class=Logger
+        bind=f'{cmdargs.https_bind}:{cmdargs.https_port}', insecure_bind=f'{cmdargs.http_bind}:{cmdargs.http_port}',
+        certfile=const.certfile, keyfile=const.keyfile, logger_class=Logger
 ), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server')  # type: ignore
 
 try:
@@ -145,7 +136,7 @@ except KeyboardInterrupt:
     SHUTDOWN_EVENT.set()
     pass
 
-stop_hostpot()
+loop.run_until_complete(stop_hotspot())
 
 observer.stop()
 # APT_THREAD.join()

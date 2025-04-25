@@ -1,6 +1,6 @@
 from io import BytesIO
 from json import dumps, loads
-from platform import node as get_hostname
+from socket import gethostname
 from time import strftime
 from typing import Annotated
 from zipfile import ZipFile, ZIP_DEFLATED, BadZipFile
@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, UploadFile, Body, HTTPException
 from starlette import status
 from starlette.responses import Response
 
-import api.constants as const
+import utils.constants as const
 from api.commons import UPLOADS
 from api.models import Config
 from routers.login import LOGMAN
@@ -28,7 +28,7 @@ async def create_backup(include_uploaded: bool = False):
     config_backup = {
         "version": const.__version__,
         "CONFIG": Config.model_dump_json(),
-        "hostname": get_hostname(),
+        "hostname": gethostname(),
         "def_audio_dev": get_default_audio_device(),
         "netplan": {fname: get_netplan_file(fname) for fname in get_netplan_file_list()},
         "cron": CRONTAB.serialize()

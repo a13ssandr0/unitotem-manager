@@ -27,7 +27,7 @@ from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field,
 from pydantic_extra_types.color import Color
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from api import constants as const
+from utils import constants as const
 from utils.async_timer import Timer
 from utils.extras import strtobool
 from utils.models.user import User, UserData, UserPerms

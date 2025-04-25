@@ -6,7 +6,7 @@
 
 import asyncio
 
-from api.constants import Arguments, uploads_folder
+from utils.constants import Arguments, uploads_folder
 from utils.storage.uploadmanager import UploadManager
 
 UPLOADS = UploadManager(uploads_folder)

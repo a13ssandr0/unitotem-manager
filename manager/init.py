@@ -2,7 +2,7 @@ import asyncio
 
 import uvloop
 
-import api.constants as const
+import utils.constants as const
 from utils.logging import logger
 
 # loguru is imported for the first time from

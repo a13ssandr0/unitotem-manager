@@ -283,14 +283,17 @@
 
         const messageModal = $('#messageModal');
         const messageModalTitle = $('#messageModal .modal-title');
-        const messageModalPosBtn = $('#messageModal .btn-danger');
-        const messageModalNegBtn = $('#messageModal .btn-outline-primary');
-        $('#confirmModal').on('show.bs.modal', event => {
-            const button = event.relatedTarget;
-            messageModalTitle.text(button.attr('data-bs-title'));
-            messageModalPosBtn.html(button.attr('data-bs-positive-btn'))
+
+        const confirmModal = $('#confirmModal');
+        const confirmModalTitle = $('#confirmModal .modal-title');
+        const confirmModalPosBtn = $('#confirmModal .btn-danger');
+        const confirmModalNegBtn = $('#confirmModal .btn-outline-primary');
+        confirmModal.on('show.bs.modal', event => {
+            const button = $(event.relatedTarget);
+            confirmModalTitle.html(button.attr('data-bs-title'));
+            confirmModalPosBtn.html(button.attr('data-bs-positive-btn'))
                 .attr("onclick", button.attr('data-bs-positive-action'));
-            messageModalNegBtn.html(button.attr('data-bs-negative-btn'))
+            confirmModalNegBtn.html(button.attr('data-bs-negative-btn'))
                 .attr("onclick", button.attr('data-bs-negative-action'));
         });
     </script>

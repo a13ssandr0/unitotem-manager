@@ -4,8 +4,14 @@ from subprocess import run, PIPE
 
 
 def do_ip_addr(get_default=False):
-    ip_addr = run(['/usr/sbin/ip', 'addr'],
-            stdout=PIPE, stderr=PIPE, check=False).stdout.decode().splitlines()
+    """
+    Run `ip addr` and parse its result
+    :param get_default: get only data about default interface
+    :return: if get_default is False return the full output, otherwise return default interface status.
+            If get_default is True but no default interface is present in /proc/net/route this means the system is
+            not connected to the internet and returns False.
+    """
+    ip_addr = run(['/usr/sbin/ip', 'addr'], stdout=PIPE, text=True).stdout.splitlines()
     r = {}
     current = {}
     rx_next_line = False
@@ -129,3 +135,8 @@ def do_ip_addr(get_default=False):
         elif line.startswith("TX"):
             tx_next_line = True
     return r[def_iface] if get_default and def_iface else False if get_default and not def_iface else r
+
+
+if __name__ == "__main__":
+    from pprint import pprint
+    pprint(do_ip_addr(True))
