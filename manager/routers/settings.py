@@ -9,10 +9,10 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
 from utils import constants as const
-from api.commons import UPLOADS
 from utils.models.user import User
 from routers.login import LOGMAN
 from templates import templates
+from utils.storage.uploadmanager import upload_manager
 from utils.system.audio import get_audio_devices
 from utils.system.lsblk import lsblk
 from utils.system.network.misc import get_default_wireless
@@ -35,8 +35,8 @@ async def settings(request: Request, tab: str = 'main_menu', user: User = Depend
             logged_user=user,
             cur_tab=tab,
             disp_size=controller.bounds,
-            disk_used=UPLOADS.disk_usedh,  # type: ignore
-            disk_total=UPLOADS.disk_totalh,  # type: ignore
+            disk_used=upload_manager.disk_usedh,  # type: ignore
+            disk_total=upload_manager.disk_totalh,  # type: ignore
             def_wifi=get_default_wireless()
     )
     if tab == 'audio':
@@ -53,8 +53,8 @@ def info(request: Request, user: User = Depends(LOGMAN)):
     return templates.TemplateResponse(request, 'info.html.j2', dict(
             logged_user=user,
             disp_size=controller.bounds,
-            disk_used=UPLOADS.disk_usedh,  # type: ignore
-            disk_total=UPLOADS.disk_totalh,  # type: ignore
+            disk_used=upload_manager.disk_usedh,  # type: ignore
+            disk_total=upload_manager.disk_totalh,  # type: ignore
             cpu_count=cpu_count(),
             ram_tot=human_readable_size(virtual_memory().total),
             disks=[blk.model_dump() for blk in lsblk()],

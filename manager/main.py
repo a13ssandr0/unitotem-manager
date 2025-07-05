@@ -20,15 +20,18 @@ from watchdog.observers import Observer
 
 import routers
 import utils.constants as const
-from api.commons import SHUTDOWN_EVENT, UPLOADS
-from api.models import Config
+from api.commons import SHUTDOWN_EVENT
 from api.ws.endpoints import REMOTE_WS, WS, api
 from api.ws.wsmanager import WSManager
 from routers.error import http_exception_handler
 from routers.login import NotAuthenticatedException, login_redirect
 from templates import templates
-from utils.constants import Arguments
-from utils.logging import Logger
+from utils._logging import Logger
+from utils.models.assets import assets_manager
+from utils.models.command_line import cmdargs
+from utils.models.remote import remote_manager
+from utils.models.user import user_manager
+from utils.storage.uploadmanager import upload_manager
 from utils.system.network.hotspot import get_hotspot_with_qr, is_hotspot_enabled, start_hotspot, stop_hotspot
 from utils.system.network.ip import do_ip_addr
 from utils.system.sysinfo import get_sysinfo
@@ -72,14 +75,14 @@ parser.add_argument('--https-bind', default=const.default_bind_secure)
 parser.add_argument('--https-port', default=const.default_port_secure)  # , gt=0, le=65525)
 parser.add_argument('--config', default=const.default_config_file)
 parser.add_argument('--version', action='version', version='%(prog)s ' + const.__version__)
-cmdargs = Arguments.model_validate(vars(parser.parse_args()))
+# cmdargs = Arguments.model_validate(vars(parser.parse_args()))
 
 loop = asyncio.get_event_loop()
 logger.debug('Got event loop {}', id(loop))
 loop.add_signal_handler(signal.SIGTERM, SHUTDOWN_EVENT.set, ())
 
 try:
-    Config(filename=cmdargs.config)
+    assets_manager.load()
 except FileNotFoundError:
     logger.warning('First boot or no configuration file found.')
     try:
@@ -91,26 +94,38 @@ except FileNotFoundError:
     except Exception as e:
         logger.error(f"Couldn't start wifi hotspot: {e}")
 
-REMOTE_WS.pk = Config.rsa_pk
+try:
+    user_manager.load()
+except FileNotFoundError:
+    logger.warning('Users configuration file not found. Creating default user "admin" with password "admin".')
+    user_manager.add('admin', 'admin', ['admin'])
+
+try:
+    remote_manager.load()
+except FileNotFoundError:
+    logger.info("Saving remote connection RSA private key")
+    remote_manager.save()
+
+REMOTE_WS.pk = remote_manager.rsa_prik
 
 # APT_THREAD.start()
 
 
-Config.assets.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current))
+assets_manager.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current))
 
 observer = Observer()
 # noinspection PyTypeChecker
-observer.schedule(UPLOADS, UPLOADS.folder)
+observer.schedule(upload_manager, upload_manager.folder)
 observer.start()
 
-UPLOADS.scan_folder()
+upload_manager.scan_folder()
 
 # if cmdargs.get('remote'):
 #     loop.create_task(connect_to_server(cmdargs['remote']), name='remote_control')
 # el
-if Config.remote_server_ip:
+if remote_manager.server_ip:
     loop.create_task(api.generators['Settings/Remote/_Remote__connect_to_server'].__original_func__(
-            Config.remote_server_ip, Config.remote_server_port), name='remote_control')
+            remote_manager.server_ip, remote_manager.server_port), name='remote_control')
 elif not cmdargs.no_gui:
     loop.create_task(api.generators['Settings/Remote/_Remote__webview_control_main'].__original_func__(),
                      name='page_controller')
@@ -125,8 +140,8 @@ async def info_loop(_ws: WSManager, waiter: asyncio.Event):
 loop.create_task(info_loop(WS, SHUTDOWN_EVENT), name='info_loop')
 
 loop.create_task(serve(WWW, HyperConfig().from_mapping(  # type: ignore
-        bind=f'{cmdargs.https_bind}:{cmdargs.https_port}', insecure_bind=f'{cmdargs.http_bind}:{cmdargs.http_port}',
-        certfile=const.certfile, keyfile=const.keyfile, logger_class=Logger
+        bind=f'{cmdargs.bind_secure}:{cmdargs.port_secure}', insecure_bind=f'{cmdargs.bind}:{cmdargs.port}',
+        certfile=cmdargs.certfile, keyfile=cmdargs.keyfile, logger_class=Logger
 ), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server')  # type: ignore
 
 try:

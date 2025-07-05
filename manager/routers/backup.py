@@ -10,9 +10,9 @@ from starlette import status
 from starlette.responses import Response
 
 import utils.constants as const
-from api.commons import UPLOADS
-from api.models import Config
+# from api.models import Config
 from routers.login import LOGMAN
+from utils.storage.uploadmanager import upload_manager
 from utils.system.audio import get_default_audio_device, set_default_audio_device
 from utils.system.crontab import CRONTAB
 from utils.system.network.misc import set_hostname
@@ -38,7 +38,7 @@ async def create_backup(include_uploaded: bool = False):
     with ZipFile(zip_buffer, 'w', ZIP_DEFLATED, False) as zip_file:
         zip_file.writestr("config.json", dumps(config_backup))
         if include_uploaded:
-            for file in UPLOADS.files:
+            for file in upload_manager.files:
                 zip_file.write(file.absolute(), "uploaded/" + file.name)
     zip_buffer.seek(0)
     return Response(content=zip_buffer, media_type='application/zip',
@@ -82,7 +82,7 @@ async def load_backup(backup_file: UploadFile,
                 for filename in files:
                     if filename.startswith('uploaded/'):
                         with zip_file.open(filename) as infile:
-                            _ = await UPLOADS.save(infile, filename)
+                            _ = await upload_manager.save(infile, filename)
 
             res = generate_netplan()
             if isinstance(res, str):
@@ -102,5 +102,5 @@ async def factory_reset():
 
     controller.Reset()
 
-    for file in UPLOADS.files:
-        UPLOADS.remove(file)
+    for file in upload_manager.files:
+        upload_manager.remove(file)

@@ -1,130 +1,137 @@
 from datetime import datetime
-from typing import Optional, Union, Annotated, Literal
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BeforeValidator
+from pydantic import BeforeValidator, FutureDatetime
+from pydantic_core import PydanticUndefined
 from pydantic_extra_types.color import Color
 
-from api.commons import UPLOADS
-from api.models import Config, FitEnum, validate_date, MediaType
-from utils.models.user import UserPerms
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast, WSResponse
+from utils.models.assets import FitEnum, MediaType, assets_manager
+from utils.models.user import UserPerms
+from utils.storage.uploadmanager import upload_manager
 
 
 class Scheduler(WSAPIBase):
     @UserPerms.requires.scheduler
     def asset(self):
-        return WSBroadcast(items=Config.assets.serialize(), current=Config.assets.current.uuid)
+        return WSBroadcast(items=assets_manager.serialize_assets(), current=assets_manager.current.uuid)
 
     @UserPerms.requires.scheduler
     def file(self):
-        return WSBroadcast(files=UPLOADS.serialize())
+        return WSBroadcast(files=upload_manager.serialize())
 
     @UserPerms.requires.scheduler
-    def add_url(self, items=None):
-        if items is None:
-            items = []
+    def add_url(self, items:list):
         for element in items:
             if isinstance(element, str):
                 element = {'url': element}
             element.pop('uuid', None)  # uuid MUST be generated internally
-            Config.assets.append(element)
-        Config.save()
+            assets_manager.append(element)
+        assets_manager.save()
 
     @UserPerms.requires.scheduler
-    def add_file(self, items=None):
-        if items is None:
-            items = []
+    def add_file(self, items:list):
         invalid = []
         for element in items:
             if isinstance(element, str):
                 element = {'url': element}
-            if element['url'] in UPLOADS.filenames:  # type: ignore
-                Config.assets.append({
+            if element['url'] in upload_manager.filenames:  # type: ignore
+                assets_manager.append({
                     'url': 'file:' + element['url'],
                     'name': element['url'],
-                    'duration': element.get('duration', UPLOADS.files_info[element['url']].duration_s),
+                    'duration': element.get('duration', upload_manager.files_info[element['url']].duration_s),
                     'enabled': element.get('enabled', False),
-                    'media_type': element.get('media_type', UPLOADS.files_info[element['url']].mime)
+                    'media_type': element.get('media_type', upload_manager.files_info[element['url']].mime)
                 })
             else:
                 invalid.append(element)
-        Config.save()
+        assets_manager.save()
         if invalid:
             return WSResponse(error='Invalid elements', extra=invalid)
+        return None
 
     @UserPerms.requires.scheduler
     def edit(self,
              uuid: str,
-             name: Optional[str] = None,
-             url: Optional[str] = None,
-             duration: Optional[Union[int, float]] = None,
-             fit: Optional[FitEnum] = None,
-             bg_color: Union[Color, None, Literal[-1]] = -1,
-             ena_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
-             dis_date: Annotated[Optional[datetime], BeforeValidator(validate_date)] = None,
-             enabled: Optional[bool] = None):
-        asset = Config.assets[uuid]
-        if name is not None and asset.name != name:
+             name: Optional[str]|PydanticUndefined = PydanticUndefined,
+             url: Optional[str]|PydanticUndefined = PydanticUndefined,
+             duration: Optional[Union[int, float]]|PydanticUndefined = PydanticUndefined,
+             fit: Optional[FitEnum]|PydanticUndefined = PydanticUndefined,
+             bg_color: Optional[Color]|PydanticUndefined = PydanticUndefined,
+             ena_date: Optional[FutureDatetime]|PydanticUndefined = PydanticUndefined,
+             dis_date: Optional[FutureDatetime]|PydanticUndefined = PydanticUndefined,
+             enabled: Optional[bool]|PydanticUndefined = PydanticUndefined):
+        asset = assets_manager[uuid]
+
+        if name is not PydanticUndefined and asset.name != name:
             asset.name = name
-        if url is not None and asset.url != url:
+
+        if url is not PydanticUndefined and asset.url != url:
             asset.url = url
             asset.media_type = MediaType.undefined
-        if duration is not None and asset.duration != duration:
-            asset.duration = duration
-        if fit is not None and asset.fit != fit:
+
+        if duration is not PydanticUndefined and asset.duration != duration:
+            asset.update_duration(duration)
+
+        if fit is not PydanticUndefined and asset.fit != fit:
             asset.fit = fit
-        if bg_color != -1 and asset.bg_color != bg_color:
+
+        if bg_color is not PydanticUndefined and asset.bg_color != bg_color:
             asset.bg_color = bg_color
-        if ena_date is not None and asset.ena_date != ena_date:
+
+        if ena_date is not PydanticUndefined and asset.ena_date != ena_date:
             asset.ena_date = ena_date
-        if dis_date is not None and asset.dis_date != dis_date:
+
+        if dis_date is not PydanticUndefined and asset.dis_date != dis_date:
             asset.dis_date = dis_date
-        if enabled is not None and asset.enabled != enabled:
+
+        if enabled is not PydanticUndefined and asset.enabled != enabled:
             if enabled:
                 asset.enable()
             else:
                 asset.disable()
-        Config.save()
+        assets_manager.save()
 
     @UserPerms.requires.scheduler
     def current(self):
-        if Config.enabled_asset_count:
-            return WSBroadcast(uuid=Config.assets.current.uuid)
+        if assets_manager.count_enabled():
+            return WSBroadcast(uuid=assets_manager.current.uuid)
+        return None
 
     @UserPerms.requires.scheduler
     def delete(self, uuid: str):
-        del Config.assets[uuid]
-        Config.save()
+        del assets_manager[uuid]
+        assets_manager.save()
 
     @UserPerms.requires.scheduler
     def delete_file(self, files: list[str]):
         for file in files:
-            UPLOADS.remove(file)
-        Config.save()
+            upload_manager.remove(file)
+        assets_manager.save()
 
     @UserPerms.requires.scheduler
     def goto(self, index: Union[None, int, str] = None):
-        Config.assets.goto_a(index)
+        assets_manager.goto_a(index)
 
     @UserPerms.requires.scheduler
     def back(self):
-        Config.assets.prev_a()
+        assets_manager.prev_a()
 
     @UserPerms.requires.scheduler
     def next(self):
-        Config.assets.next_a()
+        assets_manager.next_a()
 
     @UserPerms.requires.scheduler
     def reorder(self, from_i: int, to_i: int):
-        Config.assets.move(from_i, to_i)
-        Config.save()
+        assets_manager.move(from_i, to_i)
+        assets_manager.save()
 
 
 class Settings(WSAPIBase):
     @UserPerms.requires.scheduler
     def default_duration(self, duration: Optional[int] = None):
         if duration is not None:
-            Config.def_duration = duration
-            Config.save()
-        return WSBroadcast(duration=Config.def_duration)
+            assets_manager.default_duration = duration
+            assets_manager.save()
+        return WSBroadcast(duration=assets_manager.default_duration)

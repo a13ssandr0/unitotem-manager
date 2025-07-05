@@ -100,7 +100,7 @@ if __name__ == "__main__":
     sock_path = Path('/run/unitotem/nm.sock')
     sock_path.parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info('Staring UniTotem admin daemon...')
+    logger.info('Starting UniTotem admin daemon...')
     t = rpyc_server.ThreadedServer(Netplan, socket_path=str(sock_path))
     shutil.chown(sock_path, group='unitotem')
     sock_path.chmod(0o760)

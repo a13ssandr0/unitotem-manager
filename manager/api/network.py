@@ -6,9 +6,10 @@ from loguru import logger
 from rpyc.utils.factory import unix_connect
 from werkzeug.utils import secure_filename
 
-from api.models import Config
 from api.ws.responses import WSBroadcast, WSResponse
 from api.ws.wsmanager import WSAPIBase
+from utils.models import assets
+from utils.models.assets import assets_manager
 from utils.models.user import UserPerms
 from utils.system.network.hotspot import is_hotspot_enabled, stop_hotspot
 from utils.system.network.ip import do_ip_addr
@@ -75,8 +76,8 @@ class Settings(WSAPIBase):
                         if await is_hotspot_enabled() and do_ip_addr(True):
                             # AP is still enabled, but now we are connected, AP is no longer needed
                             await stop_hotspot()
-                            # TODO: check if showing first boot with QR
-                            Config.assets.next_a()
+                            if assets_manager.current == assets.first_boot:
+                                assets_manager.next_a()
                     elif isinstance(res, str):
                         yield WSResponse(error='Netplan error', extra=res)
                 yield self.getFile()

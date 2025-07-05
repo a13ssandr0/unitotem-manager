@@ -3,10 +3,9 @@ import asyncio
 import uvloop
 
 import utils.constants as const
-from utils.logging import logger
+from utils._logging import logger
 
-# loguru is imported for the first time from
-# utils.logging to initialize the log interceptor
+# loguru is imported for the first time from utils.logging to initialize the log interceptor
 
 logger.info('Starting UniTotem Manager {}', const.__version__)
 
@@ -20,6 +19,12 @@ logger.success('Event loop (id: {}) ready', id(loop))
 
 # noinspection PyUnresolvedReferences
 from utils import environment
+
+
+# Migration of old configuration files to newer versions
+from utils.migration import run_advancement
+run_advancement()
+
 
 try:
     # noinspection PyUnresolvedReferences

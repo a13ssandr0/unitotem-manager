@@ -1,26 +1,26 @@
 import asyncio
-import base64
+from base64 import b64decode
 from ipaddress import IPv4Address
 from json import loads
-from os import environ
 from socket import gethostname
 from traceback import format_exc
-from typing import Optional, cast
+from typing import Optional
 
 import asyncwebsockets
 import requests
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from Crypto.Hash import SHA256
+from Crypto.Signature import pss as PSS
 from loguru import logger
 from pydantic import PositiveInt
 from wsproto.events import CloseConnection
 
-import utils.constants as const
 from api.commons import SHUTDOWN_EVENT
-from api.models import Config
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
+from utils.environment import environ
+from utils.models.assets import assets_manager
+from utils.models.command_line import cmdargs
+from utils.models.remote import remote_manager
 from webview_controller.controller import controller
 
 REMOTE_CONNECTED = False
@@ -30,21 +30,21 @@ class Remote(WSAPIBase):
     @staticmethod
     def getMode():
         return WSBroadcast(
-                remote_server=Config.remote_server_ip.compressed if Config.remote_server_ip else None,
+                remote_server=remote_manager.server_ip.compressed if remote_manager.server_ip else None,
                 remote_connected=REMOTE_CONNECTED,
-                remote_port=Config.remote_server_port,
-                remote_clients=list(Config.remote_clients.items())
+                remote_port=remote_manager.server_port,
+                remote_clients=remote_manager.clients_list,
         )
 
     def setMode(self, remote_server: Optional[IPv4Address],
-                remote_port: Optional[PositiveInt] = const.default_port_secure):
-        remote_port = remote_port or const.default_port_secure
-        if Config.remote_server_ip == remote_server and Config.remote_server_port == remote_port:
-            return
-        Config.remote_server_ip = remote_server
-        Config.remote_server_port = remote_port
-        Config.remote_server_pk = None
-        Config.save()
+                remote_port: Optional[PositiveInt] = cmdargs.port_secure):
+        remote_port = remote_port or cmdargs.port_secure
+        if remote_manager.server_ip == remote_server and remote_manager.server_port == remote_port:
+            return None
+        remote_manager.server_ip = remote_server
+        remote_manager.server_port = remote_port
+        remote_manager.server_pubk = None
+        remote_manager.save()
         for task in asyncio.all_tasks():
             if task.get_name() in ['page_controller', 'remote_control']:
                 task.cancel()
@@ -61,12 +61,14 @@ class Remote(WSAPIBase):
             if remote.headers['instance_id'] == client:
                 await remote.close(code=4023, reason="Server forced disconnection")
                 self.remote_ws.disconnect(remote)
-                del Config.remote_clients[remote.headers['instance_id']]
-                return self.getMode()
+                del remote_manager.clients[remote.headers['instance_id']]
+                remote_manager.save()
+                break
+        return self.getMode()
 
     async def __webview_control_main(self):
         logger.info('Starting webview controller')
-        async for asset in Config.assets.iter_wait(waiter=SHUTDOWN_EVENT):
+        async for asset in assets_manager.iter_wait():
             await self.ws.broadcast('Scheduler/Asset/current', uuid=asset.uuid)
             url = asset.url
             if url.startswith('file:'):
@@ -81,26 +83,28 @@ class Remote(WSAPIBase):
             controller.Show(**data)
             await self.remote_ws.broadcast('Show', False, **data)
 
-    async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = const.default_port_secure, headers=None):
+    async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = cmdargs.port_secure, headers=None):
         if headers is None:
             headers = {}
         global REMOTE_CONNECTED
         url = f'wss://{ip}:{port}/remote'
-        headers.setdefault("instance_id", environ['instance_id'])
+        headers.setdefault("instance_id", environ.instance_id)
         headers.setdefault("hostname", gethostname())
-        headers.setdefault("port", const.default_port_secure)
+        headers.setdefault("port", cmdargs.port_secure)
         while not SHUTDOWN_EVENT.is_set():
             try:
                 logger.info('Connecting to', url)
-                if Config.remote_server_pk is None:
+                if remote_manager.server_pubk is None:
                     server_pk = requests.get(f'https://{ip}:{port}/remote/public_key', verify=False).content
-                    Config.remote_server_pk = cast(rsa.RSAPublicKey, serialization.load_pem_public_key(server_pk))
-                    Config.save()
+                    remote_manager.server_pubk = server_pk
+                    remote_manager.save()
+
+                verifier = PSS.new(remote_manager.server_pubk)
                 # noinspection PyArgumentList
                 async with asyncwebsockets.open_websocket(url, list(headers.items())) as ws:
                     REMOTE_CONNECTED = True
                     logger.success('Connected to', url)
-                    while True:
+                    while not SHUTDOWN_EVENT.is_set():
                         msg = await ws._next_event()
                         if isinstance(msg, CloseConnection):
                             if msg.code == 4023:  # Server forced disconnection for unpairing
@@ -109,25 +113,16 @@ class Remote(WSAPIBase):
                                 self.setMode(remote_server=None, remote_port=None)
                                 return
                             break
-                        data = loads(getattr(msg, 'data', '{}'))
-                        if 'target' in data and '__signature__' in data:
-                            Config.remote_server_pk.verify(
-                                    base64.b64decode(data['__signature__'].encode()),
-                                    data['src'].encode(),
-                                    padding.PSS(
-                                            mgf=padding.MGF1(hashes.SHA256()),
-                                            salt_length=padding.PSS.MAX_LENGTH
-                                    ),
-                                    hashes.SHA256()
-                            )
+                        data, signature = getattr(msg, 'data', '.').split('.')
+                        data, signature = b64decode(data), b64decode(signature)
+                        verifier.verify(SHA256.new(data), signature)
+                        data = loads(data)
                         if data.pop('target') == 'Show':
                             controller.Show(**data)
-                        if SHUTDOWN_EVENT.is_set():
-                            break
             except asyncio.exceptions.CancelledError:
                 logger.info('Disconnected from remote server')
                 break
-            except InvalidSignature:
+            except ValueError:
                 logger.error('Invalid signature, disconnected from server')
                 await asyncio.sleep(5)
             except OSError as e:

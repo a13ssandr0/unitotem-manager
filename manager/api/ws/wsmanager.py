@@ -6,19 +6,20 @@ from collections import defaultdict
 from json import dumps
 from typing import Optional
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from Crypto.Hash import SHA256
+from Crypto.Signature import pss as PSS
 from fastapi import WebSocket
+
+from utils.models.remote import remote_manager
 
 
 class WSManager:
-    pk: Optional[RSAPrivateKey] = None
     active_connections: list[WebSocket] = []
     active_users: defaultdict[str, list[WebSocket]] = defaultdict(list)
     last: Optional[dict] = None
+    signer: Optional[PSS.PSS_SigScheme] = None
 
-    def __init__(self, cache_last=False):
+    def __init__(self, *, cache_last=False, sign_messages=False):
         if cache_last:
             self.last = {}
         # if last is not None we are using command cache.
@@ -31,6 +32,9 @@ class WSManager:
         # if we need caching, self.last is initialized to something different from None
         # this way we avoid using two variables: one for setting and the other
         # for actual caching
+
+        if sign_messages:
+            self.signer = PSS.new(remote_manager.rsa_prik)
 
     async def connect(self, websocket: WebSocket, user: Optional[str] = None):
         await websocket.accept()
@@ -50,17 +54,12 @@ class WSManager:
             pass  # it's not necessary to crash if not present
 
     def prepare_message(self, msg: dict, nocache=False):
-        if self.pk:
-            msg['__signature__'] = b64encode(self.pk.sign(
-                msg['src'].encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
-                ),
-                hashes.SHA256()
-            )).decode()
-        text = dumps(msg)
+        text = dumps(msg).encode()
+        if self.signer:
+            text = b64encode(text) + b'.' + b64encode(self.signer.sign(SHA256.new(text)))
+        text=text.decode()
         if self.last is not None and not nocache:
+            # if cache is enabled (self.last is not None) and message is set to be cached (not nocache)
             self.last[msg['target']] = text
         return text
 

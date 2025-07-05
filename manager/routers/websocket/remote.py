@@ -7,15 +7,15 @@ from starlette import status
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from utils import constants as const
-from api.models import Config
 from api.ws.endpoints import REMOTE_WS
+from utils.models.remote import remote_manager
 
 router = APIRouter()
 
 
 @router.websocket("/remote")
 async def remote_websocket(websocket: WebSocket):
-    if Config.remote_server_ip:
+    if remote_manager.server_ip:
         # immediately refuse connections if remote_server is configured (!=None)
         # this means that this instance is running in client/slave mode
         # and someone is trying either to connect from another client or
@@ -35,12 +35,12 @@ async def remote_websocket(websocket: WebSocket):
 
     await REMOTE_WS.connect(websocket)
 
-    Config.remote_clients[websocket.headers['instance_id']] = {
+    remote_manager.clients[websocket.headers['instance_id']] = {
         'ip': websocket.client.host,
         'port': websocket.headers.get('port', const.default_port_secure),
         'hostname': websocket.headers.get('hostname', websocket.headers['instance_id'])
     }
-    Config.save()
+    remote_manager.save()
 
     while True:
         try:
