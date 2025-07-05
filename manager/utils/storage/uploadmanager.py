@@ -9,7 +9,8 @@ from aiofiles import open as aopen
 from watchdog.events import FileSystemEventHandler
 from werkzeug.utils import secure_filename
 
-from api.models import Config
+from utils.constants import uploads_folder
+from utils.models.assets import assets_manager
 from utils.storage.file_info import FileInfo, get_file_info
 from utils.units import human_readable_size
 
@@ -123,14 +124,14 @@ class UploadManager(FileSystemEventHandler):
             return await self.save(infile, out_filename)
 
         file_data = get_file_info(out_filename)
-        Config.assets.append({
+        assets_manager.append({
             'name': file_data.filename,
             'url': 'file:' + file_data.filename,
             'duration': file_data.duration_s,
             'enabled': False,
             'media_type': file_data.mime
         })
-        Config.save()
+        assets_manager.save()
 
         return out_filename
 
@@ -141,9 +142,9 @@ class UploadManager(FileSystemEventHandler):
         return self._folder.joinpath(file).exists()
 
     def remove(self, file):
-        for asset in Config.assets.find('file:' + file):
-            Config.assets.remove(asset)
-        Config.save()
+        for asset in assets_manager.find('file:' + file):
+            assets_manager.remove(asset)
+        assets_manager.save()
         self._folder.joinpath(file).unlink(True)
 
     def on_closed(self, event):
@@ -161,3 +162,6 @@ class UploadManager(FileSystemEventHandler):
     def on_moved(self, event):
         super().on_moved(event)
         self.scan_folder()
+
+
+upload_manager = UploadManager(uploads_folder)

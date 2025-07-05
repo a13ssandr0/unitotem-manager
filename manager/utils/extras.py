@@ -1,3 +1,9 @@
+from typing import Any
+
+from pydantic import WrapValidator
+from pydantic_core.core_schema import ValidationInfo, ValidatorFunctionWrapHandler
+
+
 def strtobool(val: str) -> bool:
     """Convert a string representation of truth to true (1) or false (0).
 
@@ -12,3 +18,18 @@ def strtobool(val: str) -> bool:
         return False
     else:
         raise ValueError(f"invalid truth value {val!r}")
+
+
+# noinspection PyPep8Naming
+def ValidatorFallback(fallback_value: Any):
+    def use_fallback(
+        v: Any,
+        handler: ValidatorFunctionWrapHandler,
+        info: ValidationInfo,
+    ) -> Any:
+        try:
+            return handler(v)
+        except ValueError:
+            return fallback_value
+
+    return WrapValidator(use_fallback)

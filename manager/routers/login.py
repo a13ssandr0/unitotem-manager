@@ -8,12 +8,9 @@ __all__ = [
 
 import time
 from datetime import timedelta
-from os import environ, urandom
 from typing import Optional
 from urllib.parse import quote_plus
 
-from cryptography.hazmat.primitives import serialization
-from dotenv import load_dotenv, set_key
 from fastapi import APIRouter, Depends, Form, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -23,18 +20,10 @@ from loguru import logger
 from starlette.requests import Request
 from starlette.responses import Response
 
-import utils.constants as const
-from api.models import Config
 from templates import templates
-from utils.models.user import User
-from utils.system.network.ip import do_ip_addr
-
-load_dotenv(const.envfile)
-
-if 'auth_token' not in environ:
-    environ['auth_token'] = urandom(24).hex()
-    const.envfile.touch(mode=0o600)
-    set_key(const.envfile, 'auth_token', environ['auth_token'])
+from utils.environment import environ
+from utils.models.remote import remote_manager
+from utils.models.user import User, user_manager
 
 
 class NotAuthenticatedException(Exception):
@@ -68,21 +57,21 @@ class LoginForm(OAuth2PasswordRequestForm):
 
 
 LOGMAN = LoginManager(
-        secret=environ['auth_token'],
+        secret=environ.auth_token,
         token_url='/auth/token',
         use_cookie=True,
         use_header=False,
         not_authenticated_exception=NotAuthenticatedException,
         default_expiry=timedelta(days=7)
 )
-LOGMAN.user_loader()(Config.get_user)
+LOGMAN.user_loader()(user_manager.get_user)
 
 router = APIRouter()
 
 
 @router.post(LOGMAN.model.flows.password.tokenUrl)
 async def login(data: LoginForm = Depends()):
-    if not Config.authenticate(data.username, data.password):
+    if not user_manager.authenticate(data.username, data.password):
         raise InvalidCredentialsException
     access_token = LOGMAN.create_access_token(data={'sub': data.username, 'cre': time.monotonic()})
     resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
@@ -94,10 +83,7 @@ async def login(data: LoginForm = Depends()):
 
 @router.get("/remote/public_key")
 async def get_public_key():
-    return Response(Config.rsa_pk.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-    ), media_type="text/plain")
+    return Response(remote_manager.rsa_prik.public_key().exportKey(), media_type="text/plain")
 
 
 @router.get('/login')
@@ -121,7 +107,6 @@ async def logout():
 
 @router.post("/api/settings/set_passwd")
 async def set_pass(request: Request, response: Response, password: str, user: User = Depends(LOGMAN)):
-    Config.change_password(user.name, password)
-    Config.save()
+    user_manager.change_password(user.name, password)
     if 'Referer' in request.headers:
         response.headers['location'] = request.headers['Referer']

@@ -4,7 +4,8 @@ Werkzeug
 aiofiles
 aiohttp
 asyncwebsockets
-cryptography
+benedict
+benedict[parse]
 fastapi
 fastapi-login
 hypercorn
@@ -14,8 +15,9 @@ natsort
 packaging
 psutil
 pulsectl
+pycryptodome
 pydantic-extra-types
-pydantic==2.6.3
+pydantic
 pydbus
 pygobject==3.50.0
 pymediainfo

@@ -9,13 +9,13 @@ from benedict import benedict
 from loguru import logger
 from pydantic import validate_call
 
-from api.commons import UPLOADS
 from api.ws.permissions import check_permissions
 from api.ws.wsmanager import Context
 from api.ws.wsmanager import WSManager, WSAPIBase
 from utils.objs import dict_sort
+from utils.storage.uploadmanager import upload_manager
 
-REMOTE_WS = WSManager(cache_last=True)
+REMOTE_WS = WSManager(cache_last=True, sign_messages=True)
 WS = WSManager(cache_last=False)
 
 
@@ -142,4 +142,4 @@ async def handle_call(target, user, request_data):
 
 
 
-UPLOADS._callback = lambda x: WS.broadcast('Scheduler/file', files=x)
+upload_manager._callback = lambda x: WS.broadcast('Scheduler/file', files=x)
