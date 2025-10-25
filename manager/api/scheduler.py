@@ -88,10 +88,7 @@ class Scheduler(WSAPIBase):
             asset.dis_date = dis_date
 
         if enabled is not None and asset.enabled != enabled:
-            if enabled:
-                asset.enable()
-            else:
-                asset.disable()
+            asset.enabled = enabled
         assets_manager.save()
 
     @UserPerms.requires.scheduler
