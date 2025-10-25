@@ -55,39 +55,39 @@ class Scheduler(WSAPIBase):
     @UserPerms.requires.scheduler
     def edit(self,
              uuid: str,
-             name: Optional[str]|PydanticUndefined = PydanticUndefined,
-             url: Optional[str]|PydanticUndefined = PydanticUndefined,
-             duration: Optional[Union[int, float]]|PydanticUndefined = PydanticUndefined,
-             fit: Optional[FitEnum]|PydanticUndefined = PydanticUndefined,
-             bg_color: Optional[Color]|PydanticUndefined = PydanticUndefined,
-             ena_date: Optional[FutureDatetime]|PydanticUndefined = PydanticUndefined,
-             dis_date: Optional[FutureDatetime]|PydanticUndefined = PydanticUndefined,
-             enabled: Optional[bool]|PydanticUndefined = PydanticUndefined):
+             name: Optional[str] = None,
+             url: Optional[str] = None,
+             duration: Optional[Union[int, float]] = None,
+             fit: Optional[FitEnum] = None,
+             bg_color: Optional[Color] = None,
+             ena_date: Optional[FutureDatetime] = None,
+             dis_date: Optional[FutureDatetime] = None,
+             enabled: Optional[bool] = None):
         asset = assets_manager[uuid]
 
-        if name is not PydanticUndefined and asset.name != name:
+        if name is not None and asset.name != name:
             asset.name = name
 
-        if url is not PydanticUndefined and asset.url != url:
+        if url is not None and asset.url != url:
             asset.url = url
             asset.media_type = MediaType.undefined
 
-        if duration is not PydanticUndefined and asset.duration != duration:
+        if duration is not None and asset.duration != duration:
             asset.update_duration(duration)
 
-        if fit is not PydanticUndefined and asset.fit != fit:
+        if fit is not None and asset.fit != fit:
             asset.fit = fit
 
-        if bg_color is not PydanticUndefined and asset.bg_color != bg_color:
+        if bg_color is not None and asset.bg_color != bg_color:
             asset.bg_color = bg_color
 
-        if ena_date is not PydanticUndefined and asset.ena_date != ena_date:
+        if ena_date is not None and asset.ena_date != ena_date:
             asset.ena_date = ena_date
 
-        if dis_date is not PydanticUndefined and asset.dis_date != dis_date:
+        if dis_date is not None and asset.dis_date != dis_date:
             asset.dis_date = dis_date
 
-        if enabled is not PydanticUndefined and asset.enabled != enabled:
+        if enabled is not None and asset.enabled != enabled:
             if enabled:
                 asset.enable()
             else:
