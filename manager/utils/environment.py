@@ -38,5 +38,5 @@ class Environment(BaseSettings, env_file=const.envfile, frozen=True):
             for k, v in self.model_dump().items():
                 file.write(f'{k.upper()}={v}\n')
 
-
+#TODO replace all os.environ occurrencies
 environ = Environment()

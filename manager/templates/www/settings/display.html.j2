@@ -46,9 +46,17 @@ svg text {
     {% set bnd = disp.bounds -%}
     {% set m = ([bnd.width, bnd.height]|min)*0.025 -%}
     {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" class="screen_bg"/>'.format(bnd.x, bnd.y, bnd.width, bnd.height)) -%}
-    {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" class="screen_fg"/>'.format(bnd.x+m, bnd.y+m, bnd.width-2*m, bnd.height-5*m)) -%}
+    {% if disp.rotation == 0 %}
+        {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" class="screen_fg"/>'.format(bnd.x+m, bnd.y+m, bnd.width-2*m, bnd.height-5*m)) -%}
+    {% elif disp.rotation == 90 %}
+        {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" class="screen_fg"/>'.format(bnd.x+m, bnd.y+m, bnd.width-5*m, bnd.height-2*m)) -%}
+    {% elif disp.rotation == 180 %}
+        {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" class="screen_fg"/>'.format(bnd.x+m, bnd.y+5*m, bnd.width-2*m, bnd.height-2*m)) -%}
+    {% else %}
+        {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" class="screen_fg"/>'.format(bnd.x+5*m, bnd.y+m, bnd.width-2*m, bnd.height-2*m)) -%}
+    {% endif %}
     {% do svg.content.append('<text x="{}" y="{}">{}</text>'.format(bnd.x+bnd.width/2, bnd.y+bnd.height*2/5, disp.label)) -%}
-    {% do svg.content.append('<text x="{}" y="{}">({}x{})</text>'.format(bnd.x+bnd.width/2, bnd.y+bnd.height*3/5, bnd.width, bnd.height)) -%}
+    {% do svg.content.append('<text x="{}" y="{}">({}x{})</text>'.format(bnd.x+bnd.width/2, bnd.y+bnd.height*3/5, (bnd.width*disp.scaleFactor)|int, (bnd.height*disp.scaleFactor)|int)) -%}
     {% do svg.content.append('<rect x="{}" y="{}" width="{}" height="{}" name="screen" fill="#00000000"/>'.format(bnd.x, bnd.y, bnd.width, bnd.height)) -%}
     {% set svg.w = [svg.w, bnd.x + bnd.width]|max -%}
     {% set svg.h = [svg.h, bnd.y + bnd.height]|max -%}

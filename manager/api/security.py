@@ -9,7 +9,7 @@ from api.ws.wsmanager import WSAPIBase
 class Security(WSAPIBase):
     @staticmethod
     def getUsers():
-        return WSBroadcast(users=[(user, {'perms': list(data.perms)}) for user, data in user_manager.items()])
+        return WSBroadcast(users=[(user, {'perms': list(data.permissions)}) for user, data in user_manager.items()])
 
     def addUser(self, username: str, password: str):
         if username in user_manager:

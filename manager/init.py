@@ -1,17 +1,46 @@
+################# IMPORT LOGGER #################
+
+import sys
+from importlib.abc import Loader, MetaPathFinder
+
+from loguru import logger
+
+
+class LoggingImporter(MetaPathFinder, Loader):
+    def find_spec(self, fullname, path, target=None):
+        l = logger.opt(depth=4)
+        l.trace(f"Importing {fullname}")
+
+        for finder in sys.meta_path[1:]:
+            if hasattr(finder, 'find_spec'):
+                spec = finder.find_spec(fullname, path, target)
+                if spec is not None:
+                    return spec
+
+        l.error(f"No module named {fullname}")
+        return None
+
+
+sys.meta_path.insert(0, LoggingImporter())
+
+################# IMPORT LOGGER #################
+
+
 import asyncio
+import sys
 
 import uvloop
 
 import utils.constants as const
-from utils._logging import logger
-
-# loguru is imported for the first time from utils.logging to initialize the log interceptor
+from utils._logging import install_logger
 
 logger.info('Starting UniTotem Manager {}', const.__version__)
 
+install_logger()
+
 logger.info('Creating event loop')
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-loop = asyncio.get_event_loop()
+loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 logger.success('Event loop (id: {}) ready', id(loop))
 
@@ -20,11 +49,9 @@ logger.success('Event loop (id: {}) ready', id(loop))
 # noinspection PyUnresolvedReferences
 from utils import environment
 
-
 # Migration of old configuration files to newer versions
 from utils.migration import run_advancement
 run_advancement()
-
 
 try:
     # noinspection PyUnresolvedReferences

@@ -8,8 +8,7 @@ from hypercorn.config import Config
 from hypercorn.typing import ResponseSummary, WWWScope
 from loguru import logger
 
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
+
 
 
 class InterceptHandler(logging.Handler):
@@ -30,7 +29,6 @@ class InterceptHandler(logging.Handler):
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 
-logging.basicConfig(handlers=[InterceptHandler()], level=0)
 
 
 def get_patcher(logger_name: str):
@@ -60,3 +58,9 @@ class Logger(hypercorn.logging.Logger):
                 self.error_logger.patch(lambda r: r.update(name='')).success(message, *args, **kwargs)
             else:
                 self.error_logger.info(message, *args, **kwargs)
+
+
+def install_logger():
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    logging.basicConfig(handlers=[InterceptHandler()], level=0)
