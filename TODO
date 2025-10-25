@@ -35,6 +35,38 @@ Show confirmation on command execution (success popup/notification)
 
 <!-- Add image fitting method for images not matching screen ratio -->
 
+Fix pulseaudio missing fatal error
+Fix asset edit error
+--------
+Traceback (most recent call last):
+  File "/home/unitotem/unitotem-manager/manager/routers/websocket/web_ui.py", line 40, in websocket_endpoint
+    async for ret in handle_call(target=t, user=user, request_data=data):
+    ...<7 lines>...
+            await WS.send(websocket, ret.pop('target', t), **ret)
+  File "/home/unitotem/unitotem-manager/manager/api/ws/endpoints.py", line 140, in handle_call
+    async for ret in func(**request_data):
+        yield ret
+  File "/home/unitotem/unitotem-manager/manager/api/ws/endpoints.py", line 99, in async_gen
+    yield validated_func(*args, **kwargs)
+          ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/unitotem/unitotem-manager/.venv/lib/python3.13/site-packages/pydantic/_internal/_validate_call.py", line 39, in wrapper_function
+    return wrapper(*args, **kwargs)
+  File "/home/unitotem/unitotem-manager/.venv/lib/python3.13/site-packages/pydantic/_internal/_validate_call.py", line 136, in __call__
+    res = self.__pydantic_validator__.validate_python(pydantic_core.ArgsKwargs(args, kwargs))
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Scheduler.edit
+enabled
+  Missing required argument [type=missing_argument, input_value=ArgsKwargs((), {'name': '...568c4f3ec786dbb331df2'}), input_type=ArgsKwargs]
+    For further information visit https://errors.pydantic.dev/2.11/v/missing_argument
+---------
+
+Change default uploaded folder location
+Set ssl certificate readable by unitotem user
+Create autostart script for unitotem-admind
+Create dbus rule for user unitotem
+Handle screen hotplug
+
+Use cage on wayland https://github.com/cage-kiosk/cage
+
 Screensaver for touch panels
 
 <!-- Allow Multiuser -->

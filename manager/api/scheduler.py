@@ -51,6 +51,7 @@ class Scheduler(WSAPIBase):
             return WSResponse(error='Invalid elements', extra=invalid)
         return None
 
+    # noinspection PyTypeHints
     @UserPerms.requires.scheduler
     def edit(self,
              uuid: str,

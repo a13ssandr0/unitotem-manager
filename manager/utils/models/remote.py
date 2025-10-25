@@ -4,7 +4,7 @@ from secrets import token_hex
 from typing import Optional
 
 from Crypto.PublicKey import RSA
-from pydantic import BaseModel, Field, PositiveInt, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 from utils import constants as const
 from utils.models.command_line import cmdargs
@@ -17,7 +17,7 @@ class Client(BaseModel, validate_assignment=True, arbitrary_types_allowed=True):
 
 class RemoteManager(BaseModel, validate_assignment=True, arbitrary_types_allowed=True):
     server_ip: Optional[IPv4Address] = None
-    server_port: PositiveInt = const.default_port_secure
+    server_port: Optional[int] = Field(const.default_port_secure, gt=0, le=65535)
     server_id: Optional[str] = None
     server_pubk: Optional[RSA.RsaKey] = None
     rsa_prik: RSA.RsaKey = Field(default_factory=lambda: RSA.generate(4096))

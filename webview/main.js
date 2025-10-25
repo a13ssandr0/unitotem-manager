@@ -65,6 +65,24 @@ app.whenReady().then(() => {
     });
     mainWindow.loadFile('boot-screen.html');
 
+    // TODO will be used later to allow multiple windows
+    /*const mainWindow2 = new BrowserWindow({
+        autoHideMenuBar: true,
+        autoplayPolicy:  'no-user-gesture-required',
+        backgroundColor: '#000000',
+        frame:           false,
+        titleBarStyle:   'hidden',
+        webPreferences:  {
+            preload: path.join(__dirname, 'preload.js'),
+            webviewTag: true
+        },
+        x:               config.bounds.x+1080,
+        y:               config.bounds.y,
+        width:           config.bounds.width,
+        height:          config.bounds.height
+    });
+    mainWindow2.loadFile('boot-screen.html');*/
+
 	const session = mainWindow.webContents.session;
 	session.on('will-download', e => e.preventDefault());
 
@@ -89,6 +107,7 @@ app.whenReady().then(() => {
 		type: {type: 'a{si}'},
 		getter: function (callback) {callback(null, config.bounds)},
 		setter: function (v, complete) {
+            console.log(`Setting new bounds x:${v.x}, y:${v.y}, width:${v.width}, height:${v.height}`);
         	config.bounds = {x:v.x, y:v.y, width:v.width, height:v.height};
 			mainWindow.setBounds(config.bounds);
         	writeFileSync(cfg_file_path, JSON.stringify(config));

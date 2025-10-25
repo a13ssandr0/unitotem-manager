@@ -9,11 +9,11 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@electron/rebuild": "^3.7.1",
-    "electron": "^22.0.0"
+    "@electron/rebuild": "^4.0.1"
   },
   "dependencies": {
+    "electron": "^38.4.0",
     "dbus": "^1.0.7",
-    "npm": "^9.2.0"
+    "npm": "^11.6.2"
   }
 }

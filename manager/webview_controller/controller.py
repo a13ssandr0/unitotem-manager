@@ -1,7 +1,6 @@
-from functools import cache
 from threading import Timer
 
-from gi.repository import GLib
+import gi.repository
 from loguru import logger
 from pydbus import SessionBus
 
@@ -11,16 +10,16 @@ show_timer: Timer | None = None
 connected = None
 
 
-@cache
 def _get_proxy():
     bus = SessionBus()
     return bus.get('unitotem.WebView', '/unitotem/WebView', timeout=1)
 
 
 def get_proxy():
+    # noinspection PyUnresolvedReferences
     try:
         return _get_proxy()
-    except GLib.GError:
+    except gi.repository.GLib.GError:
         logger.error('Failed to connect to WebView, will try again later')
         return None
 
@@ -76,7 +75,7 @@ class Controller:
     @property
     def flip(self) -> int | None:
         if proxy := get_proxy():
-            return proxy.flip()
+            return proxy.flip
         return None
 
     @flip.setter
