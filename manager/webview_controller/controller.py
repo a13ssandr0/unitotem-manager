@@ -19,8 +19,8 @@ def get_proxy():
     # noinspection PyUnresolvedReferences
     try:
         return _get_proxy()
-    except gi.repository.GLib.GError:
-        logger.error('Failed to connect to WebView, will try again later')
+    except gi.repository.GLib.GError as e:
+        logger.error('Failed to connect to WebView, will try again later ({})', str(e))
         return None
 
 
@@ -31,13 +31,15 @@ class Controller:
         global connected, show_timer
         if show_timer:
             show_timer.cancel()
+        # noinspection PyUnresolvedReferences
         try:
             proxy = _get_proxy()
             connected = True
             return proxy.Show(src, container, fit, bg_color)
-        except GLib.GError:
+        except gi.repository.GLib.GError as e:
             if not SHUTDOWN_EVENT.is_set():
-                if connected or connected is None: logger.trace('Not connected to WebView, will retry every 2 seconds')
+                if connected or connected is None:
+                    logger.trace('Not connected to WebView, will retry every 2 seconds ({})', str(e))
                 show_timer = Timer(2.0, cls.Show, (src, container, fit, bg_color))
                 show_timer.start()
                 connected = False

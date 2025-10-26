@@ -93,10 +93,10 @@
             <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasResponsive"><span class="navbar-toggler-icon"></span></button>
             <a class="navbar-brand p-0" href="/"><span class="my-auto fw-bold fs-1">U<span class="d-none d-md-inline">niTotem<span id="navbar_hostname" class="fs-3"></span></span></span></a>
             {% if logged_user.has_perm.power %}
-            <button class="btn btn-outline-light ms-auto" type="button" data-bs-title="Do you want to reboot UniTotem?" data-bs-positive-btn="Reboot" data-bs-positive-action="sendCommand('power/reboot')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
+            <button class="btn btn-outline-light ms-auto" type="button" data-bs-title="Do you want to reboot UniTotem?" data-bs-positive-btn="Reboot" data-bs-positive-action="sendCommand('Power/reboot')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
                 <i class="bi bi-bootstrap-reboot"></i><span class="d-none d-sm-inline"> Reboot</span>
             </button>
-            <button class="btn btn-outline-light" type="button" data-bs-title="Do you want to shutdown UniTotem?" data-bs-positive-btn="Shutdown" data-bs-positive-action="sendCommand('power/shutdown')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
+            <button class="btn btn-outline-light" type="button" data-bs-title="Do you want to shutdown UniTotem?" data-bs-positive-btn="Shutdown" data-bs-positive-action="sendCommand('Power/shutdown')" data-bs-negative-btn="No" data-bs-toggle="modal" data-bs-target="#confirmModal">
                 <i class="bi bi-power"></i><span class="d-none d-sm-inline"> Shutdown</span>
             </button>
             {% endif %}
