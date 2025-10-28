@@ -12,8 +12,9 @@
     "@electron/rebuild": "^4.0.1"
   },
   "dependencies": {
-    "electron": "^38.4.0",
     "dbus": "^1.0.7",
+    "electron": "^38.4.0",
+    "electron-settings": "^4.0.4",
     "npm": "^11.6.2"
   }
 }
