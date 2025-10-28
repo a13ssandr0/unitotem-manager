@@ -1,7 +1,5 @@
 const {app, BrowserWindow, screen, ipcMain} = require('electron');
 const path = require('path');
-const {readFileSync, writeFileSync, unlinkSync} = require('fs');
-const {homedir} = require("os");
 const DBus = require('dbus');
 const settings = require('electron-settings');
 
