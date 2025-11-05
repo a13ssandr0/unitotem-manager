@@ -4,8 +4,8 @@ Werkzeug
 aiofiles
 aiohttp
 asyncwebsockets
-benedict
-benedict[parse]
+dash
+dash-bootstrap-components
 fastapi
 fastapi-login
 hypercorn
@@ -18,10 +18,12 @@ pulsectl
 pycryptodome
 pydantic-extra-types
 pydantic
+pydantic_settings
 pydbus
 pygobject==3.50.0
 pymediainfo
 python-benedict
+python-benedict[parse]
 python-crontab
 python-dotenv
 python-multipart
@@ -29,6 +31,7 @@ qrcode
 requests
 rpyc
 ruamel.yaml
+sdbus-networkmanager
 uvloop
 validators
 watchdog
