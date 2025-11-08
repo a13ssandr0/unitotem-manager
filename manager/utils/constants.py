@@ -1,13 +1,7 @@
 __author__ = 'Alessandro Campolo (a13ssandr0)'
 __version__ = '3.0.0'
 
-from ipaddress import IPv4Address
 from pathlib import Path
-
-from pydantic import BaseModel, Field
-
-# noinspection PyUnboundLocalVariable
-__file__: Path = Path(__file__)
 
 default_bind = '0.0.0.0'
 default_port = 80
@@ -18,11 +12,10 @@ envfile = Path('/etc/unitotem/unitotem.env')
 certfile = '/etc/ssl/unitotem.pem'
 keyfile = '/etc/ssl/unitotem.pem'
 
-uploads_folder = __file__.joinpath('../../uploaded').resolve()
-static_folder = __file__.joinpath('../../static').resolve()
+uploads_folder = Path(__file__).joinpath('../../uploaded').resolve()
+static_folder = Path(__file__).joinpath('../../static').resolve()
 
 def_duration = 30
-
 
 # class Arguments(BaseModel):
 #     no_gui: bool = Field(False, description='Start UniTotem Manager without webview gui (for testing)')

@@ -121,7 +121,7 @@
                         {% endif %}
                         {% if logged_user.has_perm.admin or logged_user.has_perm.scheduler or logged_user.has_perm.audio %}
                         <div class="row m-2 ms-0">
-                            <a href="/templates/www/settingss/www/settings" class="text-reset text-decoration-none"><i class="bi bi-sliders text-primary-emphasis"></i>&nbsp;&nbsp;&nbsp;{{menu_select('Settings', '/settings')}}</a>
+                            <a href="/settings" class="text-reset text-decoration-none"><i class="bi bi-sliders text-primary-emphasis"></i>&nbsp;&nbsp;&nbsp;{{menu_select('Settings', '/settings')}}</a>
                         </div>
                         {%- for name, tab, _, icon, show in tabs %}
                         {% if logged_user.has_perm.admin or show %}

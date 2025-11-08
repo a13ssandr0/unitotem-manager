@@ -1,0 +1,32 @@
+html {
+    font-size: 14px
+}
+
+@media (min-width: 1200px) {
+    .fs-1 {
+        font-size: 2.7rem !important;
+    }
+}
+
+.fade-in-out {
+    -webkit-animation: fadeinout 3s ease-in-out infinite;
+    animation: fadeinout 3s ease-in-out infinite;
+}
+
+@-webkit-keyframes fadeinout {
+    0%, 100% {
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeinout {
+    0%, 100% {
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+}
