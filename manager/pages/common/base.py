@@ -1,3 +1,4 @@
+from functools import wraps
 from socket import gethostname
 from typing import Sequence
 
@@ -14,9 +15,10 @@ from pages.utils.icons import Icon, MI
 
 
 def catch_and_show(func):
-    def wrapper():
+    @wraps(func)
+    def wrapper(*args, **kwargs):
         try:
-            return func()
+            return func(*args, **kwargs)
         except Exception as e:
             logger.exception(e)
             return b.Alert(str(e))
@@ -26,9 +28,9 @@ def catch_and_show(func):
 
 color_mode_switch = Span(
         [
-            MI("dark_mode"),
+            MI("dark_mode", style={"color":"navy"}),
             b.Switch(id="night-switch", value=True, className="d-inline-block ms-1", persistence=True),
-            MI("light_mode"),
+            MI("light_mode", style={"color":"yellow"}),
         ], className="align-middle ms-auto"
 )
 
@@ -137,14 +139,11 @@ def layout(children: str | int | float | Component | None | Sequence[str | int |
 
                         color_mode_switch,
                         b.Button([MI("replay"), Span("Reboot", className="d-none d-sm-inline ms-1")],
-                                 id="btn-reboot", n_clicks=0,
-                                 color="light", outline=True),
+                                 id="btn-reboot", n_clicks=0, color="light", outline=True),
                         b.Button([MI("power_settings_new"), Span("Shutdown", className="d-none d-sm-inline ms-1")],
-                                 id="btn-shutdown", n_clicks=0,
-                                 color="light", outline=True),
+                                 id="btn-shutdown", n_clicks=0, color="light", outline=True),
                         b.Button([MI("logout"), Span("Logout", className="d-none d-sm-inline ms-1")],
-                                 id="btn-logout", n_clicks=0,
-                                 color="light", outline=True),
+                                 id="btn-logout", n_clicks=0, color="light", outline=True),
                     ],
                     fluid=True, class_name="gap-1 gap-sm-2"
             ),
@@ -152,7 +151,7 @@ def layout(children: str | int | float | Component | None | Sequence[str | int |
             class_name="p-0"
     )
 
-    navigation = b.Col(navigation_items(), md=3, className="d-none d-md-block mt-lg-4 mt-1 mb-4")
+    navigation = b.Col(navigation_items(), md=3, className="d-none d-md-block mt-lg-4 mt-1 mb-4", style={"width":"16rem"})
 
     offcanvas_nav = b.Offcanvas(
             title=H1("UniTotem", style={"color": R.colors.accent}, className="ms-2"),
