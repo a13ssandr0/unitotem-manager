@@ -11,25 +11,20 @@
 
 <body>
 <div id="q-app">
-    <q-layout view="hHh Lpr lff" container style="height: 100vh" class="shadow-2 rounded-borders">
-        <q-header elevated :class="$q.dark.isActive ? 'bg-secondary' : 'bg-black'">
+    <q-layout view="hHh Lpr fFf" container style="height: 100vh" class="shadow-2 rounded-borders">
+        <q-header bordered :class="$q.dark.isActive ? 'bg-secondary' : 'bg-black'">
             <q-toolbar class="bg-accent text-white">
                 <q-btn flat @click="drawer = !drawer" round dense icon="mdi-menu"></q-btn>
-                <q-toolbar-title>Unitotem @ {{ hostname }}</q-toolbar-title>
+                <q-toolbar-title><b>U</b>niTotem @ [[ hostname ]]</q-toolbar-title>
                 <q-btn flat round dense icon="mdi-theme-light-dark" @click="this.$q.dark.toggle()"></q-btn>
                 <q-btn flat round dense icon="mdi-dots-vertical"></q-btn>
             </q-toolbar>
         </q-header>
 
 
-        <q-drawer
-                v-model="drawer"
-                show-if-above
-                :width="200"
-                :breakpoint="lg"
-                bordered
-        >
-            <q-scroll-area class="fit">
+        <q-drawer v-model="drawer" show-if-above :width="200" :breakpoint="lg" bordered>
+            <q-scroll-area class="fit" :horizontal-offset="[0, 2]" :thumb-style="styles.thumbStyle"
+                           :bar-style="styles.barStyle">
                 <q-list>
 
                     <template v-for="(menuItem, index) in menuList" :key="index">
@@ -44,19 +39,78 @@
                         <q-separator :key="'sep' + index" v-if="menuItem.separator"/>
                     </template>
 
+                    <q-space/>
+
+{#                    <q-separator/>#}
+                    <q-item active="false">
+                        <q-item-section avatar><q-icon name="mdi-github"/></q-item-section>
+                        <q-item-section>UniTotem by a13ssadr0</q-item-section>
+                    </q-item>
                 </q-list>
             </q-scroll-area>
         </q-drawer>
 
-        <q-page-container>
-            <q-page padding>
-                <p v-for="n in 15" :key="n">
-                    Lorem ipsum dolor sit amet consectetur adipisicing elit. Fugit nihil praesentium molestias a
-                    adipisci, dolore vitae odit, quidem consequatur optio voluptates asperiores pariatur eos numquam
-                    rerum delectus commodi perferendis voluptate?
-                </p>
-            </q-page>
-        </q-page-container>
+
+        <q-scroll-area :horizontal-offset="[0, 2]" :thumb-style="styles.thumbStyle"
+                       :bar-style="styles.barStyle" style="height: 100vh; max-width: 100vw;">
+            <q-page-container>
+                <q-page padding>
+                    <p v-for="n in 15" :key="n">
+                        Lorem ipsum dolor sit amet consectetur adipisicing elit. Fugit nihil praesentium molestias a
+                        adipisci, dolore vitae odit, quidem consequatur optio voluptates asperiores pariatur eos numquam
+                        rerum delectus commodi perferendis voluptate?
+                    </p>
+                </q-page>
+            </q-page-container>
+        </q-scroll-area>
+
+
+        <q-page-sticky position="bottom">
+        <div class="row flex-center bg-black full-width">
+            <div><small>
+                <q-btn flat dense icon="mdi-github" label="Unitotem"
+                       href="https://github.com/a13ssandr0/unitotem" target="_blank" rel="noopener noreferrer"></q-btn>
+                {{ ut_vers }} by a13ssandr0
+            </small>
+            </div>
+
+            {#            <q-separator vertical inset />#}
+            {##}
+            {#             <small>Logged in as {{ 'username' }}</small>#}
+            {#             <small>Display size: {{ '1920x1080' }}</small>#}
+            {#             <small>Used {{disk_used}} of {{disk_total}}</small>#}
+
+            {#            <q-separator vertical class="lt-sm" style="display: none;"/>#}
+            {#            <q-separator vertical class="gt-xs"/>#}
+
+            <div>
+                <small>Logged in as {{ 'logged_user.name' }}</small>
+            </div>
+
+            {#            <q-separator vertical class="lt-sm" style="display: none;"/>#}
+            {#            <q-separator vertical class="gt-xs"/>#}
+
+            <div>
+                <small>Display: <span
+                        id="display_bounds">{{ 'disp_size' }}</span></small>
+            </div>
+
+            {#            <q-separator vertical class="lt-sm" style="display: none;"/>#}
+            {#            <q-separator vertical class="gt-xs"/>#}
+
+            <div>
+                <small>Used {{ disk_used }} of {{ disk_total }}</small>
+            </div>
+
+            {#            <q-separator vertical class="lt-sm" style="display: none;"/>#}
+            {#            <q-separator vertical class="gt-xs"/>#}
+
+            <div>
+                <small id="status_disc" class="text-negative fade-in-out">Disconnected</small>
+                <small id="status_conn" class="text-positive" style="display: none;">Connected</small>
+            </div>
+        </div>
+        </q-page-sticky>
 
     </q-layout>
 
@@ -68,6 +122,23 @@
 
 
 <script>
+    Vue.config.devtools = true;
+
+    const styles = {
+        thumbStyle: {
+            borderRadius: '5px',
+            backgroundColor: '#027be3',
+            width: '5px',
+            opacity: 0.75
+        },
+
+        barStyle: {
+            borderRadius: '9px',
+            backgroundColor: '#027be3',
+            width: '9px',
+            opacity: 0.2
+        }
+    }
 
 
     const menuList = [
@@ -146,7 +217,8 @@
     const app = Vue.createApp({
         setup() {
             return {
-                test: "Test line",
+                styles: styles,
+                hostname: "{{ hostname }}",
                 drawer: Vue.ref(false),
                 menuList
             }

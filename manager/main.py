@@ -2,7 +2,6 @@ import asyncio
 import signal
 import warnings
 from argparse import ArgumentParser
-from traceback import format_exc
 from typing import Literal, Union
 
 import urllib3
@@ -16,10 +15,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
 from loguru import logger
-from starlette.middleware.wsgi import WSGIMiddleware
 from watchdog.observers import Observer
-import dash
-import dash_bootstrap_components as dbc
 import routers
 import utils.constants as const
 from api.commons import SHUTDOWN_EVENT
@@ -40,17 +36,6 @@ from utils.system.sysinfo import get_sysinfo
 
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
-webui_app = dash.Dash(__name__, use_pages=True, requests_pathname_prefix='/ui2/',
-                      external_stylesheets=[
-                          "/static/fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf",
-                          "/static/fonts/Roboto/roboto.css",
-                          "/static/icons/md-symbols/material-symbols.css",
-                          "/static/css/base_style.css",
-                          "/static/bootstrap.min.css",
-                          "/static/bootstrap-icons.css",
-                          dbc.icons.FONT_AWESOME],
-                      suppress_callback_exceptions=True)
-
 # noinspection PyTypeChecker
 WWW = FastAPI(
         title='UniTotem', version=const.__version__,
@@ -58,7 +43,6 @@ WWW = FastAPI(
         routes=[
             Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
             Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded'),
-            Mount('/ui2', WSGIMiddleware(webui_app), name='ui2')
         ],
         exception_handlers={
             InvalidSignatureError    : login_redirect,
