@@ -4,10 +4,10 @@
       <v-app-bar-nav-icon @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
       <v-toolbar-title class="app-bar-title">UniTotem @ {{ hostname }}</v-toolbar-title>
       <v-spacer></v-spacer>
-      <v-btn icon>
+      <v-btn icon @click="rebootDialog = true">
         <v-icon>mdi-restart</v-icon>
       </v-btn>
-      <v-btn icon>
+      <v-btn icon @click="powerOffDialog = true">
         <v-icon>mdi-power</v-icon>
       </v-btn>
 
@@ -72,6 +72,30 @@
     <v-main>
       <router-view />
     </v-main>
+
+    <v-dialog v-model="rebootDialog" max-width="fit-content">
+      <v-card class="pa-2 pb-0 rounded-lg">
+        <v-card-title class="text-h5">Are you sure you want to reboot?</v-card-title>
+        <v-card-text>This will reboot the system.</v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="rebootDialog = false">Cancel</v-btn>
+          <v-btn color="red darken-1" text @click="rebootDialog = false">Reboot</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="powerOffDialog" max-width="fit-content">
+      <v-card class="pa-2 pb-0 rounded-lg">
+        <v-card-title class="text-h5">Are you sure you want to power off?</v-card-title>
+        <v-card-text>This will power off the system.</v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="powerOffDialog = false">Cancel</v-btn>
+          <v-btn color="red darken-1" text @click="powerOffDialog = false">Power Off</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
@@ -81,6 +105,8 @@ import { useDisplay } from 'vuetify'
 
 const { lgAndUp } = useDisplay()
 const drawer = ref(lgAndUp.value)
+const rebootDialog = ref(false)
+const powerOffDialog = ref(false)
 
 const hostname = ref('PCALE')
 const ut_vers = ref('1.0.0') // Example version

@@ -65,11 +65,11 @@
           <v-card-title class="d-flex align-center">
             Playlist
             <v-spacer></v-spacer>
-            <v-btn-toggle variant="text" density="compact">
-              <v-btn icon="mdi-arrow-left" title="Previous"></v-btn>
-              <v-btn icon="mdi-reload" title="Reload"></v-btn>
-              <v-btn icon="mdi-arrow-right" title="Next"></v-btn>
-            </v-btn-toggle>
+            <v-btn icon="mdi-arrow-left" title="Previous" variant="text" density="compact"></v-btn>
+            <v-btn icon title="Reload" @click="reload" variant="text" density="compact">
+              <v-icon :class="{ 'rotate-once': isReloading }">mdi-reload</v-icon>
+            </v-btn>
+            <v-btn icon="mdi-arrow-right" title="Next" variant="text" density="compact"></v-btn>
             <v-btn color="blue" prepend-icon="mdi-link-plus" class="ml-4">
               Add URL
             </v-btn>
@@ -102,9 +102,9 @@
                 <td>{{ item.duration }}</td>
                 <td class="d-flex align-center justify-end">
                   <v-switch v-model="item.enabled" hide-details color="primary" density="compact" class="mr-10"></v-switch>
-                  <v-btn icon="mdi-delete" color="red" variant="text" size="x-small"></v-btn>
-                  <v-btn icon="mdi-pencil" color="yellow" variant="text" size="x-small"></v-btn>
-                  <v-btn icon="mdi-login" variant="text" size="x-small"></v-btn>
+                  <v-btn icon="mdi-delete" color="red" variant="text" size="small"></v-btn>
+                  <v-btn icon="mdi-pencil" color="yellow" variant="text" size="small"></v-btn>
+                  <v-btn icon="mdi-login" variant="text" size="small"></v-btn>
                 </td>
               </tr>
             </tbody>
@@ -142,6 +142,15 @@ const playlistItems = ref([
 ]);
 
 const hoveredRow = ref(null);
+const isReloading = ref(false);
+
+const reload = () => {
+  if (isReloading.value) return;
+  isReloading.value = true;
+  setTimeout(() => {
+    isReloading.value = false;
+  }, 500); // Durata dell'animazione
+};
 
 const triggerFileUpload = () => fileInput.value.click();
 
@@ -200,5 +209,18 @@ const deselectAll = () => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 1px;
+}
+
+.rotate-once {
+  animation: rotate-once 0.5s linear;
+}
+
+@keyframes rotate-once {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
