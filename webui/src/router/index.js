@@ -7,6 +7,8 @@
 // Composables
 import { createRouter, createWebHistory } from 'vue-router'
 
+let user_allowed_scheduler = true;
+
 const routes = [
   {
     path: '/',
@@ -15,7 +17,9 @@ const routes = [
       {
         path: '',
         name: 'Home',
-        component: () => import('@/pages/empty_page.vue'),
+        component: () =>
+          user_allowed_scheduler?
+            import('@/pages/scheduler.vue'):import('@/pages/empty_page.vue'),
       },
     ],
   },
