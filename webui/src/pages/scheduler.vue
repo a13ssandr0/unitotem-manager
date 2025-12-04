@@ -2,7 +2,7 @@
   <v-container fluid>
     <v-row align="start">
       <!-- Colonna di Sinistra: Files -->
-      <v-col cols="12" md="4">
+      <v-col cols="12" md="4" class="pe-0">
         <v-card>
           <v-card-title
             class="d-flex align-center transition-swing"
@@ -55,6 +55,7 @@
               <v-list-item-subtitle>{{ file.duration }} - {{ file.size }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
+          <v-divider class="mb-2"></v-divider>
         </v-card>
       </v-col>
 
@@ -108,7 +109,7 @@
               </tr>
             </tbody>
           </v-table>
-
+          <v-divider class="mb-2"></v-divider>
         </v-card>
       </v-col>
     </v-row>
@@ -178,7 +179,7 @@ const deselectAll = () => {
 
 <style scoped>
 .files-list :deep(.v-list-item) {
-  padding-inline-start: 8px !important;
+  padding-inline-start: 0 !important;
 }
 
 .selected-title-bar {
