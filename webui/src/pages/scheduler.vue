@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <v-row>
+    <v-row align="start">
       <!-- Colonna di Sinistra: Files -->
       <v-col cols="12" md="4">
         <v-card>
@@ -58,16 +58,57 @@
         </v-card>
       </v-col>
 
-      <!-- Colonna di Destra: Placeholder -->
+      <!-- Colonna di Destra: Playlist -->
       <v-col cols="12" md="8">
         <v-card>
-          <v-card-title>
-            Details
+          <v-card-title class="d-flex align-center">
+            Playlist
+            <v-spacer></v-spacer>
+            <v-btn-toggle variant="text" density="compact">
+              <v-btn icon="mdi-arrow-left" title="Previous"></v-btn>
+              <v-btn icon="mdi-reload" title="Reload"></v-btn>
+              <v-btn icon="mdi-arrow-right" title="Next"></v-btn>
+            </v-btn-toggle>
+            <v-btn color="blue" prepend-icon="mdi-link-plus" class="ml-4">
+              Add URL
+            </v-btn>
           </v-card-title>
           <v-divider></v-divider>
-          <v-card-text>
-            <p class="text-grey">Select a file to see its details here.</p>
-          </v-card-text>
+
+          <v-table density="compact" class="playlist-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;"></th>
+                <th>URL</th>
+                <th style="width: 100px;">Duration</th>
+                <th style="width: 180px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in playlistItems"
+                :key="item.id"
+                @mouseenter="hoveredRow = item.id"
+                @mouseleave="hoveredRow = null"
+              >
+                <td>
+                  <v-icon v-if="hoveredRow === item.id">mdi-drag-horizontal</v-icon>
+                  <v-icon v-else>{{ item.type === 'video' ? 'mdi-video' : 'mdi-link' }}</v-icon>
+                </td>
+                <td class="truncate-text">
+                  {{ item.url }}
+                </td>
+                <td>{{ item.duration }}</td>
+                <td class="d-flex align-center justify-end">
+                  <v-switch v-model="item.enabled" hide-details color="primary" density="compact" class="mr-6"></v-switch>
+                  <v-btn icon="mdi-delete" color="red" variant="text" size="x-small"></v-btn>
+                  <v-btn icon="mdi-pencil" color="yellow" variant="text" size="x-small"></v-btn>
+                  <v-btn icon="mdi-login" variant="text" size="x-small"></v-btn>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+
         </v-card>
       </v-col>
     </v-row>
@@ -77,7 +118,7 @@
 <script setup>
 import { ref } from 'vue';
 
-// Dati di esempio
+// Dati di esempio per i file
 const mediaFiles = ref([
   { id: 1, name: 'Nature_Video.mp4', duration: '00:02:30', size: '58 MB' },
   { id: 2, name: 'Corporate_Presentation.mp4', duration: '00:05:12', size: '120 MB' },
@@ -89,15 +130,26 @@ const mediaFiles = ref([
 const selectedFiles = ref([]);
 const fileInput = ref(null);
 
+// Dati di esempio per la playlist
+const playlistItems = ref([
+  { id: 101, type: 'video', url: 'Nature_Video.mp4', duration: '00:02:30', enabled: true },
+  { id: 102, type: 'url', url: 'https://example.com/a_very_long_url_to_show_how_it_truncates_properly.html', duration: '00:00:10', enabled: true },
+  { id: 103, type: 'video', url: 'Advertisement.mp4', duration: '00:00:30', enabled: false },
+  { id: 104, type: 'video', url: 'Nature_Video.mp4', duration: '00:02:30', enabled: true },
+  { id: 105, type: 'url', url: 'https://example.com/a_very_long_url_to_show_how_it_truncates_properly.html', duration: '00:00:10', enabled: true },
+  { id: 106, type: 'video', url: 'Advertisement.mp4', duration: '00:00:30', enabled: false },
+]);
+
+const hoveredRow = ref(null);
+
 const triggerFileUpload = () => fileInput.value.click();
 
 const handleFileUpload = (event) => {
   const files = event.target.files;
   if (!files) return;
   for (const file of files) {
-    console.log('File selected:', file.name);
     const newFile = {
-      id: mediaFiles.value.length + 1 + Math.random(), // Usa random per evitare ID duplicati
+      id: mediaFiles.value.length + 1 + Math.random(),
       name: file.name,
       duration: 'N/A',
       size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
@@ -130,6 +182,22 @@ const deselectAll = () => {
 }
 
 .selected-title-bar {
-  background-color: rgba(41, 98, 255, 0.15); /* Blu (#2962FF) con 15% di opacità */
+  background-color: rgba(41, 98, 255, 0.15);
+}
+
+.playlist-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.playlist-table :deep(.v-table__wrapper) {
+  overflow: visible;
+}
+
+.truncate-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 1px;
 }
 </style>
