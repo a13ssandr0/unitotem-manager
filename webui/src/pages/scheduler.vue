@@ -101,7 +101,7 @@
                 </td>
                 <td>{{ item.duration }}</td>
                 <td class="d-flex align-center justify-end">
-                  <v-switch v-model="item.enabled" hide-details color="primary" density="compact" class="mr-6"></v-switch>
+                  <v-switch v-model="item.enabled" hide-details color="primary" density="compact" class="mr-10"></v-switch>
                   <v-btn icon="mdi-delete" color="red" variant="text" size="x-small"></v-btn>
                   <v-btn icon="mdi-pencil" color="yellow" variant="text" size="x-small"></v-btn>
                   <v-btn icon="mdi-login" variant="text" size="x-small"></v-btn>
