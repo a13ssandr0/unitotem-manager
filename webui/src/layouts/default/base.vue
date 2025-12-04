@@ -2,7 +2,7 @@
   <v-app>
     <v-app-bar app clipped-left class="app-bar-border">
       <v-app-bar-nav-icon @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
-      <v-toolbar-title>UniTotem @ {{ hostname }}</v-toolbar-title>
+      <v-toolbar-title class="app-bar-title">UniTotem @ {{ hostname }}</v-toolbar-title>
       <v-spacer></v-spacer>
       <v-btn icon>
         <v-icon>mdi-restart</v-icon>
@@ -13,7 +13,7 @@
 
       <v-menu offset-y>
         <template v-slot:activator="{ props }">
-          <v-btn v-bind="props" class="text-none">
+          <v-btn v-bind="props" class="text-none app-bar-button">
             {{ logged_user.name }}
             <v-icon end>mdi-menu-down</v-icon>
           </v-btn>
@@ -127,5 +127,23 @@ onMounted(() => {
 
 .app-bar-border {
   border-bottom: 2px solid #2962FF !important;
+}
+
+.app-bar-title {
+  font-size: 1.8rem !important;
+  line-height: 2rem !important; /* Assicura che il testo non venga tagliato */
+}
+
+.app-bar-button {
+  font-size: 1.1rem !important;
+}
+
+/* Selettore ultra-specifico per l'icona del menu */
+.v-app-bar-nav-icon :deep(.v-icon) {
+  font-size: 2rem !important;
+}
+
+.v-btn--icon .v-icon {
+  font-size: 1.8rem !important;
 }
 </style>
