@@ -21,6 +21,12 @@ const routes = [
           user_allowed_scheduler?
             import('@/pages/scheduler.vue'):import('@/pages/empty_page.vue'),
       },
+      // Catch-all route for 404 pages
+      {
+        path: '/:pathMatch(.*)*',
+        name: 'NotFound',
+        component: () => import('@/pages/NotFound.vue'),
+      },
     ],
   },
   {
