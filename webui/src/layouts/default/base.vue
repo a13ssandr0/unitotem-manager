@@ -116,7 +116,6 @@ const disk_used = ref('10GB') // Example disk usage
 const disk_total = ref('100GB') // Example disk total
 
 const tabs = ref([
-  { id: 'playback', name: 'Playback', icon: 'mdi-play' },
   { id: 'audio', name: 'Audio', icon: 'mdi-speaker' },
   { id: 'display', name: 'Display', icon: 'mdi-monitor' },
   { id: 'remote', name: 'Remote control', icon: 'mdi-remote' },
