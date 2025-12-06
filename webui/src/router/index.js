@@ -29,7 +29,12 @@ const routes = [
             path: 'audio',
             name: 'Audio',
             component: () => import('@/pages/settings/audio.vue'),
-          }
+          },
+          {
+            path: 'display',
+            name: 'Display',
+            component: () => import('@/pages/settings/display.vue'),
+          },
         ]
       },
       // Catch-all route for 404 pages
