@@ -65,6 +65,7 @@
           <v-card-title class="d-flex align-center">
             Playlist
             <v-spacer></v-spacer>
+            <v-btn icon="mdi-cog" title="Settings" variant="text" density="compact" class="mr-4" @click="showSettingsDialog = true"></v-btn>
             <v-btn icon="mdi-arrow-left" title="Previous" variant="text" density="compact"></v-btn>
             <v-btn icon title="Reload" @click="reload" variant="text" density="compact">
               <v-icon :class="{ 'rotate-once': isReloading }">mdi-reload</v-icon>
@@ -113,6 +114,28 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <!-- Settings Dialog -->
+    <v-dialog v-model="showSettingsDialog" max-width="400px">
+      <v-card class="pa-2 pb-0">
+        <v-card-title>Default Asset Duration</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="defaultDuration"
+            label="Default duration"
+            type="number"
+            suffix="seconds"
+            variant="outlined"
+            :rules="[v => v > 0 || 'Duration must be positive']"
+          ></v-text-field>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="showSettingsDialog = false">Annulla</v-btn>
+          <v-btn color="primary" @click="saveSettings">Salva</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -143,6 +166,8 @@ const playlistItems = ref([
 
 const hoveredRow = ref(null);
 const isReloading = ref(false);
+const showSettingsDialog = ref(false);
+const defaultDuration = ref(30);
 
 const reload = () => {
   if (isReloading.value) return;
@@ -183,6 +208,12 @@ const selectAll = () => {
 
 const deselectAll = () => {
   selectedFiles.value = [];
+};
+
+const saveSettings = () => {
+  // Qui andrà la logica per salvare le impostazioni
+  console.log('Default duration saved:', defaultDuration.value);
+  showSettingsDialog.value = false;
 };
 </script>
 

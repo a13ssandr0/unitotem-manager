@@ -21,6 +21,17 @@ const routes = [
           user_allowed_scheduler?
             import('@/pages/scheduler.vue'):import('@/pages/empty_page.vue'),
       },
+      {
+        path: '/settings',
+        name: 'Settings',
+        children: [
+          {
+            path: 'audio',
+            name: 'Audio',
+            component: () => import('@/pages/settings/audio.vue'),
+          }
+        ]
+      },
       // Catch-all route for 404 pages
       {
         path: '/:pathMatch(.*)*',

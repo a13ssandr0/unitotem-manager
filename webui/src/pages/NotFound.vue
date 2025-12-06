@@ -17,6 +17,7 @@
 </template>
 
 <script setup>
+// noinspection JSFileReferences
 import img404 from '@/components/404.js';
 </script>
 

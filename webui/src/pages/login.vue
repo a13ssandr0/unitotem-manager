@@ -9,8 +9,8 @@
               <v-card-title class="mb-4">UniTotem 3.0.0</v-card-title>
               <v-card-text>
                 <v-form>
-                  <v-text-field label="Username" name="login" type="text" v-model="username"></v-text-field>
-                  <v-text-field id="password" label="Password" name="password" type="password" v-model="password"></v-text-field>
+                  <v-text-field label="Username" name="login" type="text" v-model="username" variant="outlined"></v-text-field>
+                  <v-text-field id="password" label="Password" name="password" type="password" v-model="password" variant="outlined"></v-text-field>
                   <v-checkbox v-model="rememberMe" label="Remember me" checked hide-details class="my-2"></v-checkbox>
                   <v-btn color="primary" block size="large" variant="elevated" class="mt-4">Log In</v-btn>
                 </v-form>
