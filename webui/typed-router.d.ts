@@ -23,6 +23,7 @@ declare module 'vue-router/auto-routes' {
     '/NotFound': RouteRecordInfo<'/NotFound', '/NotFound', Record<never, never>, Record<never, never>>,
     '/scheduler': RouteRecordInfo<'/scheduler', '/scheduler', Record<never, never>, Record<never, never>>,
     '/settings/audio': RouteRecordInfo<'/settings/audio', '/settings/audio', Record<never, never>, Record<never, never>>,
+    '/settings/display': RouteRecordInfo<'/settings/display', '/settings/display', Record<never, never>, Record<never, never>>,
   }
 
   /**
@@ -54,6 +55,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/settings/audio.vue': {
       routes: '/settings/audio'
+      views: never
+    }
+    'src/pages/settings/display.vue': {
+      routes: '/settings/display'
       views: never
     }
   }
