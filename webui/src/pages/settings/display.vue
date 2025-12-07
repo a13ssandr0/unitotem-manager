@@ -163,14 +163,6 @@ rect {
   rx: 50;
 }
 
-.screen_bg {
-  fill: var(--v-theme-primary);
-}
-
-.screen_fg {
-  fill: var(--bs-body-bg);
-}
-
 svg text {
   font-size: 150px;
   text-anchor: middle;
