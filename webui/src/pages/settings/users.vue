@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import {ref, watch} from 'vue'
+import {ref, watch, computed} from 'vue'
 
 const dialog = ref(false)
+const passwordDialog = ref(false)
 const newUsername = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const selectedUser = ref(null)
 
 const users = ref([
   {id: 1, username: 'user1', permissions: {scheduler: false, audio: false, power: false, admin: false}},
@@ -11,6 +15,17 @@ const users = ref([
 ])
 
 const permissions = ref(['Scheduler', 'Audio', 'Power', 'Admin'])
+
+const passwordsMatch = computed(() => {
+  return newPassword.value === confirmPassword.value && newPassword.value.trim() !== '';
+});
+
+const passwordErrorMessages = computed(() => {
+  if (confirmPassword.value && newPassword.value !== confirmPassword.value) {
+    return 'Passwords do not match';
+  }
+  return undefined;
+});
 
 // Watch for changes in users' permissions
 watch(users, (currentUsers) => {
@@ -37,6 +52,20 @@ function addUser() {
   }
 }
 
+function openPasswordDialog(user) {
+  selectedUser.value = user;
+  newPassword.value = '';
+  confirmPassword.value = '';
+  passwordDialog.value = true;
+}
+
+function changePassword() {
+  if (selectedUser.value && passwordsMatch.value) {
+    console.log(`Changing password for ${selectedUser.value.username} to ${newPassword.value}`);
+    // Here you would typically make an API call to update the password
+    passwordDialog.value = false;
+  }
+}
 </script>
 
 <template>
@@ -71,7 +100,7 @@ function addUser() {
               </div>
             </td>
             <td class="text-right">
-              <v-btn variant="text" icon="mdi-pencil" color="yellow" class="mr-2" aria-label="Edit"></v-btn>
+              <v-btn variant="text" icon="mdi-pencil" color="yellow" class="mr-2" aria-label="Edit" @click="openPasswordDialog(user)"></v-btn>
               <v-btn variant="text" icon="mdi-delete" color="red" aria-label="Delete"></v-btn>
             </td>
           </tr>
@@ -101,6 +130,42 @@ function addUser() {
           </v-btn>
           <v-btn color="primary" variant="text" @click="addUser">
             Add
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="passwordDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="mt-2 ml-2">
+          <span class="text-h5">Change Password for {{ selectedUser?.username }}</span>
+        </v-card-title>
+        <v-card-text class="pb-0">
+          <v-text-field
+            v-model="newPassword"
+            label="New Password"
+            required
+            variant="outlined"
+            type="password"
+            class="mb-2"
+          ></v-text-field>
+          <v-text-field
+            v-model="confirmPassword"
+            label="Confirm Password"
+            required
+            variant="outlined"
+            type="password"
+            @keyup.enter="changePassword"
+            :error-messages="passwordErrorMessages"
+          ></v-text-field>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="passwordDialog = false">
+            Cancel
+          </v-btn>
+          <v-btn color="primary" variant="text" @click="changePassword" :disabled="!passwordsMatch">
+            Save
           </v-btn>
         </v-card-actions>
       </v-card>
