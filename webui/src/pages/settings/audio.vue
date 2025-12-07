@@ -19,7 +19,7 @@ const audioDevices = ref({
       class="ma-4"
       max-width="600"
       width="100%"
-      title="Audio output"
+      :title="String($route.name)"
     >
       <v-list>
         <v-radio-group v-model="audioDevices.default">
