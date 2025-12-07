@@ -40,6 +40,11 @@ const routes = [
             name: 'Remote control',
             component: () => import('@/pages/settings/remote.vue'),
           },
+          {
+            path: 'users',
+            name: 'Users and permissions',
+            component: () => import('@/pages/settings/users.vue'),
+          },
         ]
       },
       // Catch-all route for 404 pages

@@ -35,6 +35,7 @@ function manageClient(ip: string, port: number) {
           v-model="mode"
           :items="items"
           label="Mode"
+          variant="outlined"
         ></v-select>
 
         <v-row v-if="mode === 'Client'">
@@ -42,12 +43,14 @@ function manageClient(ip: string, port: number) {
             <v-text-field
               v-model="serverIp"
               label="Server IP"
+              variant="outlined"
             ></v-text-field>
           </v-col>
           <v-col cols="4">
             <v-text-field
               v-model="serverPort"
               label="Server port"
+              variant="outlined"
             ></v-text-field>
           </v-col>
         </v-row>

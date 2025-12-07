@@ -119,7 +119,7 @@ const tabs = ref([
   { id: 'audio', name: 'Audio', icon: 'mdi-speaker' },
   { id: 'display', name: 'Display', icon: 'mdi-monitor' },
   { id: 'remote', name: 'Remote control', icon: 'mdi-remote' },
-  { id: 'security', 'name': 'Security', icon: 'mdi-shield-lock' },
+  { id: 'users', 'name': 'Users', icon: 'mdi-account-key' },
   { id: 'cron', name: 'Scheduled actions', icon: 'mdi-alarm' },
   { id: 'network', name: 'Network', icon: 'mdi-ethernet' },
   { id: 'updates', name: 'Updates', icon: 'mdi-update' },
