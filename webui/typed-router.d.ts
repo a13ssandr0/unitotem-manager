@@ -25,6 +25,7 @@ declare module 'vue-router/auto-routes' {
     '/settings/audio': RouteRecordInfo<'/settings/audio', '/settings/audio', Record<never, never>, Record<never, never>>,
     '/settings/display': RouteRecordInfo<'/settings/display', '/settings/display', Record<never, never>, Record<never, never>>,
     '/settings/remote': RouteRecordInfo<'/settings/remote', '/settings/remote', Record<never, never>, Record<never, never>>,
+    '/settings/users': RouteRecordInfo<'/settings/users', '/settings/users', Record<never, never>, Record<never, never>>,
   }
 
   /**
@@ -64,6 +65,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/settings/remote.vue': {
       routes: '/settings/remote'
+      views: never
+    }
+    'src/pages/settings/users.vue': {
+      routes: '/settings/users'
       views: never
     }
   }
