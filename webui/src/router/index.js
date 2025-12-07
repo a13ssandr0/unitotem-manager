@@ -45,6 +45,11 @@ const routes = [
             name: 'Users and permissions',
             component: () => import('@/pages/settings/users.vue'),
           },
+          {
+            path: 'timers',
+            name: 'Timers',
+            component: () => import('@/pages/settings/timers.vue'),
+          },
         ]
       },
       // Catch-all route for 404 pages
