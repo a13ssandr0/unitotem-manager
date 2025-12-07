@@ -35,6 +35,11 @@ const routes = [
             name: 'Display',
             component: () => import('@/pages/settings/display.vue'),
           },
+          {
+            path: 'remote',
+            name: 'Remote control',
+            component: () => import('@/pages/settings/remote.vue'),
+          },
         ]
       },
       // Catch-all route for 404 pages
