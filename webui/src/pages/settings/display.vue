@@ -4,7 +4,7 @@
       class="ma-4"
       max-width="1000"
       width="100%"
-      title="Display"
+      :title="String($route.name)"
     >
       <v-label class="d-block text-center">Click on a screen to change output device</v-label>
       <div class="row d-flex justify-center pa-4" id="screen_container">
