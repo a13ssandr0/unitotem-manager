@@ -50,6 +50,16 @@ const routes = [
             name: 'Timers',
             component: () => import('@/pages/settings/timers.vue'),
           },
+          {
+            path: 'network',
+            name: 'Network',
+            component: () => import('@/pages/settings/network.vue'),
+          },
+          {
+            path: 'updates',
+            name: 'Updates',
+            component: () => import('@/pages/settings/updates.vue'),
+          },
         ]
       },
       // Catch-all route for 404 pages
