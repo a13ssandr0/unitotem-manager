@@ -55,8 +55,10 @@
         <div class="pa-2 text-caption">
           <v-divider class="mb-2"></v-divider>
           <div>
-            <a href="https://github.com/a13ssandr0/unitotem" target="_blank" rel="noopener noreferrer" class="text-white">
-              <v-icon size="small">mdi-github</v-icon> Unitotem
+            <a href="https://github.com/a13ssandr0/unitotem" target="_blank" rel="noopener noreferrer"
+               class="text-white">
+              <v-icon size="small">mdi-github</v-icon>
+              Unitotem
             </a> {{ ut_vers }} by a13ssandr0
           </div>
           <div class="mt-2">Display: <span id="display_bounds">{{ disp_size.width }}x{{ disp_size.height }}</span></div>
@@ -70,7 +72,9 @@
     </v-navigation-drawer>
 
     <v-main>
-      <router-view />
+      <div class="main-content">
+        <router-view/>
+      </div>
     </v-main>
 
     <v-dialog v-model="rebootDialog" max-width="fit-content">
@@ -101,29 +105,29 @@
 
 <script setup>
 import {onMounted, ref} from 'vue'
-import { useDisplay } from 'vuetify'
+import {useDisplay} from 'vuetify'
 
-const { lgAndUp } = useDisplay()
+const {lgAndUp} = useDisplay()
 const drawer = ref(lgAndUp.value)
 const rebootDialog = ref(false)
 const powerOffDialog = ref(false)
 
 const hostname = ref('PCALE')
-const ut_vers = ref('1.0.0') // Example version
-const logged_user = ref({ name: 'user' }) // Example user
-const disp_size = ref({ width: 1920, height: 1080 }) // Example display size
-const disk_used = ref('10GB') // Example disk usage
-const disk_total = ref('100GB') // Example disk total
+const ut_vers = ref('1.0.0')
+const logged_user = ref({name: 'user'})
+const disp_size = ref({width: 1920, height: 1080})
+const disk_used = ref('10GB')
+const disk_total = ref('100GB')
 
 const tabs = ref([
-  { id: 'audio', name: 'Audio', icon: 'mdi-speaker' },
-  { id: 'display', name: 'Display', icon: 'mdi-monitor' },
-  { id: 'remote', name: 'Remote control', icon: 'mdi-remote' },
-  { id: 'users', name: 'Users', icon: 'mdi-account-key' },
-  { id: 'timers', name: 'Timers', icon: 'mdi-alarm' },
-  { id: 'network', name: 'Network', icon: 'mdi-ethernet' },
-  { id: 'updates', name: 'Updates', icon: 'mdi-update' },
-  { id: 'backup', name: 'Backup and restore', icon: 'mdi-history' },
+  {id: 'audio', name: 'Audio', icon: 'mdi-speaker'},
+  {id: 'display', name: 'Display', icon: 'mdi-monitor'},
+  {id: 'remote', name: 'Remote control', icon: 'mdi-remote'},
+  {id: 'users', name: 'Users', icon: 'mdi-account-key'},
+  {id: 'timers', name: 'Timers', icon: 'mdi-alarm'},
+  {id: 'network', name: 'Network', icon: 'mdi-ethernet'},
+  {id: 'updates', name: 'Updates', icon: 'mdi-update'},
+  {id: 'backup', name: 'Backup and restore', icon: 'mdi-history'},
 ])
 
 onMounted(() => {
@@ -132,7 +136,21 @@ onMounted(() => {
 
 </script>
 
-<style scoped>
+<style>
+html, body {
+  overflow: hidden !important;
+  height: 100vh;
+}
+
+.main-content {
+  overflow-y: auto !important;
+  height: calc(100vh - var(--v-layout-top)) !important;
+}
+
+.main-content > :deep(.v-main__wrap) {
+  min-height: 100% !important;
+}
+
 .sub-item {
   padding-inline-start: 24px !important;
 }
@@ -156,14 +174,13 @@ onMounted(() => {
 
 .app-bar-title {
   font-size: 1.8rem !important;
-  line-height: 2rem !important; /* Assicura che il testo non venga tagliato */
+  line-height: 2rem !important;
 }
 
 .app-bar-button {
   font-size: 1.1rem !important;
 }
 
-/* Selettore ultra-specifico per l'icona del menu */
 .v-app-bar-nav-icon :deep(.v-icon) {
   font-size: 2rem !important;
 }
