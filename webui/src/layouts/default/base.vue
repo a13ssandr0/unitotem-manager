@@ -4,6 +4,10 @@
       <v-app-bar-nav-icon @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
       <v-toolbar-title class="app-bar-title">UniTotem @ {{ hostname }}</v-toolbar-title>
       <v-spacer></v-spacer>
+      <v-btn
+        @click="theme.cycle()"
+        text="Cycle Themes"
+      ></v-btn>
       <v-btn icon @click="rebootDialog = true">
         <v-icon>mdi-restart</v-icon>
       </v-btn>
@@ -105,7 +109,9 @@
 
 <script setup>
 import {onMounted, ref} from 'vue'
-import {useDisplay} from 'vuetify'
+import {useDisplay, useTheme} from 'vuetify'
+
+const theme = useTheme()
 
 const {lgAndUp} = useDisplay()
 const drawer = ref(lgAndUp.value)
@@ -145,6 +151,30 @@ html, body {
 .main-content {
   overflow-y: auto !important;
   height: calc(100vh - var(--v-layout-top)) !important;
+}
+
+::-webkit-scrollbar {
+  height: 12px;
+  width: 14px;
+  background: transparent;
+  z-index: 12;
+  overflow: visible
+}
+
+::-webkit-scrollbar-thumb {
+  width: 10px;
+  background-color: #2962FF;
+  border-radius: 10px;
+  z-index: 12;
+  border: 4px solid rgba(0, 0, 0, 0);
+  background-clip: padding-box;
+  margin: 4px;
+  min-height: 32px;
+  min-width: 32px
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2962FF
 }
 
 .main-content > :deep(.v-main__wrap) {
