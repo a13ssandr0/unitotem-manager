@@ -60,6 +60,11 @@ const routes = [
             name: 'Updates',
             component: () => import('@/pages/settings/updates.vue'),
           },
+          {
+            path: 'backup',
+            name: 'Backup and restore',
+            component: () => import('@/pages/settings/backup.vue'),
+          },
         ]
       },
       // Catch-all route for 404 pages
