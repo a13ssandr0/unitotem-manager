@@ -24,8 +24,10 @@ declare module 'vue-router/auto-routes' {
     '/scheduler': RouteRecordInfo<'/scheduler', '/scheduler', Record<never, never>, Record<never, never>>,
     '/settings/audio': RouteRecordInfo<'/settings/audio', '/settings/audio', Record<never, never>, Record<never, never>>,
     '/settings/display': RouteRecordInfo<'/settings/display', '/settings/display', Record<never, never>, Record<never, never>>,
+    '/settings/network': RouteRecordInfo<'/settings/network', '/settings/network', Record<never, never>, Record<never, never>>,
     '/settings/remote': RouteRecordInfo<'/settings/remote', '/settings/remote', Record<never, never>, Record<never, never>>,
     '/settings/timers': RouteRecordInfo<'/settings/timers', '/settings/timers', Record<never, never>, Record<never, never>>,
+    '/settings/updates': RouteRecordInfo<'/settings/updates', '/settings/updates', Record<never, never>, Record<never, never>>,
     '/settings/users': RouteRecordInfo<'/settings/users', '/settings/users', Record<never, never>, Record<never, never>>,
   }
 
@@ -64,12 +66,20 @@ declare module 'vue-router/auto-routes' {
       routes: '/settings/display'
       views: never
     }
+    'src/pages/settings/network.vue': {
+      routes: '/settings/network'
+      views: never
+    }
     'src/pages/settings/remote.vue': {
       routes: '/settings/remote'
       views: never
     }
     'src/pages/settings/timers.vue': {
       routes: '/settings/timers'
+      views: never
+    }
+    'src/pages/settings/updates.vue': {
+      routes: '/settings/updates'
       views: never
     }
     'src/pages/settings/users.vue': {
