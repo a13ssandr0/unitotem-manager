@@ -146,6 +146,7 @@ onMounted(() => {
 html, body {
   overflow: hidden !important;
   height: 100vh;
+  font-size: 14px;
 }
 
 .main-content {
