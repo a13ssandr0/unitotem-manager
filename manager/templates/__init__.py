@@ -27,12 +27,3 @@ templates = Jinja2Templates(
         context_processors=[ctx_proc],
 )
 templates.env.filters['flatten'] = flatten
-
-
-# noinspection PyTypeChecker
-templates_new = Jinja2Templates(
-        directory=Path(__file__).joinpath('../www2').resolve(),
-        extensions=['jinja2.ext.do', 'jinja2.ext.debug'],
-        context_processors=[ctx_proc],
-)
-templates_new.env.filters['flatten'] = flatten
