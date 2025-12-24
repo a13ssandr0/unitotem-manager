@@ -23,7 +23,7 @@ from api.ws.endpoints import REMOTE_WS, WS, api
 from api.ws.wsmanager import WSManager
 from routers.error import http_exception_handler
 from routers.login import NotAuthenticatedException, login_redirect
-from templates import templates, templates_new
+from templates import templates
 from utils._logging import Logger
 from utils.models.assets import assets_manager
 from utils.models.command_line import cmdargs
@@ -62,11 +62,6 @@ WWW.include_router(routers.backup.router)
 async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
     return templates.TemplateResponse(request, f'{page}.html.j2',
                                       {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
-
-@WWW.api_route("/v3/{path}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
-async def first_boot_page(request: Request, path: str):
-    return templates_new.TemplateResponse(request, f'{path}.html.j2')
-
 
 parser = ArgumentParser()
 parser.add_argument('--no-gui', action='store_true',
