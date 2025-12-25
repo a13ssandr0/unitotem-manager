@@ -68,8 +68,8 @@
           <div class="mt-2">Display: <span id="display_bounds">{{ disp_size.width }}x{{ disp_size.height }}</span></div>
           <div>Used {{ disk_used }} of {{ disk_total }}</div>
           <div class="mt-2">
-            <span id="status_disc" class="text-red fade-in-out">Disconnected</span>
-            <span id="status_conn" class="text-green d-none">Connected</span>
+            <span v-if="!connected" class="text-red fade-in-out">Disconnected</span>
+            <span v-else class="text-green">Connected</span>
           </div>
         </div>
       </template>
@@ -108,10 +108,12 @@
 </template>
 
 <script setup>
-import {onMounted, ref} from 'vue'
+import {onMounted, onUnmounted, ref} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
+import {useRouter} from 'vue-router'
 
 const theme = useTheme()
+const router = useRouter()
 
 const {lgAndUp} = useDisplay()
 const drawer = ref(lgAndUp.value)
@@ -124,6 +126,7 @@ const logged_user = ref({name: 'user'})
 const disp_size = ref({width: 1920, height: 1080})
 const disk_used = ref('10GB')
 const disk_total = ref('100GB')
+const connected = ref(false)
 
 const tabs = ref([
   {id: 'audio', name: 'Audio', icon: 'mdi-speaker'},
@@ -136,8 +139,34 @@ const tabs = ref([
   {id: 'backup', name: 'Backup and restore', icon: 'mdi-history'},
 ])
 
+let ws = null
+
+function connectWs() {
+  ws = new WebSocket('wss://localhost/ws')
+  ws.onopen = () => {
+    connected.value = true
+  }
+  ws.onclose = (evt) => {
+    connected.value = false
+    if (evt.reason === 'Not Authenticated') {
+      window.location.href = '/login'
+      return
+    }
+    setTimeout(connectWs, 3000)
+  }
+  ws.onerror = (err) => {
+    console.error('WebSocket error:', err)
+    ws.close(evt)
+  }
+}
+
 onMounted(() => {
-  document.title = hostname.value + ' - UniTotem Login'
+  document.title = hostname.value + ' - UniTotem Manager'
+  connectWs()
+})
+
+onUnmounted(() => {
+  if (ws) ws.close()
 })
 
 </script>

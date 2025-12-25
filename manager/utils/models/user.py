@@ -111,6 +111,9 @@ class UserManager(RootModel):
     def __contains__(self, username: str):
         return self.root.__contains__(username)
 
+    def users(self):
+        return self.root.keys()
+
     def items(self):
         return self.root.items()
 
