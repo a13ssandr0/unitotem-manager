@@ -15,6 +15,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
 from loguru import logger
+from starlette.middleware.cors import CORSMiddleware
 from watchdog.observers import Observer
 import routers
 import utils.constants as const
@@ -39,7 +40,10 @@ warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 # noinspection PyTypeChecker
 WWW = FastAPI(
         title='UniTotem', version=const.__version__,
-        middleware=[Middleware(HTTPSRedirectMiddleware)],
+        middleware=[
+            Middleware(HTTPSRedirectMiddleware),
+            Middleware(CORSMiddleware, allow_origin_regex='https?://.*:3000')
+        ],
         routes=[
             Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
             Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded'),

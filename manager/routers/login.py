@@ -86,6 +86,10 @@ async def get_public_key():
     return Response(remote_manager.rsa_prik.public_key().exportKey(), media_type="text/plain")
 
 
+@router.get("/login/users")
+async def get_users() -> list[str]:
+    return list(user_manager.users())
+
 @router.get('/login')
 async def login_page(request: Request, src: Optional[str] = '/'):
     try:

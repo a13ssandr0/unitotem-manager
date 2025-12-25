@@ -1,3 +1,5 @@
+import fs from "fs"
+
 // Plugins
 import Components from 'unplugin-vue-components/vite'
 import Vue from '@vitejs/plugin-vue'
@@ -62,5 +64,9 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    https: {
+      key: fs.readFileSync('/etc/ssl/unitotem.pem'),
+      cert: fs.readFileSync('/etc/ssl/unitotem.pem'),
+    },
   },
 })
