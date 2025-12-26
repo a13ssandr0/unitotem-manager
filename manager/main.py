@@ -2,6 +2,7 @@ import asyncio
 import signal
 import warnings
 from argparse import ArgumentParser
+from pathlib import Path
 from typing import Literal, Union
 
 import urllib3
@@ -16,6 +17,7 @@ from hypercorn.config import Config as HyperConfig
 from jwt import InvalidSignatureError
 from loguru import logger
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import FileResponse
 from watchdog.observers import Observer
 import routers
 import utils.constants as const
@@ -42,11 +44,12 @@ WWW = FastAPI(
         title='UniTotem', version=const.__version__,
         middleware=[
             Middleware(HTTPSRedirectMiddleware),
-            Middleware(CORSMiddleware, allow_origin_regex='https?://.*:3000')
+            Middleware(CORSMiddleware, allow_origin_regex='https?://.*:3000', allow_credentials=True),
         ],
         routes=[
             Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
             Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded'),
+            # Mount('/assets', StaticFiles(directory=Path(__file__).joinpath('../../webui/dist/assets').resolve()), name='assets'),
         ],
         exception_handlers={
             InvalidSignatureError    : login_redirect,
@@ -62,10 +65,22 @@ WWW.include_router(routers.settings.router)
 WWW.include_router(routers.backup.router)
 
 
+# @WWW.get("/", response_class=FileResponse)
+# def index():
+#     return FileResponse(Path(__file__).joinpath('../../webui/dist/index.html').resolve())
+
 @WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
 async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
     return templates.TemplateResponse(request, f'{page}.html.j2',
                                       {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
+
+##TODO: USE ONLY FOR TESTING
+from subprocess import run
+from threading import Thread
+webui_path = Path(__file__).joinpath("../../webui/").resolve()
+t = Thread(target=run, args=([webui_path.joinpath("node_modules/vite/bin/vite.js")],), kwargs={'cwd':webui_path}, daemon=True)
+t.start()
+
 
 parser = ArgumentParser()
 parser.add_argument('--no-gui', action='store_true',
@@ -142,7 +157,7 @@ loop.create_task(info_loop(WS, SHUTDOWN_EVENT), name='info_loop')
 
 loop.create_task(serve(WWW, HyperConfig().from_mapping(  # type: ignore
         bind=f'{cmdargs.bind_secure}:{cmdargs.port_secure}', insecure_bind=f'{cmdargs.bind}:{cmdargs.port}',
-        certfile=cmdargs.certfile, keyfile=cmdargs.keyfile, logger_class=Logger
+        certfile=cmdargs.certfile, keyfile=cmdargs.keyfile, #logger_class=Logger
 ), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server')  # type: ignore
 
 try:

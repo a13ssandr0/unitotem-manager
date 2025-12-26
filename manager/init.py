@@ -36,7 +36,7 @@ from utils._logging import install_logger
 
 logger.info('Starting UniTotem Manager {} (Python {})', const.__version__, sys.version)
 
-install_logger()
+# install_logger()
 
 logger.info('Creating event loop')
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())

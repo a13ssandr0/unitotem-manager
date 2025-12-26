@@ -120,7 +120,7 @@ const drawer = ref(lgAndUp.value)
 const rebootDialog = ref(false)
 const powerOffDialog = ref(false)
 
-const hostname = ref('PCALE')
+const hostname = ref('')
 const ut_vers = ref('1.0.0')
 const logged_user = ref({name: 'user'})
 const disp_size = ref({width: 1920, height: 1080})
@@ -139,29 +139,63 @@ const tabs = ref([
   {id: 'backup', name: 'Backup and restore', icon: 'mdi-history'},
 ])
 
-let ws = null
+let ws = null;
+
+window.sendCommand = (target, args) => {
+  if (args === undefined) args = {};
+  args.target = target
+  ws.send(JSON.stringify(args));
+}
+
+window.onWSOpen = (e) => {}
+window.onWSMessage = (data, e) => {}
+window.onWSClose = (e) => {}
+window.onWSError = (e) => {}
+
+window.isWSReady = () => {
+  return ws && ws.readyState === WebSocket.OPEN
+}
 
 function connectWs() {
   ws = new WebSocket('wss://localhost/ws')
-  ws.onopen = () => {
+  ws.onopen = (e) => {
     connected.value = true
+    sendCommand("Settings/hostname")
+    window.onWSOpen(e)
   }
-  ws.onclose = (evt) => {
+  ws.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.target === 'Settings/hostname') {
+      hostname.value = data.hostname;
+      document.title = data.hostname + ' - UniTotem Manager';
+    }
+    if (data.hasOwnProperty('error')) {
+      // messageModal.find('.modal-title').text('Error');
+      // messageModal.find('.modal-body h6').text(data.target + ' returned ' + data.error);
+      // messageModal.find('.modal-body code').text(data.extra);
+      // new bootstrap.Modal(messageModal).show();
+      return;
+    }
+    // handlers[data.target]?.(data);
+    window.onWSMessage(data, e)
+  };
+  ws.onclose = (e) => {
     connected.value = false
-    if (evt.reason === 'Not Authenticated') {
+    window.onWSClose(e)
+    if (e.reason === 'Not Authenticated') {
       window.location.href = '/login'
       return
     }
     setTimeout(connectWs, 3000)
   }
-  ws.onerror = (err) => {
-    console.error('WebSocket error:', err)
-    ws.close(evt)
+  ws.onerror = (e) => {
+    connected.value = false
+    console.error('WebSocket error:', e)
+    window.onWSError(e)
   }
 }
 
 onMounted(() => {
-  document.title = hostname.value + ' - UniTotem Manager'
   connectWs()
 })
 
