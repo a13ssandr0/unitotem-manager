@@ -1,27 +1,3 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-
-const mode = ref('Server')
-const items = ref([
-  'Server',
-  'Client'
-])
-const serverIp = ref('')
-const serverPort = ref('')
-
-const clients = ref([
-  { hostname: 'Client-1-long-hostname-that-should-be-truncated', ip: '192.168.1.10', port: 8080, enabled: true },
-  { hostname: 'Client-2', ip: '192.168.1.11', port: 8080, enabled: false },
-  { hostname: 'Client-3', ip: '192.168.1.12', port: 8080, enabled: true },
-  { hostname: 'Client-4', ip: '192.168.1.13', port: 8080, enabled: true },
-  { hostname: 'Client-5', ip: '192.168.1.14', port: 8080, enabled: false },
-])
-
-function manageClient(ip: string, port: number) {
-  window.open(`https://${ip}:${port}/settings`, '_blank')
-}
-</script>
-
 <template>
   <div class="d-flex flex-column align-center">
     <v-card
@@ -87,6 +63,30 @@ function manageClient(ip: string, port: number) {
     </div>
   </div>
 </template>
+
+<script setup>
+import { ref } from 'vue'
+
+const mode = ref('Server')
+const items = ref([
+  'Server',
+  'Client'
+])
+const serverIp = ref('')
+const serverPort = ref('')
+
+const clients = ref([
+  { hostname: 'Client-1-long-hostname-that-should-be-truncated', ip: '192.168.1.10', port: 8080, enabled: true },
+  { hostname: 'Client-2', ip: '192.168.1.11', port: 8080, enabled: false },
+  { hostname: 'Client-3', ip: '192.168.1.12', port: 8080, enabled: true },
+  { hostname: 'Client-4', ip: '192.168.1.13', port: 8080, enabled: true },
+  { hostname: 'Client-5', ip: '192.168.1.14', port: 8080, enabled: false },
+])
+
+function manageClient(ip, port) {
+  window.open(`https://${ip}:${port}/settings`, '_blank')
+}
+</script>
 
 <style scoped>
 .client-grid {

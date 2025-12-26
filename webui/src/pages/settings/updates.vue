@@ -1,28 +1,3 @@
-<script setup lang="ts">
-import {computed, ref} from 'vue'
-
-const packages = ref([
-])
-
-const updates = computed(() => {
-  const count = packages.value.length
-  if (count === 0) {
-    return 'All packages are up to date'
-  }
-  if (count === 1) {
-    return '1 update available'
-  }
-  return `${count} updates available`
-})
-
-const logs = ref([
-  { type: 'stdout', text: 'Reading package lists... Done' },
-  { type: 'stdout', text: 'Building dependency tree... Done' },
-  { type: 'stderr', text: 'E: Could not open lock file /var/lib/dpkg/lock - open (13: Permission denied)' },
-  { type: 'stdout', text: 'All packages are up to date.' },
-])
-</script>
-
 <template>
   <div class="d-flex justify-center flex-column align-center">
     <v-card
@@ -91,6 +66,30 @@ const logs = ref([
     </v-card>
   </div>
 </template>
+
+<script setup>
+import {computed, ref} from 'vue'
+
+const packages = ref([])
+
+const updates = computed(() => {
+  const count = packages.value.length
+  if (count === 0) {
+    return 'All packages are up to date'
+  }
+  if (count === 1) {
+    return '1 update available'
+  }
+  return `${count} updates available`
+})
+
+const logs = ref([
+  { type: 'stdout', text: 'Reading package lists... Done' },
+  { type: 'stdout', text: 'Building dependency tree... Done' },
+  { type: 'stderr', text: 'E: Could not open lock file /var/lib/dpkg/lock - open (13: Permission denied)' },
+  { type: 'stdout', text: 'All packages are up to date.' },
+])
+</script>
 
 <style scoped>
 .log-container {

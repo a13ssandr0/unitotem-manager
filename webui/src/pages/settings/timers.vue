@@ -1,4 +1,119 @@
-<script setup lang="ts">
+<template>
+  <div class="d-flex flex-column align-center">
+    <v-card
+      class="ma-4"
+      max-width="1000"
+      width="100%"
+      :title="String($route.name)"
+    >
+      <v-data-table
+        :headers="headers"
+        :items="timers"
+        class="elevation-1"
+      >
+        <template v-slot:item.action="{ item }">
+          {{ getActionTitle(item.action) }}
+        </template>
+        <template v-slot:item.month="{ item }">
+          {{ getMonthTitle(item.month) }}
+        </template>
+        <template v-slot:item.dayOfWeek="{ item }">
+          {{ getDayOfWeekTitle(item.dayOfWeek) }}
+        </template>
+        <template v-slot:item.actions="{ item }">
+          <v-btn variant="text" icon="mdi-pencil" color="yellow" class="mr-2" @click="editItem(item)" aria-label="Edit"></v-btn>
+          <v-btn variant="text" icon="mdi-delete" color="red" @click="deleteItem(item)" aria-label="Delete"></v-btn>
+        </template>
+      </v-data-table>
+    </v-card>
+
+    <v-dialog v-model="dialog" max-width="500px">
+      <v-card>
+        <v-card-title>
+          <span class="text-h5">{{ formTitle }}</span>
+        </v-card-title>
+
+        <v-card-text>
+          <v-container>
+            <v-row>
+              <v-col cols="12">
+                <v-select
+                  v-model="editedItem.action"
+                  :items="actions"
+                  item-title="title"
+                  item-value="value"
+                  label="Action"
+                  variant="outlined"
+                ></v-select>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-select
+                  v-model="editedItem.hour"
+                  :items="hours"
+                  label="Hour"
+                  variant="outlined"
+                ></v-select>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-select
+                  v-model="editedItem.minute"
+                  :items="minutes"
+                  label="Minute"
+                  variant="outlined"
+                ></v-select>
+              </v-col>
+              <v-col cols="12">
+                <v-select
+                  v-model="editedItem.dayOfMonth"
+                  :items="daysOfMonth"
+                  label="Day of the month"
+                  variant="outlined"
+                ></v-select>
+              </v-col>
+              <v-col cols="12">
+                <v-select
+                  v-model="editedItem.month"
+                  :items="months"
+                  item-title="title"
+                  item-value="value"
+                  label="Month"
+                  variant="outlined"
+                ></v-select>
+              </v-col>
+              <v-col cols="12">
+                <v-select
+                  v-model="editedItem.dayOfWeek"
+                  :items="daysOfWeek"
+                  item-title="title"
+                  item-value="value"
+                  label="Day of the week"
+                  variant="outlined"
+                ></v-select>
+              </v-col>
+            </v-row>
+          </v-container>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="blue-darken-1" variant="text" @click="close">Cancel</v-btn>
+          <v-btn color="blue-darken-1" variant="text" @click="save">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-btn
+      class="ma-4"
+      position="fixed"
+      location="bottom right"
+      icon="mdi-plus"
+      color="primary"
+      @click="dialog = true"
+      aria-label="Add user"
+    ></v-btn>
+  </div>
+</template>
+
+<script setup>
 import { ref, computed } from 'vue';
 
 const headers = ref([
@@ -121,120 +236,6 @@ function save() {
 }
 </script>
 
-<template>
-  <div class="d-flex flex-column align-center">
-    <v-card
-      class="ma-4"
-      max-width="1000"
-      width="100%"
-      :title="String($route.name)"
-    >
-      <v-data-table
-        :headers="headers"
-        :items="timers"
-        class="elevation-1"
-      >
-        <template v-slot:item.action="{ item }">
-          {{ getActionTitle(item.action) }}
-        </template>
-        <template v-slot:item.month="{ item }">
-          {{ getMonthTitle(item.month) }}
-        </template>
-        <template v-slot:item.dayOfWeek="{ item }">
-          {{ getDayOfWeekTitle(item.dayOfWeek) }}
-        </template>
-        <template v-slot:item.actions="{ item }">
-          <v-btn variant="text" icon="mdi-pencil" color="yellow" class="mr-2" @click="editItem(item)" aria-label="Edit"></v-btn>
-          <v-btn variant="text" icon="mdi-delete" color="red" @click="deleteItem(item)" aria-label="Delete"></v-btn>
-        </template>
-      </v-data-table>
-    </v-card>
-
-    <v-dialog v-model="dialog" max-width="500px">
-      <v-card>
-        <v-card-title>
-          <span class="text-h5">{{ formTitle }}</span>
-        </v-card-title>
-
-        <v-card-text>
-          <v-container>
-            <v-row>
-              <v-col cols="12">
-                <v-select
-                  v-model="editedItem.action"
-                  :items="actions"
-                  item-title="title"
-                  item-value="value"
-                  label="Action"
-                  variant="outlined"
-                ></v-select>
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-select
-                  v-model="editedItem.hour"
-                  :items="hours"
-                  label="Hour"
-                  variant="outlined"
-                ></v-select>
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-select
-                  v-model="editedItem.minute"
-                  :items="minutes"
-                  label="Minute"
-                  variant="outlined"
-                ></v-select>
-              </v-col>
-              <v-col cols="12">
-                <v-select
-                  v-model="editedItem.dayOfMonth"
-                  :items="daysOfMonth"
-                  label="Day of the month"
-                  variant="outlined"
-                ></v-select>
-              </v-col>
-              <v-col cols="12">
-                <v-select
-                  v-model="editedItem.month"
-                  :items="months"
-                  item-title="title"
-                  item-value="value"
-                  label="Month"
-                  variant="outlined"
-                ></v-select>
-              </v-col>
-              <v-col cols="12">
-                <v-select
-                  v-model="editedItem.dayOfWeek"
-                  :items="daysOfWeek"
-                  item-title="title"
-                  item-value="value"
-                  label="Day of the week"
-                  variant="outlined"
-                ></v-select>
-              </v-col>
-            </v-row>
-          </v-container>
-        </v-card-text>
-
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="close">Cancel</v-btn>
-          <v-btn color="blue-darken-1" variant="text" @click="save">Save</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-    <v-btn
-      class="ma-4"
-      position="fixed"
-      location="bottom right"
-      icon="mdi-plus"
-      color="primary"
-      @click="dialog = true"
-      aria-label="Add user"
-    ></v-btn>
-  </div>
-</template>
 
 <style scoped>
 

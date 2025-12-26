@@ -1,73 +1,3 @@
-<script setup lang="ts">
-import {ref, watch, computed} from 'vue'
-
-const dialog = ref(false)
-const passwordDialog = ref(false)
-const newUsername = ref('')
-const newPassword = ref('')
-const confirmPassword = ref('')
-const selectedUser = ref(null)
-
-const users = ref([
-  {id: 1, username: 'user1', permissions: {scheduler: false, audio: false, power: false, admin: false}},
-  {id: 2, username: 'user2', permissions: {scheduler: false, audio: true, power: true, admin: false}},
-  {id: 3, username: 'user3', permissions: {scheduler: true, audio: true, power: true, admin: true}}
-])
-
-const permissions = ref(['Scheduler', 'Audio', 'Power', 'Admin'])
-
-const passwordsMatch = computed(() => {
-  return newPassword.value === confirmPassword.value && newPassword.value.trim() !== '';
-});
-
-const passwordErrorMessages = computed(() => {
-  if (confirmPassword.value && newPassword.value !== confirmPassword.value) {
-    return 'Passwords do not match';
-  }
-  return undefined;
-});
-
-// Watch for changes in users' permissions
-watch(users, (currentUsers) => {
-  currentUsers.forEach(user => {
-    if (user.permissions.admin) {
-      // If admin is checked, ensure other permissions are also checked
-      user.permissions.scheduler = true;
-      user.permissions.audio = true;
-      user.permissions.power = true;
-    }
-  });
-}, {deep: true});
-
-function addUser() {
-  if (newUsername.value.trim()) {
-    const newUser = {
-      id: users.value.length > 0 ? Math.max(...users.value.map(u => u.id)) + 1 : 1,
-      username: newUsername.value,
-      permissions: {scheduler: false, audio: false, power: false, admin: false}
-    };
-    users.value.push(newUser);
-    newUsername.value = ''; // Reset
-    dialog.value = false; // Close dialog
-  }
-}
-
-function openPasswordDialog(user) {
-  selectedUser.value = user;
-  newPassword.value = '';
-  confirmPassword.value = '';
-  passwordDialog.value = true;
-}
-
-function changePassword() {
-  if (selectedUser.value && passwordsMatch.value) {
-    console.log(`Changing password for ${selectedUser.value.username} to ${newPassword.value}`);
-    // Here you would typically make an API call to update the password
-    passwordDialog.value = false;
-  }
-}
-</script>
-
 <template>
   <div>
     <div class="d-flex justify-center">
@@ -182,6 +112,77 @@ function changePassword() {
     ></v-btn>
   </div>
 </template>
+
+<script setup>
+import {ref, watch, computed} from 'vue'
+
+const dialog = ref(false)
+const passwordDialog = ref(false)
+const newUsername = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const selectedUser = ref(null)
+
+const users = ref([
+  {id: 1, username: 'user1', permissions: {scheduler: false, audio: false, power: false, admin: false}},
+  {id: 2, username: 'user2', permissions: {scheduler: false, audio: true, power: true, admin: false}},
+  {id: 3, username: 'user3', permissions: {scheduler: true, audio: true, power: true, admin: true}}
+])
+
+const permissions = ref(['Scheduler', 'Audio', 'Power', 'Admin'])
+
+const passwordsMatch = computed(() => {
+  return newPassword.value === confirmPassword.value && newPassword.value.trim() !== '';
+});
+
+const passwordErrorMessages = computed(() => {
+  if (confirmPassword.value && newPassword.value !== confirmPassword.value) {
+    return 'Passwords do not match';
+  }
+  return undefined;
+});
+
+// Watch for changes in users' permissions
+watch(users, (currentUsers) => {
+  currentUsers.forEach(user => {
+    if (user.permissions.admin) {
+      // If admin is checked, ensure other permissions are also checked
+      user.permissions.scheduler = true;
+      user.permissions.audio = true;
+      user.permissions.power = true;
+    }
+  });
+}, {deep: true});
+
+function addUser() {
+  if (newUsername.value.trim()) {
+    const newUser = {
+      id: users.value.length > 0 ? Math.max(...users.value.map(u => u.id)) + 1 : 1,
+      username: newUsername.value,
+      permissions: {scheduler: false, audio: false, power: false, admin: false}
+    };
+    users.value.push(newUser);
+    newUsername.value = ''; // Reset
+    dialog.value = false; // Close dialog
+  }
+}
+
+function openPasswordDialog(user) {
+  selectedUser.value = user;
+  newPassword.value = '';
+  confirmPassword.value = '';
+  passwordDialog.value = true;
+}
+
+function changePassword() {
+  if (selectedUser.value && passwordsMatch.value) {
+    console.log(`Changing password for ${selectedUser.value.username} to ${newPassword.value}`);
+    // Here you would typically make an API call to update the password
+    passwordDialog.value = false;
+  }
+}
+</script>
+
 
 <style scoped>
 .darker-disabled-checkbox :deep(.mdi-checkbox-marked) {
