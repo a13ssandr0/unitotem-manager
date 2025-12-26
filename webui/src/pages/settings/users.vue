@@ -152,11 +152,7 @@ const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 const selectedUser = ref(null)
 
-const users = ref({
-  'user1': {perms: []},
-  'user2': {perms: ['audio', 'power']},
-  'user3': {perms: ['scheduler', 'audio', 'power', 'admin']}
-})
+const users = ref({})
 
 const permissions = ref(['Scheduler', 'Audio', 'Power', 'Admin'])
 
