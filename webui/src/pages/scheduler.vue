@@ -55,7 +55,8 @@
               <v-list-item-subtitle>Duration: {{ file.duration }} | Size: {{ file.size }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
-          <v-divider class="mb-2"></v-divider>
+          <v-divider></v-divider>
+          <v-card-subtitle class="my-1">Used {{ disk_used }} of {{ disk_total }}</v-card-subtitle>
         </v-card>
       </v-col>
 
@@ -302,6 +303,8 @@ import {ref, computed} from 'vue';
 
 // Dati di esempio per i file
 const mediaFiles = ref({});
+const disk_used = ref('')
+const disk_total = ref('')
 
 const selectedFiles = ref([]);
 const fileInput = ref(null);
@@ -345,14 +348,7 @@ const isIndefinite = computed({
 
 const sendCommand = window.sendCommand;
 
-onWSOpen = (e) => {
-  sendCommand("Scheduler/asset")
-  sendCommand("Scheduler/current")
-  sendCommand("Scheduler/file")
-  sendCommand("Settings/default_duration")
-}
-
-if (isWSReady()) onWSOpen()
+setInitCommands("Scheduler/asset","Scheduler/current","Scheduler/file","Settings/default_duration")
 
 onWSMessage = (data) => {
   switch (data.target) {
@@ -363,6 +359,8 @@ onWSMessage = (data) => {
       break;
     case "Scheduler/file":
       mediaFiles.value = data.files;
+      disk_used.value = data.disk_used;
+      disk_total.value = data.disk_total;
       break;
     case "Settings/default_duration":
       defaultDuration.value = data.duration;

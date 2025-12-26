@@ -1,13 +1,12 @@
 <template>
   <v-app>
-    <v-app-bar app clipped-left class="app-bar-border">
+    <v-app-bar app clipped-left :class="connected ? 'app-bar-border' : 'app-bar-border-disconnected'">
       <v-app-bar-nav-icon @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
       <v-toolbar-title class="app-bar-title">UniTotem @ {{ hostname }}</v-toolbar-title>
       <v-spacer></v-spacer>
-      <v-btn
-        @click="theme.cycle()"
-        text="Cycle Themes"
-      ></v-btn>
+      <v-btn icon @click="cycleTheme">
+        <v-icon>{{ themeIcon }}</v-icon>
+      </v-btn>
       <v-btn icon @click="rebootDialog = true">
         <v-icon>mdi-restart</v-icon>
       </v-btn>
@@ -58,18 +57,14 @@
       <template v-slot:append>
         <div class="pa-2 text-caption">
           <v-divider class="mb-2"></v-divider>
+          <div class="mt-2" v-if="disp_size">Display: {{ disp_size.width }}x{{ disp_size.height }}</div>
+          <div class="mt-2" v-else>Display: disconnected</div>
           <div>
             <a href="https://github.com/a13ssandr0/unitotem" target="_blank" rel="noopener noreferrer"
                class="text-white">
               <v-icon size="small">mdi-github</v-icon>
               Unitotem
             </a> {{ ut_vers }} by a13ssandr0
-          </div>
-          <div class="mt-2">Display: <span id="display_bounds">{{ disp_size.width }}x{{ disp_size.height }}</span></div>
-          <div>Used {{ disk_used }} of {{ disk_total }}</div>
-          <div class="mt-2">
-            <span v-if="!connected" class="text-red fade-in-out">Disconnected</span>
-            <span v-else class="text-green">Connected</span>
           </div>
         </div>
       </template>
@@ -104,16 +99,57 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-dialog :model-value="!connected" persistent max-width="400" class="reconnect-dialog">
+      <v-card class="pa-4 d-flex align-center">
+        <v-progress-circular indeterminate color="primary" size="64" class="mt-4"></v-progress-circular>
+        <span class="text-h6 mt-6">Reconnecting...</span>
+        <span class="mt-2">If the problem persists try reloading the page</span>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
 <script setup>
-import {onMounted, onUnmounted, ref} from 'vue'
+import {onMounted, onUnmounted, ref, computed, watch} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
 import {useRouter} from 'vue-router'
 
 const theme = useTheme()
 const router = useRouter()
+
+const themeMode = ref(localStorage.getItem('themeMode') || 'auto')
+
+const themeIcon = computed(() => {
+  if (themeMode.value === 'auto') return 'mdi-brightness-auto'
+  return themeMode.value === 'dark' ? 'mdi-weather-night' : 'mdi-weather-sunny'
+})
+
+function cycleTheme() {
+  const modes = ['light', 'dark', 'auto']
+  themeMode.value = modes[(modes.indexOf(themeMode.value) + 1) % modes.length]
+}
+
+function applyTheme() {
+  localStorage.setItem('themeMode', themeMode.value)
+  if (themeMode.value === 'auto') {
+    theme.change(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  } else {
+    theme.change(themeMode.value)
+  }
+}
+
+watch(themeMode, applyTheme)
+
+const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+function handleSystemThemeChange(e) {
+  if (themeMode.value === 'auto') {
+    theme.change(e.matches ? 'dark' : 'light')
+  }
+}
+mediaQuery.addEventListener('change', handleSystemThemeChange)
+
+applyTheme()
 
 const {lgAndUp} = useDisplay()
 const drawer = ref(lgAndUp.value)
@@ -123,10 +159,9 @@ const powerOffDialog = ref(false)
 const hostname = ref('')
 const ut_vers = ref('1.0.0')
 const logged_user = ref({name: 'user'})
-const disp_size = ref({width: 1920, height: 1080})
-const disk_used = ref('10GB')
-const disk_total = ref('100GB')
+const disp_size = ref(null)
 const connected = ref(false)
+const init_commands = ref([]);
 
 const tabs = ref([
   {id: 'audio', name: 'Audio', icon: 'mdi-speaker'},
@@ -147,20 +182,31 @@ window.sendCommand = (target, args) => {
   ws.send(JSON.stringify(args));
 }
 
+window.setInitCommands = (...commands) => {
+  init_commands.value = commands;
+  if (connected.value) {
+    new Set(commands).forEach(cmd => {
+      sendCommand(cmd)
+    })
+  }
+}
+
 window.onWSOpen = (e) => {}
 window.onWSMessage = (data, e) => {}
 window.onWSClose = (e) => {}
 window.onWSError = (e) => {}
 
 window.isWSReady = () => {
-  return ws && ws.readyState === WebSocket.OPEN
+  return connected.value
 }
 
 function connectWs() {
   ws = new WebSocket('wss://localhost/ws')
   ws.onopen = (e) => {
     connected.value = true
-    sendCommand("Settings/hostname")
+    new Set([...init_commands.value,
+      'Settings/hostname', 'Settings/Display/getBounds'
+    ]).forEach(cmd => sendCommand(cmd))
     window.onWSOpen(e)
   }
   ws.onmessage = e => {
@@ -168,6 +214,11 @@ function connectWs() {
     if (data.target === 'Settings/hostname') {
       hostname.value = data.hostname;
       document.title = data.hostname + ' - UniTotem Manager';
+    } else if (data.target === 'Settings/Display/getBounds'){
+      if (data.width && data.height)
+        disp_size.value = data;
+      else
+        disp_size.value = null;
     }
     if (data.hasOwnProperty('error')) {
       // messageModal.find('.modal-title').text('Error');
@@ -176,7 +227,6 @@ function connectWs() {
       // new bootstrap.Modal(messageModal).show();
       return;
     }
-    // handlers[data.target]?.(data);
     window.onWSMessage(data, e)
   };
   ws.onclose = (e) => {
@@ -200,6 +250,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  mediaQuery.removeEventListener('change', handleSystemThemeChange)
   if (ws) ws.close()
 })
 
@@ -266,6 +317,10 @@ html, body {
   border-bottom: 2px solid #2962FF !important;
 }
 
+.app-bar-border-disconnected {
+  border-bottom: 2px solid #F44336 !important;
+}
+
 .app-bar-title {
   font-size: 1.8rem !important;
   line-height: 2rem !important;
@@ -281,5 +336,12 @@ html, body {
 
 .v-btn--icon .v-icon {
   font-size: 1.8rem !important;
+}
+
+.reconnect-dialog .v-overlay__scrim {
+  background: rgba(0, 0, 0, 0.5) !important;
+  opacity: 1 !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
 }
 </style>
