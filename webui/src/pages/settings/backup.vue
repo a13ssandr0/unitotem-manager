@@ -1,9 +1,3 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-
-const includeFiles = ref(false)
-</script>
-
 <template>
   <div class="d-flex flex-column align-center pa-4">
     <div class="w-100" style="max-width: 1000px;">
@@ -48,6 +42,12 @@ const includeFiles = ref(false)
     </div>
   </div>
 </template>
+
+<script setup>
+import { ref } from 'vue'
+
+const includeFiles = ref(false)
+</script>
 
 <style scoped>
 .actions-grid {

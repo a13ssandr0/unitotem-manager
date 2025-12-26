@@ -1,191 +1,3 @@
-<script setup lang="ts">
-import {ref, computed, reactive, onMounted, onBeforeUnmount} from 'vue'
-import {onBeforeRouteLeave} from 'vue-router'
-import MonacoEditor from 'vue-monaco-cdn'
-
-const hostname = ref('Unitotem')
-const originalHostname = ref(hostname.value)
-
-const yamlFiles = ref(['network.yaml', 'another.yaml'])
-const selectedFile = ref<string | null>(null)
-const fileContent = ref('')
-
-// Dialog states
-const dialogDelete = ref(false)
-const fileToDelete = ref<string | null>(null)
-const dialogCreate = ref(false)
-const newFileName = ref('')
-const dialogLeave = ref(false)
-let resolveLeave: (confirm: boolean) => void = () => {
-}
-
-// WiFi state
-const loadingWifi = ref(false)
-const wifiNetworks = ref<any[]>([])
-const wifiMenu = ref(false)
-
-// Content states
-const originalFileContents = reactive(new Map<string, string>())
-const unsavedChanges = reactive(new Map<string, string>())
-
-const isHostnameChanged = computed(() => hostname.value !== originalHostname.value)
-
-const isFileDirty = computed(() => {
-  if (!selectedFile.value) return false
-  const original = originalFileContents.get(selectedFile.value)
-  return original !== fileContent.value
-})
-
-const hasUnsavedChanges = computed(() => isHostnameChanged.value || unsavedChanges.size > 0 || isFileDirty.value)
-
-const beforeWindowUnload = (e: BeforeUnloadEvent) => {
-  if (hasUnsavedChanges.value) {
-    e.preventDefault()
-    e.returnValue = ''
-  }
-}
-
-onMounted(() => window.addEventListener('beforeunload', beforeWindowUnload))
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeWindowUnload))
-
-onBeforeRouteLeave((to, from, next) => {
-  if (hasUnsavedChanges.value) {
-    dialogLeave.value = true
-    resolveLeave = next
-  } else {
-    next()
-  }
-})
-
-const confirmLeave = (confirm: boolean) => {
-  resolveLeave(confirm)
-  dialogLeave.value = false
-}
-
-const isFileDirtyByName = (file: string): boolean => {
-  return unsavedChanges.has(file) || (file === selectedFile.value && isFileDirty.value)
-}
-
-const applyHostname = () => {
-  originalHostname.value = hostname.value
-  console.log('Hostname applied:', hostname.value)
-}
-
-const switchFile = (file: string) => {
-  if (selectedFile.value && isFileDirty.value) {
-    unsavedChanges.set(selectedFile.value, fileContent.value)
-  }
-  loadFileContent(file)
-}
-
-const loadFileContent = async (file: string) => {
-  selectedFile.value = file
-  if (unsavedChanges.has(file)) {
-    fileContent.value = unsavedChanges.get(file) as string
-    return
-  }
-  const response = `# Mock content for ${file}\nhostname: unitotem-default`
-  fileContent.value = response
-  originalFileContents.set(file, response)
-}
-
-const requestDeleteFile = (file: string) => {
-  fileToDelete.value = file
-  dialogDelete.value = true
-}
-
-const confirmDeleteFile = () => {
-  if (!fileToDelete.value) return
-  const file = fileToDelete.value
-  const index = yamlFiles.value.indexOf(file)
-  if (index > -1) {
-    yamlFiles.value.splice(index, 1)
-    originalFileContents.delete(file)
-    unsavedChanges.delete(file)
-    if (selectedFile.value === file) {
-      selectedFile.value = null
-      fileContent.value = ''
-    }
-  }
-  console.log('Deleted file:', file)
-  closeDeleteDialog()
-}
-
-const closeDeleteDialog = () => {
-  dialogDelete.value = false
-  fileToDelete.value = null
-}
-
-const openCreateDialog = () => {
-  dialogCreate.value = true
-}
-
-const closeCreateDialog = () => {
-  dialogCreate.value = false
-  newFileName.value = ''
-}
-
-const confirmCreateFile = () => {
-  if (!newFileName.value.trim()) return
-  const finalName = `${newFileName.value.trim()}.yaml`
-  if (yamlFiles.value.includes(finalName)) {
-    console.error('File already exists')
-    return
-  }
-  yamlFiles.value.push(finalName)
-  closeCreateDialog()
-  switchFile(finalName)
-}
-
-const saveChanges = () => {
-  if (!selectedFile.value || !isFileDirty.value) return
-  const currentFile = selectedFile.value
-  originalFileContents.set(currentFile, fileContent.value)
-  unsavedChanges.delete(currentFile)
-  console.log(`Saving ${currentFile}...`, fileContent.value)
-}
-
-const applyChanges = () => {
-  if (!selectedFile.value || !isFileDirty.value) return
-  saveChanges()
-  console.log(`Applying changes for ${selectedFile.value}...`)
-}
-
-const discardFileChanges = () => {
-  if (selectedFile.value) {
-    fileContent.value = originalFileContents.get(selectedFile.value) as string
-    unsavedChanges.delete(selectedFile.value)
-  }
-}
-
-const scanWifi = () => {
-  loadingWifi.value = true
-  wifiNetworks.value = []
-  setTimeout(() => {
-    wifiNetworks.value = [
-      {ssid: 'WiFi-Network-1', mac: '00:1B:44:11:3A:B7', signal: -45, band: '5GHz', security: true},
-      {ssid: 'WiFi-Network-2', mac: '00:1B:44:11:3A:B8', signal: -75, band: '2.4GHz', security: false},
-      {ssid: 'WiFi-Network-3', mac: '00:1B:44:11:3A:B9', signal: -85, band: '2.4GHz', security: true},
-    ]
-    loadingWifi.value = false
-  }, 2000)
-}
-
-const getSignalIcon = (signal: number, security: boolean): string => {
-  let icon = 'mdi-wifi-strength-'
-  if (signal > -50) icon += '4'
-  else if (signal > -70) icon += '3'
-  else if (signal > -80) icon += '2'
-  else icon += '1'
-  if (security) icon += '-lock'
-  return icon
-}
-
-if (yamlFiles.value.length > 0) {
-  switchFile(yamlFiles.value[0])
-}
-</script>
-
 <template>
   <div class="d-flex flex-column align-center">
     <v-card
@@ -352,6 +164,189 @@ if (yamlFiles.value.length > 0) {
     ></v-btn>
   </div>
 </template>
+
+<script setup>
+import {ref, computed, reactive, onMounted, onBeforeUnmount} from 'vue'
+import {onBeforeRouteLeave} from 'vue-router'
+import MonacoEditor from 'vue-monaco-cdn'
+
+const hostname = ref('Unitotem')
+const originalHostname = ref(hostname.value)
+
+const yamlFiles = ref(['network.yaml', 'another.yaml'])
+const selectedFile = ref(null)
+const fileContent = ref('')
+
+// Dialog states
+const dialogDelete = ref(false)
+const fileToDelete = ref(null)
+const dialogCreate = ref(false)
+const newFileName = ref('')
+const dialogLeave = ref(false)
+let resolveLeave = () => {}
+
+// WiFi state
+const loadingWifi = ref(false)
+const wifiNetworks = ref([])
+const wifiMenu = ref(false)
+
+// Content states
+const originalFileContents = reactive(new Map())
+const unsavedChanges = reactive(new Map())
+
+const isHostnameChanged = computed(() => hostname.value !== originalHostname.value)
+
+const isFileDirty = computed(() => {
+  if (!selectedFile.value) return false
+  const original = originalFileContents.get(selectedFile.value)
+  return original !== fileContent.value
+})
+
+const hasUnsavedChanges = computed(() => isHostnameChanged.value || unsavedChanges.size > 0 || isFileDirty.value)
+
+const beforeWindowUnload = (e) => {
+  if (hasUnsavedChanges.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
+onMounted(() => window.addEventListener('beforeunload', beforeWindowUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeWindowUnload))
+
+onBeforeRouteLeave((to, from, next) => {
+  if (hasUnsavedChanges.value) {
+    dialogLeave.value = true
+    resolveLeave = next
+  } else {
+    next()
+  }
+})
+
+const confirmLeave = (confirm) => {
+  resolveLeave(confirm)
+  dialogLeave.value = false
+}
+
+const isFileDirtyByName = (file) => {
+  return unsavedChanges.has(file) || (file === selectedFile.value && isFileDirty.value)
+}
+
+const applyHostname = () => {
+  originalHostname.value = hostname.value
+  console.log('Hostname applied:', hostname.value)
+}
+
+const switchFile = (file) => {
+  if (selectedFile.value && isFileDirty.value) {
+    unsavedChanges.set(selectedFile.value, fileContent.value)
+  }
+  loadFileContent(file)
+}
+
+const loadFileContent = async (file) => {
+  selectedFile.value = file
+  if (unsavedChanges.has(file)) {
+    fileContent.value = unsavedChanges.get(file)
+    return
+  }
+  const response = `# Mock content for ${file}\nhostname: unitotem-default`
+  fileContent.value = response
+  originalFileContents.set(file, response)
+}
+
+const requestDeleteFile = (file) => {
+  fileToDelete.value = file
+  dialogDelete.value = true
+}
+
+const confirmDeleteFile = () => {
+  if (!fileToDelete.value) return
+  const file = fileToDelete.value
+  const index = yamlFiles.value.indexOf(file)
+  if (index > -1) {
+    yamlFiles.value.splice(index, 1)
+    originalFileContents.delete(file)
+    unsavedChanges.delete(file)
+    if (selectedFile.value === file) {
+      selectedFile.value = null
+      fileContent.value = ''
+    }
+  }
+  console.log('Deleted file:', file)
+  closeDeleteDialog()
+}
+
+const closeDeleteDialog = () => {
+  dialogDelete.value = false
+  fileToDelete.value = null
+}
+
+const closeCreateDialog = () => {
+  dialogCreate.value = false
+  newFileName.value = ''
+}
+
+const confirmCreateFile = () => {
+  if (!newFileName.value.trim()) return
+  const finalName = `${newFileName.value.trim()}.yaml`
+  if (yamlFiles.value.includes(finalName)) {
+    console.error('File already exists')
+    return
+  }
+  yamlFiles.value.push(finalName)
+  closeCreateDialog()
+  switchFile(finalName)
+}
+
+const saveChanges = () => {
+  if (!selectedFile.value || !isFileDirty.value) return
+  const currentFile = selectedFile.value
+  originalFileContents.set(currentFile, fileContent.value)
+  unsavedChanges.delete(currentFile)
+  console.log(`Saving ${currentFile}...`, fileContent.value)
+}
+
+const applyChanges = () => {
+  if (!selectedFile.value || !isFileDirty.value) return
+  saveChanges()
+  console.log(`Applying changes for ${selectedFile.value}...`)
+}
+
+const discardFileChanges = () => {
+  if (selectedFile.value) {
+    fileContent.value = originalFileContents.get(selectedFile.value)
+    unsavedChanges.delete(selectedFile.value)
+  }
+}
+
+const scanWifi = () => {
+  loadingWifi.value = true
+  wifiNetworks.value = []
+  setTimeout(() => {
+    wifiNetworks.value = [
+      {ssid: 'WiFi-Network-1', mac: '00:1B:44:11:3A:B7', signal: -45, band: '5GHz', security: true},
+      {ssid: 'WiFi-Network-2', mac: '00:1B:44:11:3A:B8', signal: -75, band: '2.4GHz', security: false},
+      {ssid: 'WiFi-Network-3', mac: '00:1B:44:11:3A:B9', signal: -85, band: '2.4GHz', security: true},
+    ]
+    loadingWifi.value = false
+  }, 2000)
+}
+
+const getSignalIcon = (signal, security) => {
+  let icon = 'mdi-wifi-strength-'
+  if (signal > -50) icon += '4'
+  else if (signal > -70) icon += '3'
+  else if (signal > -80) icon += '2'
+  else icon += '1'
+  if (security) icon += '-lock'
+  return icon
+}
+
+if (yamlFiles.value.length > 0) {
+  switchFile(yamlFiles.value[0])
+}
+</script>
 
 <style scoped>
 .v-list-item--active {
