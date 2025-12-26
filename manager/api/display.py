@@ -12,7 +12,8 @@ class Display(WSAPIBase):
         try:
             return WSBroadcast(**controller.bounds)
         except TypeError:
-            pass
+            # controller.bounds may be None if the webview process is not running, explicitly return none in this case
+            return WSBroadcast()
 
     def setBounds(self, x: int, y: int, width: int, height: int):
         """

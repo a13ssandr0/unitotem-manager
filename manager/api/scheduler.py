@@ -19,7 +19,7 @@ class Scheduler(WSAPIBase):
 
     @UserPerms.requires.scheduler
     def file(self):
-        return WSBroadcast(files=upload_manager.serialize())
+        return WSBroadcast(files=upload_manager.serialize(), disk_used=upload_manager.disk_usedh, disk_total=upload_manager.disk_totalh)
 
     @UserPerms.requires.scheduler
     def add_url(self, items:list):
