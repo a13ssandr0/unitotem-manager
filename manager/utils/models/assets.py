@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 from benedict.dicts.parse.parse_util import parse_datetime
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator, \
+from pydantic import BaseModel, Field, field_serializer, field_validator, \
     model_validator
 from pydantic_core.core_schema import ValidationInfo
 from pydantic_extra_types.color import Color
@@ -152,6 +152,12 @@ class Asset(BaseModel, validate_assignment=True):
             # and added to their dictionary, we don't need them yet
             TIMERS[info.data['uuid']][info.field_name.removesuffix('_date')].set_timeout(v)
         return v
+
+    @field_serializer('bg_color')
+    def serialize_color(self, c: Color):
+        if c is None:
+            return None
+        return c.as_hex('long')
 
     def __del__(self):
         if self.uuid in TIMERS:
@@ -431,6 +437,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
             logger.success('Found {} assets', len(self.assets))
 
     def save(self):
+        self.callback()
         logger.info('Saving assets in {}', cmdargs.assets_file)
         with open(cmdargs.assets_file, 'w') as file:
             json.dump(self.model_dump(), file, indent=4)
