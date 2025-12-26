@@ -3,9 +3,8 @@ from pulsectl import Pulse
 
 def get_audio_devices() -> list[dict[str, str | bool | float]]:
     with Pulse() as pulse:
-        default_dev = pulse.server_info().default_sink_name
-        return [{'name': sink.name, 'description': sink.description, 'mute': bool(sink.mute),
-                 'volume': sink.volume.value_flat, 'default': sink.name == default_dev} for sink in pulse.sink_list()]
+        return [{'name': sink.name, 'description': sink.description, 'muted': bool(sink.mute),
+                 'volume': sink.volume.value_flat} for sink in pulse.sink_list()]
 
 
 def get_default_audio_device() -> str:
