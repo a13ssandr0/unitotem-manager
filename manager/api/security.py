@@ -9,12 +9,12 @@ from api.ws.wsmanager import WSAPIBase
 class Security(WSAPIBase):
     @staticmethod
     def getUsers():
-        return WSBroadcast(users=[(user, {'perms': list(data.permissions)}) for user, data in user_manager.items()])
+        return WSBroadcast(users={user: {'perms': list(data.permissions)} for user, data in user_manager.items()})
 
     def addUser(self, username: str, password: str):
         if username in user_manager:
             return WSResponse(error="User already exists")
-        user_manager.add_user(user=username, password=password)
+        user_manager.add_user(username, password)
         logger.info(f'Created new user: {username}')
         return self.getUsers()
 
@@ -41,8 +41,7 @@ class Security(WSAPIBase):
                 yield self.getUsers()
                 return
 
-        user_manager[username].perms = perms
-        user_manager.save()
+        user_manager.change_perms(username, perms)
         logger.info(f'Changed permissions for {username}: {perms}')
         yield WSMulticast(ctx.username, 'reload')
         yield self.getUsers()

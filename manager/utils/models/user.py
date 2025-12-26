@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import json
+import warnings
 from collections import namedtuple
 from enum import Enum
 from typing import Callable, Coroutine
@@ -12,6 +13,11 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from utils.models.command_line import cmdargs
 
+warnings.filterwarnings(
+    "ignore",
+    message="Pydantic serializer warnings.*\n.*field_name\=\'permissions\'.*",
+    category=UserWarning,
+)
 
 class RequiresMeta(type):
     def __getattr__(cls, name):
@@ -117,7 +123,7 @@ class UserManager(RootModel):
     def items(self):
         return self.root.items()
 
-    def add(self, username: str, password: str, permissions: set[UserPerms] = None):
+    def add_user(self, username: str, password: str, permissions: set[UserPerms] = None):
         if permissions is None:
             permissions = set()
         self[username] = UserData(password=generate_password_hash(password), permissions=permissions)
@@ -127,6 +133,11 @@ class UserManager(RootModel):
 
     def change_password(self, username: str, password: str):
         self.root[username].password = generate_password_hash(password)
+        self.callback()
+        self.save()
+
+    def change_perms(self, username: str, permissions: set[UserPerms]):
+        self.root[username].permissions = permissions
         self.callback()
         self.save()
 
