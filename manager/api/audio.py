@@ -5,13 +5,14 @@ from typing import Optional
 from utils.models.user import UserPerms
 from api.ws.responses import WSBroadcast
 from api.ws.wsmanager import WSAPIBase
-from utils.system.audio import get_audio_devices, set_default_audio_device, set_volume, set_mute
+from utils.system.audio import get_audio_devices, get_default_audio_device, set_default_audio_device, set_volume, \
+    set_mute
 
 
 class Audio(WSAPIBase):
     @UserPerms.requires.audio
     def devices(self):
-        return WSBroadcast(self.devices, devices=get_audio_devices())
+        return WSBroadcast(self.devices, devices=get_audio_devices(), default=get_default_audio_device())
 
     @UserPerms.requires.audio
     def default(self, device: Optional[str] = None):
