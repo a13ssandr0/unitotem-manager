@@ -25,8 +25,8 @@
                 <tbody>
                   <tr v-for="item in packages" :key="item.name">
                     <td><strong>{{ item.name }}</strong></td>
-                    <td>{{ item.installed }}</td>
-                    <td>{{ item.available }}</td>
+                    <td>{{ item.old_version }}</td>
+                    <td>{{ item.new_version }}</td>
                   </tr>
                 </tbody>
               </v-table>
@@ -34,13 +34,10 @@
           </v-menu>
         </v-card-subtitle>
         <v-spacer></v-spacer>
-        <v-btn variant="text" color="primary" prepend-icon="mdi-refresh">Check updates</v-btn>
-        <v-btn
-          variant="text"
-          color="red"
-          prepend-icon="mdi-progress-upload"
-          :disabled="packages.length === 0"
-        >Apply updates</v-btn>
+        <v-btn variant="text" color="primary" :prepend-icon="status === 'update' ? 'mdi-loading mdi-spin' : 'mdi-refresh'" @click="sendCommand('Settings/Update/update')"
+                :disabled="status !== null">Check updates</v-btn>
+        <v-btn variant="text" color="red" :prepend-icon="status === 'upgrade' ? 'mdi-loading mdi-spin' : 'mdi-progress-upload'" @click="sendCommand('Settings/Update/upgrade')"
+               :disabled="status !== null || packages.length === 0">Apply updates</v-btn>
       </div>
     </v-card>
     <v-card
@@ -53,13 +50,9 @@
         <div class="bg-black pa-4 rounded log-container">
           <div v-if="logs.length === 0">No logs available</div>
           <div v-else>
-            <div
-              v-for="(log, index) in logs"
-              :key="index"
-              :class="{ 'text-red': log.type === 'stderr' }"
-            >
-              {{ log.text }}
-            </div>
+            <div v-for="(log, index) in logs" :key="index" :class="{ 'text-red': !log[0] }">{{ log[1] }}</div>
+            <div v-if="returncode===0" class="text-green">Process terminated with code {{ returncode }}</div>
+            <div v-else-if="returncode!==null" class="text-red">Process failed with code {{ returncode }}</div>
           </div>
         </div>
       </v-card-text>
@@ -69,6 +62,9 @@
 
 <script setup>
 import {computed, ref} from 'vue'
+
+const status = ref(null);
+const returncode = ref(0);
 
 const packages = ref([])
 
@@ -83,16 +79,48 @@ const updates = computed(() => {
   return `${count} updates available`
 })
 
-const logs = ref([
-  { type: 'stdout', text: 'Reading package lists... Done' },
-  { type: 'stdout', text: 'Building dependency tree... Done' },
-  { type: 'stderr', text: 'E: Could not open lock file /var/lib/dpkg/lock - open (13: Permission denied)' },
-  { type: 'stdout', text: 'All packages are up to date.' },
-])
+const logs = ref([])
+
+
+const sendCommand = window.sendCommand;
+
+onWSOpen = (e) => {
+  sendCommand("Settings/Update/list")
+  sendCommand("Settings/Update/status")
+}
+
+if (isWSReady()) onWSOpen()
+
+onWSMessage = (data) => {
+  switch (data.target) {
+    case "Settings/Update/list":
+      packages.value = data.updates;
+      break;
+    case "Settings/Update/status":
+      status.value = data.status;
+      returncode.value = data.returncode;
+      logs.value = data.log;
+      break;
+    case 'Settings/Update/start':
+      logs.value = [];
+      break;
+    case 'Settings/Update/progress':
+      logs.value.push([data.is_stdout, data.data]);
+      break;
+    case 'Settings/Update/end':
+      status.value = null;
+      returncode.value = data.returncode;
+      break;
+  }
+}
+
 </script>
 
 <style scoped>
 .log-container {
   font-family: monospace;
+}
+:deep(.v-btn--disabled) {
+  opacity: 0.6;
 }
 </style>
