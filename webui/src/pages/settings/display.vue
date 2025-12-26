@@ -103,7 +103,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import {computed, ref} from 'vue'
 import {useTheme} from 'vuetify'
 
@@ -159,8 +159,8 @@ const orientationButtons = ref([
 </script>
 
 <style scoped>
-rect {
-  rx: 50;
+svg rect {
+  rx: 50px;
 }
 
 svg text {
