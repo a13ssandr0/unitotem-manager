@@ -12,6 +12,7 @@
           :items="items"
           label="Mode"
           variant="outlined"
+          @change="setMode"
         ></v-select>
 
         <v-row v-if="mode === 'Client'">
@@ -33,7 +34,7 @@
       </v-card-text>
       <v-card-actions v-if="mode === 'Client'">
         <v-spacer></v-spacer>
-        <v-btn color="primary">Connect</v-btn>
+        <v-btn color="primary" @click="connectToServer">Connect</v-btn>
       </v-card-actions>
     </v-card>
 
@@ -42,16 +43,13 @@
         Clients will appear here once connected
       </div>
       <div v-else class="client-grid">
-        <v-card
-          v-for="client in clients"
-          :key="client.hostname"
-        >
+        <v-card v-for="client in clients" :key="client.hostname">
           <v-card-title>
             <span class="text-truncate">{{ client.hostname }}</span>
           </v-card-title>
           <v-card-subtitle class="d-flex justify-space-between align-center">
             {{ client.ip }}:{{ client.port }}
-            <v-switch v-model="client.enabled" color="primary" hide-details></v-switch>
+<!--            <v-switch v-model="client.enabled" color="primary" hide-details></v-switch>-->
           </v-card-subtitle>
           <v-card-actions>
             <v-btn color="red">Disconnect</v-btn>
@@ -68,24 +66,45 @@
 import { ref } from 'vue'
 
 const mode = ref('Server')
-const items = ref([
-  'Server',
-  'Client'
-])
+const items = ref(['Server', 'Client'])
 const serverIp = ref('')
 const serverPort = ref('')
 
-const clients = ref([
-  { hostname: 'Client-1-long-hostname-that-should-be-truncated', ip: '192.168.1.10', port: 8080, enabled: true },
-  { hostname: 'Client-2', ip: '192.168.1.11', port: 8080, enabled: false },
-  { hostname: 'Client-3', ip: '192.168.1.12', port: 8080, enabled: true },
-  { hostname: 'Client-4', ip: '192.168.1.13', port: 8080, enabled: true },
-  { hostname: 'Client-5', ip: '192.168.1.14', port: 8080, enabled: false },
-])
+const clients = ref([])
 
 function manageClient(ip, port) {
   window.open(`https://${ip}:${port}/settings`, '_blank')
 }
+
+function setMode(){
+  if (mode.value === 'Server') {
+    serverIp.value = ''
+    serverPort.value = ''
+    sendCommand('Settings/Remote/setMode', {remote_server:null});
+  }
+}
+
+function connectToServer(){
+  sendCommand('Settings/Remote/setMode', {
+    remote_server: serverIp.value,
+    remote_port: serverPort.value,
+  })
+}
+
+const sendCommand = window.sendCommand;
+window.setInitCommands("Settings/Remote/getMode")
+
+onWSMessage = (data) => {
+  switch (data.target) {
+    case "Settings/Remote/getMode":
+      mode.value = data.remote_server ? 'Client' : 'Server';
+      serverIp.value = data.remote_server || '';
+      serverPort.value = data.remote_port || '';
+      clients.value = data.remote_clients;
+      break;
+  }
+}
+
 </script>
 
 <style scoped>
