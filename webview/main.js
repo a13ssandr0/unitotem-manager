@@ -36,6 +36,8 @@ const iface = DBus.registerService('session', 'unitotem.WebView')
 const containers = [null, 'web', 'image', 'video', 'audio'];
 const media_fits = ['contain', 'cover', 'fill'];
 
+let gpu_info_valid = false;
+
 app.whenReady().then(() => {
     const screens = screen.getAllDisplays();
     console.log(screens);
@@ -65,7 +67,8 @@ app.whenReady().then(() => {
         width: settings.getSync("windows[0].bounds.width"),
         height: settings.getSync("windows[0].bounds.height")
     });
-    windows[0].loadFile('boot-screen.html');
+    // windows[0].loadFile('boot-screen.html');
+    windows[0].loadURL('chrome://gpu')
 
     // TODO will be used later to allow multiple windows
     /*windows[1] = new BrowserWindow({
@@ -101,6 +104,11 @@ app.whenReady().then(() => {
         windows[0].webContents.executeJavaScript(`show("${src}", "${container}", "${fit}", "${bg_color}")`);
         callback(null);
     })
+
+    iface.addMethod('GetGPUFeatureStats', {out: DBus.Define(Object, "features")},
+        function (callback) {
+            callback(null, gpu_info_valid?app.getGPUFeatureStatus():{})
+        })
 
     iface.addMethod('GetAllDisplays', {out: DBus.Define(Array, "displays")},
         function (callback) {
@@ -138,7 +146,7 @@ app.whenReady().then(() => {
             callback(null, settings.getSync("windows[0].flip"))
         },
         setter: function (flip, complete) {
-            settings.setSync("windows[0].orientation", flip);
+            settings.setSync("windows[0].flip", flip);
             windows[0].webContents.executeJavaScript(`setFlip(${flip})`);
             complete();
         }
@@ -194,3 +202,5 @@ app.on('second-instance', () => {
         windows[0].focus()
     }
 })
+
+app.on("gpu-info-update", ()=>{gpu_info_valid=true;})

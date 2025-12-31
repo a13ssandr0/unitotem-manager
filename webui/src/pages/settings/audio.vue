@@ -58,6 +58,15 @@ const audioDevices = ref({
 });
 
 const sendCommand = window.sendCommand;
+window.setInitCommands("Settings/Audio/devices")
+
+onWSMessage = (data) => {
+  switch (data.target) {
+    case "Settings/Audio/devices":
+      audioDevices.value = data;
+      break;
+  }
+}
 
 const setDefaultDevice = (deviceName) => {
   sendCommand("Settings/Audio/default", {device: deviceName})
@@ -71,21 +80,6 @@ const toggleMute = (device) => {
   device.muted = !device.muted
   sendCommand("Settings/Audio/mute", {device: device.name, mute: device.muted})
 }
-
-onWSOpen = (e) => {
-  sendCommand("Settings/Audio/devices")
-}
-
-if (isWSReady()) onWSOpen()
-
-onWSMessage = (data) => {
-  switch (data.target) {
-    case "Settings/Audio/devices":
-      audioDevices.value = data;
-      break;
-  }
-}
-
 </script>
 
 

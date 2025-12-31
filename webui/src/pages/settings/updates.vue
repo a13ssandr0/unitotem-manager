@@ -84,12 +84,7 @@ const logs = ref([])
 
 const sendCommand = window.sendCommand;
 
-onWSOpen = (e) => {
-  sendCommand("Settings/Update/list")
-  sendCommand("Settings/Update/status")
-}
-
-if (isWSReady()) onWSOpen()
+window.setInitCommands("Settings/Update/list", "Settings/Update/status")
 
 onWSMessage = (data) => {
   switch (data.target) {
