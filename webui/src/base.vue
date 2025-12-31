@@ -158,7 +158,7 @@ const powerOffDialog = ref(false)
 
 const hostname = ref('')
 const ut_vers = ref('1.0.0')
-const logged_user = ref({name: 'user'})
+const logged_user = ref({name: 'user', permissions: []})
 const disp_size = ref(null)
 const connected = ref(false)
 const init_commands = ref([]);
@@ -205,7 +205,7 @@ function connectWs() {
   ws.onopen = (e) => {
     connected.value = true
     new Set([...init_commands.value,
-      'Settings/hostname', 'Settings/Display/getBounds'
+      'Settings/hostname', 'Settings/Security/getUser', 'Settings/Display/getBounds'
     ]).forEach(cmd => sendCommand(cmd))
     window.onWSOpen(e)
   }
@@ -214,11 +214,10 @@ function connectWs() {
     if (data.target === 'Settings/hostname') {
       hostname.value = data.hostname;
       document.title = data.hostname + ' - UniTotem Manager';
+    } else if (data.target === 'Settings/Security/getUser'){
+      logged_user.value = data;
     } else if (data.target === 'Settings/Display/getBounds'){
-      if (data.width && data.height)
-        disp_size.value = data;
-      else
-        disp_size.value = null;
+      disp_size.value = (data.width && data.height) ? data : null;
     }
     if (data.hasOwnProperty('error')) {
       // messageModal.find('.modal-title').text('Error');

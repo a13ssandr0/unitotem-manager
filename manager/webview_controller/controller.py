@@ -52,6 +52,12 @@ class Controller:
             return proxy.GetAllDisplays()
         return []
 
+    @staticmethod
+    def GetGPUFeatureStats() -> dict | None:
+        if proxy := get_proxy():
+            return proxy.GetGPUFeatureStats()
+        return None
+
     @property
     def bounds(self) -> dict | None:
         if proxy := get_proxy():

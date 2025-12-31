@@ -5,6 +5,14 @@ from webview_controller.controller import controller
 
 class Display(WSAPIBase):
     @staticmethod
+    def getDisplays():
+        return WSBroadcast(displays=controller.GetAllDisplays())
+
+    @staticmethod
+    def getGPUFeatureStats():
+        return WSBroadcast(features=controller.GetGPUFeatureStats())
+
+    @staticmethod
     def getBounds():
         """
         Get viewer window bounds
