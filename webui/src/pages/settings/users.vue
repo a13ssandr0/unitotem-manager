@@ -218,11 +218,7 @@ function onPermissionChange(username) {
 
 const sendCommand = window.sendCommand;
 
-onWSOpen = (e) => {
-  sendCommand("Settings/Security/getUsers")
-}
-
-if (isWSReady()) onWSOpen()
+window.setInitCommands("Settings/Security/getUsers")
 
 onWSMessage = (data) => {
   switch (data.target) {

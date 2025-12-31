@@ -8,8 +8,7 @@
     >
       <v-label class="d-block text-center">Click on a screen to change output device</v-label>
       <div class="row d-flex justify-center pa-4" id="screen_container">
-        <svg :viewBox="`0 0 ${svg.w} ${svg.h}`" height="200px" xmlns="http://www.w3.org/2000/svg"
-             :disabled="svg.disabled">
+        <svg :disabled="svg.disabled" :viewBox="svg.viewbox" height="200px" xmlns="http://www.w3.org/2000/svg">
           <template v-for="disp in displays">
             <rect
               :x="disp.bounds.x"
@@ -62,8 +61,8 @@
               :y="disp.bounds.y"
               :width="disp.bounds.width"
               :height="disp.bounds.height"
-              name="screen" fill="#00000000"
-              @click="window_bound_rect = disp.bounds"/>
+              fill="#00000000"
+              @click="sendCommand('Settings/Display/setBounds', disp.bounds)"/>
           </template>
           <text x="500" y="500" v-if="svg.disabled" :fill="textColor">Disconnected</text>
           <rect id="window_bound_rect"
@@ -74,37 +73,61 @@
                 fill="#00ff0055"></rect>
         </svg>
       </div>
-      <!--      <v-spacer style="height: 200px"></v-spacer>-->
       <div class="d-flex justify-center align-center mb-4">
         <v-label class="text-center mr-2">Orientation:</v-label>
         <v-btn-toggle v-model="orientation" mandatory>
-          <v-btn v-for="(btn, index) in orientationButtons" :key="index">
-            <v-icon :style="{ transform: `rotate(${btn.rotation}deg)` }">mdi-monitor</v-icon>
+          <v-btn @click="sendCommand('Settings/Display/setOrientation', {orientation: 0})">
+            <v-icon :style="{ transform: 'rotate(0deg)' }">mdi-monitor</v-icon>
+          </v-btn>
+          <v-btn @click="sendCommand('Settings/Display/setOrientation', {orientation: 1})">
+            <v-icon :style="{ transform: 'rotate(90deg)' }">mdi-monitor</v-icon>
+          </v-btn>
+          <v-btn @click="sendCommand('Settings/Display/setOrientation', {orientation: 2})">
+            <v-icon :style="{ transform: 'rotate(180deg)' }">mdi-monitor</v-icon>
+          </v-btn>
+          <v-btn @click="sendCommand('Settings/Display/setOrientation', {orientation: 3})">
+            <v-icon :style="{ transform: 'rotate(270deg)' }">mdi-monitor</v-icon>
           </v-btn>
         </v-btn-toggle>
       </div>
       <div class="d-flex justify-center align-center mb-4">
         <v-label class="text-center mr-2">Flip:</v-label>
         <v-btn-toggle v-model="flip" mandatory>
-          <v-btn>
+          <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: 0})">
             No
           </v-btn>
 
-          <v-btn>
-            <v-icon>mdi-reflect-horizontal</v-icon>
-          </v-btn>
-
-          <v-btn>
+          <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: -1})">
             <v-icon>mdi-reflect-vertical</v-icon>
           </v-btn>
+
+          <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: 1})">
+            <v-icon>mdi-reflect-horizontal</v-icon>
+          </v-btn>
         </v-btn-toggle>
+      </div>
+      <v-spacer style="height: 20px"></v-spacer>
+      <div class="d-flex justify-center align-center mb-4">
+        <div>
+          <h2>Graphics Feature Status</h2>
+          <ul class="ms-10">
+            <li v-for="(value, key) in gpu" :key="key">
+              {{ key }}:
+              <span v-if="value === 'enabled'" class="text-green">Hardware accelerated</span>
+              <span v-else-if="value === 'enabled_on'" class="text-green">Enabled</span>
+              <span v-else-if="value === 'disabled_off_ok'" class="text-yellow">Disabled</span>
+              <span v-else-if="value === 'disabled_off'" class="text-red">Disabled</span>
+              <span v-else-if="value === 'disabled_software'" class="text-yellow">Software only. Hardware acceleration disabled</span>
+            </li>
+          </ul>
+        </div>
       </div>
     </v-card>
   </div>
 </template>
 
 <script setup>
-import {computed, ref} from 'vue'
+import {computed, ref, watch} from 'vue'
 import {useTheme} from 'vuetify'
 
 const theme = useTheme()
@@ -113,49 +136,55 @@ const textColor = computed(() => theme.global.current.value.colors['on-backgroun
 const screenBGColor = computed(() => theme.global.current.value.colors['primary'])
 const screenFGColor = computed(() => theme.global.current.value.colors['secondary'])
 
-const displays = ref([
-  {
-    bounds: {x: 0, y: 0, width: 1080, height: 1920},
-    label: 'Screen1',
-    margin: 0, rotation: 90, scaleFactor: 1,
-  },
-  {
-    bounds: {x: 1080, y: 0, width: 3840, height: 2160},
-    label: 'Screen2',
-    margin: 0, rotation: 0, scaleFactor: 1,
-  },
-  {
-    bounds: {x: 1080 + 3840, y: 0, width: 3840, height: 2160},
-    label: 'Screen3',
-    margin: 0, rotation: 180, scaleFactor: 1,
-  },
-])
-
-const window_bound_rect = ref(displays.value[1].bounds)
-
-const svg = ref({
-  content: [],
-  w: displays.value.length ? 0 : 1000,
-  h: displays.value.length ? 0 : 1000,
-  disabled: !displays.value.length,
-})
-
-for (const disp of displays.value) {
-  disp.margin = Math.min(disp.bounds.width, disp.bounds.height) * 0.025;
-  svg.value.w = Math.max(svg.value.w, disp.bounds.x + disp.bounds.width)
-  svg.value.h = Math.max(svg.value.h, disp.bounds.y + disp.bounds.height)
-}
-
-
+const gpu = ref({})
+const displays = ref([])
 const orientation = ref(0)
 const flip = ref(0)
 
-const orientationButtons = ref([
-  {rotation: 0},
-  {rotation: 90},
-  {rotation: 180},
-  {rotation: 270},
-])
+const window_bound_rect = ref({})
+
+const svg = ref({viewbox: "0 0 1000 1000", disabled: true})
+
+watch(displays, (_displays) => {
+    if (!_displays.length) {
+      svg.value = {viewbox: '0 0 1000 1000', disabled: true}
+    } else {
+      let w = 0, h = 0;
+      for (const disp of _displays) {
+        disp.margin = Math.min(disp.bounds.width, disp.bounds.height) * 0.025;
+        w = Math.max(w, disp.bounds.x + disp.bounds.width)
+        h = Math.max(h, disp.bounds.y + disp.bounds.height)
+      }
+      svg.value = {viewbox: `0 0 ${w} ${h}`, disabled: false}
+    }
+  }
+)
+
+const sendCommand = window.sendCommand;
+window.setInitCommands(
+  "Settings/Display/getGPUFeatureStats",
+  "Settings/Display/getDisplays", "Settings/Display/getBounds",
+  "Settings/Display/getOrientation", "Settings/Display/getFlip")
+
+onWSMessage = (data) => {
+  switch (data.target) {
+    case "Settings/Display/getGPUFeatureStats":
+      gpu.value = data.features;
+      break;
+    case "Settings/Display/getDisplays":
+      displays.value = data.displays;
+      break;
+    case "Settings/Display/getBounds":
+      window_bound_rect.value = data;
+      break;
+    case "Settings/Display/getOrientation":
+      orientation.value = data.orientation;
+      break;
+    case "Settings/Display/getFlip":
+      flip.value = data.flip;
+      break;
+  }
+}
 </script>
 
 <style scoped>

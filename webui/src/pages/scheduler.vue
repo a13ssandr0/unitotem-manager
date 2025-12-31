@@ -89,7 +89,7 @@
             </thead>
             <tbody>
               <tr
-                v-for="item in playlistItems"
+                v-for="(item, index) in playlistItems"
                 :key="item.uuid"
                 @mouseenter="hoveredRow = item.uuid"
                 @mouseleave="hoveredRow = null"
@@ -126,7 +126,7 @@
                         @click="sendCommand('Scheduler/delete', {uuid: item.uuid})"></v-btn>
                   <v-btn icon="mdi-pencil" color="yellow" variant="text" size="small" @click="openEditDialog(item)"></v-btn>
                   <v-btn icon="mdi-login" variant="text" size="small"
-                        @click="sendCommand('Scheduler/goto', {uuid: item.uuid})"></v-btn>
+                        @click="sendCommand('Scheduler/goto', {'index': index})"></v-btn>
                 </td>
               </tr>
             </tbody>

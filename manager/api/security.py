@@ -11,6 +11,10 @@ class Security(WSAPIBase):
     def getUsers():
         return WSBroadcast(users={user: {'perms': list(data.permissions)} for user, data in user_manager.items()})
 
+    @staticmethod
+    def getUser(ctx: Context):
+        return WSResponse(name=ctx.username, perms=list(user_manager[ctx.username].permissions))
+
     def addUser(self, username: str, password: str):
         if username in user_manager:
             return WSResponse(error="User already exists")
