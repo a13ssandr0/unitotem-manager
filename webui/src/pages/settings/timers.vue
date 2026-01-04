@@ -11,8 +11,8 @@
         :items="timers"
         class="elevation-1"
       >
-        <template v-slot:item.action="{ item }">
-          {{ getActionTitle(item.action) }}
+        <template v-slot:item.command="{ item }">
+          {{ getActionTitle(item.command) }}
         </template>
         <template v-slot:item.month="{ item }">
           {{ getMonthTitle(item.month) }}
@@ -38,8 +38,8 @@
             <v-row>
               <v-col cols="12">
                 <v-select
-                  v-model="editedItem.action"
-                  :items="actions"
+                  v-model="editedItem.command"
+                  :items="commands"
                   item-title="title"
                   item-value="value"
                   label="Action"
@@ -117,7 +117,7 @@
 import { ref, computed } from 'vue';
 
 const headers = ref([
-  { title: 'Action', key: 'action' },
+  { title: 'Action', key: 'command' },
   { title: 'Hour', key: 'hour' },
   { title: 'Minute', key: 'minute' },
   { title: 'Day of the month', key: 'dayOfMonth' },
@@ -126,7 +126,7 @@ const headers = ref([
   { title: '', key: 'actions', sortable: false },
 ]);
 
-const actions = [
+const commands = [
   { title: 'Shutdown', value: 'pwr' },
   { title: 'Reboot', value: 'reb' },
 ];
@@ -161,30 +161,24 @@ const daysOfWeek = [
 ];
 
 const defaultItem = {
-  action: actions[0].value,
+  command: commands[0].value,
   hour: hours[0],
   minute: minutes[0],
   dayOfMonth: daysOfMonth[0],
   month: months[0].value,
   dayOfWeek: daysOfWeek[0].value,
+  enabled: true,
 };
 
 const timers = ref([
   {
-    action: 'reb',
+    command: 'reb',
     hour: '0',
     minute: '0',
     dayOfMonth: '*',
     month: '*',
     dayOfWeek: '*',
-  },
-  {
-    action: 'pwr',
-    hour: '0',
-    minute: '30',
-    dayOfMonth: '*',
-    month: '*',
-    dayOfWeek: 1,
+    enabled: true,
   },
 ]);
 
@@ -195,7 +189,7 @@ const editedItem = ref({ ...defaultItem });
 const formTitle = computed(() => (editedIndex.value === -1 ? 'New Timer' : 'Edit Timer'));
 
 function getActionTitle(value) {
-  const item = actions.find(i => i.value === value);
+  const item = commands.find(i => i.value === value);
   return item ? item.title : value;
 }
 
@@ -227,13 +221,28 @@ function close() {
 }
 
 function save() {
+  const item = { ...editedItem.value };
+  delete item.enabled;
   if (editedIndex.value > -1) {
-    Object.assign(timers.value[editedIndex.value], editedItem.value);
+    sendCommand('Settings/Cron/editJob', item);
   } else {
-    timers.value.push(editedItem.value);
+    delete item.uuid;
+    sendCommand('Settings/Cron/addJob', item);
   }
   close();
 }
+
+const sendCommand = window.sendCommand;
+window.setInitCommands("Settings/Cron/getJobs")
+
+onWSMessage = (data) => {
+  switch (data.target) {
+    case "Settings/Cron/getJobs":
+      timers.value = data.jobs;
+      break;
+  }
+}
+
 </script>
 
 

@@ -97,12 +97,12 @@
             No
           </v-btn>
 
-          <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: -1})">
-            <v-icon>mdi-reflect-vertical</v-icon>
-          </v-btn>
-
           <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: 1})">
             <v-icon>mdi-reflect-horizontal</v-icon>
+          </v-btn>
+
+          <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: 2})">
+            <v-icon>mdi-reflect-vertical</v-icon>
           </v-btn>
         </v-btn-toggle>
       </div>

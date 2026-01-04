@@ -21,12 +21,14 @@ from utils.environment import environ
 from utils.models.assets import assets_manager
 from utils.models.command_line import cmdargs
 from utils.models.remote import remote_manager
-from webview_controller.controller import controller
+from webview_controller.controller import Controller
 
 REMOTE_CONNECTED = False
 
 
 class Remote(WSAPIBase):
+    controller = Controller.get_instance()
+
     @staticmethod
     def getMode():
         return WSBroadcast(
@@ -80,7 +82,7 @@ class Remote(WSAPIBase):
                     bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
             )
             # await self.ui_ws.broadcast('Show', False, **data)
-            controller.Show(**data)
+            self.controller.Show(**data)
             await self.remote_ws.broadcast('Show', False, **data)
 
     async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = cmdargs.port_secure, headers=None):
@@ -118,7 +120,7 @@ class Remote(WSAPIBase):
                         verifier.verify(SHA256.new(data), signature)
                         data = loads(data)
                         if data.pop('target') == 'Show':
-                            controller.Show(**data)
+                            self.controller.Show(**data)
             except asyncio.exceptions.CancelledError:
                 logger.info('Disconnected from remote server')
                 break
