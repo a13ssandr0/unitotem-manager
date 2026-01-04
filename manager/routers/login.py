@@ -72,11 +72,13 @@ router = APIRouter()
 @router.post(LOGMAN.model.flows.password.tokenUrl)
 async def login(data: LoginForm = Depends()):
     if not user_manager.authenticate(data.username, data.password):
+        logger.error("Invalid credentials for user {}", data.username)
         raise InvalidCredentialsException
+    logger.success("User {} logged in", data.username)
     access_token = LOGMAN.create_access_token(data={'sub': data.username, 'cre': time.monotonic()})
     resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
     resp.set_cookie(key=LOGMAN.cookie_name, value=access_token,
-                    httponly=True, samesite='strict',
+                    httponly=True, samesite='strict', secure=True,
                     max_age=int(LOGMAN.default_expiry.total_seconds()) if data.remember_me else None)
     return resp
 

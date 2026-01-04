@@ -17,7 +17,7 @@ from utils.system.audio import get_default_audio_device, set_default_audio_devic
 from utils.system.crontab import CRONTAB
 from utils.system.network.misc import set_hostname
 from utils.system.network.netplan import set_netplan, generate_netplan, get_netplan_file, get_netplan_file_list
-from webview_controller.controller import controller
+from webview_controller.controller import Controller
 
 router = APIRouter()
 
@@ -100,7 +100,7 @@ async def factory_reset():
     CRONTAB.remove_all(comment=CRONTAB._cron_re)
     CRONTAB.write()
 
-    controller.Reset()
+    Controller.get_instance().Reset()
 
     for file in upload_manager.files:
         upload_manager.remove(file)

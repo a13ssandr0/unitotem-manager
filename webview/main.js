@@ -3,6 +3,16 @@ const path = require('path');
 const DBus = require('dbus');
 const settings = require('electron-settings');
 
+const containers = [null, 'web', 'image', 'video', 'audio'];
+const media_fits = ['contain', 'cover', 'fill'];
+
+let gpu_info_valid = false;
+const windows = {
+    0: BrowserWindow
+};
+
+
+
 app.setName("UniTotem");
 
 function setDefaultSettings() {
@@ -23,20 +33,96 @@ console.log(settings.getSync());
 setDefaultSettings();
 
 
-const windows = {
-    0: null
-};
 
 // Create a new service, object and interface
-const iface = DBus.registerService('session', 'unitotem.WebView')
-    .createObject('/unitotem/WebView')
-    .createInterface('unitotem.WebView');
+const iface = DBus.registerService('session', 'io.github.a13ssandr0.unitotem')
+    .createObject('/io/github/a13ssandr0/unitotem/WebView')
+    .createInterface('io.github.a13ssandr0.unitotem.WebView');
 
 
-const containers = [null, 'web', 'image', 'video', 'audio'];
-const media_fits = ['contain', 'cover', 'fill'];
+iface.addMethod('Show', {
+    in: [
+        DBus.Define(String, "src"),
+        {type: 'y', name: "container"},
+        {type: 'y', name: "fit"},
+        DBus.Define(String, "bg_color"),
+    ]
+}, async function (src, container, fit, bg_color, callback) {
+    container = containers[container];
+    fit = media_fits[fit];
+    await windows[0].webContents.executeJavaScript(`show("${src}", "${container}", "${fit}", "${bg_color}")`);
+    callback(null);
+})
 
-let gpu_info_valid = false;
+iface.addMethod('GetGPUFeatureStats', {out: {type: 'a{ss}'}},
+    function (callback) {
+        callback(null, gpu_info_valid?app.getGPUFeatureStatus():{})
+    })
+
+iface.addMethod('GetAllDisplays', {out: DBus.Define(Array, "displays")},
+    function (callback) {
+        callback(null, screen.getAllDisplays())
+    })
+
+iface.addProperty('Bounds', {
+    type: {type: 'a{su}'},
+    getter: async function (callback) {
+        callback(null, await settings.get("windows[0].bounds"))
+    },
+    setter: async function (v, complete) {
+        console.log(`Setting new bounds x:${v.x}, y:${v.y}, width:${v.width}, height:${v.height}`);
+        windows[0].setBounds({x: v.x, y: v.y, width: v.width, height: v.height});
+        await settings.set("windows[0].bounds", {x: v.x, y: v.y, width: v.width, height: v.height});
+        complete();
+    }
+})
+
+iface.addProperty('Orientation', {
+    type: {type: 'y'},
+    getter: async function (callback) {
+        callback(null, await settings.get("windows[0].orientation"))
+    },
+    setter: async function (orientation, complete) {
+        await windows[0].webContents.executeJavaScript(`setOrientation(${orientation})`);
+        await settings.set("windows[0].orientation", orientation);
+        complete();
+    }
+})
+
+iface.addProperty('Flip', {
+    type: {type: 'y'},
+    getter: async function (callback) {
+        callback(null, await settings.get("windows[0].flip"))
+    },
+    setter: async function (flip, complete) {
+        await windows[0].webContents.executeJavaScript(`setFlip(${flip})`);
+        await settings.set("windows[0].flip", flip);
+        complete();
+    }
+})
+
+// noinspection JSCheckFunctionSignatures
+iface.addProperty('AllowInsecureCerts', {
+    type: DBus.Define(Boolean),
+    getter: async function (callback) {
+        callback(null, await settings.get("allowInsecureCerts"))
+    },
+    setter: async function (allowInsecureCerts, complete) {
+        await settings.set("allowInsecureCerts", allowInsecureCerts);
+        complete();
+    }
+})
+
+iface.addMethod('Reset', {}, async function (callback) {
+    await settings.unset();
+    // app.relaunch(); // systemd should handle it
+    app.exit();
+    callback(null);
+})
+
+iface.update();
+
+
 
 app.whenReady().then(() => {
     const screens = screen.getAllDisplays();
@@ -67,8 +153,8 @@ app.whenReady().then(() => {
         width: settings.getSync("windows[0].bounds.width"),
         height: settings.getSync("windows[0].bounds.height")
     });
-    // windows[0].loadFile('boot-screen.html');
-    windows[0].loadURL('chrome://gpu')
+    windows[0].loadFile('boot-screen.html');
+    // windows[0].loadURL('chrome://gpu')
 
     // TODO will be used later to allow multiple windows
     /*windows[1] = new BrowserWindow({
@@ -91,86 +177,6 @@ app.whenReady().then(() => {
     const session = windows[0].webContents.session;
     session.on('will-download', e => e.preventDefault());
 
-    iface.addMethod('Show', {
-        in: [
-            DBus.Define(String, "src"),
-            {type: 'y', name: "container"},
-            {type: 'y', name: "fit"},
-            DBus.Define(String, "bg_color"),
-        ]
-    }, function (src, container, fit, bg_color, callback) {
-        container = containers[container];
-        fit = media_fits[fit];
-        windows[0].webContents.executeJavaScript(`show("${src}", "${container}", "${fit}", "${bg_color}")`);
-        callback(null);
-    })
-
-    iface.addMethod('GetGPUFeatureStats', {out: DBus.Define(Object, "features")},
-        function (callback) {
-            callback(null, gpu_info_valid?app.getGPUFeatureStatus():{})
-        })
-
-    iface.addMethod('GetAllDisplays', {out: DBus.Define(Array, "displays")},
-        function (callback) {
-            callback(null, screen.getAllDisplays())
-        })
-
-    iface.addProperty('bounds', {
-        type: {type: 'a{si}'},
-        getter: function (callback) {
-            callback(null, settings.getSync("windows[0].bounds"))
-        },
-        setter: function (v, complete) {
-            console.log(`Setting new bounds x:${v.x}, y:${v.y}, width:${v.width}, height:${v.height}`);
-            settings.setSync("windows[0].bounds", {x: v.x, y: v.y, width: v.width, height: v.height});
-            windows[0].setBounds({x: v.x, y: v.y, width: v.width, height: v.height});
-            complete();
-        }
-    })
-
-    iface.addProperty('orientation', {
-        type: {type: 'i'},
-        getter: function (callback) {
-            callback(null, settings.getSync("windows[0].orientation"))
-        },
-        setter: function (orientation, complete) {
-            settings.setSync("windows[0].orientation", orientation);
-            windows[0].webContents.executeJavaScript(`setOrientation(${orientation})`);
-            complete();
-        }
-    })
-
-    iface.addProperty('flip', {
-        type: {type: 'i'},
-        getter: function (callback) {
-            callback(null, settings.getSync("windows[0].flip"))
-        },
-        setter: function (flip, complete) {
-            settings.setSync("windows[0].flip", flip);
-            windows[0].webContents.executeJavaScript(`setFlip(${flip})`);
-            complete();
-        }
-    })
-
-    // noinspection JSCheckFunctionSignatures
-    iface.addProperty('allowInsecureCerts', {
-        type: DBus.Define(Boolean),
-        getter: function (callback) {
-            callback(null, settings.getSync("allowInsecureCerts"))
-        },
-        setter: function (allowInsecureCerts, complete) {
-            settings.setSync("allowInsecureCerts", allowInsecureCerts);
-            complete();
-        }
-    })
-
-    iface.addMethod('Reset', {}, function (callback) {
-        settings.unsetSync();
-        // app.relaunch(); // systemd should handle it
-        app.exit();
-        callback(null);
-    })
-
     iface.update();
 
 
@@ -192,7 +198,8 @@ app.whenReady().then(() => {
 });
 
 // Make the app a single instance app
-if (process.mas) return
+// if (process.mas)
+//     app.exit()
 
 app.requestSingleInstanceLock()
 

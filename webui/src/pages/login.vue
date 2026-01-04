@@ -48,8 +48,10 @@ const handleLogin = () => {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
     },
-    body: formData
-  }).then(() => {
+    body: formData,
+    credentials: "include"
+  }).then((resp) => {
+    // TODO handle wrong password
     window.location.href = 'https://localhost:3000/'
   }).catch(err => {
     console.error('Login failed', err)

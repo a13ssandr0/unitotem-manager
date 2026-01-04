@@ -4,8 +4,7 @@ Werkzeug
 aiofiles
 aiohttp
 asyncwebsockets
-dash
-dash-bootstrap-components
+dasbus
 fastapi
 fastapi-login
 hypercorn
@@ -19,7 +18,6 @@ pycryptodome
 pydantic-extra-types
 pydantic
 pydantic_settings
-pydbus
 pygobject==3.50.0
 pymediainfo
 python-benedict
