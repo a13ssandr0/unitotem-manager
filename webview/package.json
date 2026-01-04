@@ -4,6 +4,7 @@
   "description": "",
   "main": "main.js",
   "scripts": {
+    "rebuild": "electron-rebuild",
     "start": "electron . --ozone-platform=x11"
   },
   "author": "",

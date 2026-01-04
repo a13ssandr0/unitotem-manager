@@ -1,47 +1,44 @@
 from api.ws.responses import WSBroadcast
 from api.ws.wsmanager import WSAPIBase
-from webview_controller.controller import controller
+from webview_controller.controller import Controller
 
 
 class Display(WSAPIBase):
-    @staticmethod
-    def getDisplays():
-        return WSBroadcast(displays=controller.GetAllDisplays())
+    controller = Controller.get_instance()
 
-    @staticmethod
-    def getGPUFeatureStats():
-        return WSBroadcast(features=controller.GetGPUFeatureStats())
+    def getDisplays(self):
+        return WSBroadcast(displays=self.controller.GetAllDisplays())
 
-    @staticmethod
-    def getBounds():
+    def getGPUFeatureStats(self):
+        return WSBroadcast(features=self.controller.GetGPUFeatureStats())
+
+    def getBounds(self):
         """
         Get viewer window bounds
         """
         try:
-            return WSBroadcast(**controller.bounds)
+            return WSBroadcast(**self.controller.bounds)
         except TypeError:
-            # controller.bounds may be None if the webview process is not running, explicitly return none in this case
+            # self.controller.bounds may be None if the webview process is not running, explicitly return none in this case
             return WSBroadcast()
 
     def setBounds(self, x: int, y: int, width: int, height: int):
         """
         Set viewer window bounds
         """
-        controller.bounds = {'x': x, 'y': y, 'width': width, 'height': height}
+        self.controller.bounds = {'x': x, 'y': y, 'width': width, 'height': height}
         return self.getBounds()
 
-    @staticmethod
-    def getOrientation():
-        return WSBroadcast(orientation=controller.orientation)
+    def getOrientation(self):
+        return WSBroadcast(orientation=self.controller.orientation)
 
     def setOrientation(self, orientation: int):
-        controller.orientation = orientation
+        self.controller.orientation = orientation
         return self.getOrientation()
 
-    @staticmethod
-    def getFlip():
-        return WSBroadcast(flip=controller.flip)
+    def getFlip(self):
+        return WSBroadcast(flip=self.controller.flip)
 
     def setFlip(self, flip: int):
-        controller.flip = flip
+        self.controller.flip = flip
         return self.getFlip()

@@ -18,7 +18,7 @@ from utils.system.lsblk import lsblk
 from utils.system.network.misc import get_default_wireless
 from utils.system.sensors import sensors_temperatures
 from utils.units import human_readable_size
-from webview_controller.controller import controller
+from webview_controller.controller import Controller
 
 router = APIRouter()
 
@@ -34,7 +34,7 @@ async def settings(request: Request, tab: str = 'main_menu', user: User = Depend
     data: dict[str, Any] = dict(
             logged_user=user,
             cur_tab=tab,
-            disp_size=controller.bounds,
+            disp_size=Controller.get_instance().bounds,
             disk_used=upload_manager.disk_usedh,  # type: ignore
             disk_total=upload_manager.disk_totalh,  # type: ignore
             def_wifi=get_default_wireless()
@@ -42,7 +42,7 @@ async def settings(request: Request, tab: str = 'main_menu', user: User = Depend
     if tab == 'audio':
         data['audio'] = get_audio_devices()
     elif tab == 'display':
-        data['displays'] = controller.GetAllDisplays()
+        data['displays'] = Controller.get_instance().GetAllDisplays()
 
     return templates.TemplateResponse(request, f'settings/{tab}.html.j2', data)
 
@@ -52,7 +52,7 @@ async def settings(request: Request, tab: str = 'main_menu', user: User = Depend
 def info(request: Request, user: User = Depends(LOGMAN)):
     return templates.TemplateResponse(request, 'info.html.j2', dict(
             logged_user=user,
-            disp_size=controller.bounds,
+            disp_size=Controller.get_instance().bounds,
             disk_used=upload_manager.disk_usedh,  # type: ignore
             disk_total=upload_manager.disk_totalh,  # type: ignore
             cpu_count=cpu_count(),

@@ -10,7 +10,7 @@ from utils.models.user import User
 from routers.login import LOGMAN
 from templates import templates
 from utils.storage.uploadmanager import upload_manager
-from webview_controller.controller import controller
+from webview_controller.controller import Controller
 
 router = APIRouter()
 
@@ -30,7 +30,7 @@ async def scheduler(request: Request, user: User = Depends(LOGMAN)):
 
     return templates.TemplateResponse(request, template, dict(
             logged_user=user,
-            disp_size=controller.bounds,
+            disp_size=Controller.get_instance().bounds,
             disk_used=upload_manager.disk_usedh,  # type: ignore
             disk_total=upload_manager.disk_totalh  # type: ignore
     ))

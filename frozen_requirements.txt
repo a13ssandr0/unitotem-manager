@@ -11,6 +11,7 @@ bracex==2.5.post1
 certifi==2025.6.15
 cffi==1.17.1
 charset-normalizer==3.4.2
+dasbus==1.7
 fastapi==0.115.13
 fastapi-login==1.10.3
 frozenlist==1.7.0
@@ -42,7 +43,6 @@ pydantic==2.11.7
 pydantic-extra-types==2.10.5
 pydantic-settings==2.10.1
 pydantic_core==2.33.2
-pydbus==0.6.0
 PyGObject==3.50.0
 PyJWT==2.10.1
 pymediainfo==7.0.1
