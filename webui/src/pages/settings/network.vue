@@ -73,7 +73,7 @@
               Scanning...
             </div>
             <v-list v-else>
-              <v-list-item v-for="(net, i) in wifiNetworks" :key="i">
+              <v-list-item v-for="(net, i) in wifiNetworks" :key="i" @click="createWifiFile(net)">
                 <template v-slot:prepend>
                   <v-icon :icon="getSignalIcon(net.strength, net.flags)"></v-icon>
                 </template>
@@ -99,8 +99,8 @@
             >
               <v-list-item-title>
                 <span v-if="isFileDirtyByName(file)">• </span>{{ file }}
-                <v-tooltip activator="parent" location="bottom">{{ file }}</v-tooltip>
               </v-list-item-title>
+              <v-tooltip activator="parent" location="right">{{ file }}</v-tooltip>
               <template v-slot:append>
                 <v-btn icon="mdi-delete" size="small" variant="text" color="red"
                        @click.stop="requestDeleteFile(file)"></v-btn>
@@ -110,7 +110,7 @@
         </v-col>
         <v-col cols="9" style="position: relative">
           <template v-if="selectedFile">
-            <div style="border: 1px solid #ccc; border-radius: 4px; overflow: hidden;">
+            <div class="card-border" style="border-radius: 4px">
               <MonacoEditor
                 v-model="fileContent"
                 language="yaml"
@@ -237,6 +237,7 @@ let resolveLeave = () => {}
 const loadingWifi = ref(false)
 const has_wireless = ref(false)
 const is_wireless_enabled = ref(false)
+const default_wireless_device = ref(null)
 const wifiNetworks = ref([])
 const wifiMenu = ref(false)
 
@@ -291,6 +292,7 @@ onWSMessage = (data) => {
       has_wireless.value = data.wireless
       if (data.wireless)
         sendCommand('Settings/is_wireless_enabled');
+        sendCommand('Settings/get_default_wlan_device');
       break;
     case "Settings/is_wireless_enabled":
       is_wireless_enabled.value = data.enabled
@@ -298,6 +300,9 @@ onWSMessage = (data) => {
     case "Settings/get_wireless_networks":
       wifiNetworks.value = data.wifis;
       loadingWifi.value = false;
+      break;
+    case "Settings/get_default_wlan_device":
+      default_wireless_device.value = data.device;
       break;
   }
 }
@@ -357,9 +362,28 @@ const requestDeleteFile = (file) => {
   dialogDelete.value = true
 }
 
+const createWifiFile = (net) => {
+  const needsPassword = (net.flags & 1) !== 0
+  const content = wifi_yaml(net.ssid, needsPassword)
+
+  let filename = `wifi-${net.ssid}.yaml`
+  let counter = 1
+  while (yamlFiles.value.includes(filename)) {
+    filename = `wifi-${net.ssid}-${counter}.yaml`
+    counter++
+  }
+
+  yamlFiles.value.push(filename)
+  unsavedChanges.set(filename, content)
+  switchFile(filename)
+  wifiMenu.value = false
+}
+
 const confirmDeleteFile = () => {
   if (!fileToDelete.value) return
   const file = fileToDelete.value
+  const shouldDeleteFromBackend = originalFileContents.has(file)
+
   const index = yamlFiles.value.indexOf(file)
   if (index > -1) {
     yamlFiles.value.splice(index, 1)
@@ -371,6 +395,11 @@ const confirmDeleteFile = () => {
     }
   }
   console.log('Deleted file:', file)
+
+  if (shouldDeleteFromBackend) {
+    sendCommand('Settings/Netplan/deleteFile', {filename: file})
+  }
+
   closeDeleteDialog()
 }
 
@@ -392,6 +421,7 @@ const confirmCreateFile = () => {
     return
   }
   yamlFiles.value.push(finalName)
+  unsavedChanges.set(finalName, '')
   closeCreateDialog()
   switchFile(finalName)
 }
@@ -399,6 +429,13 @@ const confirmCreateFile = () => {
 const saveChanges = () => {
   if (!selectedFile.value || !isFileDirty.value) return
   const currentFile = selectedFile.value
+
+  if (!originalFileContents.has(currentFile)) {
+    sendCommand('Settings/Netplan/newFile', {filename: currentFile})
+  }
+
+  sendCommand('Settings/Netplan/changeFile', {filename: currentFile, content: fileContent.value, apply: false})
+
   originalFileContents.set(currentFile, fileContent.value)
   unsavedChanges.delete(currentFile)
   console.log(`Saving ${currentFile}...`, fileContent.value)
@@ -453,10 +490,15 @@ const getBand = (frequency) => {
 if (yamlFiles.value.length > 0) {
   switchFile(yamlFiles.value[0])
 }
+
+function wifi_yaml(wifi_name, password=true) {
+    let net = `network:\n  wifis:\n    ${default_wireless_device.value}:\n      dhcp4: true\n      # addresses: [192.168.1.100/24]\n      # routes:\n      #   - to: 0.0.0.0/0\n      #     via: 192.168.1.1\n      # nameservers:\n      #   addresses: [192.168.1.1, 1.1.1.1, 8.8.8.8]\n      access-points:\n        "${wifi_name}":`;
+    if (password)
+        net += `\n          password: "<super-secure>"\n`;
+    else
+        net += ' {}';
+    return net;
+}
 </script>
 
-<style scoped>
-.v-list-item--active {
-  background-color: rgba(0, 0, 0, 0.1);
-}
-</style>
+

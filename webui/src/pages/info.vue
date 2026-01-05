@@ -54,8 +54,14 @@
                   <tr v-for="(temp, index) in temps" :key="`${controller}-${index}`">
                     <td class="pl-4">{{ temp.name }}</td>
                     <td class="text-right" :class="getTempColorClass(temp)">{{ temp.current }} °C</td>
-                    <td class="text-right" :class="{ 'text-grey': (temp.high || temp.critical) > 300 }">{{ temp.high || temp.critical }} °C</td>
-                    <td class="text-right" :class="{ 'text-grey': (temp.critical || temp.high) > 300 }">{{ temp.critical || temp.high }} °C</td>
+                    <template v-if="temp.high || temp.critical">
+                      <td class="text-right" :class="{ 'text-grey': (temp.high || temp.critical) > 300 }">{{ temp.high || temp.critical }} °C</td>
+                      <td class="text-right" :class="{ 'text-grey': (temp.critical || temp.high) > 300 }">{{ temp.critical || temp.high }} °C</td>
+                    </template>
+                    <template v-else>
+                      <td class="text-right text-grey">N/A</td>
+                      <td class="text-right text-grey">N/A</td>
+                    </template>
                   </tr>
                 </template>
               </tbody>
@@ -287,7 +293,7 @@ const getTempColorClass = (temp) => {
   const critical = temp.critical || temp.high;
 
   if (critical && temp.current > critical) return 'text-red';
-  if (high && temp.current > high) return 'text-yellow';
+  if (high && temp.current > high) return 'text-orange';
   return '';
 };
 
@@ -315,11 +321,11 @@ const DiskItem = defineComponent({
                 rounded: true,
               }, {
                 default: () => h('div', { class: 'd-flex justify-center align-center w-100 h-100' }, [
-                    h('strong', { class: 'text-caption text-white' },
+                    h('strong', { class: 'text-caption text-on-primary' },
                   `${formatBytes(disk.fsused)} / ${formatBytes(disk.size)}`)
                 ])
               }),
-              h('div', { class: 'text-caption text-grey' }, disk.mountpoint)
+              h('div', { class: 'text-caption text-medium-emphasis' }, disk.mountpoint)
             ] : h('div', { class: 'text-right text-caption' }, formatBytes(disk.size))
           ])
         ]),
