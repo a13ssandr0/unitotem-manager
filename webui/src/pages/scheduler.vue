@@ -2,7 +2,7 @@
   <v-container fluid>
     <v-row align="start">
       <!-- Colonna di Sinistra: Files -->
-      <v-col cols="12" md="4" class="pe-0">
+      <v-col cols="12" md="4">
         <v-card>
           <v-card-title
             class="d-flex align-center transition-swing"

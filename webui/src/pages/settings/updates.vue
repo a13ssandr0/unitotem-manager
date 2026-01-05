@@ -41,7 +41,7 @@
       </div>
     </v-card>
     <v-card
-      class="ma-4 mt-0"
+      class="ma-4 mt-2"
       max-width="1000"
       width="100%"
       title="Logs"

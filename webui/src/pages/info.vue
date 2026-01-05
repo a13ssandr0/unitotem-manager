@@ -7,7 +7,7 @@
     </v-row>
     <v-row>
       <v-col cols="12" md="6" lg="4">
-        <v-card class="mb-4">
+        <v-card class="mb-6">
           <v-card-title>CPU</v-card-title>
           <v-card-text>
             <canvas ref="cpuChartCanvas" style="min-height: 400px;"></canvas>
@@ -65,7 +65,7 @@
       </v-col>
 
       <v-col cols="12" md="6" lg="4" v-if="info">
-        <v-card class="mb-4">
+        <v-card class="mb-6">
           <v-card-title>Fans</v-card-title>
           <v-card-text>
             <div v-for="(fans, controller) in info.fans" :key="controller" class="mb-4">
@@ -91,7 +91,7 @@
           </v-card-text>
         </v-card>
 
-        <v-card v-if="info.disks">
+        <v-card v-if="info.disks" class="mb-6">
           <v-card-title>Storage</v-card-title>
           <v-card-text>
             <template v-for="disk in info.disks" :key="disk.name">
