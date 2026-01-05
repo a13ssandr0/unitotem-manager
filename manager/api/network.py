@@ -14,6 +14,7 @@ from utils.models.user import UserPerms
 from utils.system.network.hotspot import is_hotspot_enabled, stop_hotspot
 from utils.system.network.ip import do_ip_addr
 import utils.system.network.wifi as w
+from utils.system.network.misc import get_default_wireless
 
 
 # from https://github.com/RedHatInsights/insights-core
@@ -35,6 +36,10 @@ class Settings(WSAPIBase):
         except FileNotFoundError:
             logger.error('Network backend service not running')
             return WSResponse(error='Network backend service not running')
+
+    @staticmethod
+    def get_default_wlan_device():
+        return WSBroadcast(device=get_default_wireless())
 
     @staticmethod
     async def has_wireless():
