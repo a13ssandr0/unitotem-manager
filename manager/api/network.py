@@ -13,7 +13,7 @@ from utils.models.assets import assets_manager
 from utils.models.user import UserPerms
 from utils.system.network.hotspot import is_hotspot_enabled, stop_hotspot
 from utils.system.network.ip import do_ip_addr
-from utils.system.network.wifi import get_access_points, scan_access_points
+import utils.system.network.wifi as w
 
 
 # from https://github.com/RedHatInsights/insights-core
@@ -37,9 +37,21 @@ class Settings(WSAPIBase):
             return WSResponse(error='Network backend service not running')
 
     @staticmethod
-    async def get_wifis():
-        await scan_access_points()
-        return WSBroadcast(wifis=await get_access_points())
+    async def has_wireless():
+        return WSBroadcast(wireless=await w.has_wireless())
+
+    @staticmethod
+    async def is_wireless_enabled():
+        return WSBroadcast(enabled=await w.is_wireless_enabled())
+
+    async def set_wireless_enabled(self, enabled: bool):
+        await w.set_wireless_enabled(enabled)
+        return await self.is_wireless_enabled()
+
+    @staticmethod
+    async def get_wireless_networks():
+        await w.scan_access_points()
+        return WSBroadcast(wifis=await w.get_access_points())
 
     class Netplan(WSAPIBase):
         _nm_sock = '/run/unitotem/nm.sock'

@@ -15,6 +15,31 @@ def open_system_bus():
         bus.close()
 
 
+async def has_wireless():
+    with open_system_bus() as bus:
+        nm = NetworkManager(bus)
+        return await nm.wireless_hardware_enabled
+
+
+async def is_wireless_enabled():
+    with open_system_bus() as bus:
+        nm = NetworkManager(bus)
+
+        if not await nm.wireless_hardware_enabled:
+            raise RuntimeError('Wireless hardware not enabled')
+
+        return await nm.wireless_enabled
+
+async def set_wireless_enabled(status):
+    with open_system_bus() as bus:
+        nm = NetworkManager(bus)
+
+        if not await nm.wireless_hardware_enabled:
+            raise RuntimeError('Wireless hardware not enabled')
+
+        await nm.wireless_enabled.set_async(status)
+
+
 async def get_access_points():
     with open_system_bus() as bus:
         nm = NetworkManager(bus)
