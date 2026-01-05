@@ -31,12 +31,8 @@
       </v-menu>
     </v-app-bar>
 
-    <v-navigation-drawer
-      v-model="drawer"
-      app
-      clipped
-    >
-      <v-list density="compact" color="#2962FF">
+    <v-navigation-drawer v-model="drawer" app clipped>
+      <v-list density="compact" color="primary">
         <v-list-item to="/" exact prepend-icon="mdi-view-dashboard" title="Scheduler"></v-list-item>
 
         <v-divider class="my-2"></v-divider>
@@ -61,10 +57,11 @@
           <div class="mt-2" v-else>Display: disconnected</div>
           <div>
             <a href="https://github.com/a13ssandr0/unitotem" target="_blank" rel="noopener noreferrer"
-               class="text-white">
+               class="text-high-emphasis">
               <v-icon size="small">mdi-github</v-icon>
-              Unitotem
-            </a> {{ ut_vers }} by a13ssandr0
+              <span>Unitotem</span>
+            </a>
+            {{ $unitotem_version }} by a13ssandr0
           </div>
         </div>
       </template>
@@ -157,7 +154,6 @@ const rebootDialog = ref(false)
 const powerOffDialog = ref(false)
 
 const hostname = ref('')
-const ut_vers = ref('1.0.0')
 const logged_user = ref({name: 'user', permissions: []})
 const disp_size = ref(null)
 const connected = ref(false)
@@ -201,7 +197,7 @@ window.isWSReady = () => {
 }
 
 function connectWs() {
-  ws = new WebSocket('wss://localhost/ws')
+  ws = new WebSocket(`wss://${location.host.split(':')[0]}/ws`)
   ws.onopen = (e) => {
     connected.value = true
     new Set([...init_commands.value,
@@ -255,92 +251,3 @@ onUnmounted(() => {
 
 </script>
 
-<style>
-html, body {
-  overflow: hidden !important;
-  height: 100vh;
-  font-size: 14px;
-}
-
-.main-content {
-  overflow-y: auto !important;
-  height: calc(100vh - var(--v-layout-top)) !important;
-}
-
-::-webkit-scrollbar {
-  height: 12px;
-  width: 14px;
-  background: transparent;
-  z-index: 12;
-  overflow: visible
-}
-
-::-webkit-scrollbar-thumb {
-  width: 10px;
-  background-color: #2962FF;
-  border-radius: 10px;
-  z-index: 12;
-  border: 4px solid rgba(0, 0, 0, 0);
-  background-clip: padding-box;
-  margin: 4px;
-  min-height: 32px;
-  min-width: 32px
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #2962FF
-}
-
-.main-content > :deep(.v-main__wrap) {
-  min-height: 100% !important;
-}
-
-.sub-item {
-  padding-inline-start: 24px !important;
-}
-
-.fade-in-out {
-  animation: fade-in-out 3s ease-in-out infinite;
-}
-
-@keyframes fade-in-out {
-  0%, 100% {
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.app-bar-border {
-  border-bottom: 2px solid #2962FF !important;
-}
-
-.app-bar-border-disconnected {
-  border-bottom: 2px solid #F44336 !important;
-}
-
-.app-bar-title {
-  font-size: 1.8rem !important;
-  line-height: 2rem !important;
-}
-
-.app-bar-button {
-  font-size: 1.1rem !important;
-}
-
-.v-app-bar-nav-icon :deep(.v-icon) {
-  font-size: 2rem !important;
-}
-
-.v-btn--icon .v-icon {
-  font-size: 1.8rem !important;
-}
-
-.reconnect-dialog .v-overlay__scrim {
-  background: rgba(0, 0, 0, 0.5) !important;
-  opacity: 1 !important;
-  backdrop-filter: blur(6px) !important;
-  -webkit-backdrop-filter: blur(6px) !important;
-}
-</style>

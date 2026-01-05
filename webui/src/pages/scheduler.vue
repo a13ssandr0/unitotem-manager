@@ -391,7 +391,7 @@ const handleFileUpload = async (event) => {
     formData.append('files', file);
 
     try {
-      const response = await fetch('https://localhost/api/scheduler/upload', {
+      const response = await fetch(`https://${location.host.split(':')[0]}/api/scheduler/upload`, {
         method: 'POST',
         body: formData,
         credentials: "include"

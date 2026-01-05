@@ -23,8 +23,8 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in packages" :key="item.name">
-                    <td><strong>{{ item.name }}</strong></td>
+                  <tr v-for="item in packages" :key="item.package">
+                    <td><strong>{{ item.package }}</strong></td>
                     <td>{{ item.old_version }}</td>
                     <td>{{ item.new_version }}</td>
                   </tr>

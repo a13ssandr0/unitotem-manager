@@ -6,7 +6,7 @@
           <v-col cols="12">
             <h1 class="text-h4 mb-10" style="width:450px; margin: 0 auto;">Welcome to UniTotem</h1>
             <v-card class="elevation-12 pa-4 d-inline-block" width="450" rounded="lg">
-              <v-card-title class="mb-4">UniTotem 3.0.0</v-card-title>
+              <v-card-title class="mb-4">UniTotem {{ $unitotem_version }}</v-card-title>
               <v-card-text>
                 <v-form @submit.prevent="handleLogin">
                   <v-select label="Username" name="username" v-model="username" :items="usersList" variant="outlined"></v-select>
@@ -43,7 +43,7 @@ const handleLogin = () => {
     formData.append('remember_me', 'on')
   }
 
-  fetch('https://localhost/auth/token', {
+  fetch(`https://${location.host.split(':')[0]}/auth/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
@@ -52,7 +52,7 @@ const handleLogin = () => {
     credentials: "include"
   }).then((resp) => {
     // TODO handle wrong password
-    window.location.href = 'https://localhost:3000/'
+    window.location.href = `https://${location.host.split(':')[0]}:3000/`
   }).catch(err => {
     console.error('Login failed', err)
   })
@@ -61,7 +61,7 @@ const handleLogin = () => {
 onMounted(() => {
   document.title = hostname.value + ' - UniTotem Login'
 
-  fetch('https://localhost/login/users').then(res => res.json()).then(users => {
+  fetch(`https://${location.host.split(':')[0]}/login/users`).then(res => res.json()).then(users => {
     usersList.value = users
     if (username.value === '' || !users.includes(username.value)){
       username.value = users[0]

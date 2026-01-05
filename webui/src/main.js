@@ -19,6 +19,18 @@ import {createRouter, createWebHistory} from "vue-router";
 const vuetify = createVuetify({
   theme: {
     defaultTheme: 'system',
+    themes: {
+      light: {
+        colors: {
+          primary: '#2962FF',
+        },
+      },
+      dark: {
+        colors: {
+          primary: '#2962FF',
+        },
+      },
+    },
   },
 })
 
@@ -28,6 +40,8 @@ const router = createRouter({
 })
 
 const app = createApp(App)
+
+app.config.globalProperties.$unitotem_version = "3.0.0";
 
 app
   .use(vuetify)

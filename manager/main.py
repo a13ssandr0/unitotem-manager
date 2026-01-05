@@ -78,7 +78,7 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
 from subprocess import run
 from threading import Thread
 webui_path = Path(__file__).joinpath("../../webui/").resolve()
-t = Thread(target=run, args=([webui_path.joinpath("node_modules/vite/bin/vite.js")],), kwargs={'cwd':webui_path}, daemon=True)
+t = Thread(target=run, args=([webui_path.joinpath("node_modules/vite/bin/vite.js"), '--host'],), kwargs={'cwd':webui_path}, daemon=True)
 t.start()
 
 
