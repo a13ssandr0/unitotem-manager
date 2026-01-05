@@ -1,6 +1,6 @@
 <template>
   <div class="d-flex flex-column align-center pa-4">
-    <div class="w-100" style="max-width: 1000px;">
+    <div class="w-100" style="max-width: 1050px;">
       <div class="actions-grid">
         <v-card class="d-flex flex-column">
           <v-card-title>Backup</v-card-title>
@@ -53,7 +53,7 @@ const includeFiles = ref(false)
 .actions-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
+  gap: 20px;
 }
 
 .actions-grid :deep(.v-card-actions) {

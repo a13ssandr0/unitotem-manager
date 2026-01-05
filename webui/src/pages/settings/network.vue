@@ -4,7 +4,7 @@
       class="ma-4"
       max-width="1000"
       width="100%"
-      :title="String($route.name)"
+      title="Hostname"
     >
       <v-card-text>
         <v-row align="center">
@@ -31,35 +31,58 @@
       </v-card-text>
     </v-card>
 
-    <v-card class="ma-4 mt-0" max-width="1000" width="100%">
+    <v-alert
+      v-if="!backend_running"
+      type="warning"
+      class="ma-4 mt-2"
+      max-width="1000"
+      width="100%"
+    >
+      Network backend not running, Netplan configuration will be unavailable.
+    </v-alert>
+
+    <v-card class="ma-4 mt-2" max-width="1000" width="100%" :disabled="!backend_running">
       <v-card-title class="d-flex align-center">
         Netplan configuration
         <a href="https://netplan.io/reference/" target="_blank" rel="noopener noreferrer" class="text-primary">
           <v-icon size="small" class="ml-2">mdi-help-circle</v-icon>
         </a>
         <v-spacer></v-spacer>
-        <v-menu v-model="wifiMenu" :close-on-content-click="false" location="bottom end">
+        <v-switch
+          v-if="has_wireless"
+          v-model="is_wireless_enabled"
+          @update:model-value="toggleWifi"
+          color="primary"
+          hide-details
+          density="compact"
+          :label="'Wireless ' + (is_wireless_enabled ? 'on' : 'off')"
+          class="mr-4"
+        ></v-switch>
+        <v-menu v-if="has_wireless" v-model="wifiMenu" :close-on-content-click="false" location="bottom end">
           <template v-slot:activator="{ props }">
-            <v-btn v-bind="props" @click="scanWifi" append-icon="mdi-menu-down">
+            <v-btn :disabled="!is_wireless_enabled" v-bind="props" :color="is_wireless_enabled?'primary':''" append-icon="mdi-menu-down">
               <v-icon>mdi-wifi</v-icon>
             </v-btn>
           </template>
           <v-card min-width="300">
             <v-progress-linear indeterminate color="primary"></v-progress-linear>
-            <div v-if="wifiNetworks.length === 0" class="text-center pa-4 text-grey">
+            <div v-if="!is_wireless_enabled" class="text-center pa-4 text-grey">
+              Wireless disabled
+            </div>
+            <div v-else-if="wifiNetworks.length === 0" class="text-center pa-4 text-grey">
               Scanning...
             </div>
             <v-list v-else>
               <v-list-item v-for="(net, i) in wifiNetworks" :key="i">
                 <template v-slot:prepend>
-                  <v-icon :icon="getSignalIcon(net.signal, net.security)"></v-icon>
+                  <v-icon :icon="getSignalIcon(net.strength, net.flags)"></v-icon>
                 </template>
                 <v-list-item-title class="d-flex">
                   <span>{{ net.ssid }}</span>
                   <v-spacer></v-spacer>
-                  <v-chip size="x-small" class="mr-auto">{{ net.band }}</v-chip>
+                  <v-chip size="x-small" class="mr-auto">{{ getBand(net.frequency) }}</v-chip>
                 </v-list-item-title>
-                <v-list-item-subtitle>{{ net.mac }}</v-list-item-subtitle>
+                <v-list-item-subtitle>{{ net.hw_address }}</v-list-item-subtitle>
               </v-list-item>
             </v-list>
           </v-card>
@@ -67,7 +90,7 @@
       </v-card-title>
       <v-row>
         <v-col cols="3">
-          <v-list density="compact">
+          <v-list density="compact" style="max-height: 400px; overflow-y: auto;">
             <v-list-item
               v-for="file in yamlFiles"
               :key="file"
@@ -76,6 +99,7 @@
             >
               <v-list-item-title>
                 <span v-if="isFileDirtyByName(file)">• </span>{{ file }}
+                <v-tooltip activator="parent" location="bottom">{{ file }}</v-tooltip>
               </v-list-item-title>
               <template v-slot:append>
                 <v-btn icon="mdi-delete" size="small" variant="text" color="red"
@@ -84,14 +108,31 @@
             </v-list-item>
           </v-list>
         </v-col>
-        <v-col cols="9">
-          <MonacoEditor
-            v-if="selectedFile"
-            v-model="fileContent"
-            language="yaml"
-            :options="{ theme: 'vs-dark', automaticLayout: true }"
-            style="height: 400px"
-          />
+        <v-col cols="9" style="position: relative">
+          <template v-if="selectedFile">
+            <div style="border: 1px solid #ccc; border-radius: 4px; overflow: hidden;">
+              <MonacoEditor
+                v-model="fileContent"
+                language="yaml"
+                :options="{ theme: theme.global.current.value.dark ? 'vs-dark' : 'vs', automaticLayout: true }"
+                style="height: 400px"
+                @editorDidMount="onEditorMounted"
+              />
+            </div>
+            <div
+              v-if="!isEditorReady"
+              class="d-flex flex-column align-center justify-center"
+              style="position: absolute; top: 0; left: 0; width: 100%; height: 400px; z-index: 10;"
+            >
+              <p class="mb-3">Loading editor...</p>
+              <v-progress-circular
+                color="primary"
+                indeterminate
+                :size="54"
+                :width="5"
+              ></v-progress-circular>
+            </div>
+          </template>
           <div v-else class="d-flex align-center justify-center" style="height: 400px;">
             <p>Select a file to edit.</p>
           </div>
@@ -166,16 +207,23 @@
 </template>
 
 <script setup>
-import {ref, computed, reactive, onMounted, onBeforeUnmount} from 'vue'
+import {ref, computed, reactive, onMounted, onBeforeUnmount, watch} from 'vue'
 import {onBeforeRouteLeave} from 'vue-router'
 import MonacoEditor from 'vue-monaco-cdn'
+import { useTheme } from 'vuetify'
 
-const hostname = ref('Unitotem')
-const originalHostname = ref(hostname.value)
+const theme = useTheme()
 
-const yamlFiles = ref(['network.yaml', 'another.yaml'])
+const hostname = ref('')
+const originalHostname = ref('')
+
+const yamlFiles = ref([])
 const selectedFile = ref(null)
 const fileContent = ref('')
+
+const isEditorReady = ref(false)
+
+const backend_running = ref(false);
 
 // Dialog states
 const dialogDelete = ref(false)
@@ -187,6 +235,8 @@ let resolveLeave = () => {}
 
 // WiFi state
 const loadingWifi = ref(false)
+const has_wireless = ref(false)
+const is_wireless_enabled = ref(false)
 const wifiNetworks = ref([])
 const wifiMenu = ref(false)
 
@@ -203,6 +253,55 @@ const isFileDirty = computed(() => {
 })
 
 const hasUnsavedChanges = computed(() => isHostnameChanged.value || unsavedChanges.size > 0 || isFileDirty.value)
+
+const onEditorMounted = () => {
+  isEditorReady.value = true
+}
+
+watch(selectedFile, (newVal, oldVal) => {
+  if (newVal && !oldVal) {
+    isEditorReady.value = false
+  }
+})
+
+const sendCommand = window.sendCommand;
+window.setInitCommands("Settings/hostname", "Settings/Netplan/getFile", "Settings/has_wireless")
+
+onWSMessage = (data) => {
+  switch (data.target) {
+    case "Settings/hostname":
+      hostname.value = data.hostname;
+      originalHostname.value = data.hostname;
+      break;
+    case "Settings/Netplan/getFile":
+      if (data.error) {
+        backend_running.value = false;
+      } else {
+        backend_running.value = true;
+        yamlFiles.value = Object.keys(data.files);
+        originalFileContents.clear();
+
+        Object.entries(data.files).forEach(([filename, content]) => {
+          originalFileContents.set(filename, content);
+        });
+        if (selectedFile.value === null) switchFile(yamlFiles.value[0]);
+      }
+      break;
+    case "Settings/has_wireless":
+      has_wireless.value = data.wireless
+      if (data.wireless)
+        sendCommand('Settings/is_wireless_enabled');
+      break;
+    case "Settings/is_wireless_enabled":
+      is_wireless_enabled.value = data.enabled
+      break;
+    case "Settings/get_wireless_networks":
+      wifiNetworks.value = data.wifis;
+      loadingWifi.value = false;
+      break;
+  }
+}
+
 
 const beforeWindowUnload = (e) => {
   if (hasUnsavedChanges.value) {
@@ -250,9 +349,7 @@ const loadFileContent = async (file) => {
     fileContent.value = unsavedChanges.get(file)
     return
   }
-  const response = `# Mock content for ${file}\nhostname: unitotem-default`
-  fileContent.value = response
-  originalFileContents.set(file, response)
+  fileContent.value = originalFileContents.get(file)
 }
 
 const requestDeleteFile = (file) => {
@@ -320,27 +417,37 @@ const discardFileChanges = () => {
   }
 }
 
-const scanWifi = () => {
-  loadingWifi.value = true
-  wifiNetworks.value = []
-  setTimeout(() => {
-    wifiNetworks.value = [
-      {ssid: 'WiFi-Network-1', mac: '00:1B:44:11:3A:B7', signal: -45, band: '5GHz', security: true},
-      {ssid: 'WiFi-Network-2', mac: '00:1B:44:11:3A:B8', signal: -75, band: '2.4GHz', security: false},
-      {ssid: 'WiFi-Network-3', mac: '00:1B:44:11:3A:B9', signal: -85, band: '2.4GHz', security: true},
-    ]
-    loadingWifi.value = false
-  }, 2000)
+let wifi_upd_timer = null;
+watch(wifiMenu, () => {
+  if (wifiMenu.value && is_wireless_enabled.value) {
+    sendCommand('Settings/get_wireless_networks');
+    loadingWifi.value = true
+    wifi_upd_timer=setInterval(sendCommand, 5000, 'Settings/get_wireless_networks')
+  } else if (wifi_upd_timer !== null) {
+    clearInterval(wifi_upd_timer);
+  }
+})
+
+const toggleWifi = (val) => {
+  sendCommand('Settings/set_wireless_enabled', {enabled: val})
 }
 
-const getSignalIcon = (signal, security) => {
+const getSignalIcon = (strength, flags) => {
   let icon = 'mdi-wifi-strength-'
-  if (signal > -50) icon += '4'
-  else if (signal > -70) icon += '3'
-  else if (signal > -80) icon += '2'
+  if (strength > 75) icon += '4'
+  else if (strength > 50) icon += '3'
+  else if (strength > 25) icon += '2'
   else icon += '1'
-  if (security) icon += '-lock'
+  // noinspection JSBitwiseOperatorUsage
+  if (flags & 1) icon += '-lock'
   return icon
+}
+
+const getBand = (frequency) => {
+  if (frequency >= 5925) return '6 GHz'
+  if (frequency >= 5000) return '5 GHz'
+  if (frequency >= 2400) return '2.4 GHz'
+  return `${frequency} MHz`
 }
 
 if (yamlFiles.value.length > 0) {

@@ -71,7 +71,7 @@
     </v-navigation-drawer>
 
     <v-main>
-      <div class="main-content">
+      <div class="main-content px-2 pt-2">
         <router-view/>
       </div>
     </v-main>
