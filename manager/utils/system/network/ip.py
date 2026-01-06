@@ -2,6 +2,8 @@ from _socket import inet_ntoa, inet_aton
 from struct import pack
 from subprocess import run, PIPE
 
+# Licensed under Apache License 2.0
+#from: https://github.com/RedHatInsights/insights-core/blob/master/insights/parsers/ip.py
 
 def do_ip_addr(get_default=False):
     """

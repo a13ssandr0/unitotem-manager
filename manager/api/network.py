@@ -6,6 +6,7 @@ from loguru import logger
 from rpyc.utils.factory import unix_connect
 from werkzeug.utils import secure_filename
 
+import utils.system.network.wifi as w
 from api.ws.responses import WSBroadcast, WSResponse
 from api.ws.wsmanager import WSAPIBase
 from utils.models import assets
@@ -13,12 +14,7 @@ from utils.models.assets import assets_manager
 from utils.models.user import UserPerms
 from utils.system.network.hotspot import is_hotspot_enabled, stop_hotspot
 from utils.system.network.ip import do_ip_addr
-import utils.system.network.wifi as w
 from utils.system.network.misc import get_default_wireless
-
-
-# from https://github.com/RedHatInsights/insights-core
-# Licensed under Apache License 2.0
 
 
 class Settings(WSAPIBase):
