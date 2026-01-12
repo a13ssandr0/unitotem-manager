@@ -22,7 +22,7 @@ from starlette.responses import Response
 
 from templates import templates
 from utils.environment import environ
-from utils.models.remote import remote_manager
+from utils.models.remote import RemoteManager
 from utils.models.user import User, user_manager
 
 
@@ -85,7 +85,7 @@ async def login(data: LoginForm = Depends()):
 
 @router.get("/remote/public_key")
 async def get_public_key():
-    return Response(remote_manager.rsa_prik.public_key().exportKey(), media_type="text/plain")
+    return Response(RemoteManager.get_instance().rsa_prik.public_key().exportKey(), media_type="text/plain")
 
 
 @router.get("/login/users")
