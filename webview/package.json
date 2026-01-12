@@ -2,7 +2,7 @@
   "name": "webview",
   "version": "1.0.0",
   "description": "",
-  "main": "main.js",
+  "main": "src/main.js",
   "scripts": {
     "rebuild": "electron-rebuild",
     "start": "electron . --ozone-platform=x11"

@@ -2,26 +2,33 @@
 
 import sys
 from importlib.abc import Loader, MetaPathFinder
+from time import time
 
 from loguru import logger
 
 
 class LoggingImporter(MetaPathFinder, Loader):
+    _last_time = 0
+
     def find_spec(self, fullname, path, target=None):
         l = logger.opt(depth=4)
+        l.trace("Last import took {:1.6f} seconds", time()-self._last_time)
+
         l.trace(f"Importing {fullname}")
 
         for finder in sys.meta_path[1:]:
             if hasattr(finder, 'find_spec'):
                 spec = finder.find_spec(fullname, path, target)
                 if spec is not None:
+                    self._last_time = time()
                     return spec
 
         l.error(f"No module named {fullname}")
+        self._last_time = time()
         return None
 
 
-sys.meta_path.insert(0, LoggingImporter())
+# sys.meta_path.insert(0, LoggingImporter())
 
 ################# IMPORT LOGGER #################
 

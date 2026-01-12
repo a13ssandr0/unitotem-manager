@@ -117,7 +117,7 @@ except FileNotFoundError:
     user_manager.add('admin', 'admin', ['admin'])
 
 try:
-    remote_manager.load()
+    remote_manager.get_instance()
 except FileNotFoundError:
     logger.info("Saving remote connection RSA private key")
     remote_manager.save()
