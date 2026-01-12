@@ -20,33 +20,36 @@ from api.ws.responses import WSBroadcast
 from utils.environment import environ
 from utils.models.assets import assets_manager
 from utils.models.command_line import cmdargs
-from utils.models.remote import remote_manager
+from utils.models.remote import RemoteManager
 from webview_controller.controller import Controller
 
-REMOTE_CONNECTED = False
 
 
 class Remote(WSAPIBase):
-    controller = Controller.get_instance()
+    __remote_connected = False
 
-    @staticmethod
-    def getMode():
+    def __init__(self, ws, remote_ws):
+        super().__init__(ws, remote_ws)
+        self.controller = Controller.get_instance()
+        self.remote_manager = RemoteManager.get_instance()
+
+    def getMode(self):
         return WSBroadcast(
-                remote_server=remote_manager.server_ip.compressed if remote_manager.server_ip else None,
-                remote_connected=REMOTE_CONNECTED,
-                remote_port=remote_manager.server_port,
-                remote_clients=remote_manager.clients_list,
+                remote_server=self.remote_manager.server_ip.compressed if self.remote_manager.server_ip else None,
+                remote_connected=self.__remote_connected,
+                remote_port=self.remote_manager.server_port,
+                remote_clients=self.remote_manager.clients_list,
         )
 
     def setMode(self, remote_server: Optional[IPv4Address],
                 remote_port: Optional[PositiveInt] = cmdargs.port_secure):
         remote_port = remote_port or cmdargs.port_secure
-        if remote_manager.server_ip == remote_server and remote_manager.server_port == remote_port:
+        if self.remote_manager.server_ip == remote_server and self.remote_manager.server_port == remote_port:
             return None
-        remote_manager.server_ip = remote_server
-        remote_manager.server_port = remote_port
-        remote_manager.server_pubk = None
-        remote_manager.save()
+        self.remote_manager.server_ip = remote_server
+        self.remote_manager.server_port = remote_port
+        self.remote_manager.server_pubk = None
+        self.remote_manager.save()
         for task in asyncio.all_tasks():
             if task.get_name() in ['page_controller', 'remote_control']:
                 task.cancel()
@@ -63,8 +66,8 @@ class Remote(WSAPIBase):
             if remote.headers['instance_id'] == client:
                 await remote.close(code=4023, reason="Server forced disconnection")
                 self.remote_ws.disconnect(remote)
-                del remote_manager.clients[remote.headers['instance_id']]
-                remote_manager.save()
+                del self.remote_manager.clients[remote.headers['instance_id']]
+                self.remote_manager.save()
                 break
         return self.getMode()
 
@@ -88,7 +91,6 @@ class Remote(WSAPIBase):
     async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = cmdargs.port_secure, headers=None):
         if headers is None:
             headers = {}
-        global REMOTE_CONNECTED
         url = f'wss://{ip}:{port}/remote'
         headers.setdefault("instance_id", environ.instance_id)
         headers.setdefault("hostname", gethostname())
@@ -96,21 +98,21 @@ class Remote(WSAPIBase):
         while not SHUTDOWN_EVENT.is_set():
             try:
                 logger.info('Connecting to', url)
-                if remote_manager.server_pubk is None:
+                if self.remote_manager.server_pubk is None:
                     server_pk = requests.get(f'https://{ip}:{port}/remote/public_key', verify=False).content
-                    remote_manager.server_pubk = server_pk
-                    remote_manager.save()
+                    self.remote_manager.server_pubk = server_pk
+                    self.remote_manager.save()
 
-                verifier = PSS.new(remote_manager.server_pubk)
+                verifier = PSS.new(self.remote_manager.server_pubk)
                 # noinspection PyArgumentList
                 async with asyncwebsockets.open_websocket(url, list(headers.items())) as ws:
-                    REMOTE_CONNECTED = True
+                    self.__remote_connected = True
                     logger.success('Connected to', url)
                     while not SHUTDOWN_EVENT.is_set():
                         msg = await ws._next_event()
                         if isinstance(msg, CloseConnection):
                             if msg.code == 4023:  # Server forced disconnection for unpairing
-                                REMOTE_CONNECTED = False
+                                self.__remote_connected = False
                                 # TODO: this should be broadcast
                                 self.setMode(remote_server=None, remote_port=None)
                                 return
@@ -135,4 +137,4 @@ class Remote(WSAPIBase):
                 await asyncio.sleep(5)
             except Exception:
                 logger.error(format_exc())
-            REMOTE_CONNECTED = False
+            self.__remote_connected = False

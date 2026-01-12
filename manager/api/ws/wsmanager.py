@@ -10,7 +10,7 @@ from Crypto.Hash import SHA256
 from Crypto.Signature import pss as PSS
 from fastapi import WebSocket
 
-from utils.models.remote import remote_manager
+from utils.models.remote import RemoteManager
 
 
 class WSManager:
@@ -34,7 +34,7 @@ class WSManager:
         # for actual caching
 
         if sign_messages:
-            self.signer = PSS.new(remote_manager.rsa_prik)
+            self.signer = PSS.new(RemoteManager.get_instance().rsa_prik)
 
     async def connect(self, websocket: WebSocket, user: Optional[str] = None):
         await websocket.accept()
