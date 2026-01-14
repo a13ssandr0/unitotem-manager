@@ -16,9 +16,9 @@ class Display(WSAPIBase):
         """
         Get viewer window bounds
         """
-        try:
-            return WSBroadcast(**self.controller.bounds)
-        except TypeError:
+        if self.controller.connected:
+            return WSBroadcast(**self.controller.Window[0].bounds)
+        else:
             # self.controller.bounds may be None if the webview process is not running, explicitly return none in this case
             return WSBroadcast()
 
@@ -26,19 +26,19 @@ class Display(WSAPIBase):
         """
         Set viewer window bounds
         """
-        self.controller.bounds = {'x': x, 'y': y, 'width': width, 'height': height}
+        self.controller.Window[0].bounds = {'x': x, 'y': y, 'width': width, 'height': height}
         return self.getBounds()
 
     def getOrientation(self):
-        return WSBroadcast(orientation=self.controller.orientation)
+        return WSBroadcast(orientation=self.controller.Window[0].orientation)
 
     def setOrientation(self, orientation: int):
-        self.controller.orientation = orientation
+        self.controller.Window[0].orientation = orientation
         return self.getOrientation()
 
     def getFlip(self):
-        return WSBroadcast(flip=self.controller.flip)
+        return WSBroadcast(flip=self.controller.Window[0].flip)
 
     def setFlip(self, flip: int):
-        self.controller.flip = flip
+        self.controller.Window[0].flip = flip
         return self.getFlip()

@@ -2,6 +2,7 @@ from threading import Event, Timer, Thread
 from time import sleep
 from xml.etree import ElementTree as xml
 
+from dasbus.client.proxy import InterfaceProxy
 from dasbus.typing import get_native
 from loguru import logger
 from dasbus.connection import SessionMessageBus
@@ -30,7 +31,7 @@ class Controller:
     _connected = Event()
     _show_timer: Timer | None = None
 
-    __current = None
+    __current = {}
 
     @classmethod
     def get_instance(cls):
@@ -41,13 +42,13 @@ class Controller:
     def __on_name_owner(self, name, old, new):
         if name == self.SERVICE:
             if new:
-                logger.info("WebView connected")
+                logger.success("WebView connected")
                 self.__query_windows()
                 self._connected.set()
-                sleep(2)
-                self.Show(*self.__current)
+                if 0 in self.__current:
+                    self.Show(*self.__current[0])
             elif old:
-                logger.info("WebView disconnected")
+                logger.warning("WebView disconnected")
                 self._connected.clear()
 
     def __query_windows(self):
@@ -62,6 +63,7 @@ class Controller:
         self.loop_thread = GLibThread()
         self.bus = SessionMessageBus()
         self.proxy = self.bus.get_proxy(self.SERVICE, self.OBJECT, self.INTERFACE)
+        self.window_proxies = []
 
         self.name_proxy = self.bus.get_proxy('org.freedesktop.DBus', '/org/freedesktop/DBus')
         self.name_proxy.NameOwnerChanged.connect(self.__on_name_owner)
@@ -76,20 +78,13 @@ class Controller:
         self.loop_thread.stop()
 
     def Show(self, src, container, fit, bg_color):
-        self.__current = (src, container, fit, bg_color)
-
-        if self._show_timer:
-            self._show_timer.cancel()
-
+        self.__current[0] = (src, container, fit, bg_color)
         if self._connected.is_set():
             logger.info("Showing {} [container={}; fit={}; bg_color={}]", src, container, fit, bg_color)
             try:
                 return self.window_proxies[0].Show(src, container, fit, bg_color, timeout=1000)
             except TimeoutError:
                 logger.warning("WebView Show timed out")
-        elif not SHUTDOWN_EVENT.is_set():
-            self._show_timer = Timer(2.0, self.Show, (src, container, fit, bg_color))
-            self._show_timer.start()
         return None
 
     def GetAllDisplays(self) -> list:
@@ -102,38 +97,50 @@ class Controller:
             return self.proxy.GetGPUFeatureStats(timeout=1000)
         return None
 
-    @property
-    def bounds(self) -> dict | None:
-        if self._connected.is_set():
-            return get_native(self.window_proxies[0].Bounds)
-        return None
+    class Window:
+        def __class_getitem__(cls, item):
+            return cls(Controller.get_instance().window_proxies[item], Controller.get_instance()._connected)
 
-    @bounds.setter
-    def bounds(self, value: dict):
-        if self._connected.is_set():
-            self.window_proxies[0].Bounds = value
+        def __init__(self, proxy: 'InterfaceProxy', connected: 'Event'):
+            self.proxy = proxy
+            self._connected = connected
 
-    @property
-    def orientation(self) -> int | None:
-        if self._connected.is_set():
-            return self.window_proxies[0].Orientation
-        return None
+        @property
+        def bounds(self) -> dict | None:
+            if self._connected.is_set():
+                return get_native(self.proxy.Bounds)
+            return None
 
-    @orientation.setter
-    def orientation(self, value: int):
-        if self._connected.is_set():
-            self.window_proxies[0].Orientation = value
+        @bounds.setter
+        def bounds(self, value: dict):
+            if self._connected.is_set():
+                # noinspection PyDunderSlots,PyUnresolvedReferences
+                self.proxy.Bounds = value
 
-    @property
-    def flip(self) -> int | None:
-        if self._connected.is_set():
-            return self.window_proxies[0].Flip
-        return None
+        @property
+        def orientation(self) -> int | None:
+            if self._connected.is_set():
+                return self.proxy.Orientation
+            return None
 
-    @flip.setter
-    def flip(self, value: int):
-        if self._connected.is_set():
-            self.window_proxies[0].Flip = value
+        @orientation.setter
+        def orientation(self, value: int):
+            if self._connected.is_set():
+                # noinspection PyDunderSlots,PyUnresolvedReferences
+                self.proxy.Orientation = value
+
+        @property
+        def flip(self) -> int | None:
+            if self._connected.is_set():
+                return self.proxy.Flip
+            return None
+
+        @flip.setter
+        def flip(self, value: int):
+            if self._connected.is_set():
+                # noinspection PyDunderSlots,PyUnresolvedReferences
+                self.proxy.Flip = value
+
 
     @property
     def allowInsecureCerts(self) -> bool | None:
