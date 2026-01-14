@@ -84,6 +84,11 @@ class WSManager:
 
 
 
+class WSAPIMeta(type):
+    def __getattr__(cls, item):
+        pass
+        # will make this syntax (`Settings.Audio.get_devices()`) work instead of requiring api['Settings/Audio/get_devices']()
+
 class WSAPIBase:
 
     def __init__(self, ws: WSManager, remote_ws: WSManager):
