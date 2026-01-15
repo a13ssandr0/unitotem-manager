@@ -87,49 +87,46 @@
                 <th style="width: 180px;"></th>
               </tr>
             </thead>
-            <tbody>
-              <tr
-                v-for="(item, index) in playlistItems"
-                :key="item.uuid"
-                @mouseenter="hoveredRow = item.uuid"
-                @mouseleave="hoveredRow = null"
-              >
-                <td>
-                  <v-icon v-if="hoveredRow === item.uuid">mdi-drag-horizontal</v-icon>
-                  <v-icon v-else-if="item.media_type === 1">mdi-image</v-icon>
-                  <v-icon v-else-if="item.media_type === 2">mdi-video</v-icon>
-                  <v-icon v-else-if="item.media_type === 3">mdi-music</v-icon>
-                  <v-icon v-else-if="item.url.startsWith('file:')">mdi-file</v-icon>
-                  <v-icon v-else>mdi-link</v-icon>
-                </td>
-                <td style="max-width: 1px;">
-                  <div v-if="item.name && item.url">
-                    <div class="text-truncate font-weight-medium" style="font-size: 1.1em;">{{ item.name }}</div>
-                    <div class="text-caption text-grey text-truncate">{{ item.url }}</div>
-                  </div>
-                  <div v-else class="text-truncate font-weight-medium" style="font-size: 1.1em;">
-                    {{ item.url }}
-                  </div>
-                </td>
-                <td>{{
-                    item.duration === 0 ? 'Forever' : (() => {
-                      let [h, m, s] = new Date(item.duration * 1000).toISOString().slice(11, 19).split(':');
-                      if (h > 0) h += ' h'; else h = '';
-                      if (m > 0) m += ' min'; else m = '';
-                      return `${h} ${m} ${s} sec`;
-                    })()
-                  }}</td>
-                <td class="d-flex align-center justify-end">
-                  <v-switch v-model="item.enabled" hide-details color="primary" density="compact" class="mr-10"
-                        @click="sendCommand('Scheduler/edit', {uuid: item.uuid, enabled: !item.enabled})"></v-switch>
-                  <v-btn icon="mdi-delete" color="red" variant="text" size="small"
-                        @click="sendCommand('Scheduler/delete', {uuid: item.uuid})"></v-btn>
-                  <v-btn icon="mdi-pencil" color="yellow" variant="text" size="small" @click="openEditDialog(item)"></v-btn>
-                  <v-btn icon="mdi-login" variant="text" size="small"
-                        @click="sendCommand('Scheduler/goto', {'index': index})"></v-btn>
-                </td>
-              </tr>
-            </tbody>
+              <draggable v-model="playlistItems" item-key="uuid" tag="tbody" handle=".mdi-drag-horizontal" @update="onDraggableUpdate">
+                <template #item="{ element: item, index }">
+                  <tr @mouseenter="hoveredRow = item.uuid" @mouseleave="hoveredRow = null">
+                    <td>
+                      <v-icon v-if="hoveredRow === item.uuid">mdi-drag-horizontal</v-icon>
+                      <v-icon v-else-if="item.media_type === 1">mdi-image</v-icon>
+                      <v-icon v-else-if="item.media_type === 2">mdi-video</v-icon>
+                      <v-icon v-else-if="item.media_type === 3">mdi-music</v-icon>
+                      <v-icon v-else-if="item.url.startsWith('file:')">mdi-file</v-icon>
+                      <v-icon v-else>mdi-link</v-icon>
+                    </td>
+                    <td style="max-width: 1px;">
+                      <div v-if="item.name && item.url">
+                        <div class="text-truncate font-weight-medium" style="font-size: 1.1em;">{{ item.name }}</div>
+                        <div class="text-caption text-grey text-truncate">{{ item.url }}</div>
+                      </div>
+                      <div v-else class="text-truncate font-weight-medium" style="font-size: 1.1em;">
+                        {{ item.url }}
+                      </div>
+                    </td>
+                    <td>{{
+                        item.duration === 0 ? 'Forever' : (() => {
+                          let [h, m, s] = new Date(item.duration * 1000).toISOString().slice(11, 19).split(':');
+                          if (h > 0) h += ' h'; else h = '';
+                          if (m > 0) m += ' min'; else m = '';
+                          return `${h} ${m} ${s} sec`;
+                        })()
+                      }}</td>
+                    <td class="d-flex align-center justify-end">
+                      <v-switch v-model="item.enabled" hide-details color="primary" density="compact" class="mr-10"
+                            @click="sendCommand('Scheduler/edit', {uuid: item.uuid, enabled: !item.enabled})"></v-switch>
+                      <v-btn icon="mdi-delete" color="red" variant="text" size="small"
+                            @click="sendCommand('Scheduler/delete', {uuid: item.uuid})"></v-btn>
+                      <v-btn icon="mdi-pencil" color="yellow" variant="text" size="small" @click="openEditDialog(item)"></v-btn>
+                      <v-btn icon="mdi-login" variant="text" size="small"
+                            @click="sendCommand('Scheduler/goto', {'index': index})"></v-btn>
+                    </td>
+                  </tr>
+                </template>
+              </draggable>
           </v-table>
           <v-divider class="mb-2"></v-divider>
         </v-card>
@@ -299,6 +296,7 @@
 </template>
 
 <script setup>
+import draggable from 'vuedraggable';
 import {ref, computed} from 'vue';
 
 // Dati di esempio per i file
@@ -533,6 +531,10 @@ const saveUrlItem = () => {
 
   showAddUrlDialog.value = false;
 };
+
+const onDraggableUpdate = (event) => {
+  sendCommand('Scheduler/reorder', {from_i: event.oldIndex, to_i: event.newIndex});
+}
 </script>
 
 <style scoped>
