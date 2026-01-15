@@ -86,7 +86,8 @@ class Remote(WSAPIBase):
             )
             # await self.ui_ws.broadcast('Show', False, **data)
             self.controller.Show(**data)
-            await self.remote_ws.broadcast('Show', False, **data)
+            #FIXME: somehow this sends the command to the wrong websocket
+            # await self.remote_ws.broadcast('Show', False, **data)
 
     async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = cmdargs.port_secure, headers=None):
         if headers is None:
