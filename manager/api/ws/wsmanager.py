@@ -14,12 +14,12 @@ from utils.models.remote import RemoteManager
 
 
 class WSManager:
-    active_connections: list[WebSocket] = []
-    active_users: defaultdict[str, list[WebSocket]] = defaultdict(list)
-    last: Optional[dict] = None
-    signer: Optional[PSS.PSS_SigScheme] = None
-
     def __init__(self, *, cache_last=False, sign_messages=False):
+        self.active_connections: list[WebSocket] = []
+        self.active_users: defaultdict[str, list[WebSocket]] = defaultdict(list)
+        self.last: Optional[dict] = None
+        self.signer: Optional[PSS.PSS_SigScheme] = None
+
         if cache_last:
             self.last = {}
         # if last is not None we are using command cache.

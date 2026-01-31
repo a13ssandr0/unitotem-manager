@@ -46,7 +46,7 @@ logger.info('Starting UniTotem Manager {} (Python {})', const.__version__, sys.v
 # install_logger()
 
 logger.info('Creating event loop')
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+# asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 logger.success('Event loop (id: {}) ready', id(loop))
