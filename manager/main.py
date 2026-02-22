@@ -1,7 +1,9 @@
 import asyncio
+import json
 import signal
 import warnings
 from argparse import ArgumentParser
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Literal, Union
 
@@ -44,12 +46,12 @@ WWW = FastAPI(
         title='UniTotem', version=const.__version__,
         middleware=[
             Middleware(HTTPSRedirectMiddleware),
-            Middleware(CORSMiddleware, allow_origin_regex='https?://.*:3000', allow_credentials=True),
+            # Middleware(CORSMiddleware, allow_origin_regex='https?://.*:3000', allow_credentials=True),
         ],
         routes=[
-            Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
+            Mount('/assets', StaticFiles(directory=const.static_folder.joinpath('assets').resolve()), name='assets'),
+            # Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
             Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded'),
-            # Mount('/assets', StaticFiles(directory=Path(__file__).joinpath('../../webui/dist/assets').resolve()), name='assets'),
         ],
         exception_handlers={
             InvalidSignatureError    : login_redirect,
@@ -61,25 +63,15 @@ WWW.include_router(routers.login.router)
 WWW.include_router(routers.websocket.remote.router)
 WWW.include_router(routers.websocket.web_ui.router)
 WWW.include_router(routers.scheduler.router)
-WWW.include_router(routers.settings.router)
+# WWW.include_router(routers.settings.router)
 WWW.include_router(routers.backup.router)
 
-
-# @WWW.get("/", response_class=FileResponse)
-# def index():
-#     return FileResponse(Path(__file__).joinpath('../../webui/dist/index.html').resolve())
 
 @WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
 async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
     return templates.TemplateResponse(request, f'{page}.html.j2',
                                       {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
 
-##TODO: USE ONLY FOR TESTING
-from subprocess import run
-from threading import Thread
-webui_path = Path(__file__).joinpath("../../webui/").resolve()
-t = Thread(target=run, args=([webui_path.joinpath("node_modules/vite/bin/vite.js"), '--host'],), kwargs={'cwd':webui_path}, daemon=True)
-t.start()
 
 
 parser = ArgumentParser()
@@ -164,8 +156,9 @@ try:
     loop.run_forever()
 except KeyboardInterrupt:
     logger.info('Shutdown requested.')
-    SHUTDOWN_EVENT.set()
     pass
+
+SHUTDOWN_EVENT.set()
 
 loop.run_until_complete(stop_hotspot())
 

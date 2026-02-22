@@ -84,7 +84,7 @@ class Remote(WSAPIBase):
                     fit=asset.fit,  # ['contain', 'cover', 'fill'][asset.fit],
                     bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
             )
-            self.controller.Show(**data)
+            # self.controller.Show(**data)
             await self.remote_ws.broadcast('Show', False, **data)
 
     async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = cmdargs.port_secure, headers=None):

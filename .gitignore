@@ -13,6 +13,7 @@ debhelper-build-stamp
 debian/unitotem-manager
 debian/files
 __pycache__
+manager/static
 manager/uploaded
 .venv
 webview/node_modules

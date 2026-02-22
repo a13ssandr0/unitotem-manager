@@ -41,10 +41,10 @@ const router = createRouter({
 
 const app = createApp(App)
 
-app.config.globalProperties.$unitotem_version = "3.0.0";
-
 app
   .use(vuetify)
   .use(router)
+
+app.provide('initialState', window.__INITIAL_STATE__ || {})
 
 app.mount('#app')
