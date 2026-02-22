@@ -1,5 +1,3 @@
-let user_allowed_scheduler = true;
-
 const routes = [
   {
     path: '/',
@@ -8,9 +6,7 @@ const routes = [
       {
         path: '',
         name: 'Home',
-        component: () =>
-          user_allowed_scheduler?
-            import('@/pages/scheduler.vue'):import('@/pages/empty_page.vue'),
+        component: () => import('@/pages/scheduler.vue'),
       },
       {
         path: '/settings',
@@ -77,7 +73,5 @@ const routes = [
     component: () => import('@/pages/login.vue'),
   },
 ]
-
-
 
 export default routes

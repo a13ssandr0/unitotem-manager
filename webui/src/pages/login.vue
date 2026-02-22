@@ -6,7 +6,7 @@
           <v-col cols="12">
             <h1 class="text-h4 mb-10" style="width:450px; margin: 0 auto;">Welcome to UniTotem</h1>
             <v-card class="elevation-12 pa-4 d-inline-block" width="450" rounded="lg">
-              <v-card-title class="mb-4">UniTotem {{ $unitotem_version }}</v-card-title>
+              <v-card-title class="mb-4">{{ hostname }} - {{ ip_addr }}</v-card-title>
               <v-card-text>
                 <v-form @submit.prevent="handleLogin">
                   <v-select label="Username" name="username" v-model="username" :items="usersList" variant="outlined"></v-select>
@@ -16,7 +16,14 @@
                 </v-form>
               </v-card-text>
             </v-card>
-            <div class="mt-4 text-grey" style="width:450px; margin: 0 auto;">{{ hostname }} - {{ ip_addr }}</div>
+            <div class="mt-4 text-grey" style="width:450px; margin: 0 auto;">
+              <a href="https://github.com/a13ssandr0/unitotem" target="_blank" rel="noopener noreferrer"
+                 class="text-high-emphasis">
+                <v-icon size="small">mdi-github</v-icon>
+                <span>Unitotem</span>
+              </a>
+              {{ unitotem_version }} by a13ssandr0
+            </div>
           </v-col>
         </v-row>
       </v-container>
@@ -31,8 +38,9 @@ import { useStorage } from '@vueuse/core'
 const username = useStorage('last_user', '', localStorage)
 const password = ref('')
 const rememberMe = ref(true)
-const hostname = ref('hostname')
-const ip_addr = ref('192.168.1.1')
+const hostname = ref(window.__INITIAL_STATE__.hostname)
+const ip_addr = ref(window.__INITIAL_STATE__.ip_addr)
+const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
 const usersList = ref([])
 
 const handleLogin = () => {
@@ -43,16 +51,14 @@ const handleLogin = () => {
     formData.append('remember_me', 'on')
   }
 
-  fetch(`https://${location.host.split(':')[0]}/auth/token`, {
+  fetch(`/auth/token`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: formData,
     credentials: "include"
   }).then((resp) => {
     // TODO handle wrong password
-    window.location.href = `https://${location.host.split(':')[0]}:3000/`
+    window.location.href = window.__INITIAL_STATE__.src || '/';
   }).catch(err => {
     console.error('Login failed', err)
   })
@@ -61,7 +67,7 @@ const handleLogin = () => {
 onMounted(() => {
   document.title = hostname.value + ' - UniTotem Login'
 
-  fetch(`https://${location.host.split(':')[0]}/login/users`).then(res => res.json()).then(users => {
+  fetch(`/login/users`).then(res => res.json()).then(users => {
     usersList.value = users
     if (username.value === '' || !users.includes(username.value)){
       username.value = users[0]

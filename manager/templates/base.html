@@ -2,9 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <link rel="icon" href="http://localhost/static/favicon.ico">
+    <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniTotem Manager</title>
+    {% for css in assets.css %}
+      <link rel="stylesheet" href="{{ css }}">
+    {% endfor %}
   </head>
   <body>
     <div id="app">
@@ -13,6 +16,10 @@
             Enable Javascript to be able to view this page.
         </noscript>
     </div>
-    <script type="module" src="/src/main.js"></script>
+
+    <script>
+        window.__INITIAL_STATE__ = {{ (state or {})|tojson }};
+    </script>
+    <script type="module" src="{{ assets.js }}"></script>
   </body>
 </html>

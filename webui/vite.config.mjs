@@ -1,5 +1,3 @@
-import fs from "fs"
-
 // Plugins
 import Components from 'unplugin-vue-components/vite'
 import Vue from '@vitejs/plugin-vue'
@@ -62,11 +60,19 @@ export default defineConfig({
       '.vue',
     ],
   },
+  build: {
+    outDir: '../manager/static',
+    assetsDir: 'assets',
+    manifest: 'manifest.json',
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: './src/main.js',
+        // altre entry point per pagine specifiche
+      }
+    }
+  },
   server: {
     port: 3000,
-    https: {
-      key: fs.readFileSync('/etc/ssl/unitotem.pem'),
-      cert: fs.readFileSync('/etc/ssl/unitotem.pem'),
-    },
   },
 })

@@ -8,6 +8,7 @@ __all__ = [
 
 import time
 from datetime import timedelta
+from platform import freedesktop_os_release as os_release, node as gethostname
 from typing import Optional
 from urllib.parse import quote_plus
 
@@ -20,10 +21,12 @@ from loguru import logger
 from starlette.requests import Request
 from starlette.responses import Response
 
-from templates import templates
+import utils.constants as const
+from templates import get_vite_assets, load_vite_manifest, templates
 from utils.environment import environ
 from utils.models.remote import RemoteManager
 from utils.models.user import User, user_manager
+from utils.system.network.ip import do_ip_addr
 
 
 class NotAuthenticatedException(Exception):
@@ -101,7 +104,22 @@ async def login_page(request: Request, src: Optional[str] = '/'):
     except NotAuthenticatedException:
         pass
 
-    return templates.TemplateResponse(request, 'login.html.j2', {'src': src})
+    ## USE ONLY IN DEBUG
+    load_vite_manifest.cache_clear()
+    get_vite_assets.cache_clear()
+    ##
+    assets = get_vite_assets("src/pages/login.vue")
+    return templates.TemplateResponse("base.html", {
+        "request": request,
+        "assets": assets,
+        "state": {
+            "src": src or '/',
+            "ut_vers": const.__version__,
+            "os_vers": os_release()['PRETTY_NAME'],
+            "ip_addr": ip['addr'][0]['addr'] if (ip:=do_ip_addr(True)) else None,
+            "hostname": gethostname(),
+        },
+    })
 
 
 @router.get('/logout')

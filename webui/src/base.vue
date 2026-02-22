@@ -23,7 +23,7 @@
         </template>
         <v-list>
           <v-list-item>
-            <v-btn prepend-icon="mdi-logout" variant="text">
+            <v-btn prepend-icon="mdi-logout" variant="text" :href="'/logout'">
               Logout
             </v-btn>
           </v-list-item>
@@ -61,7 +61,7 @@
               <v-icon size="small">mdi-github</v-icon>
               <span>Unitotem</span>
             </a>
-            {{ $unitotem_version }} by a13ssandr0
+            {{ unitotem_version }} by a13ssandr0
           </div>
         </div>
       </template>
@@ -153,7 +153,8 @@ const drawer = ref(lgAndUp.value)
 const rebootDialog = ref(false)
 const powerOffDialog = ref(false)
 
-const hostname = ref('')
+const hostname = ref(window.__INITIAL_STATE__.hostname)
+const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
 const logged_user = ref({name: 'user', permissions: []})
 const disp_size = ref(null)
 const connected = ref(false)
@@ -197,7 +198,7 @@ window.isWSReady = () => {
 }
 
 function connectWs() {
-  ws = new WebSocket(`wss://${location.host.split(':')[0]}/ws`)
+  ws = new WebSocket(`/ws`)
   ws.onopen = (e) => {
     connected.value = true
     new Set([...init_commands.value,
