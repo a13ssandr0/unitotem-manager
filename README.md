@@ -19,6 +19,11 @@ sudo apt install unitotem-manager
 ## Known bugs
 None
 
-## TODO
-- No changes programmed
-
+## DEVELOPMENT
+### WebUI
+Before starting development webui sources need to be built.
+```bash
+cd webui
+npm install
+npm run build
+```
