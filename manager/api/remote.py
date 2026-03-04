@@ -74,7 +74,6 @@ class Remote(WSAPIBase):
     async def __webview_control_main(self):
         logger.info('Starting webview controller')
         async for asset in assets_manager.iter_wait():
-            await self.ws.broadcast('Scheduler/Asset/current', uuid=asset.uuid)
             url = asset.url
             if url.startswith('file:'):
                 url = 'https://localhost/uploaded/' + url.removeprefix('file:')
