@@ -119,8 +119,6 @@ REMOTE_WS.pk = remote_manager.rsa_prik
 # APT_THREAD.start()
 
 
-assets_manager.set_callback(lambda assets, current: WS.broadcast('Scheduler/asset', items=assets, current=current))
-
 observer = Observer()
 # noinspection PyTypeChecker
 observer.schedule(upload_manager, upload_manager.folder)
