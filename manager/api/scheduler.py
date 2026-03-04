@@ -7,12 +7,18 @@ from pydantic_extra_types.color import Color
 
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast, WSResponse
+from api.ws.wsmanager import WSManager
 from utils.models.assets import FitEnum, MediaType, assets_manager
 from utils.models.user import UserPerms
 from utils.storage.uploadmanager import upload_manager
 
 
 class Scheduler(WSAPIBase):
+    def __init__(self, ws: WSManager, remote_ws: WSManager):
+        super().__init__(ws, remote_ws)
+        assets_manager.set_on_assets_update(lambda assets, current: ws.broadcast('Scheduler/asset', items=assets, current=current))
+        assets_manager.set_on_current_update(lambda current: ws.broadcast('Scheduler/current', current=current))
+
     @UserPerms.requires.scheduler
     def asset(self):
         return WSBroadcast(items=assets_manager.serialize_assets(), current=assets_manager.current.uuid)
@@ -94,7 +100,7 @@ class Scheduler(WSAPIBase):
     @UserPerms.requires.scheduler
     def current(self):
         if assets_manager.count_enabled():
-            return WSBroadcast(uuid=assets_manager.current.uuid)
+            return WSBroadcast(current=assets_manager.current.model_dump(mode='json'))
         return None
 
     @UserPerms.requires.scheduler

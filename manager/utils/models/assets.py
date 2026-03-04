@@ -67,7 +67,7 @@ class Asset(BaseModel, validate_assignment=True):
         self.ena_date = None
         self.enable()
         if self.__assets_manager:
-            self.__assets_manager.callback()
+            self.__assets_manager.on_assets_update()
             self.__assets_manager.save()
 
     def __disable(self):
@@ -75,7 +75,7 @@ class Asset(BaseModel, validate_assignment=True):
         self.dis_date = None
         self.disable()
         if self.__assets_manager:
-            self.__assets_manager.callback()
+            self.__assets_manager.on_assets_update()
             self.__assets_manager.save()
 
     # noinspection PyNestedDecorators
@@ -195,7 +195,8 @@ class AssetsManager(BaseModel, validate_assignment=True):
     assets: list[Asset] = Field(default_factory=list)
     __current = -1
     __last_change_time = 0
-    __callback = None
+    __on_assets_update = None
+    __on_current_update = None
     __waiting_evt = asyncio.Event()
     __waiting_timer = None
 
@@ -223,13 +224,13 @@ class AssetsManager(BaseModel, validate_assignment=True):
 
     def __setitem__(self, index, item):
         self.assets[index] = Asset.model_validate(item)
-        self.callback()
+        self.on_assets_update()
         self.save()
 
     def append(self, __object):
         # Asset.model_validate(asset) is asset = True
         self.assets.append(Asset.model_validate(__object))
-        self.callback()
+        self.on_assets_update()
         self.save()
 
     def extend(self, __iterable):
@@ -237,12 +238,12 @@ class AssetsManager(BaseModel, validate_assignment=True):
         # no realistic number of objects will ever be a performance issue
         for __object in __iterable:
             self.assets.append(Asset.model_validate(__object))
-        self.callback()
+        self.on_assets_update()
         self.save()
 
     def insert(self, __index, __object):
         self.assets.insert(__index, Asset.model_validate(__object))
-        self.callback()
+        self.on_assets_update()
         self.save()
 
     def pop(self, __index=-1):
@@ -254,7 +255,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
         if e.uuid == curr_uuid:
             self.next_a()
 
-        self.callback()
+        self.on_assets_update()
         self.save()
 
         return e
@@ -268,7 +269,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
         if __value.uuid == curr_uuid:
             self.next_a()
 
-        self.callback()
+        self.on_assets_update()
         self.save()
 
     def __delitem__(self, __key):
@@ -294,13 +295,8 @@ class AssetsManager(BaseModel, validate_assignment=True):
         if uuid == curr_uuid:
             self.next_a()
 
-        self.callback()
+        self.on_assets_update()
         self.save()
-
-    # def sort(self, *, key:Callable=None, reverse:bool=False):
-    #     self.assets.sort(key=key, reverse=reverse)
-    #     self.callback()
-    #     self.save()
 
     def index(self, __value, __start=0, __stop=sys.maxsize):
         """
@@ -323,7 +319,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
 
     def move(self, __old: int, __new: int):
         self.assets.insert(__new, self.assets.pop(__old))
-        self.callback()
+        self.on_assets_update()
         if self.__current in [__old, __new]:
             self.goto_a(None)
         self.save()
@@ -359,13 +355,14 @@ class AssetsManager(BaseModel, validate_assignment=True):
         self.__set_current(temp_current)
 
     @property
-    def current(self):
+    def current(self) -> Asset:
         if 0 <= self.__current < self.assets.__len__():
             return self.assets[self.__current]
         return first_boot if environ._unitotem_first_boot else no_assets
 
     def __set_current(self, value):
         self.__current = value
+        self.on_current_update()
         self.__last_change_time = time()
         self.__waiting_evt.set()
         self.__waiting_evt.clear()
@@ -389,12 +386,8 @@ class AssetsManager(BaseModel, validate_assignment=True):
 
     def clear(self):
         self.assets.clear()
-        self.callback()
+        self.on_assets_update()
         self.save()
-
-    # def reverse(self):
-    #     self.assets.reverse()
-    #     self.callback()
 
     def __iter__(self):
         return iter(self.assets)
@@ -416,19 +409,30 @@ class AssetsManager(BaseModel, validate_assignment=True):
             else:
                 self.next_a()
 
-    def set_callback(self, callback: Callable[[list, str | None], Coroutine]):
-        self.__callback = callback
+    @classmethod
+    def set_on_assets_update(cls, callback: Callable[[list, str | None], Coroutine]):
+        cls.__on_assets_update = callback
 
-    def callback(self):
-        if self.__callback is not None:
+    def on_assets_update(self):
+        if self.__on_assets_update is not None:
             asyncio.get_event_loop().create_task(
-                    self.__callback(
-                            self.model_dump()['assets'],
+                    self.__class__.__on_assets_update(
+                            self.model_dump(mode='json')['assets'],
                             self.assets[self.__current].uuid if self.__current >= 0 else None
                     ))
 
+    @classmethod
+    def set_on_current_update(cls, callback):
+        cls.__on_current_update = callback
+
+    def on_current_update(self):
+        if self.__on_current_update is not None:
+            asyncio.get_event_loop().create_task(
+                    self.__class__.__on_current_update(self.current.model_dump(mode='json'))
+            )
+
     def serialize_assets(self):
-        return self.model_dump()['assets']
+        return self.model_dump(mode='json')['assets']
 
     def load(self):
         logger.info('Loading assets from {}', cmdargs.assets_file)
@@ -437,10 +441,10 @@ class AssetsManager(BaseModel, validate_assignment=True):
             logger.success('Found {} assets', len(self.assets))
 
     def save(self):
-        self.callback()
+        self.on_assets_update()
         logger.info('Saving assets in {}', cmdargs.assets_file)
         with open(cmdargs.assets_file, 'w') as file:
-            json.dump(self.model_dump(), file, indent=4)
+            json.dump(self.model_dump(mode='json'), file, indent=4)
 
 
 assets_manager = AssetsManager()

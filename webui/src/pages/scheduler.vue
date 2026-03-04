@@ -1,23 +1,105 @@
 <template>
   <v-container fluid>
     <v-row align="start">
-      <!-- Colonna di Sinistra: Files -->
+      <!-- Playlist -->
+      <v-col cols="12" md="8">
+        <v-card>
+          <v-card-title class="d-flex align-center">
+            Playlist
+            <v-spacer></v-spacer>
+            <v-btn icon="mdi-cog" title="Settings" variant="text" density="compact" class="mr-4" @click="showSettingsDialog = true"></v-btn>
+            <v-btn icon="mdi-arrow-left" title="Previous" @click="back" variant="text" density="compact"></v-btn>
+            <v-btn icon title="Reload" @click="reload" variant="text" density="compact">
+              <v-icon :class="{ 'rotate-once': isReloading }">mdi-reload</v-icon>
+            </v-btn>
+            <v-btn icon="mdi-arrow-right" title="Next" @click="next" variant="text" density="compact"></v-btn>
+            <v-btn color="blue" prepend-icon="mdi-link-plus" class="ml-4" @click="openAddUrlDialog">
+              Add URL
+            </v-btn>
+          </v-card-title>
+          <v-divider></v-divider>
+
+          <v-list density="compact" lines="three" class="playlist-list">
+            <draggable v-model="playlistItems" item-key="uuid" handle=".mdi-drag-horizontal" @update="onDraggableUpdate">
+              <template #item="{ element: item, index }">
+                <v-list-item @mouseenter="hoveredRow = item.uuid" @mouseleave="hoveredRow = null">
+                  <!-- Row icon -->
+                  <template v-slot:prepend>
+                    <v-icon v-if="hoveredRow === item.uuid">mdi-drag-horizontal</v-icon>
+                    <v-icon v-else-if="item.media_type === 1">mdi-image</v-icon>
+                    <v-icon v-else-if="item.media_type === 2">mdi-video</v-icon>
+                    <v-icon v-else-if="item.media_type === 3">mdi-music</v-icon>
+                    <v-icon v-else-if="item.url.startsWith('file:')">mdi-file</v-icon>
+                    <v-icon v-else>mdi-link</v-icon>
+                  </template>
+
+                  <!-- Row info -->
+                  <template v-slot:title>
+                    <div class="text-truncate font-weight-medium">{{ item.name || item.url }}</div>
+                  </template>
+                  <template v-slot:subtitle>
+                    <span class="text-truncate" v-if="item.name && (item.url!=='file:'+item.name)">{{ item.url }}</span>
+                    <div class="mt-1">
+                      <v-chip density="compact" size="default" color="green">Duration: {{ durationToText(item.duration) }}</v-chip>
+
+                      <v-chip density="compact" size="default" color="primary" v-if="item.media_type === 1">Type: Image</v-chip>
+                      <v-chip density="compact" size="default" color="primary" v-else-if="item.media_type === 2">Type: Video</v-chip>
+                      <v-chip density="compact" size="default" color="primary" v-else-if="item.media_type === 3">Type: Audio</v-chip>
+                      <v-chip density="compact" size="default" color="primary" v-else-if="item.url.startsWith('file:')">Type: File</v-chip>
+                      <v-chip density="compact" size="default" color="primary" v-else>Type: URL</v-chip>
+
+                      <v-chip density="compact" size="default" color="red" v-if="item.ena_date || item.dis_date"><v-icon>mdi-calendar-clock</v-icon></v-chip>
+                    </div>
+                  </template>
+
+                  <!-- action buttons -->
+                  <template v-slot:append>
+                    <v-switch v-model="item.enabled" hide-details color="primary" density="compact"
+                              @click="sendCommand('Scheduler/edit', {uuid: item.uuid, enabled: !item.enabled})"></v-switch>
+                    <v-menu>
+                      <template v-slot:activator="{ props }">
+                        <v-btn icon="mdi-dots-vertical" class="ms-2" variant="text" size="small" v-bind="props"></v-btn>
+                      </template>
+                      <v-list density="compact">
+                        <v-list-item @click="openEditDialog(item)">
+                          <template v-slot:prepend><v-icon>mdi-pencil</v-icon></template>
+                          <v-list-item-title>Edit</v-list-item-title>
+                        </v-list-item>
+                        <v-list-item @click="sendCommand('Scheduler/goto', {'index': index})">
+                          <template v-slot:prepend><v-icon>mdi-login</v-icon></template>
+                          <v-list-item-title>Play Now</v-list-item-title>
+                        </v-list-item>
+                        <v-list-item @click="sendCommand('Scheduler/delete', {uuid: item.uuid})">
+                          <template v-slot:prepend><v-icon color="red">mdi-delete</v-icon></template>
+                          <v-list-item-title class="text-red">Delete</v-list-item-title>
+                        </v-list-item>
+                      </v-list>
+                    </v-menu>
+                  </template>
+                </v-list-item>
+              </template>
+            </draggable>
+          </v-list>
+          <v-divider></v-divider>
+          <v-card-subtitle class="my-1" v-if="current_asset">Current: {{current_asset.name || current_asset.url}}</v-card-subtitle>
+        </v-card>
+      </v-col>
+
+      <!-- Files -->
       <v-col cols="12" md="4">
         <v-card>
           <v-card-title
             class="d-flex align-center transition-swing"
             :class="{ 'selected-title-bar': selectedFiles.length > 0 }"
           >
-            <!-- Stato Normale -->
             <template v-if="selectedFiles.length === 0">
               <span>Files</span>
               <v-spacer></v-spacer>
-              <v-btn color="green" @click="triggerFileUpload" prepend-icon="mdi-upload">
+              <v-btn color="green" variant="tonal" @click="triggerFileUpload" prepend-icon="mdi-upload">
                 Upload
               </v-btn>
             </template>
 
-            <!-- Stato di Selezione -->
             <template v-else>
               <span class="text-subtitle-1">{{ selectedFiles.length }} selected</span>
               <v-spacer></v-spacer>
@@ -57,78 +139,6 @@
           </v-list>
           <v-divider></v-divider>
           <v-card-subtitle class="my-1">Used {{ disk_used }} of {{ disk_total }}</v-card-subtitle>
-        </v-card>
-      </v-col>
-
-      <!-- Colonna di Destra: Playlist -->
-      <v-col cols="12" md="8">
-        <v-card>
-          <v-card-title class="d-flex align-center">
-            Playlist
-            <v-spacer></v-spacer>
-            <v-btn icon="mdi-cog" title="Settings" variant="text" density="compact" class="mr-4" @click="showSettingsDialog = true"></v-btn>
-            <v-btn icon="mdi-arrow-left" title="Previous" @click="back" variant="text" density="compact"></v-btn>
-            <v-btn icon title="Reload" @click="reload" variant="text" density="compact">
-              <v-icon :class="{ 'rotate-once': isReloading }">mdi-reload</v-icon>
-            </v-btn>
-            <v-btn icon="mdi-arrow-right" title="Next" @click="next" variant="text" density="compact"></v-btn>
-            <v-btn color="blue" prepend-icon="mdi-link-plus" class="ml-4" @click="openAddUrlDialog">
-              Add URL
-            </v-btn>
-          </v-card-title>
-          <v-divider></v-divider>
-
-          <v-table density="compact" class="playlist-table">
-            <thead>
-              <tr>
-                <th style="width: 50px;"></th>
-                <th>URL</th>
-                <th style="width: 100px;">Duration</th>
-                <th style="width: 180px;"></th>
-              </tr>
-            </thead>
-              <draggable v-model="playlistItems" item-key="uuid" tag="tbody" handle=".mdi-drag-horizontal" @update="onDraggableUpdate">
-                <template #item="{ element: item, index }">
-                  <tr @mouseenter="hoveredRow = item.uuid" @mouseleave="hoveredRow = null">
-                    <td>
-                      <v-icon v-if="hoveredRow === item.uuid">mdi-drag-horizontal</v-icon>
-                      <v-icon v-else-if="item.media_type === 1">mdi-image</v-icon>
-                      <v-icon v-else-if="item.media_type === 2">mdi-video</v-icon>
-                      <v-icon v-else-if="item.media_type === 3">mdi-music</v-icon>
-                      <v-icon v-else-if="item.url.startsWith('file:')">mdi-file</v-icon>
-                      <v-icon v-else>mdi-link</v-icon>
-                    </td>
-                    <td style="max-width: 1px;">
-                      <div v-if="item.name && item.url">
-                        <div class="text-truncate font-weight-medium" style="font-size: 1.1em;">{{ item.name }}</div>
-                        <div class="text-caption text-grey text-truncate">{{ item.url }}</div>
-                      </div>
-                      <div v-else class="text-truncate font-weight-medium" style="font-size: 1.1em;">
-                        {{ item.url }}
-                      </div>
-                    </td>
-                    <td>{{
-                        item.duration === 0 ? 'Forever' : (() => {
-                          let [h, m, s] = new Date(item.duration * 1000).toISOString().slice(11, 19).split(':');
-                          if (h > 0) h += ' h'; else h = '';
-                          if (m > 0) m += ' min'; else m = '';
-                          return `${h} ${m} ${s} sec`;
-                        })()
-                      }}</td>
-                    <td class="d-flex align-center justify-end">
-                      <v-switch v-model="item.enabled" hide-details color="primary" density="compact" class="mr-10"
-                            @click="sendCommand('Scheduler/edit', {uuid: item.uuid, enabled: !item.enabled})"></v-switch>
-                      <v-btn icon="mdi-delete" color="red" variant="text" size="small"
-                            @click="sendCommand('Scheduler/delete', {uuid: item.uuid})"></v-btn>
-                      <v-btn icon="mdi-pencil" color="yellow" variant="text" size="small" @click="openEditDialog(item)"></v-btn>
-                      <v-btn icon="mdi-login" variant="text" size="small"
-                            @click="sendCommand('Scheduler/goto', {'index': index})"></v-btn>
-                    </td>
-                  </tr>
-                </template>
-              </draggable>
-          </v-table>
-          <v-divider class="mb-2"></v-divider>
         </v-card>
       </v-col>
     </v-row>
@@ -314,6 +324,7 @@ const hoveredRow = ref(null);
 const isReloading = ref(false);
 const showSettingsDialog = ref(false);
 const defaultDuration = ref(30);
+const current_asset = ref(null);
 
 // Add URL Dialog State
 const showAddUrlDialog = ref(false);
@@ -354,6 +365,8 @@ onWSMessage = (data) => {
       playlistItems.value = data.items;
       break;
     case "Scheduler/current":
+      console.log(data.current);
+      current_asset.value = data.current;
       break;
     case "Scheduler/file":
       mediaFiles.value = data.files;
@@ -451,6 +464,17 @@ const downloadSelected = () => {
   alert("NOT IMPLEMENTED YET!")
 }
 
+const durationToText = (duration) => {
+  if (duration === 0)
+    return 'forever';
+  else {
+    let [h, m, s] = new Date(duration * 1000).toISOString().slice(11, 19).split(':');
+    if (h > 0) h += ' h'; else h = '';
+    if (m > 0) m += ' min'; else m = '';
+    return `${h} ${m} ${s} sec`;
+  }
+}
+
 const saveSettings = () => {
   // Qui andrà la logica per salvare le impostazioni
   sendCommand('Settings/default_duration', {duration: defaultDuration.value});
@@ -542,17 +566,13 @@ const onDraggableUpdate = (event) => {
   padding-inline-start: 0 !important;
 }
 
+.playlist-list :deep(.v-list-item__prepend),
+.playlist-list :deep(.v-list-item__append) {
+  align-self: center;
+}
+
 .selected-title-bar {
   background-color: rgba(41, 98, 255, 0.15);
-}
-
-.playlist-table {
-  table-layout: fixed;
-  width: 100%;
-}
-
-.playlist-table :deep(.v-table__wrapper) {
-  overflow: visible;
 }
 
 .truncate-text {
