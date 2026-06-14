@@ -4,25 +4,40 @@
       <!-- Playlist -->
       <v-col cols="12" md="8">
         <v-card>
+<!--          <v-tabs v-if="playlistTabs.length > 1" v-model="playlistTab" color="primary">-->
+<!--            <v-tab v-for="(tab, index) in playlistTabs" :key="index" :value="tab" :text="`Playlist ${tab}`">-->
+<!--&lt;!&ndash;              <template v-slot:prepend>?</template>&ndash;&gt;-->
+<!--&lt;!&ndash;              <template v-slot:append>X</template>&ndash;&gt;-->
+<!--            </v-tab>-->
+<!--          </v-tabs>-->
+          <v-divider v-if="playlistTabs.length > 1"></v-divider>
           <v-card-title class="d-flex align-center">
-            Playlist
+            <v-tabs v-if="playlistTabs.length > 1" v-model="playlistTab" color="primary">
+              <v-tab v-for="(tab, index) in playlistTabs" :key="index" :value="tab" :text="`Playlist ${tab}`">
+  <!--              <template v-slot:prepend>?</template>-->
+  <!--              <template v-slot:append>X</template>-->
+              </v-tab>
+            </v-tabs>
             <v-spacer></v-spacer>
-            <v-btn icon="mdi-cog" title="Settings" variant="text" density="compact" class="mr-4" @click="showSettingsDialog = true"></v-btn>
-            <v-btn icon="mdi-arrow-left" title="Previous" @click="back" variant="text" density="compact"></v-btn>
-            <v-btn icon title="Reload" @click="reload" variant="text" density="compact">
-              <v-icon :class="{ 'rotate-once': isReloading }">mdi-reload</v-icon>
-            </v-btn>
-            <v-btn icon="mdi-arrow-right" title="Next" @click="next" variant="text" density="compact"></v-btn>
-            <v-btn color="blue" prepend-icon="mdi-link-plus" class="ml-4" @click="openAddUrlDialog">
-              Add URL
-            </v-btn>
+            <div class="d-flex align-center">
+              <v-btn icon="mdi-cog" title="Settings" variant="text" density="compact" class="mr-4" @click="showSettingsDialog = true"></v-btn>
+              <v-btn icon="mdi-arrow-left" title="Previous" @click="back" variant="text" density="compact"></v-btn>
+              <v-btn icon title="Reload" @click="reload" variant="text" density="compact">
+                <v-icon :class="{ 'rotate-once': isReloading }">mdi-reload</v-icon>
+              </v-btn>
+              <v-btn icon="mdi-arrow-right" title="Next" @click="next" variant="text" density="compact"></v-btn>
+              <v-btn color="blue" prepend-icon="mdi-link-plus" class="ml-4" @click="openAddUrlDialog">
+                Add URL
+              </v-btn>
+            </div>
           </v-card-title>
           <v-divider></v-divider>
 
           <v-list density="compact" lines="three" class="playlist-list">
             <draggable v-model="playlistItems" item-key="uuid" handle=".mdi-drag-horizontal" @update="onDraggableUpdate">
               <template #item="{ element: item, index }">
-                <v-list-item @mouseenter="hoveredRow = item.uuid" @mouseleave="hoveredRow = null">
+                <v-list-item @mouseenter="hoveredRow = item.uuid" @mouseleave="hoveredRow = null"
+                             :class="{ 'active-item': current_asset && item.uuid === current_asset.uuid }">
                   <!-- Row icon -->
                   <template v-slot:prepend>
                     <v-icon v-if="hoveredRow === item.uuid">mdi-drag-horizontal</v-icon>
@@ -309,15 +324,15 @@
 import draggable from 'vuedraggable';
 import {ref, computed} from 'vue';
 
-// Dati di esempio per i file
 const mediaFiles = ref({});
-const disk_used = ref('')
-const disk_total = ref('')
+const disk_used = ref('');
+const disk_total = ref('');
 
 const selectedFiles = ref([]);
 const fileInput = ref(null);
 
-// Dati di esempio per la playlist
+const playlistTabs = ref(['one', 'two', /*'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'*/]);
+const playlistTab = ref(playlistTabs.value[0]);
 const playlistItems = ref([]);
 
 const hoveredRow = ref(null);
@@ -573,6 +588,11 @@ const onDraggableUpdate = (event) => {
 
 .selected-title-bar {
   background-color: rgba(41, 98, 255, 0.15);
+}
+
+.active-item {
+  border-left: 4px solid rgb(41, 98, 255);
+  border-right: 4px solid rgb(41, 98, 255);
 }
 
 .truncate-text {

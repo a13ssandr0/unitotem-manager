@@ -24,6 +24,8 @@ class APT:
         self.__on_end_post = None
 
     def __run_apt_get(self, *args):
+        #TODO switch to pkexec ASAP
+
         # cmd = ['/usr/bin/apt-get', 'dist-upgrade', '-y'] if upgrade else ['/usr/bin/apt-get', 'update']
         self.__last_log.clear()
         upgrading = self.__thread.name == 'upgrade'

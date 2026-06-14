@@ -1,8 +1,6 @@
-from datetime import datetime
-from typing import Annotated, Literal, Optional, Union
+from typing import Optional, Union
 
-from pydantic import BeforeValidator, FutureDatetime
-from pydantic_core import PydanticUndefined
+from pydantic import FutureDatetime
 from pydantic_extra_types.color import Color
 
 from api.ws.endpoints import WSAPIBase
@@ -16,7 +14,8 @@ from utils.storage.uploadmanager import upload_manager
 class Scheduler(WSAPIBase):
     def __init__(self, ws: WSManager, remote_ws: WSManager):
         super().__init__(ws, remote_ws)
-        assets_manager.set_on_assets_update(lambda assets, current: ws.broadcast('Scheduler/asset', items=assets, current=current))
+        assets_manager.set_on_assets_update(
+            lambda assets, current: ws.broadcast('Scheduler/asset', items=assets, current=current))
         assets_manager.set_on_current_update(lambda current: ws.broadcast('Scheduler/current', current=current))
 
     @UserPerms.requires.scheduler
@@ -25,10 +24,11 @@ class Scheduler(WSAPIBase):
 
     @UserPerms.requires.scheduler
     def file(self):
-        return WSBroadcast(files=upload_manager.serialize(), disk_used=upload_manager.disk_usedh, disk_total=upload_manager.disk_totalh)
+        return WSBroadcast(files=upload_manager.serialize(), disk_used=upload_manager.disk_usedh,
+                           disk_total=upload_manager.disk_totalh)
 
     @UserPerms.requires.scheduler
-    def add_url(self, items:list):
+    def add_url(self, items: list):
         for element in items:
             if isinstance(element, str):
                 element = {'url': element}
@@ -37,17 +37,17 @@ class Scheduler(WSAPIBase):
         assets_manager.save()
 
     @UserPerms.requires.scheduler
-    def add_file(self, items:list):
+    def add_file(self, items: list):
         invalid = []
         for element in items:
             if isinstance(element, str):
                 element = {'url': element}
             if element['url'] in upload_manager.filenames:  # type: ignore
                 assets_manager.append({
-                    'url': 'file:' + element['url'],
-                    'name': element['url'],
-                    'duration': element.get('duration', upload_manager.files_info[element['url']].duration_s),
-                    'enabled': element.get('enabled', False),
+                    'url'       : 'file:' + element['url'],
+                    'name'      : element['url'],
+                    'duration'  : element.get('duration', upload_manager.files_info[element['url']].duration_s),
+                    'enabled'   : element.get('enabled', False),
                     'media_type': element.get('media_type', upload_manager.files_info[element['url']].mime)
                 })
             else:
