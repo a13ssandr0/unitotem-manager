@@ -422,7 +422,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
                     ))
 
     @classmethod
-    def set_on_current_update(cls, callback):
+    def set_on_current_update(cls, callback: Callable[[dict[str, Any]], Coroutine]):
         cls.__on_current_update = callback
 
     def on_current_update(self):
