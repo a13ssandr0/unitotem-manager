@@ -31,6 +31,7 @@ declare module 'vue-router/auto-routes' {
     '/settings/timers': RouteRecordInfo<'/settings/timers', '/settings/timers', Record<never, never>, Record<never, never>>,
     '/settings/updates': RouteRecordInfo<'/settings/updates', '/settings/updates', Record<never, never>, Record<never, never>>,
     '/settings/users': RouteRecordInfo<'/settings/users', '/settings/users', Record<never, never>, Record<never, never>>,
+    '/viewers': RouteRecordInfo<'/viewers', '/viewers', Record<never, never>, Record<never, never>>,
   }
 
   /**
@@ -94,6 +95,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/settings/users.vue': {
       routes: '/settings/users'
+      views: never
+    }
+    'src/pages/viewers.vue': {
+      routes: '/viewers'
       views: never
     }
   }

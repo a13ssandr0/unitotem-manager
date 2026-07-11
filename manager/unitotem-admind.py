@@ -1,8 +1,12 @@
 """
-Network related settings require the program to access files only writable by root.
-In order to avoid elevating the whole manager like in previous versions,
-a daemon is launched as root and listens to rpyc local connections and acts as
-backend for changing netplan configuration and setting the hostname of the system
+DEPRECATED - no longer launched or used.
+
+This daemon used to run as root to manipulate netplan files and change the
+hostname. Both functions are now handled without elevated privileges:
+  - Hostname: org.freedesktop.hostname1 DBus (systemd-hostnamed)
+  - Network: org.freedesktop.NetworkManager DBus (NetworkManager)
+
+The file is kept for historical reference only.
 """
 import shutil
 from pathlib import Path

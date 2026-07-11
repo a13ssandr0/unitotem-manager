@@ -8,14 +8,14 @@ from datetime import datetime
 from enum import IntEnum
 from math import inf
 from os import environ as env
+from pathlib import Path
 from time import time
 from typing import Any, Callable, Coroutine, Optional, Union
 from urllib.parse import urlsplit
 
 from benedict.dicts.parse.parse_util import parse_datetime
 from loguru import logger
-from pydantic import BaseModel, Field, field_serializer, field_validator, \
-    model_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_serializer, field_validator, model_validator
 from pydantic_core.core_schema import ValidationInfo
 from pydantic_extra_types.color import Color
 
@@ -176,7 +176,7 @@ class Asset(BaseModel, validate_assignment=True):
 
     def __radd__(self, other):
         return self.__add__(other)
-    
+
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             return self.uuid == other.uuid
@@ -189,28 +189,33 @@ first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0, medi
 
 
 class AssetsManager(BaseModel, validate_assignment=True):
+    playlist_id: str = Field(default_factory=lambda: os.urandom(8).hex())
+    name: str = 'Default'
     # default_duration MUST be validated before assets so that assets without
     # duration attribute set can get the correct value
     default_duration: int = const.def_duration
     assets: list[Asset] = Field(default_factory=list)
-    __current = -1
-    __last_change_time = 0
-    __on_assets_update = None
-    __on_current_update = None
-    __waiting_evt = asyncio.Event()
-    __waiting_timer = None
+
+    # Per-instance private state (not serialized)
+    _current: int = PrivateAttr(default=-1)
+    _last_change_time: float = PrivateAttr(default=0.0)
+    _on_assets_update: Optional[Callable] = PrivateAttr(default=None)
+    _on_current_update: Optional[Callable] = PrivateAttr(default=None)
+    _waiting_evt: asyncio.Event = PrivateAttr(default_factory=asyncio.Event)
+    _waiting_timer: Optional[Timer] = PrivateAttr(default=None)
+    _filepath: Optional[Path] = PrivateAttr(default=None)
 
     # noinspection PyNestedDecorators
     @field_validator('default_duration')
     @classmethod
-    def after_asset_validation(cls, v:int):
+    def after_asset_validation(cls, v: int):
         const.def_duration = v
         return v
 
     def model_post_init(self, context: Any, /) -> None:
         # after initialization set the timer callback function to
         # avoid assigning later or adding overheads with if statements
-        self.__waiting_timer = Timer(None, self.next_a)
+        self._waiting_timer = Timer(None, self.next_a)
 
     def __getitem__(self, item):
         if isinstance(item, str):
@@ -228,7 +233,6 @@ class AssetsManager(BaseModel, validate_assignment=True):
         self.save()
 
     def append(self, __object):
-        # Asset.model_validate(asset) is asset = True
         self.assets.append(Asset.model_validate(__object))
         self.on_assets_update()
         self.save()
@@ -249,7 +253,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
     def pop(self, __index=-1):
         # see __delitem__ for explanation
         curr_uuid = self.current.uuid
-        if __index <= self.__current: self.__current -= 1
+        if __index <= self._current: self._current -= 1
         e = self.assets.pop(__index)
 
         if e.uuid == curr_uuid:
@@ -263,7 +267,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
     def remove(self, __value):
         # see __delitem__ for explanation
         curr_uuid = self.current.uuid
-        if self.assets.index(__value) <= self.__current: self.__current -= 1
+        if self.assets.index(__value) <= self._current: self._current -= 1
         self.assets.remove(__value)
 
         if __value.uuid == curr_uuid:
@@ -285,7 +289,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
 
         # save the uuid of the asset to remove
         curr_uuid = self.current.uuid
-        if __key <= self.__current: self.__current -= 1
+        if __key <= self._current: self._current -= 1
         # remove the asset
         self.assets.__delitem__(__key)
 
@@ -303,8 +307,8 @@ class AssetsManager(BaseModel, validate_assignment=True):
         Return first index of asset by uuid
         """
         # the C implementation of list.index iterates all the elements of self and
-        # compares them with __value using the __eq__ method, 
-        # so it's only necessary to create a temporary asset with the uuid 
+        # compares them with __value using the __eq__ method,
+        # so it's only necessary to create a temporary asset with the uuid
         # contained in __value and use it to make the comparison
         if isinstance(__value, str):
             # noinspection PyArgumentList
@@ -312,15 +316,13 @@ class AssetsManager(BaseModel, validate_assignment=True):
         return self.assets.index(__value, __start, __stop)
 
     def find(self, url: str):
-        """
-        Find by url
-        """
+        """Find by url"""
         return list(filter(lambda a: a.url == url, self.assets))
 
     def move(self, __old: int, __new: int):
         self.assets.insert(__new, self.assets.pop(__old))
         self.on_assets_update()
-        if self.__current in [__old, __new]:
+        if self._current in [__old, __new]:
             self.goto_a(None)
         self.save()
 
@@ -328,7 +330,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
         if not force and not self.has_enabled():
             temp_current = -1
         else:
-            temp_current = (self.__current + 1) % self.assets.__len__()
+            temp_current = (self._current + 1) % self.assets.__len__()
             if not force and not self.assets[temp_current].enabled:
                 first = next(filter(lambda x: x.enabled, self.assets[temp_current:] + self.assets[:temp_current]))
                 temp_current = self.assets.index(first)
@@ -338,7 +340,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
         if not force and not self.has_enabled():
             temp_current = -1
         else:
-            temp_current = (self.__current - 1) % self.assets.__len__()
+            temp_current = (self._current - 1) % self.assets.__len__()
             if not force and not self.assets[temp_current].enabled:
                 first = next(filter(lambda x: x.enabled, reversed(self.assets[temp_current:] + self.assets[:temp_current])))
                 temp_current = self.assets.index(first)
@@ -346,27 +348,27 @@ class AssetsManager(BaseModel, validate_assignment=True):
 
     def goto_a(self, index: Union[None, int, str] = None):
         if index is None:
-            temp_current = self.__current
+            temp_current = self._current
         elif isinstance(index, str):
             # noinspection PyArgumentList
             temp_current = self.assets.index(Asset(url='', uuid=index))
         else:
-            temp_current = index % self.assets.__len__() 
+            temp_current = index % self.assets.__len__()
         self.__set_current(temp_current)
 
     @property
     def current(self) -> Asset:
-        if 0 <= self.__current < self.assets.__len__():
-            return self.assets[self.__current]
+        if 0 <= self._current < self.assets.__len__():
+            return self.assets[self._current]
         return first_boot if environ._unitotem_first_boot else no_assets
 
     def __set_current(self, value):
-        self.__current = value
+        self._current = value
         self.on_current_update()
-        self.__last_change_time = time()
-        self.__waiting_evt.set()
-        self.__waiting_evt.clear()
-        self.__waiting_timer.set_timeout(self.current.duration or inf)
+        self._last_change_time = time()
+        self._waiting_evt.set()
+        self._waiting_evt.clear()
+        self._waiting_timer.set_timeout(self.current.duration or inf)
 
     def count_enabled(self):
         """Count enabled assets"""
@@ -393,57 +395,63 @@ class AssetsManager(BaseModel, validate_assignment=True):
         return iter(self.assets)
 
     async def iter_wait(self):
-        self.__waiting_timer.cancel()
+        self._waiting_timer.cancel()
         # bootstrap
         self.next_a()
         while not SHUTDOWN_EVENT.is_set():
             yield self.current
-            await self.__waiting_evt.wait()
+            await self._waiting_evt.wait()
 
     def update_timer(self, uuid):
         """Call this function each time the duration of an asset is changed"""
         if uuid == self.current.uuid:
-            delta = (self.current.duration or inf) - (time() - self.__last_change_time)
+            delta = (self.current.duration or inf) - (time() - self._last_change_time)
             if delta > 0:
-                self.__waiting_timer.set_timeout(delta)
+                self._waiting_timer.set_timeout(delta)
             else:
                 self.next_a()
 
-    @classmethod
-    def set_on_assets_update(cls, callback: Callable[[list, str | None], Coroutine]):
-        cls.__on_assets_update = callback
+    def set_on_assets_update(self, callback: Callable[[list, str | None], Coroutine]):
+        self._on_assets_update = callback
 
     def on_assets_update(self):
-        if self.__on_assets_update is not None:
+        if self._on_assets_update is not None:
             asyncio.get_event_loop().create_task(
-                    self.__class__.__on_assets_update(
+                    self._on_assets_update(
                             self.model_dump(mode='json')['assets'],
-                            self.assets[self.__current].uuid if self.__current >= 0 else None
+                            self.assets[self._current].uuid if self._current >= 0 else None
                     ))
 
-    @classmethod
-    def set_on_current_update(cls, callback: Callable[[dict[str, Any]], Coroutine]):
-        cls.__on_current_update = callback
+    def set_on_current_update(self, callback: Callable[[dict[str, Any]], Coroutine]):
+        self._on_current_update = callback
 
     def on_current_update(self):
-        if self.__on_current_update is not None:
+        if self._on_current_update is not None:
             asyncio.get_event_loop().create_task(
-                    self.__class__.__on_current_update(self.current.model_dump(mode='json'))
+                    self._on_current_update(self.current.model_dump(mode='json'))
             )
 
     def serialize_assets(self):
         return self.model_dump(mode='json')['assets']
 
-    def load(self):
-        logger.info('Loading assets from {}', cmdargs.assets_file)
-        with open(cmdargs.assets_file) as file:
-            self.__init__(**json.load(file))
+    def load(self, filepath: Optional[Path] = None):
+        filepath = filepath or cmdargs.assets_file
+        self._filepath = Path(filepath)
+        logger.info('Loading assets from {}', filepath)
+        with open(filepath) as file:
+            data = json.load(file)
+            # Preserve playlist_id if not in file (legacy compatibility)
+            data.setdefault('playlist_id', self.playlist_id)
+            data.setdefault('name', self.name)
+            self.__init__(**data)
+            self._filepath = Path(filepath)
             logger.success('Found {} assets', len(self.assets))
 
-    def save(self):
+    def save(self, filepath: Optional[Path] = None):
+        filepath = filepath or self._filepath or cmdargs.assets_file
         self.on_assets_update()
-        logger.info('Saving assets in {}', cmdargs.assets_file)
-        with open(cmdargs.assets_file, 'w') as file:
+        logger.info('Saving assets in {}', filepath)
+        with open(filepath, 'w') as file:
             json.dump(self.model_dump(mode='json'), file, indent=4)
 
 

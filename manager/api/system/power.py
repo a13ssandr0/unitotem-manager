@@ -1,5 +1,3 @@
-from subprocess import run as cmd_run
-
 from loguru import logger
 
 from utils.models.user import UserPerms
@@ -22,10 +20,12 @@ class Power(WSAPIBase):
 
     @staticmethod
     @UserPerms.requires.power
-    def reboot():
-        cmd_run(['/usr/bin/systemctl', 'reboot', '-i'])
+    async def reboot():
+        from utils.system.dbus_system import system_reboot
+        await system_reboot()
 
     @staticmethod
     @UserPerms.requires.power
-    def poweroff():
-        cmd_run(['/usr/bin/systemctl', 'poweroff', '-i'])
+    async def poweroff():
+        from utils.system.dbus_system import system_poweroff
+        await system_poweroff()

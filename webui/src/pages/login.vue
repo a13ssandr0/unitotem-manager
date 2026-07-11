@@ -6,7 +6,8 @@
           <v-col cols="12">
             <h1 class="text-h4 mb-10" style="width:450px; margin: 0 auto;">Welcome to UniTotem</h1>
             <v-card class="elevation-12 pa-4 d-inline-block" width="450" rounded="lg">
-              <v-card-title class="mb-4">{{ hostname }} - {{ ip_addr }}</v-card-title>
+              <v-card-title>{{ hostname }} - {{ ip_addr }}</v-card-title>
+              <v-card-subtitle class="mb-4">{{ os_vers }}</v-card-subtitle>
               <v-card-text>
                 <v-form @submit.prevent="handleLogin">
                   <v-select label="Username" name="username" v-model="username" :items="usersList" variant="outlined"></v-select>
@@ -40,6 +41,7 @@ const password = ref('')
 const rememberMe = ref(true)
 const hostname = ref(window.__INITIAL_STATE__.hostname)
 const ip_addr = ref(window.__INITIAL_STATE__.ip_addr)
+const os_vers = ref(window.__INITIAL_STATE__.os_vers)
 const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
 const usersList = ref([])
 

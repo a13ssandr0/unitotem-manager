@@ -18,6 +18,7 @@ class WSManager:
         self.active_connections: list[WebSocket] = []
         self.active_users: defaultdict[str, list[WebSocket]] = defaultdict(list)
         self.last: Optional[dict] = None
+        self.sign_messages = sign_messages
         self.signer: Optional[PSS.PSS_SigScheme] = None
 
         if cache_last:
@@ -33,8 +34,9 @@ class WSManager:
         # this way we avoid using two variables: one for setting and the other
         # for actual caching
 
-        if sign_messages:
-            self.signer = PSS.new(RemoteManager.get_instance().rsa_prik)
+        # the signer is NOT created here: the RSA key is generated/loaded
+        # lazily at the first signature (see prepare_message), so a missing
+        # key or remote.json does not prevent the manager from starting
 
     async def connect(self, websocket: WebSocket, user: Optional[str] = None):
         await websocket.accept()
@@ -55,7 +57,9 @@ class WSManager:
 
     def prepare_message(self, msg: dict, nocache=False):
         text = dumps(msg).encode()
-        if self.signer:
+        if self.sign_messages:
+            if self.signer is None:
+                self.signer = PSS.new(RemoteManager.get_signing_key())
             text = b64encode(text) + b'.' + b64encode(self.signer.sign(SHA256.new(text)))
         text=text.decode()
         if self.last is not None and not nocache:

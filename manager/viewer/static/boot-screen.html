@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniTotem</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: rgb(0, 0, 0);
+    }
+
+    /* Each container occupies the full viewport; only one is visible at a time */
+    .container { display: none; width: 100%; height: 100%; }
+
+    #boot-screen {
+      display: flex;           /* shown by default */
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-family: sans-serif;
+      font-size: 2.5rem;
+      letter-spacing: 0.2em;
+      user-select: none;
+    }
+
+    #web-frame {
+      border: none;
+    }
+
+    #image-display {
+      object-position: center;
+    }
+
+    #video-display {
+      object-position: center;
+    }
+
+    /* audio-display is invisible; only the <audio> element matters */
+    #audio-display { background: transparent; }
+  </style>
+</head>
+<body>
+  <div id="boot-screen">UniTotem</div>
+
+  <iframe  id="web-frame"     class="container"
+           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+           allowfullscreen></iframe>
+
+  <img     id="image-display" class="container" alt="">
+
+  <video   id="video-display" class="container"
+           autoplay loop playsinline></video>
+
+  <div     id="audio-display" class="container">
+    <audio id="audio-player" autoplay loop></audio>
+  </div>
+
+  <script>
+    "use strict";
+
+    const containers = {
+      boot : document.getElementById('boot-screen'),
+      web  : document.getElementById('web-frame'),
+      image: document.getElementById('image-display'),
+      video: document.getElementById('video-display'),
+      audio: document.getElementById('audio-display'),
+    };
+
+    function hideAll() {
+      for (const el of Object.values(containers)) {
+        el.style.display = 'none';
+      }
+    }
+
+    /**
+     * Called by the Python viewer via CEF ExecuteJavascript.
+     *
+     * @param {string} src       - URL or data URI of the asset
+     * @param {string} container - 'boot' | 'web' | 'image' | 'video' | 'audio'
+     * @param {string} fit       - 'contain' | 'cover' | 'fill'
+     * @param {string} bg_color  - CSS colour, e.g. 'rgb(0,0,0)'
+     */
+    function show(src, container, fit, bg_color) {
+      document.body.style.backgroundColor = bg_color || 'rgb(0,0,0)';
+      hideAll();
+
+      const el = containers[container];
+      if (!el) return;
+
+      switch (container) {
+        case 'boot':
+          el.style.display = 'flex';
+          break;
+
+        case 'web':
+          el.style.display = 'block';
+          el.src = src;
+          break;
+
+        case 'image':
+          el.style.display    = 'block';
+          el.style.objectFit  = fit;
+          el.src = src;
+          break;
+
+        case 'video': {
+          el.style.display   = 'block';
+          el.style.objectFit = fit;
+          el.src = src;
+          el.load();
+          el.play().catch(() => {});
+          break;
+        }
+
+        case 'audio': {
+          el.style.display = 'block';  // show the wrapper (invisible)
+          const audio = document.getElementById('audio-player');
+          audio.src = src;
+          audio.load();
+          audio.play().catch(() => {});
+          break;
+        }
+      }
+    }
+  </script>
+</body>
+</html>

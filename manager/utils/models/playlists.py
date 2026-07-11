@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Optional
+
+from loguru import logger
+
+from utils.models.assets import AssetsManager
+from utils.models.command_line import cmdargs
+
+
+class PlaylistsManager:
+    """Manages multiple AssetsManager playlist instances"""
+
+    _instance: Optional[PlaylistsManager] = None
+
+    def __init__(self):
+        self._playlists: dict[str, AssetsManager] = {}
+        self._default_id: Optional[str] = None
+
+    @classmethod
+    def get_instance(cls) -> PlaylistsManager:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @property
+    def playlists(self) -> dict[str, AssetsManager]:
+        return self._playlists
+
+    @property
+    def default(self) -> AssetsManager:
+        if self._default_id and self._default_id in self._playlists:
+            return self._playlists[self._default_id]
+        if self._playlists:
+            return next(iter(self._playlists.values()))
+        raise RuntimeError("No playlists available")
+
+    def get(self, playlist_id: Optional[str] = None) -> AssetsManager:
+        if playlist_id is None:
+            return self.default
+        if playlist_id not in self._playlists:
+            raise KeyError(f"Playlist {playlist_id!r} not found")
+        return self._playlists[playlist_id]
+
+    def create(self, name: str = 'New Playlist') -> AssetsManager:
+        am = AssetsManager(name=name)
+        self._playlists[am.playlist_id] = am
+        am._filepath = self._playlist_path(am.playlist_id)
+        am.save()
+        self._save_index()
+        return am
+
+    def delete(self, playlist_id: str):
+        if playlist_id == self._default_id:
+            raise ValueError("Cannot delete the default playlist")
+        if len(self._playlists) <= 1:
+            raise ValueError("Cannot delete the last playlist")
+        am = self._playlists.pop(playlist_id, None)
+        if am and am._filepath and am._filepath.exists():
+            am._filepath.unlink()
+        self._save_index()
+
+    def _playlist_path(self, playlist_id: str) -> Path:
+        return Path(cmdargs.assets_file).parent / f'playlist_{playlist_id}.json'
+
+    def _index_path(self) -> Path:
+        return Path(cmdargs.assets_file).parent / 'playlists.json'
+
+    def _save_index(self):
+        index = {
+            'default': self._default_id,
+            'playlists': {pid: str(am._filepath) for pid, am in self._playlists.items()}
+        }
+        with open(self._index_path(), 'w') as f:
+            json.dump(index, f, indent=4)
+
+    def load(self):
+        index_path = self._index_path()
+        if index_path.exists():
+            with open(index_path) as f:
+                index = json.load(f)
+            self._default_id = index.get('default')
+            for pid, filepath in index.get('playlists', {}).items():
+                am = AssetsManager(playlist_id=pid)
+                try:
+                    am.load(filepath)
+                    self._playlists[pid] = am
+                except FileNotFoundError:
+                    logger.warning('Playlist file not found: {}', filepath)
+            if self._playlists and self._default_id not in self._playlists:
+                self._default_id = next(iter(self._playlists))
+        else:
+            # Legacy: single assets.json → become the default playlist
+            am = AssetsManager()
+            try:
+                am.load(cmdargs.assets_file)
+            except FileNotFoundError:
+                logger.warning('No assets file found, starting with empty default playlist')
+            am._filepath = self._playlist_path(am.playlist_id)
+            self._playlists[am.playlist_id] = am
+            self._default_id = am.playlist_id
+            self._save_index()
+
+    def serialize(self) -> list[dict]:
+        return [
+            {
+                'playlist_id': pid,
+                'name': am.name,
+                'asset_count': len(am.assets),
+                'enabled_count': am.count_enabled(),
+                'is_default': pid == self._default_id,
+            }
+            for pid, am in self._playlists.items()
+        ]
+
+
+playlists_manager = PlaylistsManager.get_instance()
