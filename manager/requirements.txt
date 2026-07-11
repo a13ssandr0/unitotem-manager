@@ -1,10 +1,15 @@
 Pillow
+# viewer (Qt6+CEF) — only needed in full (non-headless) mode
+PySide6>=6.4.0
+websockets>=12.0
+# cefpython3: install from the linesight fork, not PyPI
+# pip install git+https://github.com/linesight/cefpython
 PyJWT
 Werkzeug
 aiofiles
 aiohttp
 asyncwebsockets
-dasbus
+# dasbus, pygobject removed: sdbus-networkmanager gestisce già la comunicazione DBus con NM
 fastapi
 fastapi-login
 hypercorn
@@ -18,7 +23,6 @@ pycryptodome
 pydantic-extra-types
 pydantic
 pydantic_settings
-pygobject==3.50.0
 pymediainfo
 python-benedict
 python-benedict[parse]
@@ -27,7 +31,7 @@ python-dotenv
 python-multipart
 qrcode
 requests
-rpyc
+# rpyc removed: unitotem-admind replaced by hostnamed/NM DBus
 ruamel.yaml
 sdbus-networkmanager
 uvloop

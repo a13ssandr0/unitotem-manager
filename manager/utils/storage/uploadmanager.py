@@ -10,7 +10,6 @@ from watchdog.events import FileSystemEventHandler
 from werkzeug.utils import secure_filename
 
 from utils.constants import uploads_folder
-from utils.models.assets import assets_manager
 from utils.storage.file_info import FileInfo, get_file_info
 from utils.units import human_readable_size
 
@@ -124,14 +123,16 @@ class UploadManager(FileSystemEventHandler):
             return await self.save(infile, out_filename)
 
         file_data = get_file_info(out_filename)
-        assets_manager.append({
+        from utils.models.playlists import playlists_manager
+        am = playlists_manager.default
+        am.append({
             'name': file_data.filename,
             'url': 'file:' + file_data.filename,
             'duration': file_data.duration_s,
             'enabled': False,
             'media_type': file_data.mime
         })
-        assets_manager.save()
+        am.save()
 
         return out_filename
 
@@ -142,9 +143,11 @@ class UploadManager(FileSystemEventHandler):
         return self._folder.joinpath(file).exists()
 
     def remove(self, file):
-        for asset in assets_manager.find('file:' + file):
-            assets_manager.remove(asset)
-        assets_manager.save()
+        from utils.models.playlists import playlists_manager
+        for am in playlists_manager.playlists.values():
+            for asset in am.find('file:' + file):
+                am.remove(asset)
+            am.save()
         self._folder.joinpath(file).unlink(True)
 
     def on_closed(self, event):

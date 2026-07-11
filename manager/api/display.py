@@ -1,44 +1,64 @@
+import asyncio
+from typing import Optional
+
+from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
-from api.ws.wsmanager import WSAPIBase
-from webview_controller.controller import Controller
+from utils.viewer_manager import ViewerManager
+
+
+def _vm() -> ViewerManager:
+    # deferred: ViewerManager is initialized in main.py, after this module
+    # has already been imported and instantiated by the WebSocketAPI registry
+    return ViewerManager.get_instance()
 
 
 class Display(WSAPIBase):
-    controller = Controller.get_instance()
 
-    def getDisplays(self):
-        return WSBroadcast(displays=self.controller.GetAllDisplays())
+    def getDisplays(self, viewer_id: Optional[str] = None):
+        if viewer_id:
+            return WSBroadcast(displays=_vm().get_viewer_screens(viewer_id))
+        # Return screens grouped by viewer
+        return WSBroadcast(displays={
+            vid: _vm().get_viewer_screens(vid)
+            for vid in _vm().get_viewers()
+        })
 
     def getGPUFeatureStats(self):
-        return WSBroadcast(features=self.controller.GetGPUFeatureStats())
+        return WSBroadcast(features={})
 
-    def getBounds(self):
-        """
-        Get viewer window bounds
-        """
-        if self.controller.connected:
-            return WSBroadcast(**self.controller.Window[0].bounds)
-        else:
-            # self.controller.bounds may be None if the webview process is not running, explicitly return none in this case
-            return WSBroadcast()
+    def getBounds(self, viewer_id: str, window_id: int = 0):
+        windows = _vm().get_viewer_windows(viewer_id)
+        if window_id < len(windows):
+            return WSBroadcast(**windows[window_id])
+        return WSBroadcast()
 
-    def setBounds(self, x: int, y: int, width: int, height: int):
-        """
-        Set viewer window bounds
-        """
-        self.controller.Window[0].bounds = {'x': x, 'y': y, 'width': width, 'height': height}
-        return self.getBounds()
+    def setBounds(self, viewer_id: str, window_id: int, x: int, y: int, width: int, height: int):
+        asyncio.create_task(_vm().set_bounds(viewer_id, window_id, x, y, width, height))
+        return WSBroadcast(x=x, y=y, width=width, height=height)
 
-    def getOrientation(self):
-        return WSBroadcast(orientation=self.controller.Window[0].orientation)
+    def getOrientation(self, viewer_id: str, window_id: int = 0):
+        windows = _vm().get_viewer_windows(viewer_id)
+        orientation = windows[window_id].get('orientation', 0) if window_id < len(windows) else 0
+        return WSBroadcast(orientation=orientation)
 
-    def setOrientation(self, orientation: int):
-        self.controller.Window[0].orientation = orientation
-        return self.getOrientation()
+    def setOrientation(self, viewer_id: str, window_id: int, orientation: int):
+        asyncio.create_task(_vm().set_orientation(viewer_id, window_id, orientation))
+        return WSBroadcast(orientation=orientation)
 
-    def getFlip(self):
-        return WSBroadcast(flip=self.controller.Window[0].flip)
+    def getFlip(self, viewer_id: str, window_id: int = 0):
+        windows = _vm().get_viewer_windows(viewer_id)
+        flip = windows[window_id].get('flip', 0) if window_id < len(windows) else 0
+        return WSBroadcast(flip=flip)
 
-    def setFlip(self, flip: int):
-        self.controller.Window[0].flip = flip
-        return self.getFlip()
+    def setFlip(self, viewer_id: str, window_id: int, flip: int):
+        asyncio.create_task(_vm().set_flip(viewer_id, window_id, flip))
+        return WSBroadcast(flip=flip)
+
+    def addWindow(self, viewer_id: str, display: int = 0, x: int = 0, y: int = 0,
+                  width: int = 1920, height: int = 1080):
+        asyncio.create_task(_vm().add_window(viewer_id, display, x, y, width, height))
+        return WSBroadcast()
+
+    def removeWindow(self, viewer_id: str, window_id: int):
+        asyncio.create_task(_vm().remove_window(viewer_id, window_id))
+        return WSBroadcast()

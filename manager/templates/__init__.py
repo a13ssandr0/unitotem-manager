@@ -32,7 +32,7 @@ templates = Jinja2Templates(
 templates.env.filters['flatten'] = flatten
 
 # files are loaded after creating the templates object to always remember that `files` can be changed at runtime
-for file in ['base.html', 'first-boot.html.j2', 'no-assets.html.j2']:
+for file in ['base.html', 'first-boot.html.j2', 'no-assets.html.j2', 'errors/error.html.j2']:
     with open(Path(__file__).parent.joinpath(file).resolve()) as f:
         files[file] = f.read()
 

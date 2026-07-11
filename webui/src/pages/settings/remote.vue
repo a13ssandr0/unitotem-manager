@@ -31,6 +31,16 @@
             ></v-text-field>
           </v-col>
         </v-row>
+
+        <div class="d-flex align-center">
+          <v-icon
+            :icon="keyStatusIcon"
+            :color="keyStatusColor"
+            :class="{'mdi-spin': keyStatus === 'generating'}"
+            class="mr-2"
+          ></v-icon>
+          <span class="text-subtitle-2">{{ keyStatusText }}</span>
+        </div>
       </v-card-text>
       <v-card-actions v-if="mode === 'Client'">
         <v-spacer></v-spacer>
@@ -63,7 +73,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const mode = ref('Server')
 const items = ref(['Server', 'Client'])
@@ -71,6 +81,24 @@ const serverIp = ref('')
 const serverPort = ref('')
 
 const clients = ref([])
+
+// RSA signing key: generated in background by the manager right after startup
+const keyStatus = ref(null)
+const keyStatusIcon = computed(() => ({
+  generating: 'mdi-loading',
+  ready: 'mdi-check-circle',
+  missing: 'mdi-key-alert-outline',
+}[keyStatus.value] || 'mdi-help-circle-outline'))
+const keyStatusColor = computed(() => ({
+  generating: 'primary',
+  ready: 'green',
+  missing: 'orange',
+}[keyStatus.value] || 'grey'))
+const keyStatusText = computed(() => ({
+  generating: 'Generating RSA signing key… (this can take a few minutes)',
+  ready: 'RSA signing key ready',
+  missing: 'RSA signing key not generated yet',
+}[keyStatus.value] || 'Checking RSA signing key…'))
 
 function manageClient(ip, port) {
   window.open(`https://${ip}:${port}/settings`, '_blank')
@@ -92,7 +120,7 @@ function connectToServer(){
 }
 
 const sendCommand = window.sendCommand;
-window.setInitCommands("Settings/Remote/getMode")
+window.setInitCommands("Settings/Remote/getMode", "Settings/Remote/getKeyStatus")
 
 onWSMessage = (data) => {
   switch (data.target) {
@@ -101,6 +129,9 @@ onWSMessage = (data) => {
       serverIp.value = data.remote_server || '';
       serverPort.value = data.remote_port || '';
       clients.value = data.remote_clients;
+      break;
+    case "Settings/Remote/getKeyStatus":
+      keyStatus.value = data.status;
       break;
   }
 }

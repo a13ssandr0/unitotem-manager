@@ -17,12 +17,10 @@ from wsproto.events import CloseConnection
 from api.commons import SHUTDOWN_EVENT
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
+from api.ws.wsmanager import WSManager
 from utils.environment import environ
-from utils.models.assets import assets_manager
 from utils.models.command_line import cmdargs
 from utils.models.remote import RemoteManager
-from webview_controller.controller import Controller
-
 
 
 class Remote(WSAPIBase):
@@ -30,8 +28,11 @@ class Remote(WSAPIBase):
 
     def __init__(self, ws, remote_ws):
         super().__init__(ws, remote_ws)
-        self.controller = Controller.get_instance()
-        self.remote_manager = RemoteManager.get_instance()
+        try:
+            self.remote_manager = RemoteManager.get_instance()
+        except FileNotFoundError:
+            # first boot: remote.json does not exist yet, start with defaults
+            self.remote_manager = RemoteManager()
 
     def getMode(self):
         return WSBroadcast(
@@ -40,6 +41,10 @@ class Remote(WSAPIBase):
                 remote_port=self.remote_manager.server_port,
                 remote_clients=self.remote_manager.clients_list,
         )
+
+    def getKeyStatus(self):
+        """State of the RSA signing key: missing, generating or ready"""
+        return WSBroadcast(status=RemoteManager.signing_key_status())
 
     def setMode(self, remote_server: Optional[IPv4Address],
                 remote_port: Optional[PositiveInt] = cmdargs.port_secure):
@@ -56,9 +61,6 @@ class Remote(WSAPIBase):
         if remote_server:
             # noinspection PyAsyncCall
             asyncio.create_task(self.__connect_to_server(remote_server, remote_port), name='remote_control')
-        else:
-            # noinspection PyAsyncCall
-            asyncio.create_task(self.__webview_control_main(), name='page_controller')
         return self.getMode()
 
     async def disconnect(self, client: str):
@@ -70,21 +72,6 @@ class Remote(WSAPIBase):
                 self.remote_manager.save()
                 break
         return self.getMode()
-
-    async def __webview_control_main(self):
-        logger.info('Starting webview controller')
-        async for asset in assets_manager.iter_wait():
-            url = asset.url
-            if url.startswith('file:'):
-                url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-            data = dict(
-                    src=url,
-                    container=asset.media_type + 1,  # [None, 'web', 'image', 'video', 'audio'][asset.media_type + 1],
-                    fit=asset.fit,  # ['contain', 'cover', 'fill'][asset.fit],
-                    bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
-            )
-            # self.controller.Show(**data)
-            await self.remote_ws.broadcast('Show', False, **data)
 
     async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = cmdargs.port_secure, headers=None):
         if headers is None:
@@ -109,9 +96,8 @@ class Remote(WSAPIBase):
                     while not SHUTDOWN_EVENT.is_set():
                         msg = await ws._next_event()
                         if isinstance(msg, CloseConnection):
-                            if msg.code == 4023:  # Server forced disconnection for unpairing
+                            if msg.code == 4023:
                                 self.__remote_connected = False
-                                # TODO: this should be broadcast
                                 self.setMode(remote_server=None, remote_port=None)
                                 return
                             break
@@ -119,8 +105,10 @@ class Remote(WSAPIBase):
                         data, signature = b64decode(data), b64decode(signature)
                         verifier.verify(SHA256.new(data), signature)
                         data = loads(data)
-                        if data.pop('target') == 'Show':
-                            self.controller.Show(**data)
+                        target = data.pop('target')
+                        if target == 'Show':
+                            # Forward to locally connected Qt viewer via WebSocket
+                            await self.remote_ws.broadcast('Show', **data)
             except asyncio.exceptions.CancelledError:
                 logger.info('Disconnected from remote server')
                 break

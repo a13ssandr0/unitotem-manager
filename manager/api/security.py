@@ -34,16 +34,11 @@ class Security(WSAPIBase):
         if username not in user_manager:
             yield WSResponse(error=f"User {username} does not exist")
             return
-        if ctx.username == username and UserPerms.admin in user_manager[
-            username].perms and UserPerms.admin not in perms:
-            for user, userdata in user_manager.items():
-                if user != ctx.username and UserPerms.admin in userdata.perms:
-                    break
-            else:
-                # we have no other user with user management capabilities cannot continue
-                yield WSResponse(error="Cannot remove permissions from the only admin")
-                yield self.getUsers()
-                return
+        # An admin can never remove their own admin role
+        if ctx.username == username and UserPerms.admin in user_manager[username].permissions and UserPerms.admin not in perms:
+            yield WSResponse(error="An admin cannot remove their own admin role")
+            yield self.getUsers()
+            return
 
         user_manager.change_perms(username, perms)
         logger.info(f'Changed permissions for {username}: {perms}')

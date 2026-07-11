@@ -80,7 +80,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="rebootDialog = false">Cancel</v-btn>
-          <v-btn color="red darken-1" text @click="rebootDialog = false">Reboot</v-btn>
+          <v-btn color="red darken-1" text @click="rebootDialog = false; sendCommand('Settings/Power/reboot')">Reboot</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -92,7 +92,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="powerOffDialog = false">Cancel</v-btn>
-          <v-btn color="red darken-1" text @click="powerOffDialog = false">Power Off</v-btn>
+          <v-btn color="red darken-1" text @click="powerOffDialog = false; sendCommand('Settings/Power/poweroff')">Power Off</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
