@@ -118,6 +118,7 @@ api.import_class('api.system.power', 'Power')
 api.import_class('api.system.apt', 'Update', 'Settings')
 api.import_class('api.security', 'Security', 'Settings')
 api.import_class('api.display', 'Display', 'Settings')
+api.import_class('api.viewers', 'Viewers')
 
 
 async def handle_call(target, user, request_data):

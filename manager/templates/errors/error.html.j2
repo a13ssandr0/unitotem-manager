@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>UniTotem Manager - Error {{code}}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            background: black;
+            color: white;
+            margin: 0;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.5;
+            -webkit-text-size-adjust: 100%;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        h1 {
+            font-size: 3.5vw;
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            line-height: 1.2;
+        }
+
+        .error {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+            text-align: center;
+        }
+
+        .sysinfo {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            margin: 1vw;
+        }
+
+        a {
+            color: #9ecbff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="error">
+        <h1>{{code}}{% if short_desc %} - {{short_desc}}{% endif %}</h1>
+        {% if long_desc %}<p>{{long_desc}}</p>{% endif %}
+        <p><a href="/">Back to home</a></p>
+    </div>
+
+    <div class="sysinfo">
+        <p style="font-size: 1vw; margin-block:0;">UniTotem {{ut_vers}}<br>Running on {{os_vers}}<br>IP address: {{ip_addr}}<br>Hostname: {{hostname}}</p>
+    </div>
+</body>
+
+</html>

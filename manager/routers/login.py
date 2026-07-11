@@ -88,7 +88,9 @@ async def login(data: LoginForm = Depends()):
 
 @router.get("/remote/public_key")
 async def get_public_key():
-    return Response(RemoteManager.get_instance().rsa_prik.public_key().exportKey(), media_type="text/plain")
+    # asking for the public key implies signatures are about to be verified:
+    # generate the key pair now if it does not exist yet
+    return Response(RemoteManager.get_signing_key().public_key().exportKey(), media_type="text/plain")
 
 
 @router.get("/login/users")

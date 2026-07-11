@@ -1,6 +1,7 @@
 import asyncio
 import json
 import signal
+import threading
 import warnings
 from argparse import ArgumentParser
 from functools import cache, lru_cache
@@ -30,14 +31,16 @@ from routers.error import http_exception_handler
 from routers.login import NotAuthenticatedException, login_redirect
 from templates import templates
 from utils._logging import Logger
-from utils.models.assets import assets_manager
 from utils.models.command_line import cmdargs
-from utils.models.remote import remote_manager
+from utils.models.playlists import playlists_manager
+from utils.models.remote import RemoteManager, remote_manager
 from utils.models.user import user_manager
 from utils.storage.uploadmanager import upload_manager
 from utils.system.network.hotspot import get_hotspot_with_qr, is_hotspot_enabled, start_hotspot, stop_hotspot
 from utils.system.network.ip import do_ip_addr
+from utils.system.lsblk import start_fs_usage_cache
 from utils.system.sysinfo import get_sysinfo
+from utils.viewer_manager import ViewerManager
 
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
@@ -46,11 +49,9 @@ WWW = FastAPI(
         title='UniTotem', version=const.__version__,
         middleware=[
             Middleware(HTTPSRedirectMiddleware),
-            # Middleware(CORSMiddleware, allow_origin_regex='https?://.*:3000', allow_credentials=True),
         ],
         routes=[
             Mount('/assets', StaticFiles(directory=const.static_folder.joinpath('assets').resolve()), name='assets'),
-            # Mount('/static', StaticFiles(directory=const.static_folder), name='static'),
             Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded'),
         ],
         exception_handlers={
@@ -63,7 +64,6 @@ WWW.include_router(routers.login.router)
 WWW.include_router(routers.websocket.remote.router)
 WWW.include_router(routers.websocket.web_ui.router)
 WWW.include_router(routers.scheduler.router)
-# WWW.include_router(routers.settings.router)
 WWW.include_router(routers.backup.router)
 
 
@@ -73,29 +73,48 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
                                       {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
 
 
-
 parser = ArgumentParser()
 parser.add_argument('--no-gui', action='store_true',
-                    help='Start UniTotem Manager without webview gui (for testing)')
+                    help='Headless mode: run only the backend, skip the local viewer')
 parser.add_argument('--http-bind', default=const.default_bind)
-parser.add_argument('--http-port', default=const.default_port)  # , gt=0, le=65525)
+parser.add_argument('--http-port', default=const.default_port)
 parser.add_argument('--https-bind', default=const.default_bind_secure)
-parser.add_argument('--https-port', default=const.default_port_secure)  # , gt=0, le=65525)
+parser.add_argument('--https-port', default=const.default_port_secure)
 parser.add_argument('--config', default=const.default_config_file)
 parser.add_argument('--version', action='version', version='%(prog)s ' + const.__version__)
-# cmdargs = Arguments.model_validate(vars(parser.parse_args()))
 
 loop = asyncio.get_event_loop()
 logger.debug('Got event loop {}', id(loop))
-loop.add_signal_handler(signal.SIGTERM, SHUTDOWN_EVENT.set, ())
+
+
+# ── graceful shutdown ─────────────────────────────────────────────────────
+# Runs inside the asyncio thread; sets SHUTDOWN_EVENT, cleans up, stops loop.
+
+async def _shutdown():
+    if not SHUTDOWN_EVENT.is_set():
+        SHUTDOWN_EVENT.set()
+        await stop_hotspot()
+    loop.stop()
+
+
+def _schedule_shutdown():
+    """Thread-safe: schedule _shutdown() in the asyncio event loop."""
+    asyncio.run_coroutine_threadsafe(_shutdown(), loop)
+
+
+# signal.signal works from the main thread regardless of where asyncio runs
+signal.signal(signal.SIGTERM, lambda s, f: _schedule_shutdown())
+signal.signal(signal.SIGINT,  lambda s, f: _schedule_shutdown())
+
+
+# ── startup ───────────────────────────────────────────────────────────────
 
 try:
-    assets_manager.load()
+    playlists_manager.load()
 except FileNotFoundError:
     logger.warning('First boot or no configuration file found.')
     try:
         if not do_ip_addr(True):
-            # config file doesn't exist, and we are not connected, maybe it's first boot
             ssid, passwd = loop.run_until_complete(start_hotspot())
             logger.info(
                     f'Not connected to any network, started fallback hotspot {ssid} with password {passwd}.')
@@ -106,18 +125,17 @@ try:
     user_manager.load()
 except FileNotFoundError:
     logger.warning('Users configuration file not found. Creating default user "admin" with password "admin".')
-    user_manager.add('admin', 'admin', ['admin'])
+    user_manager.add_user('admin', 'admin', {'admin'})
 
 try:
     remote_manager.get_instance()
 except FileNotFoundError:
-    logger.info("Saving remote connection RSA private key")
+    # the RSA signing key is generated lazily at the first signature,
+    # here we only create the default remote connection configuration
+    logger.info("Creating default remote connection configuration")
     remote_manager.save()
 
-REMOTE_WS.pk = remote_manager.rsa_prik
-
 # APT_THREAD.start()
-
 
 observer = Observer()
 # noinspection PyTypeChecker
@@ -126,39 +144,90 @@ observer.start()
 
 upload_manager.scan_folder()
 
-# if cmdargs.get('remote'):
-#     loop.create_task(connect_to_server(cmdargs['remote']), name='remote_control')
-# el
+# probe unmounted filesystems once and watch mount/umount events
+start_fs_usage_cache()
+
+# Initialize ViewerManager and start playlist loops
+viewer_manager = ViewerManager.init(REMOTE_WS)
+for am in playlists_manager.playlists.values():
+    viewer_manager.add_playlist_loop(am)
+
+
+# ── async tasks ───────────────────────────────────────────────────────────
+
 if remote_manager.server_ip:
     loop.create_task(api.generators['Settings/Remote/_Remote__connect_to_server'].__original_func__(
             remote_manager.server_ip, remote_manager.server_port), name='remote_control')
-elif not cmdargs.no_gui:
-    loop.create_task(api.generators['Settings/Remote/_Remote__webview_control_main'].__original_func__(),
-                     name='page_controller')
 
 
 async def info_loop(_ws: WSManager, waiter: asyncio.Event):
     while not waiter.is_set():
-        await _ws.broadcast('Settings/info', **get_sysinfo())
+        # skip collection (incl. disk enumeration) when no admin is watching
+        if _ws.active_connections:
+            await _ws.broadcast('Settings/info', **get_sysinfo())
         await asyncio.sleep(3)
 
 
 loop.create_task(info_loop(WS, SHUTDOWN_EVENT), name='info_loop')
 
-loop.create_task(serve(WWW, HyperConfig().from_mapping(  # type: ignore
+
+async def generate_signing_key():
+    # RSA-4096 can take minutes on a Pi: generate it in a worker thread right
+    # after startup instead of blocking the loop at the first signature.
+    # Progress is observable in the webUI via Settings/Remote/getKeyStatus.
+    if RemoteManager.signing_key_status() != 'missing':
+        return
+    await WS.broadcast('Settings/Remote/getKeyStatus', status='generating')
+    try:
+        await loop.run_in_executor(None, RemoteManager.get_signing_key)
+    except Exception as e:
+        logger.error('RSA signing key generation failed: {}', e)
+    await WS.broadcast('Settings/Remote/getKeyStatus', status=RemoteManager.signing_key_status())
+
+
+loop.create_task(generate_signing_key(), name='rsa_keygen')
+
+loop.create_task(serve(WWW, HyperConfig().from_mapping(
         bind=f'{cmdargs.bind_secure}:{cmdargs.port_secure}', insecure_bind=f'{cmdargs.bind}:{cmdargs.port}',
-        certfile=cmdargs.certfile, keyfile=cmdargs.keyfile, #logger_class=Logger
-), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server')  # type: ignore
+        certfile=cmdargs.certfile, keyfile=cmdargs.keyfile,
+), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server')
 
-try:
-    loop.run_forever()
-except KeyboardInterrupt:
-    logger.info('Shutdown requested.')
-    pass
 
-SHUTDOWN_EVENT.set()
+# ── asyncio thread ────────────────────────────────────────────────────────
+# asyncio runs in a background thread so Qt can occupy the main thread
+# when running in full (GUI) mode.
 
-loop.run_until_complete(stop_hotspot())
+asyncio_thread = threading.Thread(target=loop.run_forever, name='asyncio', daemon=True)
+asyncio_thread.start()
 
+
+# ── full mode: Qt viewer on main thread ───────────────────────────────────
+
+if not cmdargs.no_gui and not remote_manager.server_ip:
+    try:
+        from viewer.app import ViewerApp
+        viewer_app = ViewerApp(
+            manager_url=f'wss://localhost:{cmdargs.port_secure}/remote',
+            instance_id='local-viewer',
+        )
+        # Propagate Qt quit → asyncio shutdown
+        viewer_app.qt_app.aboutToQuit.connect(_schedule_shutdown)
+        logger.info('Starting local Qt6 viewer (full mode)')
+        viewer_app.run()          # blocks until the Qt window is closed
+    except ImportError as e:
+        logger.warning('Viewer unavailable ({}), running in headless mode', e)
+        asyncio_thread.join()
+    except Exception as e:
+        logger.exception('Qt viewer crashed: {}', e)
+        _schedule_shutdown()
+        asyncio_thread.join(timeout=5)
+else:
+    # ── headless mode: block main thread until asyncio stops ──────────────
+    asyncio_thread.join()
+
+
+# ── cleanup ───────────────────────────────────────────────────────────────
+
+_schedule_shutdown()
+asyncio_thread.join(timeout=5)
 observer.stop()
-# APT_THREAD.join()

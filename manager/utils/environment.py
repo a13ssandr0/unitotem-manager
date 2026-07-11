@@ -5,11 +5,11 @@ from loguru import logger
 from pydantic import Field, ModelWrapValidatorHandler, PrivateAttr, ValidationError, model_validator
 from pydantic_settings import BaseSettings
 
-import utils.constants as const
+from utils.models.command_line import cmdargs
 
 
 # noinspection PyDataclass
-class Environment(BaseSettings, env_file=const.envfile, frozen=True):
+class Environment(BaseSettings, env_file=cmdargs.envfile, frozen=True):
     # model_config = ConfigDict()
     auth_token: str = Field(default_factory=lambda: urandom(24).hex())
     instance_id: str = Field(default_factory=lambda: urandom(16).hex())

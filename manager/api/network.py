@@ -1,16 +1,12 @@
-from socket import gethostname
 from typing import Optional
 
-import rpyc
 from loguru import logger
-from rpyc.utils.factory import unix_connect
-from werkzeug.utils import secure_filename
 
 import utils.system.network.wifi as w
 from api.ws.responses import WSBroadcast, WSResponse
 from api.ws.wsmanager import WSAPIBase
 from utils.models import assets
-from utils.models.assets import assets_manager
+from utils.models.playlists import playlists_manager
 from utils.models.user import UserPerms
 from utils.system.network.hotspot import is_hotspot_enabled, stop_hotspot
 from utils.system.network.ip import do_ip_addr
@@ -19,19 +15,18 @@ from utils.system.network.misc import get_default_wireless
 
 class Settings(WSAPIBase):
     @UserPerms.requires.none
-    def hostname(self):
-        return WSBroadcast(hostname=gethostname())
+    async def hostname(self):
+        from utils.system.dbus_system import get_hostname
+        return WSBroadcast(hostname=await get_hostname())
 
-    def setHostname(self, hostname: str):
+    async def setHostname(self, hostname: str):
+        from utils.system.dbus_system import set_static_hostname, get_hostname
         try:
-            with unix_connect(self.Netplan._nm_sock, service=RemoteLogger) as conn:
-                if conn.root.set_hostname(hostname):
-                    return self.hostname()
-                else:
-                    return WSResponse(error='Invalid hostname')
-        except FileNotFoundError:
-            logger.error('Network backend service not running')
-            return WSResponse(error='Network backend service not running')
+            await set_static_hostname(hostname)
+            return WSBroadcast(hostname=await get_hostname())
+        except Exception as e:
+            logger.error('setHostname failed: {}', e)
+            return WSResponse(error=str(e))
 
     @staticmethod
     def get_default_wlan_device():
@@ -54,73 +49,152 @@ class Settings(WSAPIBase):
         await w.scan_access_points()
         return WSBroadcast(wifis=await w.get_access_points())
 
-    class Netplan(WSAPIBase):
-        _nm_sock = '/run/unitotem/nm.sock'
+    # ── NetworkManager connection/device API ──────────────────────────────
 
-        def newFile(self, filename: str):
+    class NM(WSAPIBase):
+        """
+        Full NetworkManager management API via DBus.
+        Replaces the old Netplan class that used rpyc + root daemon.
+        """
+
+        @staticmethod
+        async def devices():
+            """List all network devices with state, type, IP address, and active connection."""
+            from utils.system.network.networkmanager import get_devices
             try:
-                with unix_connect(self._nm_sock, service=RemoteLogger) as conn:
-                    conn.root.create_netplan(filename)
-                return self.getFile()
-            except FileNotFoundError:
-                logger.error('Network backend service not running')
-                return WSResponse(error='Network backend service not running')
+                return WSBroadcast(devices=await get_devices())
+            except Exception as e:
+                logger.error('NM.devices failed: {}', e)
+                return WSResponse(error=str(e))
 
-        def getFile(self, filename: Optional[str] = None):
+        @staticmethod
+        async def connections():
+            """List all saved connection profiles."""
+            from utils.system.network.networkmanager import get_all_connections
             try:
-                with unix_connect(self._nm_sock, service=RemoteLogger) as conn:
-                    netplan_files = conn.root.get_netplan_file_list()
-                    if filename is not None and filename in netplan_files:
-                        return WSBroadcast(files={str(filename): conn.root.get_netplan_file(filename)})
-                    return WSBroadcast(files={str(f): conn.root.get_netplan_file(f) for f in netplan_files})
-            except FileNotFoundError:
-                logger.error('Network backend service not running')
-                return WSResponse(error='Network backend service not running')
+                return WSBroadcast(connections=await get_all_connections())
+            except Exception as e:
+                logger.error('NM.connections failed: {}', e)
+                return WSResponse(error=str(e))
 
-        async def changeFile(self, filename: Optional[str] = None, content: str = '', apply: bool = True):
+        @staticmethod
+        async def activeConnections():
+            """List active connections with state."""
+            from utils.system.network.networkmanager import get_active_connections
             try:
-                with unix_connect(self._nm_sock, service=RemoteLogger) as conn:
-                    if filename is not None:
-                        res = conn.root.set_netplan(secure_filename(filename), content, apply)
-                    else:
-                        res = conn.root.generate_netplan(apply)
-                    # noinspection PySimplifyBooleanCheck
-                    if res is True:
-                        if await is_hotspot_enabled() and do_ip_addr(True):
-                            # AP is still enabled, but now we are connected, AP is no longer needed
-                            await stop_hotspot()
-                            if assets_manager.current == assets.first_boot:
-                                assets_manager.next_a()
-                    elif isinstance(res, str):
-                        yield WSResponse(error='Netplan error', extra=res)
-                yield self.getFile()
-                if filename is not None:
-                    yield WSResponse('Settings/Netplan/showFile', filename=filename)
-            except FileNotFoundError:
-                logger.error('Network backend service not running')
-                yield WSResponse(error='Network backend service not running')
+                return WSBroadcast(active=await get_active_connections())
+            except Exception as e:
+                logger.error('NM.activeConnections failed: {}', e)
+                return WSResponse(error=str(e))
 
-        def deleteFile(self, filename: Optional[str] = None, apply: bool = True):
+        @staticmethod
+        async def connectionDetails(path: str):
+            """Return full (unpacked) settings for one connection."""
+            from utils.system.network.networkmanager import get_connection_details
             try:
-                with unix_connect(self._nm_sock, service=RemoteLogger) as conn:
-                    res = conn.root.del_netplan_file(filename, apply)
-                    if isinstance(res, str):
-                        yield WSResponse(error='Netplan error', extra=res)
-                yield self.getFile()
-            except FileNotFoundError:
-                logger.error('Network backend service not running')
-                yield WSResponse(error='Network backend service not running')
+                return WSBroadcast(details=await get_connection_details(path))
+            except Exception as e:
+                logger.error('NM.connectionDetails failed: {}', e)
+                return WSResponse(error=str(e))
 
+        @staticmethod
+        async def activate(conn_path: str, dev_path: str):
+            """Activate a connection on a device."""
+            from utils.system.network.networkmanager import activate_connection, get_devices, get_active_connections
+            try:
+                await activate_connection(conn_path, dev_path)
+                # If we just connected to a network, stop the fallback hotspot
+                if await is_hotspot_enabled() and do_ip_addr(True):
+                    await stop_hotspot()
+                    am = playlists_manager.default
+                    if am.current == assets.first_boot:
+                        am.next_a()
+                yield WSBroadcast(devices=await get_devices())
+                yield WSBroadcast(active=await get_active_connections())
+            except Exception as e:
+                logger.error('NM.activate failed: {}', e)
+                yield WSResponse(error=str(e))
 
-class RemoteLogger(rpyc.Service):
-    _logger = logger.patch(lambda r: r.update(name='unitotem-admind', function='Netplan', line=''))
+        @staticmethod
+        async def deactivate(active_path: str):
+            """Deactivate an active connection."""
+            from utils.system.network.networkmanager import deactivate_connection, get_devices, get_active_connections
+            try:
+                await deactivate_connection(active_path)
+                yield WSBroadcast(devices=await get_devices())
+                yield WSBroadcast(active=await get_active_connections())
+            except Exception as e:
+                logger.error('NM.deactivate failed: {}', e)
+                yield WSResponse(error=str(e))
 
-    exposed_trace = _logger.trace
-    exposed_debug = _logger.debug
-    exposed_info = _logger.info
-    exposed_success = _logger.success
-    exposed_warning = _logger.warning
-    exposed_error = _logger.error
-    exposed_critical = _logger.critical
-    exposed_exception = _logger.exception
-    exposed_log = _logger.log
+        @staticmethod
+        async def connectWifi(ssid: str,
+                              device: str,
+                              password: Optional[str] = None,
+                              bssid: Optional[str] = None,
+                              ip_method: str = 'auto',
+                              ip_address: Optional[str] = None,
+                              prefix_len: int = 24,
+                              gateway: Optional[str] = None,
+                              dns: Optional[list] = None):
+            """
+            Add (or update) a WiFi profile and immediately activate it.
+            Handles DHCP and static IP configurations.
+            """
+            from utils.system.network.networkmanager import connect_wifi, get_devices, get_active_connections
+            try:
+                uid = await connect_wifi(
+                    ssid=ssid, password=password,
+                    device_iface=device, bssid=bssid,
+                    ip_method=ip_method, ip_address=ip_address,
+                    prefix_len=prefix_len, gateway=gateway, dns=dns,
+                )
+                # Stop fallback hotspot once we connected
+                if await is_hotspot_enabled() and do_ip_addr(True):
+                    await stop_hotspot()
+                    am = playlists_manager.default
+                    if am.current == assets.first_boot:
+                        am.next_a()
+                yield WSBroadcast(devices=await get_devices())
+                yield WSBroadcast(active=await get_active_connections())
+                yield WSBroadcast(connected_uuid=uid)
+            except Exception as e:
+                logger.error('NM.connectWifi failed: {}', e)
+                yield WSResponse(error=str(e))
+
+        @staticmethod
+        async def editConnection(conn_path: str,
+                                 conn_id: Optional[str] = None,
+                                 autoconnect: Optional[bool] = None,
+                                 ip_method: str = 'auto',
+                                 ip_address: Optional[str] = None,
+                                 prefix_len: int = 24,
+                                 gateway: Optional[str] = None,
+                                 dns: Optional[list] = None,
+                                 ssid: Optional[str] = None,
+                                 password: Optional[str] = None):
+            """Edit an existing connection profile in-place."""
+            from utils.system.network.networkmanager import edit_connection, get_all_connections
+            try:
+                await edit_connection(
+                    conn_path=conn_path, conn_id=conn_id,
+                    autoconnect=autoconnect,
+                    ip_method=ip_method, ip_address=ip_address,
+                    prefix_len=prefix_len, gateway=gateway, dns=dns,
+                    ssid=ssid, password=password,
+                )
+                return WSBroadcast(connections=await get_all_connections())
+            except Exception as e:
+                logger.error('NM.editConnection failed: {}', e)
+                return WSResponse(error=str(e))
+
+        @staticmethod
+        async def deleteConnection(conn_path: str):
+            """Remove a connection profile permanently."""
+            from utils.system.network.networkmanager import delete_connection, get_all_connections
+            try:
+                await delete_connection(conn_path)
+                return WSBroadcast(connections=await get_all_connections())
+            except Exception as e:
+                logger.error('NM.deleteConnection failed: {}', e)
+                return WSResponse(error=str(e))

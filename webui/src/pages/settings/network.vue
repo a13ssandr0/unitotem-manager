@@ -1,11 +1,8 @@
 <template>
   <div class="d-flex flex-column align-center">
-    <v-card
-      class="ma-4"
-      max-width="1000"
-      width="100%"
-      title="Hostname"
-    >
+
+    <!-- Hostname -->
+    <v-card class="ma-4" max-width="1000" width="100%" title="Hostname">
       <v-card-text>
         <v-row align="center">
           <v-col cols="6">
@@ -23,31 +20,18 @@
               :disabled="!isHostnameChanged"
               color="primary"
               variant="text"
-            >
-              Apply
-            </v-btn>
+            >Apply</v-btn>
           </v-col>
         </v-row>
       </v-card-text>
     </v-card>
 
-    <v-alert
-      v-if="!backend_running"
-      type="warning"
-      class="ma-4 mt-2"
-      max-width="1000"
-      width="100%"
-    >
-      Network backend not running, Netplan configuration will be unavailable.
-    </v-alert>
-
-    <v-card class="ma-4 mt-2" max-width="1000" width="100%" :disabled="!backend_running">
+    <!-- Network configuration tabs -->
+    <v-card class="ma-4 mt-0" max-width="1000" width="100%">
       <v-card-title class="d-flex align-center">
-        Netplan configuration
-        <a href="https://netplan.io/reference/" target="_blank" rel="noopener noreferrer" class="text-primary">
-          <v-icon size="small" class="ml-2">mdi-help-circle</v-icon>
-        </a>
+        Network
         <v-spacer></v-spacer>
+        <!-- WiFi toggle -->
         <v-switch
           v-if="has_wireless"
           v-model="is_wireless_enabled"
@@ -58,415 +42,757 @@
           :label="'Wireless ' + (is_wireless_enabled ? 'on' : 'off')"
           class="mr-4"
         ></v-switch>
-        <v-menu v-if="has_wireless" v-model="wifiMenu" :close-on-content-click="false" location="bottom end">
-          <template v-slot:activator="{ props }">
-            <v-btn :disabled="!is_wireless_enabled" v-bind="props" :color="is_wireless_enabled?'primary':''" append-icon="mdi-menu-down">
-              <v-icon>mdi-wifi</v-icon>
-            </v-btn>
-          </template>
-          <v-card min-width="300">
-            <v-progress-linear indeterminate color="primary"></v-progress-linear>
-            <div v-if="!is_wireless_enabled" class="text-center pa-4 text-grey">
-              Wireless disabled
-            </div>
-            <div v-else-if="wifiNetworks.length === 0" class="text-center pa-4 text-grey">
-              Scanning...
-            </div>
-            <v-list v-else>
-              <v-list-item v-for="(net, i) in wifiNetworks" :key="i" @click="createWifiFile(net)">
-                <template v-slot:prepend>
-                  <v-icon :icon="getSignalIcon(net.strength, net.flags)"></v-icon>
-                </template>
-                <v-list-item-title class="d-flex">
-                  <span>{{ net.ssid }}</span>
-                  <v-spacer></v-spacer>
-                  <v-chip size="x-small" class="mr-auto">{{ getBand(net.frequency) }}</v-chip>
-                </v-list-item-title>
-                <v-list-item-subtitle>{{ net.hw_address }}</v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
-          </v-card>
-        </v-menu>
       </v-card-title>
-      <v-row>
-        <v-col cols="3">
-          <v-list density="compact" style="max-height: 400px; overflow-y: auto;">
-            <v-list-item
-              v-for="file in yamlFiles"
-              :key="file"
-              @click="switchFile(file)"
-              :class="{ 'v-list-item--active': selectedFile === file }"
-            >
-              <v-list-item-title>
-                <span v-if="isFileDirtyByName(file)">• </span>{{ file }}
+
+      <v-tabs v-model="activeTab" color="primary">
+        <v-tab value="overview">Overview</v-tab>
+        <v-tab value="connections">Saved Connections</v-tab>
+        <v-tab value="wifi" v-if="has_wireless">WiFi</v-tab>
+      </v-tabs>
+      <v-divider></v-divider>
+
+      <v-tabs-window v-model="activeTab">
+
+        <!-- ── Overview tab ──────────────────────────────────────────── -->
+        <v-tabs-window-item value="overview">
+          <v-list lines="two">
+            <template v-if="devices.length === 0">
+              <v-list-item>
+                <v-progress-circular indeterminate size="20" class="mr-2"></v-progress-circular>
+                Loading devices…
+              </v-list-item>
+            </template>
+            <v-list-item v-for="dev in devices" :key="dev.path">
+              <template v-slot:prepend>
+                <v-icon :icon="devTypeIcon(dev.type)" size="32" class="mr-2"></v-icon>
+              </template>
+              <v-list-item-title class="d-flex align-center ga-2">
+                {{ dev.interface }}
+                <v-chip :color="devStateColor(dev.state)" size="x-small" label>
+                  {{ devStateName(dev.state) }}
+                </v-chip>
               </v-list-item-title>
-              <v-tooltip activator="parent" location="right">{{ file }}</v-tooltip>
+              <v-list-item-subtitle>
+                <span v-if="dev.active_connection">{{ dev.active_connection.id }}</span>
+                <span v-if="dev.ip4 && dev.ip4.addresses.length">
+                  &nbsp;·&nbsp;
+                  <span v-for="(a,i) in dev.ip4.addresses" :key="i">
+                    {{ a.address }}/{{ a.prefix }}&nbsp;
+                  </span>
+                </span>
+                <span v-if="dev.ip4 && dev.ip4.gateway">
+                  &nbsp;GW {{ dev.ip4.gateway }}
+                </span>
+                <span v-else-if="!dev.active_connection" class="text-medium-emphasis">Not connected</span>
+              </v-list-item-subtitle>
               <template v-slot:append>
-                <v-btn icon="mdi-delete" size="small" variant="text" color="red"
-                       @click.stop="requestDeleteFile(file)"></v-btn>
+                <v-btn
+                  v-if="dev.active_connection"
+                  size="small" variant="text" color="error"
+                  @click="deactivateConn(dev.active_connection.path)"
+                >Disconnect</v-btn>
+                <v-btn
+                  v-else
+                  size="small" variant="text" color="primary"
+                  @click="openConnectionPicker(dev)"
+                >Connect</v-btn>
               </template>
             </v-list-item>
           </v-list>
-        </v-col>
-        <v-col cols="9" style="position: relative">
-          <template v-if="selectedFile">
-            <div class="card-border" style="border-radius: 4px">
-              <MonacoEditor
-                v-model="fileContent"
-                language="yaml"
-                :options="{ theme: theme.global.current.value.dark ? 'vs-dark' : 'vs', automaticLayout: true }"
-                style="height: 400px"
-                @editorDidMount="onEditorMounted"
-              />
-            </div>
-            <div
-              v-if="!isEditorReady"
-              class="d-flex flex-column align-center justify-center"
-              style="position: absolute; top: 0; left: 0; width: 100%; height: 400px; z-index: 10;"
-            >
-              <p class="mb-3">Loading editor...</p>
-              <v-progress-circular
-                color="primary"
-                indeterminate
-                :size="54"
-                :width="5"
-              ></v-progress-circular>
-            </div>
-          </template>
-          <div v-else class="d-flex align-center justify-center" style="height: 400px;">
-            <p>Select a file to edit.</p>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" prepend-icon="mdi-refresh" @click="refreshDevices">Refresh</v-btn>
+          </v-card-actions>
+        </v-tabs-window-item>
+
+        <!-- ── Saved Connections tab ─────────────────────────────────── -->
+        <v-tabs-window-item value="connections">
+          <v-list lines="one">
+            <template v-if="connections.length === 0">
+              <v-list-item class="text-medium-emphasis">No saved connections.</v-list-item>
+            </template>
+            <v-list-item v-for="conn in connections" :key="conn.path">
+              <template v-slot:prepend>
+                <v-icon :icon="connTypeIcon(conn.type)" class="mr-2"></v-icon>
+              </template>
+              <v-list-item-title class="d-flex align-center ga-2">
+                {{ conn.id }}
+                <v-chip v-if="isActive(conn.uuid)" color="success" size="x-small" label>Active</v-chip>
+              </v-list-item-title>
+              <v-list-item-subtitle>{{ conn.type }}</v-list-item-subtitle>
+              <template v-slot:append>
+                <v-btn
+                  v-if="!isActive(conn.uuid)"
+                  icon="mdi-play-circle-outline"
+                  variant="text"
+                  size="small"
+                  color="primary"
+                  title="Activate"
+                  @click="activateConn(conn.path)"
+                ></v-btn>
+                <v-btn
+                  v-else
+                  icon="mdi-stop-circle-outline"
+                  variant="text"
+                  size="small"
+                  color="warning"
+                  title="Deactivate"
+                  @click="deactivateByUuid(conn.uuid)"
+                ></v-btn>
+                <v-btn
+                  icon="mdi-pencil"
+                  variant="text"
+                  size="small"
+                  @click="openEditor(conn)"
+                ></v-btn>
+                <v-btn
+                  icon="mdi-delete"
+                  variant="text"
+                  size="small"
+                  color="error"
+                  @click="confirmDelete(conn)"
+                ></v-btn>
+              </template>
+            </v-list-item>
+          </v-list>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" prepend-icon="mdi-refresh" @click="refreshConnections">Refresh</v-btn>
+          </v-card-actions>
+        </v-tabs-window-item>
+
+        <!-- ── WiFi tab ──────────────────────────────────────────────── -->
+        <v-tabs-window-item value="wifi" v-if="has_wireless">
+          <v-progress-linear v-if="scanningWifi" indeterminate color="primary"></v-progress-linear>
+          <div v-if="!is_wireless_enabled" class="d-flex align-center justify-center pa-8 text-medium-emphasis">
+            Wireless is disabled.
           </div>
-        </v-col>
-      </v-row>
-      <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="secondary" @click="discardFileChanges" :disabled="!isFileDirty">Discard</v-btn>
-        <v-btn color="primary" :disabled="!isFileDirty" @click="saveChanges">Save</v-btn>
-        <v-btn color="warning" :disabled="!isFileDirty" @click="applyChanges">Apply</v-btn>
-      </v-card-actions>
+          <div v-else-if="wifiNetworks.length === 0 && !scanningWifi"
+               class="d-flex align-center justify-center pa-8 text-medium-emphasis">
+            No networks found. Try scanning.
+          </div>
+          <v-list v-else lines="one">
+            <v-list-item v-for="net in wifiNetworks" :key="net.hw_address">
+              <template v-slot:prepend>
+                <v-icon :icon="getSignalIcon(net.strength, net.flags)" class="mr-2"></v-icon>
+              </template>
+              <v-list-item-title class="d-flex align-center ga-2">
+                {{ net.ssid }}
+                <v-chip size="x-small" label>{{ getBand(net.frequency) }}</v-chip>
+                <!-- noinspection JSBitwiseOperatorUsage -->
+                <v-icon v-if="net.flags & 1" icon="mdi-lock" size="small" color="grey"></v-icon>
+              </v-list-item-title>
+              <v-list-item-subtitle>{{ net.hw_address }}</v-list-item-subtitle>
+              <template v-slot:append>
+                <v-btn
+                  size="small"
+                  variant="tonal"
+                  color="primary"
+                  @click="openWifiConnect(net)"
+                >Connect</v-btn>
+              </template>
+            </v-list-item>
+          </v-list>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" prepend-icon="mdi-magnify" :loading="scanningWifi" @click="scanWifi">
+              Scan
+            </v-btn>
+          </v-card-actions>
+        </v-tabs-window-item>
+      </v-tabs-window>
     </v-card>
 
-    <!-- Dialogs -->
-    <v-dialog v-model="dialogDelete" max-width="450px">
-      <v-card>
-        <v-card-title class="text-h5">Delete file</v-card-title>
-        <v-card-text>
-          Are you sure you want to delete <strong>{{ fileToDelete }}</strong>? This action cannot be undone.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn text @click="closeDeleteDialog">Cancel</v-btn>
-          <v-btn color="red darken-1" text @click="confirmDeleteFile">Delete</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-dialog v-model="dialogCreate" max-width="500px">
-      <v-card>
-        <v-card-title>Create new file</v-card-title>
+    <!-- ── Connection editor dialog ────────────────────────────────────── -->
+    <v-dialog v-model="editorOpen" max-width="540" scrollable>
+      <v-card :title="editorConn ? 'Edit Connection – ' + editorConn.id : 'Edit Connection'">
+        <v-divider></v-divider>
         <v-card-text>
           <v-text-field
-            v-model="newFileName"
-            label="File name"
+            v-model="editorForm.id"
+            label="Connection name"
             variant="outlined"
-            suffix=".yaml"
-            autofocus
-            @keyup.enter="confirmCreateFile"
+            density="compact"
+            class="mb-3"
           ></v-text-field>
+          <v-checkbox
+            v-model="editorForm.autoconnect"
+            label="Connect automatically"
+            density="compact"
+            hide-details
+            class="mb-3"
+          ></v-checkbox>
+
+          <!-- WiFi-specific fields -->
+          <template v-if="editorConn && editorConn.type === '802-11-wireless'">
+            <v-text-field
+              v-model="editorForm.ssid"
+              label="SSID"
+              variant="outlined"
+              density="compact"
+              class="mb-3"
+            ></v-text-field>
+            <v-text-field
+              v-model="editorForm.password"
+              label="Password (leave empty to keep current)"
+              variant="outlined"
+              density="compact"
+              type="password"
+              class="mb-3"
+            ></v-text-field>
+          </template>
+
+          <!-- IP settings -->
+          <div class="text-subtitle-2 mb-2">IPv4</div>
+          <v-select
+            v-model="editorForm.ip_method"
+            :items="[{title:'Automatic (DHCP)', value:'auto'},{title:'Manual (Static)', value:'manual'},{title:'Link-local only', value:'link-local'},{title:'Disabled',value:'disabled'}]"
+            label="Method"
+            variant="outlined"
+            density="compact"
+            class="mb-3"
+          ></v-select>
+          <template v-if="editorForm.ip_method === 'manual'">
+            <v-row dense>
+              <v-col cols="8">
+                <v-text-field
+                  v-model="editorForm.ip_address"
+                  label="IP Address"
+                  variant="outlined"
+                  density="compact"
+                  placeholder="192.168.1.100"
+                ></v-text-field>
+              </v-col>
+              <v-col cols="4">
+                <v-text-field
+                  v-model.number="editorForm.prefix_len"
+                  label="Prefix"
+                  variant="outlined"
+                  density="compact"
+                  type="number"
+                  min="1"
+                  max="32"
+                ></v-text-field>
+              </v-col>
+            </v-row>
+            <v-text-field
+              v-model="editorForm.gateway"
+              label="Gateway"
+              variant="outlined"
+              density="compact"
+              placeholder="192.168.1.1"
+              class="mb-2"
+            ></v-text-field>
+            <v-combobox
+              v-model="editorForm.dns"
+              label="DNS servers"
+              variant="outlined"
+              density="compact"
+              multiple
+              chips
+              closable-chips
+              placeholder="8.8.8.8"
+              hint="Press Enter to add"
+              persistent-hint
+            ></v-combobox>
+          </template>
+        </v-card-text>
+        <v-divider></v-divider>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn @click="editorOpen = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="editorSaving" @click="saveEditor">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── WiFi connect dialog ──────────────────────────────────────────── -->
+    <v-dialog v-model="wifiDialogOpen" max-width="480" scrollable>
+      <v-card :title="'Connect to ' + wifiForm.ssid">
+        <v-divider></v-divider>
+        <v-card-text>
+          <v-text-field
+            v-if="wifiForm.secured"
+            v-model="wifiForm.password"
+            label="Password"
+            variant="outlined"
+            density="compact"
+            type="password"
+            autofocus
+            class="mb-3"
+            @keyup.enter="connectWifi"
+          ></v-text-field>
+          <v-select
+            v-model="wifiForm.device"
+            :items="wifiDevices"
+            item-title="interface"
+            item-value="interface"
+            label="Device"
+            variant="outlined"
+            density="compact"
+            class="mb-3"
+          ></v-select>
+
+          <v-expand-transition>
+            <div>
+              <v-btn
+                variant="text"
+                size="small"
+                prepend-icon="mdi-chevron-down"
+                @click="wifiAdvanced = !wifiAdvanced"
+                class="mb-2"
+              >Advanced IP settings</v-btn>
+              <div v-if="wifiAdvanced">
+                <v-select
+                  v-model="wifiForm.ip_method"
+                  :items="[{title:'Automatic (DHCP)', value:'auto'},{title:'Manual (Static)', value:'manual'}]"
+                  label="IPv4 Method"
+                  variant="outlined"
+                  density="compact"
+                  class="mb-3"
+                ></v-select>
+                <template v-if="wifiForm.ip_method === 'manual'">
+                  <v-row dense>
+                    <v-col cols="8">
+                      <v-text-field
+                        v-model="wifiForm.ip_address"
+                        label="IP Address"
+                        variant="outlined"
+                        density="compact"
+                        placeholder="192.168.1.100"
+                      ></v-text-field>
+                    </v-col>
+                    <v-col cols="4">
+                      <v-text-field
+                        v-model.number="wifiForm.prefix_len"
+                        label="Prefix"
+                        variant="outlined"
+                        density="compact"
+                        type="number"
+                        min="1"
+                        max="32"
+                      ></v-text-field>
+                    </v-col>
+                  </v-row>
+                  <v-text-field
+                    v-model="wifiForm.gateway"
+                    label="Gateway"
+                    variant="outlined"
+                    density="compact"
+                    placeholder="192.168.1.1"
+                    class="mb-2"
+                  ></v-text-field>
+                  <v-combobox
+                    v-model="wifiForm.dns"
+                    label="DNS servers"
+                    variant="outlined"
+                    density="compact"
+                    multiple
+                    chips
+                    closable-chips
+                    placeholder="8.8.8.8"
+                  ></v-combobox>
+                </template>
+              </div>
+            </div>
+          </v-expand-transition>
+        </v-card-text>
+        <v-divider></v-divider>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn @click="wifiDialogOpen = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="wifiConnecting" @click="connectWifi">Connect</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── Device connection picker dialog ─────────────────────────────── -->
+    <v-dialog v-model="connPickerOpen" max-width="400">
+      <v-card :title="'Connect ' + (connPickerDev ? connPickerDev.interface : '') + ' to…'">
+        <v-list lines="one">
+          <v-list-item
+            v-for="conn in compatibleConnections"
+            :key="conn.path"
+            :title="conn.id"
+            :subtitle="conn.type"
+            @click="activateOnDev(conn.path, connPickerDev.path)"
+          >
+            <template v-slot:prepend>
+              <v-icon :icon="connTypeIcon(conn.type)"></v-icon>
+            </template>
+          </v-list-item>
+          <v-list-item v-if="compatibleConnections.length === 0" class="text-medium-emphasis">
+            No compatible profiles found.
+          </v-list-item>
+        </v-list>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn @click="connPickerOpen = false">Cancel</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ── Delete confirmation ─────────────────────────────────────────── -->
+    <v-dialog v-model="deleteDialogOpen" max-width="420">
+      <v-card title="Delete connection">
+        <v-card-text>
+          Delete <strong>{{ connToDelete ? connToDelete.id : '' }}</strong>? This cannot be undone.
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="closeCreateDialog">Cancel</v-btn>
-          <v-btn color="primary" @click="confirmCreateFile">Create</v-btn>
+          <v-btn @click="deleteDialogOpen = false">Cancel</v-btn>
+          <v-btn color="error" @click="doDelete">Delete</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="dialogLeave" max-width="500px">
-      <v-card>
-        <v-card-title class="text-h5">Unsaved changes</v-card-title>
-        <v-card-text>You have unsaved changes. Are you sure you want to leave?</v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn text @click="confirmLeave(false)">Cancel</v-btn>
-          <v-btn color="warning" text @click="confirmLeave(true)">Leave</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- Error snackbar -->
+    <v-snackbar v-model="errorSnack" color="error" :timeout="4000">{{ errorMsg }}</v-snackbar>
 
-    <v-btn
-      class="ma-4"
-      position="fixed"
-      location="bottom right"
-      icon="mdi-file-document-plus"
-      color="primary"
-      @click="dialogCreate = true"
-      aria-label="New file"
-    ></v-btn>
   </div>
 </template>
 
 <script setup>
-import {ref, computed, reactive, onMounted, onBeforeUnmount, watch} from 'vue'
-import {onBeforeRouteLeave} from 'vue-router'
-import MonacoEditor from 'vue-monaco-cdn'
-import { useTheme } from 'vuetify'
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 
-const theme = useTheme()
+// ── state ──────────────────────────────────────────────────────────────────
 
-const hostname = ref('')
+const hostname       = ref('')
 const originalHostname = ref('')
-
-const yamlFiles = ref([])
-const selectedFile = ref(null)
-const fileContent = ref('')
-
-const isEditorReady = ref(false)
-
-const backend_running = ref(false);
-
-// Dialog states
-const dialogDelete = ref(false)
-const fileToDelete = ref(null)
-const dialogCreate = ref(false)
-const newFileName = ref('')
-const dialogLeave = ref(false)
-let resolveLeave = () => {}
-
-// WiFi state
-const loadingWifi = ref(false)
-const has_wireless = ref(false)
-const is_wireless_enabled = ref(false)
-const default_wireless_device = ref(null)
-const wifiNetworks = ref([])
-const wifiMenu = ref(false)
-
-// Content states
-const originalFileContents = reactive(new Map())
-const unsavedChanges = reactive(new Map())
-
 const isHostnameChanged = computed(() => hostname.value !== originalHostname.value)
 
-const isFileDirty = computed(() => {
-  if (!selectedFile.value) return false
-  const original = originalFileContents.get(selectedFile.value)
-  return original !== fileContent.value
+const activeTab      = ref('overview')
+const devices        = ref([])
+const connections    = ref([])
+const activeConns    = ref([])
+
+// WiFi
+const has_wireless       = ref(false)
+const is_wireless_enabled = ref(false)
+const default_wireless_device = ref(null)
+const wifiNetworks       = ref([])
+const scanningWifi       = ref(false)
+
+// Editor dialog
+const editorOpen    = ref(false)
+const editorConn    = ref(null)   // the connection metadata (id, type, path)
+const editorSaving  = ref(false)
+const editorForm    = reactive({
+  id: '', autoconnect: true, ssid: '', password: '',
+  ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
 })
 
-const hasUnsavedChanges = computed(() => isHostnameChanged.value || unsavedChanges.size > 0 || isFileDirty.value)
-
-const onEditorMounted = () => {
-  isEditorReady.value = true
-}
-
-watch(selectedFile, (newVal, oldVal) => {
-  if (newVal && !oldVal) {
-    isEditorReady.value = false
-  }
+// WiFi connect dialog
+const wifiDialogOpen = ref(false)
+const wifiConnecting = ref(false)
+const wifiAdvanced   = ref(false)
+const wifiForm       = reactive({
+  ssid: '', password: '', secured: false, bssid: null,
+  device: null, ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
 })
 
-const sendCommand = window.sendCommand;
-window.setInitCommands("Settings/hostname", "Settings/Netplan/getFile", "Settings/has_wireless")
+// Connection picker (for "Connect" button on overview)
+const connPickerOpen = ref(false)
+const connPickerDev  = ref(null)
+const compatibleConnections = computed(() => {
+  if (!connPickerDev.value) return []
+  const devType = connPickerDev.value.type
+  return connections.value.filter(c => {
+    if (devType === 2) return c.type === '802-11-wireless' || c.type === '802-11-wireless-security'
+    if (devType === 1) return c.type === '802-3-ethernet'
+    return true
+  })
+})
+
+// Delete
+const deleteDialogOpen = ref(false)
+const connToDelete = ref(null)
+
+// Error
+const errorSnack = ref(false)
+const errorMsg   = ref('')
+
+// Convenience
+const wifiDevices = computed(() => devices.value.filter(d => d.type === 2))
+const sendCommand = window.sendCommand
+
+// ── WS setup ───────────────────────────────────────────────────────────────
+
+window.setInitCommands(
+  'Settings/hostname',
+  'Settings/NM/devices',
+  'Settings/NM/connections',
+  'Settings/NM/activeConnections',
+  'Settings/has_wireless',
+)
 
 onWSMessage = (data) => {
   switch (data.target) {
-    case "Settings/hostname":
-      hostname.value = data.hostname;
-      originalHostname.value = data.hostname;
-      break;
-    case "Settings/Netplan/getFile":
-      if (data.error) {
-        backend_running.value = false;
-      } else {
-        backend_running.value = true;
-        yamlFiles.value = Object.keys(data.files);
-        originalFileContents.clear();
+    case 'Settings/hostname':
+      hostname.value = data.hostname
+      originalHostname.value = data.hostname
+      break
 
-        Object.entries(data.files).forEach(([filename, content]) => {
-          originalFileContents.set(filename, content);
-        });
-        if (selectedFile.value === null) switchFile(yamlFiles.value[0]);
+    case 'Settings/NM/devices':
+      if (data.error) { showError(data.error); break }
+      if (data.devices !== undefined) devices.value = data.devices
+      break
+
+    case 'Settings/NM/connections':
+    case 'Settings/NM/editConnection':
+    case 'Settings/NM/deleteConnection':
+      if (data.error) { showError(data.error); break }
+      if (data.connections !== undefined) connections.value = data.connections
+      if (data.target === 'Settings/NM/editConnection') {
+        editorSaving.value = false
+        editorOpen.value = false
       }
-      break;
-    case "Settings/has_wireless":
+      break
+
+    case 'Settings/NM/connectionDetails':
+      if (data.error) { showError(data.error); break }
+      if (data.details && editorOpen.value) {
+        const d = data.details
+        const ipv4 = d.ipv4 || {}
+        editorForm.ip_method = ipv4.method || 'auto'
+        if (Array.isArray(ipv4['address-data']) && ipv4['address-data'].length) {
+          editorForm.ip_address = ipv4['address-data'][0].address || ''
+          editorForm.prefix_len = ipv4['address-data'][0].prefix || 24
+        }
+        editorForm.gateway = ipv4.gateway || ''
+        editorForm.dns     = ipv4.dns || []
+        const wifi = d['802-11-wireless']
+        if (wifi && wifi.ssid) {
+          editorForm.ssid = typeof wifi.ssid === 'string'
+            ? wifi.ssid
+            : new TextDecoder().decode(Uint8Array.from(wifi.ssid))
+        }
+      }
+      break
+
+    case 'Settings/NM/activeConnections':
+      if (data.active !== undefined) activeConns.value = data.active
+      break
+
+    // activate / deactivate / connectWifi all yield devices + active updates
+    case 'Settings/NM/activate':
+    case 'Settings/NM/deactivate':
+    case 'Settings/NM/connectWifi':
+      if (data.error) {
+        showError(data.error)
+        wifiConnecting.value = false
+        break
+      }
+      if (data.devices !== undefined)     devices.value    = data.devices
+      if (data.active !== undefined)      activeConns.value = data.active
+      if (data.connections !== undefined) connections.value = data.connections
+      if (data.target === 'Settings/NM/connectWifi' && data.connected_uuid !== undefined) {
+        wifiConnecting.value = false
+        wifiDialogOpen.value = false
+        // refresh connections so the new profile appears
+        sendCommand('Settings/NM/connections')
+      }
+      break
+
+    case 'Settings/has_wireless':
       has_wireless.value = data.wireless
-      if (data.wireless)
-        sendCommand('Settings/is_wireless_enabled');
-        sendCommand('Settings/get_default_wlan_device');
-      break;
-    case "Settings/is_wireless_enabled":
+      if (data.wireless) {
+        sendCommand('Settings/is_wireless_enabled')
+        sendCommand('Settings/get_default_wlan_device')
+      }
+      break
+
+    case 'Settings/is_wireless_enabled':
       is_wireless_enabled.value = data.enabled
-      break;
-    case "Settings/get_wireless_networks":
-      wifiNetworks.value = data.wifis;
-      loadingWifi.value = false;
-      break;
-    case "Settings/get_default_wlan_device":
-      default_wireless_device.value = data.device;
-      break;
+      break
+
+    case 'Settings/get_default_wlan_device':
+      default_wireless_device.value = data.device
+      if (!wifiForm.device) wifiForm.device = data.device
+      break
+
+    case 'Settings/get_wireless_networks':
+      wifiNetworks.value = data.wifis ?? []
+      scanningWifi.value = false
+      break
   }
 }
 
-
-const beforeWindowUnload = (e) => {
-  if (hasUnsavedChanges.value) {
-    e.preventDefault()
-    e.returnValue = ''
-  }
-}
-
-onMounted(() => window.addEventListener('beforeunload', beforeWindowUnload))
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeWindowUnload))
-
-onBeforeRouteLeave((to, from, next) => {
-  if (hasUnsavedChanges.value) {
-    dialogLeave.value = true
-    resolveLeave = next
-  } else {
-    next()
-  }
-})
-
-const confirmLeave = (confirm) => {
-  resolveLeave(confirm)
-  dialogLeave.value = false
-}
-
-const isFileDirtyByName = (file) => {
-  return unsavedChanges.has(file) || (file === selectedFile.value && isFileDirty.value)
-}
+// ── actions ────────────────────────────────────────────────────────────────
 
 const applyHostname = () => {
-  originalHostname.value = hostname.value
-  console.log('Hostname applied:', hostname.value)
+  sendCommand('Settings/setHostname', { hostname: hostname.value })
 }
 
-const switchFile = (file) => {
-  if (selectedFile.value && isFileDirty.value) {
-    unsavedChanges.set(selectedFile.value, fileContent.value)
+const refreshDevices = () => {
+  sendCommand('Settings/NM/devices')
+  sendCommand('Settings/NM/activeConnections')
+}
+
+const refreshConnections = () => {
+  sendCommand('Settings/NM/connections')
+  sendCommand('Settings/NM/activeConnections')
+}
+
+const isActive = (uuid) => activeConns.value.some(a => a.uuid === uuid)
+
+const deactivateConn = (activePath) => {
+  sendCommand('Settings/NM/deactivate', { active_path: activePath })
+}
+
+const deactivateByUuid = (uuid) => {
+  const ac = activeConns.value.find(a => a.uuid === uuid)
+  if (ac) deactivateConn(ac.path)
+}
+
+const activateConn = (connPath) => {
+  // Pick first matching device (user can use connection picker for more control)
+  const conn = connections.value.find(c => c.path === connPath)
+  if (!conn) return
+  // Find a suitable device
+  let devPath = '/'
+  if (conn.type === '802-11-wireless') {
+    const d = devices.value.find(d => d.type === 2)
+    if (d) devPath = d.path
+  } else if (conn.type === '802-3-ethernet') {
+    const d = devices.value.find(d => d.type === 1)
+    if (d) devPath = d.path
   }
-  loadFileContent(file)
+  sendCommand('Settings/NM/activate', { conn_path: connPath, dev_path: devPath })
 }
 
-const loadFileContent = async (file) => {
-  selectedFile.value = file
-  if (unsavedChanges.has(file)) {
-    fileContent.value = unsavedChanges.get(file)
-    return
-  }
-  fileContent.value = originalFileContents.get(file)
+const activateOnDev = (connPath, devPath) => {
+  connPickerOpen.value = false
+  sendCommand('Settings/NM/activate', { conn_path: connPath, dev_path: devPath })
 }
 
-const requestDeleteFile = (file) => {
-  fileToDelete.value = file
-  dialogDelete.value = true
+const openConnectionPicker = (dev) => {
+  connPickerDev.value = dev
+  connPickerOpen.value = true
 }
 
-const createWifiFile = (net) => {
-  const needsPassword = (net.flags & 1) !== 0
-  const content = wifi_yaml(net.ssid, needsPassword)
+// ── editor ─────────────────────────────────────────────────────────────────
 
-  let filename = `wifi-${net.ssid}.yaml`
-  let counter = 1
-  while (yamlFiles.value.includes(filename)) {
-    filename = `wifi-${net.ssid}-${counter}.yaml`
-    counter++
-  }
-
-  yamlFiles.value.push(filename)
-  unsavedChanges.set(filename, content)
-  switchFile(filename)
-  wifiMenu.value = false
+const openEditor = (conn) => {
+  editorConn.value = conn
+  // Reset form then fill from what we know
+  Object.assign(editorForm, {
+    id: conn.id, autoconnect: conn.autoconnect,
+    ssid: '', password: '',
+    ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
+  })
+  // Fetch full details to populate IP fields
+  sendCommand('Settings/NM/connectionDetails', { path: conn.path })
+  editorOpen.value = true
 }
 
-const confirmDeleteFile = () => {
-  if (!fileToDelete.value) return
-  const file = fileToDelete.value
-  const shouldDeleteFromBackend = originalFileContents.has(file)
-
-  const index = yamlFiles.value.indexOf(file)
-  if (index > -1) {
-    yamlFiles.value.splice(index, 1)
-    originalFileContents.delete(file)
-    unsavedChanges.delete(file)
-    if (selectedFile.value === file) {
-      selectedFile.value = null
-      fileContent.value = ''
-    }
-  }
-  console.log('Deleted file:', file)
-
-  if (shouldDeleteFromBackend) {
-    sendCommand('Settings/Netplan/deleteFile', {filename: file})
-  }
-
-  closeDeleteDialog()
+const saveEditor = () => {
+  if (!editorConn.value) return
+  editorSaving.value = true
+  sendCommand('Settings/NM/editConnection', {
+    conn_path   : editorConn.value.path,
+    conn_id     : editorForm.id,
+    autoconnect : editorForm.autoconnect,
+    ip_method   : editorForm.ip_method,
+    ip_address  : editorForm.ip_address || null,
+    prefix_len  : editorForm.prefix_len,
+    gateway     : editorForm.gateway || null,
+    dns         : editorForm.dns,
+    ssid        : editorForm.ssid || null,
+    password    : editorForm.password || null,
+  })
+  editorSaving.value = false
 }
 
-const closeDeleteDialog = () => {
-  dialogDelete.value = false
-  fileToDelete.value = null
+// ── delete ─────────────────────────────────────────────────────────────────
+
+const confirmDelete = (conn) => {
+  connToDelete.value = conn
+  deleteDialogOpen.value = true
 }
 
-const closeCreateDialog = () => {
-  dialogCreate.value = false
-  newFileName.value = ''
+const doDelete = () => {
+  if (!connToDelete.value) return
+  sendCommand('Settings/NM/deleteConnection', { conn_path: connToDelete.value.path })
+  deleteDialogOpen.value = false
+  connToDelete.value = null
 }
 
-const confirmCreateFile = () => {
-  if (!newFileName.value.trim()) return
-  const finalName = `${newFileName.value.trim()}.yaml`
-  if (yamlFiles.value.includes(finalName)) {
-    console.error('File already exists')
-    return
-  }
-  yamlFiles.value.push(finalName)
-  unsavedChanges.set(finalName, '')
-  closeCreateDialog()
-  switchFile(finalName)
-}
-
-const saveChanges = () => {
-  if (!selectedFile.value || !isFileDirty.value) return
-  const currentFile = selectedFile.value
-
-  if (!originalFileContents.has(currentFile)) {
-    sendCommand('Settings/Netplan/newFile', {filename: currentFile})
-  }
-
-  sendCommand('Settings/Netplan/changeFile', {filename: currentFile, content: fileContent.value, apply: false})
-
-  originalFileContents.set(currentFile, fileContent.value)
-  unsavedChanges.delete(currentFile)
-  console.log(`Saving ${currentFile}...`, fileContent.value)
-}
-
-const applyChanges = () => {
-  if (!selectedFile.value || !isFileDirty.value) return
-  saveChanges()
-  console.log(`Applying changes for ${selectedFile.value}...`)
-}
-
-const discardFileChanges = () => {
-  if (selectedFile.value) {
-    fileContent.value = originalFileContents.get(selectedFile.value)
-    unsavedChanges.delete(selectedFile.value)
-  }
-}
-
-let wifi_upd_timer = null;
-watch(wifiMenu, () => {
-  if (wifiMenu.value && is_wireless_enabled.value) {
-    sendCommand('Settings/get_wireless_networks');
-    loadingWifi.value = true
-    wifi_upd_timer=setInterval(sendCommand, 5000, 'Settings/get_wireless_networks')
-  } else if (wifi_upd_timer !== null) {
-    clearInterval(wifi_upd_timer);
-  }
-})
+// ── WiFi ───────────────────────────────────────────────────────────────────
 
 const toggleWifi = (val) => {
-  sendCommand('Settings/set_wireless_enabled', {enabled: val})
+  sendCommand('Settings/set_wireless_enabled', { enabled: val })
+}
+
+const scanWifi = () => {
+  scanningWifi.value = true
+  sendCommand('Settings/get_wireless_networks')
+}
+
+const openWifiConnect = (net) => {
+  // noinspection JSBitwiseOperatorUsage
+  const secured = (net.flags & 1) !== 0
+  Object.assign(wifiForm, {
+    ssid: net.ssid, password: '', secured,
+    bssid: net.hw_address,
+    device: default_wireless_device.value || (wifiDevices.value[0]?.interface ?? null),
+    ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
+  })
+  wifiAdvanced.value = false
+  wifiDialogOpen.value = true
+}
+
+const connectWifi = () => {
+  if (!wifiForm.ssid) return
+  wifiConnecting.value = true
+  sendCommand('Settings/NM/connectWifi', {
+    ssid      : wifiForm.ssid,
+    device    : wifiForm.device,
+    password  : wifiForm.password || null,
+    bssid     : wifiForm.bssid,
+    ip_method : wifiForm.ip_method,
+    ip_address: wifiForm.ip_method === 'manual' ? (wifiForm.ip_address || null) : null,
+    prefix_len: wifiForm.prefix_len,
+    gateway   : wifiForm.ip_method === 'manual' ? (wifiForm.gateway || null) : null,
+    dns       : wifiForm.ip_method === 'manual' ? wifiForm.dns : null,
+  })
+}
+
+// auto-scan when entering the WiFi tab
+watch(activeTab, (val) => {
+  if (val === 'wifi' && is_wireless_enabled.value) scanWifi()
+})
+
+// ── display helpers ────────────────────────────────────────────────────────
+
+const devTypeIcon = (type) => {
+  if (type === 2) return 'mdi-wifi'
+  if (type === 1) return 'mdi-ethernet'
+  return 'mdi-network-outline'
+}
+
+const connTypeIcon = (type) => {
+  if (type === '802-11-wireless') return 'mdi-wifi'
+  if (type === '802-3-ethernet') return 'mdi-ethernet'
+  return 'mdi-network-outline'
+}
+
+// NM_DEVICE_STATE values
+const devStateName = (state) => {
+  if (state === 100) return 'Connected'
+  if (state === 30)  return 'Disconnected'
+  if (state === 20)  return 'Unavailable'
+  if (state === 10)  return 'Unmanaged'
+  if (state === 120) return 'Failed'
+  if (state >= 40 && state < 100) return 'Connecting…'
+  return 'Unknown'
+}
+
+const devStateColor = (state) => {
+  if (state === 100) return 'success'
+  if (state === 120) return 'error'
+  if (state >= 40 && state < 100) return 'warning'
+  return 'default'
 }
 
 const getSignalIcon = (strength, flags) => {
@@ -487,18 +813,8 @@ const getBand = (frequency) => {
   return `${frequency} MHz`
 }
 
-if (yamlFiles.value.length > 0) {
-  switchFile(yamlFiles.value[0])
-}
-
-function wifi_yaml(wifi_name, password=true) {
-    let net = `network:\n  wifis:\n    ${default_wireless_device.value}:\n      dhcp4: true\n      # addresses: [192.168.1.100/24]\n      # routes:\n      #   - to: 0.0.0.0/0\n      #     via: 192.168.1.1\n      # nameservers:\n      #   addresses: [192.168.1.1, 1.1.1.1, 8.8.8.8]\n      access-points:\n        "${wifi_name}":`;
-    if (password)
-        net += `\n          password: "<super-secure>"\n`;
-    else
-        net += ' {}';
-    return net;
+const showError = (msg) => {
+  errorMsg.value = msg
+  errorSnack.value = true
 }
 </script>
-
-

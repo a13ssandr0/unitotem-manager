@@ -1,6 +1,7 @@
 import json
 from ipaddress import IPv4Address
 from secrets import token_hex
+from threading import Lock
 from typing import Annotated, Optional
 
 from Crypto.PublicKey import RSA
@@ -12,6 +13,10 @@ from utils.models.command_line import cmdargs
 from time import time
 from loguru import logger
 tic = time()
+
+# state of the lazy RSA signing-key generation (see RemoteManager.get_signing_key)
+_keygen_lock = Lock()
+_keygen_running = False
 
 class Client(BaseModel, defer_build=True, validate_assignment=True, arbitrary_types_allowed=True):
     public_key: RSA.RsaKey
@@ -56,6 +61,41 @@ class RemoteManager(BaseModel, validate_assignment=True, arbitrary_types_allowed
     def get_instance(cls):
         with open(cmdargs.remote_file) as f:
             return cls(**json.load(f))
+
+    @classmethod
+    def get_signing_key(cls) -> RSA.RsaKey:
+        """RSA private key used to sign viewer commands, generated and
+        persisted on first use: not needed for basic operation.
+
+        Generation is started in a worker thread right after startup (main.py);
+        the lock also covers the synchronous fallback in WSManager.prepare_message
+        so exactly one key is ever generated, concurrent callers wait for it."""
+        global _keygen_running
+        with _keygen_lock:
+            try:
+                instance = cls.get_instance()
+            except FileNotFoundError:
+                instance = cls()
+            if instance.rsa_prik is None:
+                _keygen_running = True
+                try:
+                    logger.info('Generating RSA signing key')
+                    instance.rsa_prik = RSA.generate(4096)
+                    instance.save()
+                    logger.success('RSA signing key saved to {}', cmdargs.remote_file)
+                finally:
+                    _keygen_running = False
+            return instance.rsa_prik
+
+    @classmethod
+    def signing_key_status(cls) -> str:
+        """'missing' | 'generating' | 'ready'"""
+        if _keygen_running:
+            return 'generating'
+        try:
+            return 'ready' if cls.get_instance().rsa_prik else 'missing'
+        except FileNotFoundError:
+            return 'missing'
 
     def save(self):
         with open(cmdargs.remote_file, 'w') as f:

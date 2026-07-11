@@ -1,3 +1,4 @@
+debian/20-unitotem-apt                                      etc/sudoers.d
 usr/share/*.py                                              /usr/share
 usr/share/unitotem-manager/static/Sortable.min.js           /usr/share/unitotem-manager/static
 usr/share/unitotem-manager/static/jszip-utils.min.js        /usr/share/unitotem-manager/static
