@@ -2,15 +2,6 @@
 
 if [ "$1" == "configure" ] && [ -z "$2" ]; then
 	# if $2 is null we are installing, run first setting code
-	echo "Creating virtual environment for UniTotem and installing required dependencies"
-	python3 -m venv /var/unitotem-venv --system-site-packages --copies
-	setcap CAP_NET_BIND_SERVICE=+eip /var/unitotem-venv/bin/python
-	setcap CAP_NET_BIND_SERVICE=+eip /var/unitotem-venv/bin/python3
-	/var/unitotem-venv/bin/pip3 install -r #TODO requirements.txt
-	# /var/unitotem-venv/bin/pip3 install python-crontab requests validators decorator qrcode PyChromeDevTools pymediainfo ruamel.yaml pillow
-	# fastapi, (starlette), uvicorn, python-multipart, jinja2, Werkzeug, websockets
-
-  groupadd unitotem
 
 	echo "Creating ssl key for UniTotem"
 	openssl req -x509 -nodes -newkey rsa:2048 -keyout "/etc/ssl/unitotem_key.pem" -out "/etc/ssl/unitotem_crt.pem" -days 365000 -subj "/C=../ST=./L=./O=a13ssandr0/OU=UniTotem/CN=UniTotem/emailAddress=."
@@ -18,25 +9,26 @@ if [ "$1" == "configure" ] && [ -z "$2" ]; then
 	rm /etc/ssl/unitotem_{crt,key}.pem
 	chmod 0600 "/etc/ssl/unitotem.pem"
 
-# 	if [ -f /etc/haproxy/haproxy.cfg ]; then
-# 	echo "Adding UniTotem haproxy configuration"
-# 	cat >> /etc/haproxy/haproxy.cfg << EOF
-# ### UniTotem section, DO NOT EDIT ###
+fi
 
-# frontend unitotem-frontend
-# 	mode http
-# 	bind :80
-# 	bind :443 ssl crt /etc/ssl/unitotem.pem
-# 	http-request redirect scheme https code 301 unless { ssl_fc }
-# 	default_backend unitotem
 
-# backend unitotem
-# 	option forwardfor
-# 	server unitotem1 127.0.0.1:5000
+# https://stackoverflow.com/questions/66775654/how-can-i-make-pulseaudio-run-as-root
 
-# ### End UniTotem section
-# EOF
-# 	fi
+if [ "$1" == "configure" ]; then
+	# The venv is prebuilt and shipped inside the package (see debian/rules).
+	# CAP_NET_BIND_SERVICE is stored as a file xattr, which dpkg's data.tar
+	# does not reliably preserve across (re)install, so it must be reapplied
+	# on every install AND every upgrade, not just the first install.
+	setcap CAP_NET_BIND_SERVICE=+eip /var/unitotem-venv/bin/python
+	setcap CAP_NET_BIND_SERVICE=+eip /var/unitotem-venv/bin/python3
+
+	getent group unitotem >/dev/null || addgroup --system unitotem
+	# reading raw block devices (to compute free space on unmounted filesystems)
+	# requires membership in the "disk" group; also reapplied on upgrade in
+	# case this device was set up before this fix existed
+	if id -u unitotem &>/dev/null; then
+		usermod -aG disk unitotem
+	fi
 
 	# ── netplan renderer check ────────────────────────────────────────────────
 	# UniTotem manages networking exclusively through NetworkManager DBus.
@@ -71,20 +63,21 @@ EOF
 		netplan apply || true
 	fi
 
-	# ── sudoers ───────────────────────────────────────────────────────────────
-	# The file is installed by dpkg; just enforce the required permissions and validate.
-	chmod 0440 /etc/sudoers.d/20-unitotem-apt
-	visudo -cf /etc/sudoers.d/20-unitotem-apt || {
-		echo "WARNING: sudoers rule failed validation, removing"
-		rm -f /etc/sudoers.d/20-unitotem-apt
-	}
+	# ── Plymouth theme ────────────────────────────────────────────────────────
+	# Registered as a high-priority alternative so it becomes the default
+	# automatically (update-alternatives picks the highest priority unless an
+	# admin has manually pinned another theme via --config). update-initramfs
+	# embeds it into initrd; the plymouth package's own initramfs-tools hook
+	# does the actual copying, no custom hook needed. Re-run on every upgrade
+	# too, in case the theme's script/images changed.
+	if [ -f /usr/share/plymouth/themes/unitotem/unitotem.plymouth ]; then
+		update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+			default.plymouth /usr/share/plymouth/themes/unitotem/unitotem.plymouth 100
+		if command -v update-initramfs >/dev/null; then
+			update-initramfs -u
+		fi
+	fi
 
-fi
-
-
-# https://stackoverflow.com/questions/66775654/how-can-i-make-pulseaudio-run-as-root
-
-if [ "$1" == "configure" ]; then
 	# check if chromium allows remote control
 	# this means the systems is configured for running UniTotem
 	grep -Fq "remote-debugging-port" /etc/X11/xinit/xinitrc

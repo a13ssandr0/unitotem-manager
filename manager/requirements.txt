@@ -2,8 +2,9 @@ Pillow
 # viewer (Qt6+CEF) — only needed in full (non-headless) mode
 PySide6>=6.4.0
 websockets>=12.0
-# cefpython3: install from the linesight fork, not PyPI
-# pip install git+https://github.com/linesight/cefpython
+# cefpython3: no PyPI release. Wheel built by the vendor/cefpython submodule's
+# own CI (github.com/a13ssandr0/cefpython, arm64 fork of linesight/cefpython)
+# and installed separately (see debian/rules, CEF_RELEASE_TAG)
 PyJWT
 Werkzeug
 aiofiles

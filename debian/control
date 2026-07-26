@@ -2,13 +2,13 @@ Source: unitotem-manager
 Section: utils
 Priority: optional
 Maintainer: Alessandro Campolo <campoloalex@gmail.com>
-Build-Depends: debhelper-compat (= 13)
+Build-Depends: debhelper-compat (= 13), python3-venv, python3-pip, git, nodejs, npm, curl
 Standards-Version: 4.6.0
 Homepage: https://github.com/a13ssandr0/unitotem-manager
 Rules-Requires-Root: binary-targets
 
 Package: unitotem-manager
-Architecture: all
-Depends: python3-pip, python3-apt, python3-venv, python3-distutils-extra, openssl, mediainfo, netplan.io, network-manager, libopenjp2-7-dev, libdbus-1-dev, libglib2.0-dev
+Architecture: any
+Depends: python3-apt, python3-distutils-extra, openssl, mediainfo, netplan.io, network-manager, libopenjp2-7-dev, libdbus-1-dev, libglib2.0-dev, plymouth, plymouth-label, ${misc:Depends}
 Recommends: alsa-utils
 Description: Management system for UniTotem
