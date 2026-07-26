@@ -1,0 +1,4 @@
+[submodule "vendor/cefpython"]
+	path = vendor/cefpython
+	url = https://github.com/a13ssandr0/cefpython.git
+	branch = cefpython147-qt

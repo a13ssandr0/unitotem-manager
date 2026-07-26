@@ -14,6 +14,22 @@
 #export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 
 
+PKGDIR       := debian/unitotem-manager
+VENV         := $(PKGDIR)/var/unitotem-venv
+SHARE        := $(PKGDIR)/usr/share/unitotem-manager
+PLYMOUTH     := $(PKGDIR)/usr/share/plymouth/themes/unitotem
+# cefpython3 has no PyPI release for this fork (vendor/cefpython submodule).
+# Building it is a separate, heavy, occasional native CEF compile (~765MB
+# CDN download + cmake/ninja on GitHub's arm64 runners, see
+# vendor/cefpython/.github/workflows/build-arm64-release.yml), not something
+# dpkg-buildpackage should redo on every run: wheels are prebuilt and
+# published as GitHub Release assets, downloaded here on first use and
+# cached locally so repeated package builds don't re-fetch ~400MB each time.
+CEF_WHEEL_DIR    ?= vendor/cefpython-wheels
+CEF_RELEASE_REPO ?= a13ssandr0/cefpython
+# Must track the tag built from the vendor/cefpython submodule's pinned commit
+CEF_RELEASE_TAG  ?= v147.0.0-arm64
+
 %:
 	dh $@
 
@@ -22,8 +38,53 @@ override_dh_builddeb:
 	dh_builddeb -- -Zgzip
 
 
-# dh_make generated override targets
-# This is example for Cmake (See https://bugs.debian.org/641051 )
-#override_dh_auto_configure:
-#	dh_auto_configure -- \
-#	-DCMAKE_LIBRARY_PATH=$(DEB_HOST_MULTIARCH)
+override_dh_auto_build:
+	cd webui && npm ci && npm run build
+
+
+override_dh_auto_install:
+	dh_auto_install
+	install -d $(SHARE) $(SHARE)/uploaded
+	cp -r manager/api manager/routers manager/templates manager/utils \
+	      manager/webview manager/resources manager/static $(SHARE)/
+	cp manager/init.py manager/main.py manager/requirements.txt $(SHARE)/
+	find $(SHARE) -name __pycache__ -type d -prune -exec rm -rf {} +
+	install -d $(PLYMOUTH)
+	cp -r plymouth/unitotem/. $(PLYMOUTH)/
+	# self-contained venv shipped inside the package: no network access is
+	# required on the target device to install UniTotem (it may have none,
+	# see the hotspot/captive-portal first-boot flow)
+	python3 -m venv --system-site-packages --copies $(VENV)
+	$(VENV)/bin/pip3 install --no-cache-dir -r manager/requirements.txt
+	CEF_PYTAG=$$($(VENV)/bin/python3 -c "import sys; print(f'cp{sys.version_info[0]}{sys.version_info[1]}')"); \
+	CEF_WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$$CEF_PYTAG-*.whl 2>/dev/null | head -1); \
+	if [ -z "$$CEF_WHEEL" ]; then \
+		echo "No cached cefpython3 wheel for $$CEF_PYTAG, fetching from" \
+		     "$(CEF_RELEASE_REPO)@$(CEF_RELEASE_TAG)..."; \
+		mkdir -p $(CEF_WHEEL_DIR); \
+		ASSET_URL=$$(python3 -c "import json,urllib.request as u; \
+d=json.load(u.urlopen('https://api.github.com/repos/$(CEF_RELEASE_REPO)/releases/tags/$(CEF_RELEASE_TAG)')); \
+print(next((a['browser_download_url'] for a in d['assets'] if '-$$CEF_PYTAG-' in a['name'] and a['name'].endswith('linux_aarch64.whl')), ''))"); \
+		if [ -z "$$ASSET_URL" ]; then \
+			echo "No cefpython3 wheel for $$CEF_PYTAG in release" \
+			     "$(CEF_RELEASE_REPO)@$(CEF_RELEASE_TAG)." >&2; \
+			echo "Check https://github.com/$(CEF_RELEASE_REPO)/releases/tag/$(CEF_RELEASE_TAG)" >&2; \
+			echo "or drop a matching wheel in $(CEF_WHEEL_DIR)/ manually." >&2; \
+			exit 1; \
+		fi; \
+		curl -fL -o "$(CEF_WHEEL_DIR)/$$(basename $$ASSET_URL)" "$$ASSET_URL"; \
+		CEF_WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$$CEF_PYTAG-*.whl | head -1); \
+	fi; \
+	$(VENV)/bin/pip3 install --no-cache-dir "$$CEF_WHEEL"
+	# CAP_NET_BIND_SERVICE is a file xattr: dpkg's data.tar does not reliably
+	# preserve it across extraction, so it is (re)applied in postinst instead
+
+
+# the bundled venv is not part of this source package: skip shared-library
+# dependency scanning and stripping to avoid dh choking on Qt6/PySide6/CEF
+# binaries inside it (mirrors what dh-virtualenv does for the same reason)
+override_dh_shlibdeps:
+	dh_shlibdeps -X/var/unitotem-venv
+
+override_dh_strip:
+	dh_strip -X/var/unitotem-venv

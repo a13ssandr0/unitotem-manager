@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=UniTotem
+Description=UniTotem boot splash: spinning "o" wordmark with boot status
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/unitotem
+ScriptFile=/usr/share/plymouth/themes/unitotem/unitotem.script
