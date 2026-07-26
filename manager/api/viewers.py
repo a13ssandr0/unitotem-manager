@@ -4,20 +4,20 @@ from typing import Optional
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
 from utils.models.playlists import playlists_manager
-from utils.viewer_manager import ViewerManager
+from webview.controller import WebviewManager
 
 
-def _vm() -> ViewerManager:
-    # deferred: ViewerManager is initialized in main.py, after this module
+def _vm() -> WebviewManager:
+    # deferred: WebviewManager is initialized in main.py, after this module
     # has already been imported and instantiated by the WebSocketAPI registry
-    return ViewerManager.get_instance()
+    return WebviewManager.get_instance()
 
 
 class Viewers(WSAPIBase):
 
     def list(self):
         return WSBroadcast(
-            viewers=_vm().get_viewers(),
+            viewers=_vm().get_webviews(),
             playlists=playlists_manager.serialize(),
             assignments=_vm().get_assignments(),
         )

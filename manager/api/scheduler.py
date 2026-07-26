@@ -49,10 +49,10 @@ class Scheduler(WSAPIBase):
     def create_playlist(self, name: str = 'New Playlist'):
         am = playlists_manager.create(name)
         self._bind_playlist_callbacks(am)
-        # Also start a loop for the new playlist in ViewerManager
+        # Also start a loop for the new playlist in WebviewManager
         try:
-            from utils.viewer_manager import ViewerManager
-            ViewerManager.get_instance().add_playlist_loop(am)
+            from webview.controller import WebviewManager
+            WebviewManager.get_instance().add_playlist_loop(am)
         except RuntimeError:
             pass
         return WSBroadcast(playlists=playlists_manager.serialize())
@@ -62,8 +62,8 @@ class Scheduler(WSAPIBase):
         try:
             playlists_manager.delete(playlist_id)
             try:
-                from utils.viewer_manager import ViewerManager
-                ViewerManager.get_instance().remove_playlist_loop(playlist_id)
+                from webview.controller import WebviewManager
+                WebviewManager.get_instance().remove_playlist_loop(playlist_id)
             except RuntimeError:
                 pass
         except ValueError as e:

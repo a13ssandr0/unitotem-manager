@@ -107,7 +107,7 @@ class Remote(WSAPIBase):
                         data = loads(data)
                         target = data.pop('target')
                         if target == 'Show':
-                            # Forward to locally connected Qt viewer via WebSocket
+                            # Forward to locally connected Qt webview via WebSocket
                             await self.remote_ws.broadcast('Show', **data)
             except asyncio.exceptions.CancelledError:
                 logger.info('Disconnected from remote server')

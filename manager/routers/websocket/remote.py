@@ -22,8 +22,8 @@ async def remote_websocket(websocket: WebSocket):
 
     is_local = websocket.client and websocket.client.host in _LOCAL_HOSTS
 
-    # Refuse remote viewers when this instance is in client mode,
-    # but still allow local Qt viewer connections.
+    # Refuse remote webviews when this instance is in client mode,
+    # but still allow local Qt webview connections.
     # this means that this instance is running in client/slave mode
     # and someone is trying either to connect from another client or
     # +----------------------+ is trying to be funny and
@@ -44,8 +44,8 @@ async def remote_websocket(websocket: WebSocket):
     instance_id = websocket.headers['instance_id']
     await REMOTE_WS.connect(websocket, user=instance_id)
 
-    # Register viewer with ViewerManager
-    viewer_info = {
+    # Register webview with WebviewManager
+    webview_info = {
         'ip': websocket.client.host,
         'port': websocket.headers.get('port', const.default_port_secure),
         'hostname': websocket.headers.get('hostname', instance_id),
@@ -53,11 +53,11 @@ async def remote_websocket(websocket: WebSocket):
         'windows': [],
     }
     try:
-        from utils.viewer_manager import ViewerManager
-        vm = ViewerManager.get_instance()
-        vm.register_viewer(instance_id, viewer_info)
+        from webview.controller import WebviewManager
+        vm = WebviewManager.get_instance()
+        vm.register_webview(instance_id, webview_info)
         await WS.broadcast('Viewers/list',
-                           viewers=vm.get_viewers(),
+                           viewers=vm.get_webviews(),
                            assignments=vm.get_assignments())
     except RuntimeError:
         vm = None
@@ -76,20 +76,20 @@ async def remote_websocket(websocket: WebSocket):
             try:
                 msg = json.loads(raw)
                 target = msg.pop('target', None)
-                if target == 'ViewerInfo' and vm:
-                    # Viewer sends its screen/window configuration
-                    vm.update_viewer_info(instance_id, msg)
+                if target == 'WebviewInfo' and vm:
+                    # Webview sends its screen/window configuration
+                    vm.update_webview_info(instance_id, msg)
                     await WS.broadcast('Viewers/list',
-                                       viewers=vm.get_viewers(),
+                                       viewers=vm.get_webviews(),
                                        assignments=vm.get_assignments())
             except json.JSONDecodeError:
-                logger.debug('Non-JSON message from viewer: {}', raw)
+                logger.debug('Non-JSON message from webview: {}', raw)
         except WebSocketDisconnect:
             REMOTE_WS.disconnect(websocket, user=instance_id)
             if vm:
-                vm.unregister_viewer(instance_id)
+                vm.unregister_webview(instance_id)
                 await WS.broadcast('Viewers/list',
-                                   viewers=vm.get_viewers(),
+                                   viewers=vm.get_webviews(),
                                    assignments=vm.get_assignments())
             if not is_local and instance_id in remote_manager.clients:
                 del remote_manager.clients[instance_id]
