@@ -11,6 +11,13 @@ if [ "$1" == "remove" ] && [ -z "$2" ]; then
     fi
     echo "Removing UniTotem virtual environment"
     rm -r /var/unitotem-venv
+
+    if update-alternatives --list default.plymouth 2>/dev/null | grep -q "^/usr/share/plymouth/themes/unitotem/unitotem.plymouth$"; then
+        update-alternatives --remove default.plymouth /usr/share/plymouth/themes/unitotem/unitotem.plymouth
+        if command -v update-initramfs >/dev/null; then
+            update-initramfs -u
+        fi
+    fi
 elif [ "$1" == "purge" ] && [ -z "$2" ]; then
     rm -r /etc/unitotem
     rm -r /usr/share/unitotem-manager/static/uploaded
