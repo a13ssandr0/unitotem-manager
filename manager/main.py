@@ -40,7 +40,7 @@ from utils.system.network.hotspot import get_hotspot_with_qr, is_hotspot_enabled
 from utils.system.network.ip import do_ip_addr
 from utils.system.lsblk import start_fs_usage_cache
 from utils.system.sysinfo import get_sysinfo
-from utils.viewer_manager import ViewerManager
+from webview.controller import WebviewManager
 
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
@@ -75,7 +75,7 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
 
 parser = ArgumentParser()
 parser.add_argument('--no-gui', action='store_true',
-                    help='Headless mode: run only the backend, skip the local viewer')
+                    help='Headless mode: run only the backend, skip the local webview')
 parser.add_argument('--http-bind', default=const.default_bind)
 parser.add_argument('--http-port', default=const.default_port)
 parser.add_argument('--https-bind', default=const.default_bind_secure)
@@ -147,10 +147,10 @@ upload_manager.scan_folder()
 # probe unmounted filesystems once and watch mount/umount events
 start_fs_usage_cache()
 
-# Initialize ViewerManager and start playlist loops
-viewer_manager = ViewerManager.init(REMOTE_WS)
+# Initialize WebviewManager and start playlist loops
+webview_manager = WebviewManager.init(REMOTE_WS)
 for am in playlists_manager.playlists.values():
-    viewer_manager.add_playlist_loop(am)
+    webview_manager.add_playlist_loop(am)
 
 
 # ── async tasks ───────────────────────────────────────────────────────────
@@ -187,10 +187,27 @@ async def generate_signing_key():
 
 loop.create_task(generate_signing_key(), name='rsa_keygen')
 
-loop.create_task(serve(WWW, HyperConfig().from_mapping(
-        bind=f'{cmdargs.bind_secure}:{cmdargs.port_secure}', insecure_bind=f'{cmdargs.bind}:{cmdargs.port}',
-        certfile=cmdargs.certfile, keyfile=cmdargs.keyfile,
-), shutdown_trigger=SHUTDOWN_EVENT.wait), name='server')
+async def _serve_www():
+    # a swallowed bind error would leave the manager up but unreachable:
+    # fail loudly and shut down instead
+    try:
+        await serve(WWW, HyperConfig().from_mapping(
+                bind=f'{cmdargs.bind_secure}:{cmdargs.port_secure}', insecure_bind=f'{cmdargs.bind}:{cmdargs.port}',
+                certfile=cmdargs.certfile, keyfile=cmdargs.keyfile,
+        ), shutdown_trigger=SHUTDOWN_EVENT.wait)
+    except PermissionError:
+        logger.critical(
+                'Cannot bind ports {} and {}: permission denied. Ports below 1024 need root or '
+                'CAP_NET_BIND_SERVICE on the python binary (sudo setcap CAP_NET_BIND_SERVICE=+eip '
+                '<venv>/bin/python3), or pick higher ports with --port/--port_secure.',
+                cmdargs.port, cmdargs.port_secure)
+        await _shutdown()
+    except Exception as e:
+        logger.critical('Web server failed to start: {}', e)
+        await _shutdown()
+
+
+loop.create_task(_serve_www(), name='server')
 
 
 # ── asyncio thread ────────────────────────────────────────────────────────
@@ -201,24 +218,24 @@ asyncio_thread = threading.Thread(target=loop.run_forever, name='asyncio', daemo
 asyncio_thread.start()
 
 
-# ── full mode: Qt viewer on main thread ───────────────────────────────────
+# ── full mode: Qt webview on main thread ───────────────────────────────────
 
 if not cmdargs.no_gui and not remote_manager.server_ip:
     try:
-        from viewer.app import ViewerApp
-        viewer_app = ViewerApp(
+        from webview.app import WebviewApp
+        webview_app = WebviewApp(
             manager_url=f'wss://localhost:{cmdargs.port_secure}/remote',
-            instance_id='local-viewer',
+            instance_id='local-webview',
         )
         # Propagate Qt quit → asyncio shutdown
-        viewer_app.qt_app.aboutToQuit.connect(_schedule_shutdown)
-        logger.info('Starting local Qt6 viewer (full mode)')
-        viewer_app.run()          # blocks until the Qt window is closed
+        webview_app.qt_app.aboutToQuit.connect(_schedule_shutdown)
+        logger.info('Starting local Qt6 webview (full mode)')
+        webview_app.run()          # blocks until the Qt window is closed
     except ImportError as e:
-        logger.warning('Viewer unavailable ({}), running in headless mode', e)
+        logger.warning('Webview unavailable ({}), running in headless mode', e)
         asyncio_thread.join()
     except Exception as e:
-        logger.exception('Qt viewer crashed: {}', e)
+        logger.exception('Qt webview crashed: {}', e)
         _schedule_shutdown()
         asyncio_thread.join(timeout=5)
 else:

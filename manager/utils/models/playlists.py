@@ -92,6 +92,13 @@ class PlaylistsManager:
                     logger.warning('Playlist file not found: {}', filepath)
             if self._playlists and self._default_id not in self._playlists:
                 self._default_id = next(iter(self._playlists))
+            if not self._playlists:
+                # every referenced playlist file is missing: self-heal with an
+                # empty default so the manager always has at least one playlist
+                logger.warning('No playlist could be loaded, recreating an empty default')
+                am = self.create('Default')
+                self._default_id = am.playlist_id
+                self._save_index()
         else:
             # Legacy: single assets.json → become the default playlist
             am = AssetsManager()
@@ -102,6 +109,7 @@ class PlaylistsManager:
             am._filepath = self._playlist_path(am.playlist_id)
             self._playlists[am.playlist_id] = am
             self._default_id = am.playlist_id
+            am.save()
             self._save_index()
 
     def serialize(self) -> list[dict]:

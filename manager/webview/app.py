@@ -1,5 +1,5 @@
 """
-ViewerApp — Qt6+CEF viewer integrated into the UniTotem manager process.
+WebviewApp — Qt6+CEF webview integrated into the UniTotem manager process.
 
 Architecture
 ───────────
@@ -15,12 +15,13 @@ import os
 import socket
 import ssl
 import threading
+from base64 import b64decode
 from typing import Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from .window import ViewerWindow
+from .window import WebviewWindow
 
 try:
     from cefpython3 import cefpython as cef
@@ -33,15 +34,15 @@ class _Bridge(QObject):
     command_received = Signal(dict)
 
 
-class ViewerApp:
+class WebviewApp:
     """
-    Initialise and run the local Qt6+CEF viewer.
+    Initialise and run the local Qt6+CEF webview.
 
     Parameters
     ----------
     manager_url  : WebSocket URL of the manager's /remote endpoint
                    (e.g. 'wss://localhost:443/remote')
-    instance_id  : Unique identifier for this viewer instance
+    instance_id  : Unique identifier for this webview instance
     """
 
     def __init__(self, manager_url: str, instance_id: str):
@@ -81,7 +82,7 @@ class ViewerApp:
         self._bridge = _Bridge()
         self._bridge.command_received.connect(self._handle_command)
 
-        self.windows: dict[int, ViewerWindow] = {}
+        self.windows: dict[int, WebviewWindow] = {}
         self._next_id = 0
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -96,7 +97,7 @@ class ViewerApp:
         screens = self.qt_app.screens()
         screen  = screens[min(screen_index, len(screens) - 1)]
         geom    = screen.geometry()
-        win = ViewerWindow(
+        win = WebviewWindow(
             window_id=self._next_id,
             screen=screen,
             x=x or geom.x(),
@@ -118,7 +119,7 @@ class ViewerApp:
         """
         self._ws_loop = asyncio.new_event_loop()
         ws_thread = threading.Thread(
-            target=self._ws_thread_main, name='viewer-ws', daemon=True
+            target=self._ws_thread_main, name='webview-ws', daemon=True
         )
         ws_thread.start()
 
@@ -155,17 +156,27 @@ class ViewerApp:
                     },
                     ssl=ssl_ctx,
                 ) as ws:
-                    await self._send_viewer_info(ws)
+                    await self._send_webview_info(ws)
                     async for raw in ws:
                         try:
-                            self._bridge.command_received.emit(json.loads(raw))
+                            self._bridge.command_received.emit(self._decode_frame(raw))
                         except Exception:
                             pass
             except Exception:
                 # Retry until the manager is up (e.g. still starting)
                 await asyncio.sleep(3)
 
-    async def _send_viewer_info(self, ws):
+    @staticmethod
+    def _decode_frame(raw: str) -> dict:
+        """The manager signs every command: frames are 'b64(json).b64(signature)'
+        (see WSManager.prepare_message); plain JSON is accepted as well."""
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            data, _, _signature = raw.partition('.')
+            return json.loads(b64decode(data))
+
+    async def _send_webview_info(self, ws):
         """Announce screen geometry and open windows to the manager."""
         screens = []
         for i, s in enumerate(self.qt_app.screens()):
@@ -184,7 +195,7 @@ class ViewerApp:
                 'width': g.width(), 'height': g.height(),
             })
         await ws.send(json.dumps({
-            'target' : 'ViewerInfo',
+            'target' : 'WebviewInfo',
             'screens': screens,
             'windows': windows,
         }))

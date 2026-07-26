@@ -3,31 +3,31 @@ from typing import Optional
 
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
-from utils.viewer_manager import ViewerManager
+from webview.controller import WebviewManager
 
 
-def _vm() -> ViewerManager:
-    # deferred: ViewerManager is initialized in main.py, after this module
+def _vm() -> WebviewManager:
+    # deferred: WebviewManager is initialized in main.py, after this module
     # has already been imported and instantiated by the WebSocketAPI registry
-    return ViewerManager.get_instance()
+    return WebviewManager.get_instance()
 
 
 class Display(WSAPIBase):
 
     def getDisplays(self, viewer_id: Optional[str] = None):
         if viewer_id:
-            return WSBroadcast(displays=_vm().get_viewer_screens(viewer_id))
-        # Return screens grouped by viewer
+            return WSBroadcast(displays=_vm().get_webview_screens(viewer_id))
+        # Return screens grouped by webview
         return WSBroadcast(displays={
-            vid: _vm().get_viewer_screens(vid)
-            for vid in _vm().get_viewers()
+            vid: _vm().get_webview_screens(vid)
+            for vid in _vm().get_webviews()
         })
 
     def getGPUFeatureStats(self):
         return WSBroadcast(features={})
 
     def getBounds(self, viewer_id: str, window_id: int = 0):
-        windows = _vm().get_viewer_windows(viewer_id)
+        windows = _vm().get_webview_windows(viewer_id)
         if window_id < len(windows):
             return WSBroadcast(**windows[window_id])
         return WSBroadcast()
@@ -37,7 +37,7 @@ class Display(WSAPIBase):
         return WSBroadcast(x=x, y=y, width=width, height=height)
 
     def getOrientation(self, viewer_id: str, window_id: int = 0):
-        windows = _vm().get_viewer_windows(viewer_id)
+        windows = _vm().get_webview_windows(viewer_id)
         orientation = windows[window_id].get('orientation', 0) if window_id < len(windows) else 0
         return WSBroadcast(orientation=orientation)
 
@@ -46,7 +46,7 @@ class Display(WSAPIBase):
         return WSBroadcast(orientation=orientation)
 
     def getFlip(self, viewer_id: str, window_id: int = 0):
-        windows = _vm().get_viewer_windows(viewer_id)
+        windows = _vm().get_webview_windows(viewer_id)
         flip = windows[window_id].get('flip', 0) if window_id < len(windows) else 0
         return WSBroadcast(flip=flip)
 
