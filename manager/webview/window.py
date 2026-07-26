@@ -1,5 +1,5 @@
 """
-ViewerWindow — frameless Qt6 window with an embedded CEF browser.
+WebviewWindow — frameless Qt6 window with an embedded CEF browser.
 
 CEF renders directly to an X11 child window (via SetAsChild / winId()),
 so Wayland must be backed by XWayland (QT_QPA_PLATFORM=xcb).
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QMainWindow, QWidget, QSizePolicy
 try:
     from cefpython3 import cefpython as cef
 except ImportError:
-    cef = None  # guarded at ViewerApp init time
+    cef = None  # guarded at WebviewApp init time
 
 # container index → name, must match show() in boot-screen.html
 _CONTAINERS = ['boot', 'web', 'image', 'video', 'audio']
@@ -65,7 +65,7 @@ class CefWidget(QWidget):
         super().closeEvent(event)
 
 
-class ViewerWindow(QMainWindow):
+class WebviewWindow(QMainWindow):
     """One frameless display window. Multiple instances = multiple screens."""
 
     def __init__(self, window_id: int, screen: QScreen,

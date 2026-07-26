@@ -152,10 +152,15 @@ def _probe_fat(f) -> Optional[tuple[int, int]]:
                 if count <= clusters:  # 0xFFFFFFFF = unknown
                     free = count
     if free is None:  # FAT16, or FAT32 with stale/missing FSInfo: count in the FAT
-        f.seek(reserved * bps)
         entry_size = 4 if fat32 else 2
-        # FAT entries are little-endian, as are all the platforms we run on
-        entries = memoryview(f.read((clusters + 2) * entry_size)).cast('I' if fat32 else 'H')
+        want = (clusters + 2) * entry_size
+        if want > 64 * 1024 * 1024:  # implausible FAT size: corrupt boot sector
+            return None
+        f.seek(reserved * bps)
+        data = f.read(want)
+        # FAT entries are little-endian, as are all the platforms we run on;
+        # truncate to a whole number of entries in case of a short read
+        entries = memoryview(data[:len(data) - len(data) % entry_size]).cast('I' if fat32 else 'H')
         mask = 0x0FFFFFFF if fat32 else 0xFFFF
         free = sum(1 for i in range(2, min(len(entries), clusters + 2)) if entries[i] & mask == 0)
     cluster_size = spc * bps
@@ -180,19 +185,28 @@ def _sysfs_devices() -> dict[str, Path]:
     return devices
 
 
-def _probe_devno(devno: str, sysfs_path: Path):
+def _probe_devno(devno: str, sysfs_path: Path) -> str:
+    """Probe one device into the cache. Returns 'ok', 'skip', 'denied' or 'error';
+    never raises, so a single odd device cannot take the watcher down."""
     probe = _FS_PROBES.get(_udev_fstype(devno) or '')
     if not probe:
-        return
+        return 'skip'
     device = Path('/dev') / sysfs_path.name
     try:
         with device.open('rb') as f:
             usage = probe(f)
+    except PermissionError:
+        logger.debug('Cannot probe {}: permission denied', device)
+        return 'denied'
     except OSError as e:
         logger.debug('Cannot probe {}: {}', device, e)
-        return
+        return 'error'
+    except Exception as e:
+        logger.warning('Unexpected error probing {}: {}', device, e)
+        return 'error'
     if usage:
         _FS_USAGE_CACHE[devno] = usage
+    return 'ok'
 
 
 def _fs_usage_worker():
@@ -202,9 +216,15 @@ def _fs_usage_worker():
         mounted = set(_parse_mountinfo(mi))
         swaps = _swap_devnos()
         # startup: the only moment every unmounted filesystem is read
+        denied = 0
         for devno, sysfs_path in _sysfs_devices().items():
             if devno not in mounted and devno not in swaps:
-                _probe_devno(devno, sysfs_path)
+                denied += _probe_devno(devno, sysfs_path) == 'denied'
+        if denied:
+            logger.warning(
+                    '{} unmounted partitions are not readable: their disk usage will not be '
+                    'shown. Reading them requires root or membership in the "disk" group.',
+                    denied)
         while True:
             poller.poll()  # wakes up (only) when the mount table changes
             mi.seek(0)
@@ -223,11 +243,18 @@ def _fs_usage_worker():
             mounted = now
 
 
+def _fs_usage_worker_safe():
+    try:
+        _fs_usage_worker()
+    except Exception:
+        logger.exception('Filesystem usage watcher stopped unexpectedly')
+
+
 def start_fs_usage_cache():
     """Start the startup probe + mount watcher thread (call once at startup)"""
     global _fs_watcher
     if _fs_watcher is None or not _fs_watcher.is_alive():
-        _fs_watcher = Thread(target=_fs_usage_worker, name='fs_usage', daemon=True)
+        _fs_watcher = Thread(target=_fs_usage_worker_safe, name='fs_usage', daemon=True)
         _fs_watcher.start()
 
 

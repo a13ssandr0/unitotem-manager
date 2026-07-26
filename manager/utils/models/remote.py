@@ -64,7 +64,7 @@ class RemoteManager(BaseModel, validate_assignment=True, arbitrary_types_allowed
 
     @classmethod
     def get_signing_key(cls) -> RSA.RsaKey:
-        """RSA private key used to sign viewer commands, generated and
+        """RSA private key used to sign webview commands, generated and
         persisted on first use: not needed for basic operation.
 
         Generation is started in a worker thread right after startup (main.py);

@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings
 
 # noinspection PyDataclass
 class CommandLineArgs(BaseSettings, cli_parse_args=True, frozen=True):
-    no_gui: bool = False   # headless mode: start only the backend, no local viewer
+    no_gui: bool = False   # headless mode: start only the backend, no local webview
     bind: IPv4Address = IPv4Address("0.0.0.0")
     port: int = Field(default=80, gt=0, lt=65535)
     bind_secure: IPv4Address = IPv4Address("0.0.0.0")

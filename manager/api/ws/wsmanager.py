@@ -26,9 +26,9 @@ class WSManager:
         # if last is not None we are using command cache.
         # this means every time a client connects will receive
         # the last command sent for each target.
-        # this is needed for the viewer program that may connect after a command
-        # was sent (i.e. the manager finishes starting before the viewer, or the 
-        # viewer for whatever reason restarts)
+        # this is needed for the webview program that may connect after a command
+        # was sent (i.e. the manager finishes starting before the webview, or the 
+        # webview for whatever reason restarts)
         #
         # if we need caching, self.last is initialized to something different from None
         # this way we avoid using two variables: one for setting and the other
