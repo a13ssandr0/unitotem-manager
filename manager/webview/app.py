@@ -3,8 +3,14 @@ WebviewApp — Qt6+CEF webview integrated into the UniTotem manager process.
 
 Architecture
 ───────────
-  Main thread  : Qt event loop + CEF message pump (QTimer @ 10 ms)
+  Main thread   : Qt event loop, pumping CEF's message loop via a QTimer
   asyncio thread: WebSocket client that receives manager commands
+
+multi_threaded_message_loop is a Windows-only feature in upstream CEF (see
+vendor/cefpython/docs/Tutorial.md "Windows: multi-threaded message loop" and
+api/ApplicationSettings.md, both state it is unsupported outside Windows) -
+on Linux it is silently a no-op at the C++ level, so it must stay False and
+CEF's queue must be pumped externally via cef.MessageLoopWork().
 
 Commands from the WS thread are forwarded to Qt via Signal/Slot,
 which is the only thread-safe bridge between the two event loops.
@@ -19,6 +25,7 @@ from base64 import b64decode
 from typing import Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtGui import QScreen
 from PySide6.QtWidgets import QApplication
 
 from .window import WebviewWindow
@@ -45,6 +52,21 @@ class WebviewApp:
     instance_id  : Unique identifier for this webview instance
     """
 
+    @staticmethod
+    def display_available() -> bool:
+        """
+        Whether a reachable X11 display exists. CEF only supports X11 (a real
+        X server or XWayland - see the QT_QPA_PLATFORM override below), so
+        this must be checked *before* ever touching Qt/CEF: constructing
+        either with no usable platform plugin aborts the whole process
+        natively (SIGABRT), which no Python exception handler can catch.
+        """
+        display = os.environ.get('DISPLAY')
+        if not display:
+            return False
+        num = display.split(':', 1)[-1].split('.', 1)[0]
+        return num.lstrip('-').isdigit() and os.path.exists(f'/tmp/.X11-unix/X{num}')
+
     def __init__(self, manager_url: str, instance_id: str):
         if cef is None:
             raise ImportError(
@@ -61,12 +83,41 @@ class WebviewApp:
         if os.environ.get('WAYLAND_DISPLAY') and 'QT_QPA_PLATFORM' not in os.environ:
             os.environ['QT_QPA_PLATFORM'] = 'xcb'
 
+        # cef.Initialize() below unconditionally attaches its own internal
+        # GLib sources (sandbox IPC, hang watcher, etc.) to the process's
+        # default GMainContext. On Linux, Qt's own event dispatcher
+        # (QEventDispatcherGlib) also iterates that same default context by
+        # default - so qt_app.exec() ends up pumping CEF's internal sources
+        # itself, far more aggressively than our own paced QTimer, pinning a
+        # full core at ~100% even with a fully static page and regardless of
+        # the QTimer's interval (both verified empirically). Forcing Qt onto
+        # QEventDispatcherUNIX (plain epoll, no GMainContext involvement)
+        # eliminates this entirely; CEF's message loop is then driven solely
+        # and correctly by the explicit cef.MessageLoopWork() QTimer in run().
+        if 'QT_NO_GLIB' not in os.environ:
+            os.environ['QT_NO_GLIB'] = '1'
+
+        # CEF's default profile dir is under $HOME/.config, which on the
+        # kiosk image is only writable during maintenance windows (the root
+        # filesystem is otherwise read-only) - CEF's ProcessSingleton lock
+        # file then can't be created/replaced and it aborts. /var/cache is a
+        # tmpfs on that image (always writable); an ephemeral cache is fine
+        # for a kiosk browser anyway (nothing here needs to survive reboots).
+        cache_path = '/var/cache/unitotem-cef'
+        os.makedirs(cache_path, exist_ok=True)
+
+        # multi_threaded_message_loop must stay False - it's a Windows-only
+        # feature in this fork (see module docstring); CEF's queue is instead
+        # pumped from a QTimer in run() (the pattern used by every cefpython
+        # example). See the QT_NO_GLIB comment above for the fix to the CPU
+        # busy-loop this used to cause.
         cef.Initialize(
             settings={
                 'windowless_rendering_enabled' : False,
                 'multi_threaded_message_loop'  : False,
                 'log_severity'                 : cef.LOGSEVERITY_WARNING,
                 'remote_debugging_port'        : 0,
+                'cache_path'                   : cache_path,
             },
             switches={
                 'no-proxy-server'  : '',
@@ -83,18 +134,52 @@ class WebviewApp:
         self._bridge.command_received.connect(self._handle_command)
 
         self.windows: dict[int, WebviewWindow] = {}
+        self._screen_windows: dict[QScreen, int] = {}
         self._next_id = 0
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
 
-        # Fullscreen window on the primary screen
-        self._open_window()
+        # One fullscreen window per currently-connected screen (zero screens
+        # means zero windows: the app must be able to start without any and
+        # keep running, picking up screens as they're connected below).
+        for screen in self.qt_app.screens():
+            self._open_window_for_screen(screen)
+        self.qt_app.screenAdded.connect(self._open_window_for_screen)
+        self.qt_app.screenRemoved.connect(self._on_screen_removed)
 
     # ── window management ─────────────────────────────────────────────────
+
+    def _open_window_for_screen(self, screen: QScreen) -> int:
+        """Open a fullscreen window on a newly-detected screen. No playlist
+        is assigned automatically (assignment is a separate, explicit step)."""
+        geom = screen.geometry()
+        win = WebviewWindow(
+            window_id=self._next_id,
+            screen=screen,
+            x=geom.x(), y=geom.y(),
+            width=geom.width(), height=geom.height(),
+        )
+        win.show()
+        self.windows[self._next_id] = win
+        self._screen_windows[screen] = self._next_id
+        self._next_id += 1
+        return self._next_id - 1
+
+    def _on_screen_removed(self, screen: QScreen):
+        """Close the window associated with a screen that just disconnected."""
+        window_id = self._screen_windows.pop(screen, None)
+        if window_id is not None:
+            win = self.windows.pop(window_id, None)
+            if win is not None:
+                win.close()
 
     def _open_window(self, screen_index: int = 0,
                      x: int = 0, y: int = 0,
                      width: int = 0, height: int = 0) -> int:
+        """Open an extra window on an already-connected screen, at a
+        possibly custom size (used by the remote 'AddWindow' command)."""
         screens = self.qt_app.screens()
+        if not screens:
+            raise RuntimeError('No screens connected')
         screen  = screens[min(screen_index, len(screens) - 1)]
         geom    = screen.geometry()
         win = WebviewWindow(
@@ -123,13 +208,11 @@ class WebviewApp:
         )
         ws_thread.start()
 
-        # Drive CEF's internal message loop from a Qt timer
         cef_timer = QTimer()
         cef_timer.timeout.connect(cef.MessageLoopWork)
         cef_timer.start(10)
 
         exit_code = self.qt_app.exec()
-        cef_timer.stop()
         cef.Shutdown()
         return exit_code
 

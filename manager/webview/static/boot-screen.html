@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UniTotem</title>
   <style>
+    @font-face {
+      font-family: "Noto Sans";
+      src: url(NotoSans.ttf);
+    }
+
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     html, body {
@@ -21,10 +26,55 @@
       align-items: center;
       justify-content: center;
       color: #ffffff;
-      font-family: sans-serif;
-      font-size: 2.5rem;
-      letter-spacing: 0.2em;
       user-select: none;
+    }
+
+    .welcome {
+      transform: scale(0.75);
+      opacity: 0;
+      filter: blur(4px);
+      animation: scale 3s forwards cubic-bezier(0.5, 1, 0.89, 1),
+                 fade-in 0.8s 0.1s forwards cubic-bezier(0.11, 0, 0.5, 0);
+    }
+    @keyframes scale { 100% { transform: scale(2); } }
+    @keyframes fade-in { 100% { opacity: 1; filter: blur(0); } }
+
+    .glow {
+      animation: glow 1.5s linear infinite alternate;
+    }
+    @keyframes glow {
+      from { text-shadow: 0 0 0.313em #000000; }
+      to   { text-shadow: 0 0 0.625em #ffffff; }
+    }
+
+    /* "o" replaced by a blank gap (two nbsp) filled by the spinning ring below */
+    .loader {
+      display: inline-block;
+      font-size: 7.5em;
+      font-family: "Noto Sans", sans-serif;
+      font-weight: bold;
+      color: #fff;
+      position: relative;
+    }
+    .loader::before {
+      content: '';
+      position: absolute;
+      left: 2.19em;
+      bottom: 0.28em;
+      width: 0.600em;
+      height: 0.600em;
+      border-radius: 50%;
+      border: 0.13em solid #fff;
+      border-bottom-color: #FF3D00;
+      box-sizing: border-box;
+      animation: rotation 3s linear infinite;
+    }
+    @keyframes rotation {
+      0%   { transform: rotate(0deg);    box-shadow: 0 0 0.313rem #000000; }
+      33%  { transform: rotate(360deg); }
+      50%  { box-shadow: 0 0 0.625rem #ffffff; }
+      67%  { transform: rotate(720deg); }
+      100% { transform: rotate(1080deg); box-shadow: 0 0 0.313rem #000000; }
     }
 
     #web-frame {
@@ -44,7 +94,13 @@
   </style>
 </head>
 <body>
-  <div id="boot-screen">UniTotem</div>
+  <div id="boot-screen" class="container">
+    <div class="welcome">
+      <div class="glow">
+        <span class="loader">UniT&nbsp;&nbsp;tem</span>
+      </div>
+    </div>
+  </div>
 
   <iframe  id="web-frame"     class="container"
            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
