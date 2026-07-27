@@ -88,3 +88,9 @@ override_dh_shlibdeps:
 
 override_dh_strip:
 	dh_strip -X/var/unitotem-venv
+
+# dh_dwz runs as a separate step from dh_strip and hits the same prebuilt
+# Qt6/PySide6/CEF binaries; dwz fails on some of them (e.g. malformed/absent
+# debug sections), aborting the whole build if not excluded too.
+override_dh_dwz:
+	dh_dwz -X/var/unitotem-venv

@@ -5,6 +5,15 @@ Description=UniTotem Manager
 WorkingDirectory=/usr/share/unitotem-manager
 ExecStart=/var/unitotem-venv/bin/python3 /usr/share/unitotem-manager/init.py
 Environment=PYTHONUNBUFFERED=1
+# Local kiosk X11 session (if any) always runs on :0 - see WebviewApp.display_available()
+# in manager/webview/app.py, which checks the actual X11 socket before ever using this,
+# so this is a no-op on truly headless/server nodes with no local display at all.
+Environment=DISPLAY=:0
+# xinitrc (unitotem-system) copies the X session's actual auth cookie here,
+# since it's a separate systemd unit with no other way to learn xinit's
+# randomly-named one. Tolerant of the file not existing yet (headless nodes,
+# or this unit racing X's own startup - it'll pick it up on the next retry).
+Environment=XAUTHORITY=/run/unitotem-x11.auth
 
 Restart=on-failure
 RestartSec=90
