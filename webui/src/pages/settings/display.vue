@@ -91,10 +91,13 @@
             <li v-for="(value, key) in gpu" :key="key">
               {{ key }}:
               <span v-if="value === 'enabled'" class="text-green">Hardware accelerated</span>
-              <span v-else-if="value === 'enabled_on'" class="text-green">Enabled</span>
+              <span v-else-if="value === 'enabled_on' || value === 'enabled_force'" class="text-green">Enabled</span>
               <span v-else-if="value === 'disabled_off_ok'" class="text-yellow">Disabled</span>
               <span v-else-if="value === 'disabled_off'" class="text-red">Disabled</span>
               <span v-else-if="value === 'disabled_software'" class="text-yellow">Software only. Hardware acceleration disabled</span>
+              <span v-else-if="value === 'unavailable_off'" class="text-red">Unavailable</span>
+              <span v-else-if="value === 'unavailable_software'" class="text-yellow">Unavailable, software only</span>
+              <span v-else class="text-grey">{{ value }}</span>
             </li>
           </ul>
         </div>

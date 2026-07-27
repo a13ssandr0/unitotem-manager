@@ -35,6 +35,14 @@ try:
 except ImportError:
     cef = None
 
+# Loopback-only Chrome DevTools Protocol port (CEF/Chromium default-binds
+# remote-debugging-port to 127.0.0.1, not 0.0.0.0, but 'remote-debugging-
+# address' is set explicitly below for defense in depth). Used by
+# api.display.getGPUFeatureStats() to query SystemInfo.getInfo - the same
+# underlying data chrome://gpu and Electron's old app.getGPUFeatureStatus()
+# both surface. Not a secret; just needs to not collide with anything else.
+CDP_PORT = 9223
+
 
 class _Bridge(QObject):
     """Carries commands from the asyncio/WS thread to the Qt main thread."""
@@ -116,7 +124,7 @@ class WebviewApp:
                 'windowless_rendering_enabled' : False,
                 'multi_threaded_message_loop'  : False,
                 'log_severity'                 : cef.LOGSEVERITY_WARNING,
-                'remote_debugging_port'        : 0,
+                'remote_debugging_port'        : CDP_PORT,
                 'cache_path'                   : cache_path,
             },
             switches={
@@ -124,6 +132,7 @@ class WebviewApp:
                 'disable-extensions': '',
                 # Allow videos and audio to auto-play without user interaction
                 'autoplay-policy'  : 'no-user-gesture-required',
+                'remote-debugging-address': '127.0.0.1',
             },
         )
 
