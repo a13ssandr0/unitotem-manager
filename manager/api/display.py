@@ -1,9 +1,16 @@
 import asyncio
 from typing import Optional
 
+import aiohttp
+
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
 from webview.controller import WebviewManager
+
+# Must match webview.app.CDP_PORT. Duplicated as a plain literal (rather than
+# imported) because webview.app hard-imports PySide6/cefpython at module
+# level and this module must stay importable on headless nodes without them.
+_CDP_PORT = 9223
 
 
 def _vm() -> WebviewManager:
@@ -23,7 +30,34 @@ class Display(WSAPIBase):
             for vid in _vm().get_webviews()
         })
 
-    def getGPUFeatureStats(self):
+    async def getGPUFeatureStats(self):
+        """
+        Graphics Feature Status for this node's own local webview - the same
+        data chrome://gpu and Electron's old app.getGPUFeatureStatus() both
+        surface (both are just views onto Chromium's GPU feature status
+        service). Queried via the Chrome DevTools Protocol's SystemInfo.getInfo
+        (a stable, documented CDP method) against the local CEF instance's
+        loopback-only debugging port, since cefpython itself exposes no
+        equivalent API. Empty dict if no local webview is running (headless
+        node, or webview not started yet) or the query fails for any reason.
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f'http://127.0.0.1:{_CDP_PORT}/json/version',
+                    timeout=aiohttp.ClientTimeout(total=2),
+                ) as resp:
+                    ws_url = (await resp.json())['webSocketDebuggerUrl']
+                async with session.ws_connect(ws_url, timeout=2) as ws:
+                    await ws.send_json({'id': 1, 'method': 'SystemInfo.getInfo'})
+                    async for msg in ws:
+                        data = msg.json()
+                        if data.get('id') == 1:
+                            return WSBroadcast(
+                                features=data.get('result', {}).get('gpu', {}).get('featureStatus', {})
+                            )
+        except (aiohttp.ClientError, OSError, KeyError, asyncio.TimeoutError):
+            pass
         return WSBroadcast(features={})
 
     def getBounds(self, viewer_id: str, window_id: int = 0):
