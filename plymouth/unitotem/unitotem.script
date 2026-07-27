@@ -1,8 +1,9 @@
 // UniTotem boot splash (script plugin theme)
 //
-// Wordmark "Unit" + spinning "o" + "tem" on black, matching the boot-screen
-// styling used by the webview (manager/webview/static/boot-screen.html:
-// black background, white sans-serif text). The "o" doubles as the spinner.
+// Wordmark "UniTotem" on black, matching the original boot animation design
+// recovered from git history (e94cadb:webview/src/frontend/boot-screen.html,
+// deleted during the Electron -> Qt6/CEF migration): bold white text, "o"
+// replaced by a spinning ring icon (white ring, one arc colored #FF3D00).
 //
 // Bottom status line: fed by both Plymouth.SetUpdateStatusFunction and
 // Plymouth.SetDisplayMessageFunction. Modern systemd sends the id of every
@@ -21,7 +22,10 @@ Window.SetBackgroundBottomColor(0, 0, 0);
 screen_width  = Window.GetWidth(0);
 screen_height = Window.GetHeight(0);
 
-wordmark_font = "Sans Bold 48";
+// Matches boot-screen.html's viewport-relative sizing (body { font-size:
+// 1.3vw } * .loader's 7.5em = 9.75vw) instead of a fixed point size, so the
+// wordmark doesn't come out small/thin on a real display's resolution.
+wordmark_font = "Sans Bold " + (screen_width * 0.0975);
 status_font   = "Sans 16";
 
 // ---- Manual string helpers --------------------------------------------
@@ -62,28 +66,52 @@ fun first_token(s) {
     return token;
 }
 
-// ---- Wordmark: "Unit" + spinning "o" + "tem" ---------------------------
+// ---- Wordmark: "UniTotem", letter by letter ----------------------------
+// Matches the original boot-screen.html design (recovered from git history,
+// commit e94cadb:webview/src/frontend/boot-screen.html): bold text reading
+// "UniT" + a blank gap + "tem", with a spinning ring icon filling the gap
+// where the "o" would be - not a rotated text glyph.
 
-unit_image = Image.Text("Unit", 1, 1, 1, 1, wordmark_font);
-o_image    = Image.Text("o",    1, 1, 1, 1, wordmark_font);
-tem_image  = Image.Text("tem",  1, 1, 1, 1, wordmark_font);
+wordmark_text = "UniTotem";
+spinner_index = 4; // the "o" in U-n-i-T-o-t-e-m, replaced by the ring icon
 
-unit_sprite = Sprite(unit_image);
-o_sprite    = Sprite(o_image);
-tem_sprite  = Sprite(tem_image);
+letter_count  = string_length(wordmark_text);
+letter_image  = [];
+letter_sprite = [];
+letter_x      = [];
+total_width   = 0;
 
-total_width = unit_image.GetWidth() + o_image.GetWidth() + tem_image.GetWidth();
-wordmark_x  = screen_width  / 2 - total_width / 2;
-wordmark_y  = screen_height / 2 - unit_image.GetHeight() / 2;
+// The spinner replaces the "o" glyph with a drawn icon (white ring with a
+// colored arc segment, spinner.png) instead of rendering the letter as text;
+// scaled to the "n" glyph's height so it sits naturally among the other characters.
+spinner_size = Image.Text("n", 1, 1, 1, 1, wordmark_font).GetHeight();
 
-unit_sprite.SetPosition(wordmark_x, wordmark_y, 10);
-tem_sprite.SetPosition(wordmark_x + unit_image.GetWidth() + o_image.GetWidth(), wordmark_y, 10);
+for (i = 0; i < letter_count; i++) {
+    if (i == spinner_index) {
+        letter_image[i] = Image("spinner.png").Scale(spinner_size, spinner_size);
+    } else {
+        local.ch = String(wordmark_text).CharAt(i);
+        letter_image[i] = Image.Text(ch, 1, 1, 1, 1, wordmark_font);
+    }
+    letter_sprite[i] = Sprite(letter_image[i]);
+    letter_x[i]      = total_width;
+    total_width     += letter_image[i].GetWidth();
+}
 
-// The "o" keeps a fixed on-screen center; Rotate() changes the image's
-// bounding box each frame, so position is recomputed from that center.
-o_center_x = wordmark_x + unit_image.GetWidth() + o_image.GetWidth() / 2;
+wordmark_x = screen_width  / 2 - total_width / 2;
+wordmark_y = screen_height / 2 - letter_image[0].GetHeight() / 2;
+
+for (i = 0; i < letter_count; i++) {
+    letter_sprite[i].SetPosition(wordmark_x + letter_x[i], wordmark_y, 10);
+}
+
+// The spinning "o" keeps a fixed on-screen center; Rotate() changes the
+// image's bounding box each frame, so position is recomputed from that
+// center every tick.
+o_image    = letter_image[spinner_index];
+o_sprite   = letter_sprite[spinner_index];
+o_center_x = wordmark_x + letter_x[spinner_index] + o_image.GetWidth() / 2;
 o_center_y = wordmark_y + o_image.GetHeight() / 2;
-o_sprite.SetPosition(o_center_x - o_image.GetWidth() / 2, o_center_y - o_image.GetHeight() / 2, 10);
 
 spin_angle = 0;
 
