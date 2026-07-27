@@ -19,7 +19,14 @@ Restart=on-failure
 RestartSec=90
 
 KillMode=process
-KillSignal=SIGINT
+# CEF's cef.Initialize() resets SIGINT's disposition back to SIG_DFL and
+# blocks it in its own internal threads (standard Chromium behaviour on
+# Linux), silently defeating this process's own SIGINT handler - confirmed
+# via /proc/<pid>/status's SigCgt bitmask (SIGINT absent, SIGTERM present)
+# and empirically (`kill -TERM` exits in ~1s; `kill -INT` never does, only
+# ending via systemd's TimeoutStopSec forcing a SIGKILL). Do not set
+# KillSignal=SIGINT here - stick to systemd's default (SIGTERM), which
+# main.py's signal.signal(SIGTERM, ...) handler actually receives.
 
 [Install]
 WantedBy=multi-user.target

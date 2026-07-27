@@ -24,6 +24,7 @@ import threading
 from base64 import b64decode
 from typing import Optional
 
+from loguru import logger
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QScreen
 from PySide6.QtWidgets import QApplication
@@ -47,6 +48,10 @@ CDP_PORT = 9223
 class _Bridge(QObject):
     """Carries commands from the asyncio/WS thread to the Qt main thread."""
     command_received = Signal(dict)
+    # Asks the Qt main thread to quit exec() (see WebviewApp.request_quit):
+    # emitted from the asyncio thread on a real shutdown, since with
+    # quitOnLastWindowClosed disabled nothing else makes exec() return.
+    quit_requested = Signal()
 
 
 class WebviewApp:
@@ -139,8 +144,19 @@ class WebviewApp:
         self.qt_app = QApplication.instance() or QApplication([])
         self.qt_app.setApplicationName('UniTotem')
 
+        # A UniTotem node must keep running with zero screens - at boot and
+        # after the *last* monitor is unplugged at runtime. Qt's default
+        # quitOnLastWindowClosed=True would make exec() return the moment the
+        # last window closes (screenRemoved -> _on_screen_removed -> close()),
+        # which via aboutToQuit -> _schedule_shutdown() tears down the whole
+        # manager. Decouple app lifetime from window count; the app instead
+        # exits only on an explicit request_quit() (real shutdown), and picks
+        # screens back up via screenAdded -> _open_window_for_screen.
+        self.qt_app.setQuitOnLastWindowClosed(False)
+
         self._bridge = _Bridge()
         self._bridge.command_received.connect(self._handle_command)
+        self._bridge.quit_requested.connect(self.qt_app.quit)
 
         self.windows: dict[int, WebviewWindow] = {}
         self._screen_windows: dict[QScreen, int] = {}
@@ -197,6 +213,16 @@ class WebviewApp:
         if self._ws_loop is not None and self._ws is not None:
             asyncio.run_coroutine_threadsafe(self._send_webview_info(self._ws), self._ws_loop)
 
+    def request_quit(self):
+        """
+        Thread-safe: ask the Qt main thread's exec() to return. Called from
+        main.py's _schedule_shutdown() (asyncio thread) on a real shutdown -
+        with quitOnLastWindowClosed disabled, this is the only way exec()
+        ever returns, so run() can reach cef.Shutdown() and the process can
+        exit cleanly instead of hanging on SIGTERM.
+        """
+        self._bridge.quit_requested.emit()
+
     def _open_window(self, screen_index: int = 0,
                      x: int = 0, y: int = 0,
                      width: int = 0, height: int = 0) -> int:
@@ -204,7 +230,11 @@ class WebviewApp:
         possibly custom size (used by the remote 'AddWindow' command)."""
         screens = self.qt_app.screens()
         if not screens:
-            raise RuntimeError('No screens connected')
+            # AddWindow with no screens connected: log and no-op rather than
+            # raising, since this runs inside a Qt slot (_handle_command) -
+            # an unhandled exception there can abort the whole process.
+            logger.warning('AddWindow requested but no screens are connected; ignoring')
+            return -1
         screen  = screens[min(screen_index, len(screens) - 1)]
         geom    = screen.geometry()
         win = WebviewWindow(
@@ -237,6 +267,20 @@ class WebviewApp:
         cef_timer = QTimer()
         cef_timer.timeout.connect(cef.MessageLoopWork)
         cef_timer.start(10)
+
+        # cef.MessageLoopWork is a C-extension function: PySide6 can invoke it
+        # as a slot without ever entering CPython's bytecode eval loop, which
+        # is the only place pending signals (SIGTERM/SIGINT, e.g. from
+        # request_quit's caller or systemd) get checked and their Python
+        # handler actually run. Without some genuine Python-level callable
+        # firing periodically, a signal can stay pending indefinitely while
+        # this thread is otherwise fully occupied by native Qt/CEF calls -
+        # verified empirically: this single addition took a SIGTERM-to-exit
+        # delay from indefinite (previously masked by systemd's 90s
+        # TimeoutStopSec forcing a SIGKILL) down to about a second.
+        sigcheck_timer = QTimer()
+        sigcheck_timer.timeout.connect(lambda: None)
+        sigcheck_timer.start(200)
 
         exit_code = self.qt_app.exec()
         cef.Shutdown()
