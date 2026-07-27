@@ -190,7 +190,9 @@ const updateChartData = () => {
   if (!info.value || !cpuChart) return;
 
   const cpuData = info.value.cpu;
-  cpuChart.data.labels = cpuData.map((_, index) => `Core ${index}`);
+  // Index 0 is the aggregate total (/proc/stat's "cpu " line), not core 0 -
+  // per-core entries ("cpu0", "cpu1", ...) start at index 1.
+  cpuChart.data.labels = cpuData.map((_, index) => index === 0 ? 'Total' : `Core ${index - 1}`);
   const newDatasets = getDatasets(cpuData);
 
   cpuChart.data.datasets.forEach((dataset, index) => {
