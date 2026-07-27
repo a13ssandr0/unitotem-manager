@@ -190,18 +190,25 @@ onWSMessage = (data) => {
     case "Settings/Display/getGPUFeatureStats":
       gpu.value = data.features;
       break;
-    case "Viewers/list":
-      if (!currentViewerId.value) {
-        const ids = Object.keys(data.viewers || {});
-        if (ids.length) {
-          currentViewerId.value = ids.includes('local-webview') ? 'local-webview' : ids[0];
-          sendCommand('Settings/Display/getDisplays', {viewer_id: currentViewerId.value});
-          sendCommand('Settings/Display/getBounds', {viewer_id: currentViewerId.value, window_id: 0});
-          sendCommand('Settings/Display/getOrientation', {viewer_id: currentViewerId.value, window_id: 0});
-          sendCommand('Settings/Display/getFlip', {viewer_id: currentViewerId.value, window_id: 0});
-        }
+    case "Viewers/list": {
+      // Re-broadcast whenever a webview's screens/windows change (see
+      // webview.app.WebviewApp._notify_screens_changed), not just once at
+      // page load - re-fetch so a hot-plugged/unplugged monitor shows up
+      // here immediately instead of only after a manual refresh. Keep the
+      // current viewer selected as long as it's still around; only pick a
+      // new one if none was selected yet or the selected one disconnected.
+      const ids = Object.keys(data.viewers || {});
+      if (!currentViewerId.value || !ids.includes(currentViewerId.value)) {
+        currentViewerId.value = ids.includes('local-webview') ? 'local-webview' : (ids[0] || null);
+      }
+      if (currentViewerId.value) {
+        sendCommand('Settings/Display/getDisplays', {viewer_id: currentViewerId.value});
+        sendCommand('Settings/Display/getBounds', {viewer_id: currentViewerId.value, window_id: 0});
+        sendCommand('Settings/Display/getOrientation', {viewer_id: currentViewerId.value, window_id: 0});
+        sendCommand('Settings/Display/getFlip', {viewer_id: currentViewerId.value, window_id: 0});
       }
       break;
+    }
     case "Settings/Display/getDisplays":
       displays.value = data.displays;
       break;
