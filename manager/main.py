@@ -2,6 +2,7 @@ import asyncio
 import json
 import signal
 import threading
+import time
 import warnings
 from argparse import ArgumentParser
 from functools import cache, lru_cache
@@ -223,14 +224,29 @@ asyncio_thread.start()
 if not cmdargs.no_gui and not remote_manager.server_ip:
     try:
         from webview.app import WebviewApp
-        webview_app = WebviewApp(
-            manager_url=f'wss://localhost:{cmdargs.port_secure}/remote',
-            instance_id='local-webview',
-        )
-        # Propagate Qt quit → asyncio shutdown
-        webview_app.qt_app.aboutToQuit.connect(_schedule_shutdown)
-        logger.info('Starting local Qt6 webview (full mode)')
-        webview_app.run()          # blocks until the Qt window is closed
+
+        # No display at all (e.g. a node with no monitor connected, or a
+        # systemd service with no access to a graphical session) is a
+        # supported, permanent situation, not just a transient one: keep
+        # running headless and poll for a display becoming reachable,
+        # since constructing WebviewApp with none aborts the whole process
+        # natively (SIGABRT, uncatchable) rather than raising an exception.
+        if not WebviewApp.display_available():
+            logger.warning('No display reachable; running headless until one appears')
+            while not SHUTDOWN_EVENT.is_set() and not WebviewApp.display_available():
+                time.sleep(5)
+
+        if not SHUTDOWN_EVENT.is_set():
+            webview_app = WebviewApp(
+                manager_url=f'wss://localhost:{cmdargs.port_secure}/remote',
+                instance_id='local-webview',
+            )
+            # Propagate Qt quit → asyncio shutdown
+            webview_app.qt_app.aboutToQuit.connect(_schedule_shutdown)
+            logger.info('Starting local Qt6 webview (full mode)')
+            webview_app.run()          # blocks until the Qt window is closed
+        else:
+            asyncio_thread.join()
     except ImportError as e:
         logger.warning('Webview unavailable ({}), running in headless mode', e)
         asyncio_thread.join()
