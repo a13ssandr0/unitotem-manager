@@ -202,8 +202,11 @@ function connectWs() {
   ws.onopen = (e) => {
     connected.value = true
     new Set([...init_commands.value,
-      'Settings/hostname', 'Settings/Security/getUser', 'Settings/Display/getBounds'
+      'Settings/hostname', 'Settings/Security/getUser'
     ]).forEach(cmd => sendCommand(cmd))
+    // getBounds requires a viewer_id; the navbar shows this device's own
+    // local screen, not an arbitrary/remote one.
+    sendCommand('Settings/Display/getBounds', {viewer_id: 'local-webview', window_id: 0})
     window.onWSOpen(e)
   }
   ws.onmessage = e => {

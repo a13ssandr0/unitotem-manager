@@ -11,58 +11,35 @@
         <svg :disabled="svg.disabled" :viewBox="svg.viewbox" height="200px" xmlns="http://www.w3.org/2000/svg">
           <template v-for="disp in displays">
             <rect
-              :x="disp.bounds.x"
-              :y="disp.bounds.y"
-              :width="disp.bounds.width"
-              :height="disp.bounds.height"
+              :x="disp.x"
+              :y="disp.y"
+              :width="disp.width"
+              :height="disp.height"
               :fill="screenBGColor"/>
 
-            <rect v-if="disp.rotation === 0"
-                  :x="disp.bounds.x+disp.margin"
-                  :y="disp.bounds.y+disp.margin"
-                  :width="disp.bounds.width-2*disp.margin"
-                  :height="disp.bounds.height-5*disp.margin"
-                  :fill="screenFGColor"/>
-
-            <rect v-else-if="disp.rotation === 90"
-                  :x="disp.bounds.x+disp.margin"
-                  :y="disp.bounds.y+disp.margin"
-                  :width="disp.bounds.width-5*disp.margin"
-                  :height="disp.bounds.height-2*disp.margin"
-                  :fill="screenFGColor"/>
-
-            <rect v-else-if="disp.rotation === 180"
-                  :x="disp.bounds.x+disp.margin"
-                  :y="disp.bounds.y+4*disp.margin"
-                  :width="disp.bounds.width-2*disp.margin"
-                  :height="disp.bounds.height-5*disp.margin"
-                  :fill="screenFGColor"/>
-
-            <rect v-else
-                  :x="disp.bounds.x+4*disp.margin"
-                  :y="disp.bounds.y+disp.margin"
-                  :width="disp.bounds.width-5*disp.margin"
-                  :height="disp.bounds.height-2*disp.margin"
-                  :fill="screenFGColor"/>
+            <rect
+              :x="disp.x+disp.margin"
+              :y="disp.y+disp.margin"
+              :width="disp.width-2*disp.margin"
+              :height="disp.height-2*disp.margin"
+              :fill="screenFGColor"/>
 
             <text
-              :x="disp.bounds.x+disp.bounds.width/2"
-              :y="disp.bounds.y+disp.bounds.height*2/5">{{ disp.label }}
+              :x="disp.x+disp.width/2"
+              :y="disp.y+disp.height*2/5">{{ disp.name }}
             </text>
             <text
-              :x="disp.bounds.x+disp.bounds.width/2"
-              :y="disp.bounds.y+disp.bounds.height*3/5">
-              ({{
-                Math.round(disp.bounds.width * disp.scaleFactor)
-              }}x{{ Math.round(disp.bounds.height * disp.scaleFactor) }})
+              :x="disp.x+disp.width/2"
+              :y="disp.y+disp.height*3/5">
+              ({{ disp.width }}x{{ disp.height }})
             </text>
             <rect
-              :x="disp.bounds.x"
-              :y="disp.bounds.y"
-              :width="disp.bounds.width"
-              :height="disp.bounds.height"
+              :x="disp.x"
+              :y="disp.y"
+              :width="disp.width"
+              :height="disp.height"
               fill="#00000000"
-              @click="sendCommand('Settings/Display/setBounds', disp.bounds)"/>
+              @click="sendCommand('Settings/Display/setBounds', {viewer_id: currentViewerId, window_id: 0, x: disp.x, y: disp.y, width: disp.width, height: disp.height})"/>
           </template>
           <text x="500" y="500" v-if="svg.disabled" :fill="textColor">Disconnected</text>
           <rect id="window_bound_rect"
@@ -76,16 +53,16 @@
       <div class="d-flex justify-center align-center mb-4">
         <v-label class="text-center mr-2">Orientation:</v-label>
         <v-btn-toggle v-model="orientation" mandatory>
-          <v-btn @click="sendCommand('Settings/Display/setOrientation', {orientation: 0})">
+          <v-btn @click="sendCommand('Settings/Display/setOrientation', {viewer_id: currentViewerId, window_id: 0, orientation: 0})">
             <v-icon :style="{ transform: 'rotate(0deg)' }">mdi-monitor</v-icon>
           </v-btn>
-          <v-btn @click="sendCommand('Settings/Display/setOrientation', {orientation: 1})">
+          <v-btn @click="sendCommand('Settings/Display/setOrientation', {viewer_id: currentViewerId, window_id: 0, orientation: 1})">
             <v-icon :style="{ transform: 'rotate(90deg)' }">mdi-monitor</v-icon>
           </v-btn>
-          <v-btn @click="sendCommand('Settings/Display/setOrientation', {orientation: 2})">
+          <v-btn @click="sendCommand('Settings/Display/setOrientation', {viewer_id: currentViewerId, window_id: 0, orientation: 2})">
             <v-icon :style="{ transform: 'rotate(180deg)' }">mdi-monitor</v-icon>
           </v-btn>
-          <v-btn @click="sendCommand('Settings/Display/setOrientation', {orientation: 3})">
+          <v-btn @click="sendCommand('Settings/Display/setOrientation', {viewer_id: currentViewerId, window_id: 0, orientation: 3})">
             <v-icon :style="{ transform: 'rotate(270deg)' }">mdi-monitor</v-icon>
           </v-btn>
         </v-btn-toggle>
@@ -93,15 +70,15 @@
       <div class="d-flex justify-center align-center mb-4">
         <v-label class="text-center mr-2">Flip:</v-label>
         <v-btn-toggle v-model="flip" mandatory>
-          <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: 0})">
+          <v-btn @click="sendCommand('Settings/Display/setFlip', {viewer_id: currentViewerId, window_id: 0, flip: 0})">
             No
           </v-btn>
 
-          <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: 1})">
+          <v-btn @click="sendCommand('Settings/Display/setFlip', {viewer_id: currentViewerId, window_id: 0, flip: 1})">
             <v-icon>mdi-reflect-horizontal</v-icon>
           </v-btn>
 
-          <v-btn @click="sendCommand('Settings/Display/setFlip', {flip: 2})">
+          <v-btn @click="sendCommand('Settings/Display/setFlip', {viewer_id: currentViewerId, window_id: 0, flip: 2})">
             <v-icon>mdi-reflect-vertical</v-icon>
           </v-btn>
         </v-btn-toggle>
@@ -140,6 +117,7 @@ const gpu = ref({})
 const displays = ref([])
 const orientation = ref(0)
 const flip = ref(0)
+const currentViewerId = ref(null)
 
 const window_bound_rect = ref({})
 
@@ -151,9 +129,9 @@ watch(displays, (_displays) => {
     } else {
       let w = 0, h = 0;
       for (const disp of _displays) {
-        disp.margin = Math.min(disp.bounds.width, disp.bounds.height) * 0.025;
-        w = Math.max(w, disp.bounds.x + disp.bounds.width)
-        h = Math.max(h, disp.bounds.y + disp.bounds.height)
+        disp.margin = Math.min(disp.width, disp.height) * 0.025;
+        w = Math.max(w, disp.x + disp.width)
+        h = Math.max(h, disp.y + disp.height)
       }
       svg.value = {viewbox: `0 0 ${w} ${h}`, disabled: false}
     }
@@ -161,15 +139,27 @@ watch(displays, (_displays) => {
 )
 
 const sendCommand = window.sendCommand;
-window.setInitCommands(
-  "Settings/Display/getGPUFeatureStats",
-  "Settings/Display/getDisplays", "Settings/Display/getBounds",
-  "Settings/Display/getOrientation", "Settings/Display/getFlip")
+// getDisplays/getBounds/getOrientation/getFlip all require a viewer_id -
+// resolve it first (defaulting to the first known viewer, usually the
+// local one) before fetching anything that depends on it.
+window.setInitCommands("Settings/Display/getGPUFeatureStats", "Viewers/list")
 
 onWSMessage = (data) => {
   switch (data.target) {
     case "Settings/Display/getGPUFeatureStats":
       gpu.value = data.features;
+      break;
+    case "Viewers/list":
+      if (!currentViewerId.value) {
+        const ids = Object.keys(data.viewers || {});
+        if (ids.length) {
+          currentViewerId.value = ids.includes('local-webview') ? 'local-webview' : ids[0];
+          sendCommand('Settings/Display/getDisplays', {viewer_id: currentViewerId.value});
+          sendCommand('Settings/Display/getBounds', {viewer_id: currentViewerId.value, window_id: 0});
+          sendCommand('Settings/Display/getOrientation', {viewer_id: currentViewerId.value, window_id: 0});
+          sendCommand('Settings/Display/getFlip', {viewer_id: currentViewerId.value, window_id: 0});
+        }
+      }
       break;
     case "Settings/Display/getDisplays":
       displays.value = data.displays;
