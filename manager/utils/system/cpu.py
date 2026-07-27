@@ -10,7 +10,7 @@ from time import sleep
 # noinspection PyUnresolvedReferences
 from psutil import _cpu_times_deltas, _cpu_tot_time
 from psutil._common import get_procfs_path, open_binary
-from psutil._pslinux import CLOCK_TICKS, scputimes, set_scputimes_ntuple
+from psutil._pslinux import CLOCK_TICKS, scputimes
 
 
 # reimplementation of psutil CPU related functions to get all CPU data at once
@@ -48,7 +48,6 @@ def cpu_times():
     The order of the list is consistent across calls.
     """
     procfs_path = get_procfs_path()
-    set_scputimes_ntuple(procfs_path)
     cpus = []
     with open_binary('%s/stat' % procfs_path) as f:
         for line in f:

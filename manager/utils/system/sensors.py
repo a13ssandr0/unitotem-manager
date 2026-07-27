@@ -15,7 +15,8 @@ import glob
 import os
 import re
 
-from psutil._common import bcat, cat, debug, shwtemp
+from psutil._common import bcat, cat, debug
+from psutil._ntuples import shwtemp
 
 
 def __sensors_temperatures():
