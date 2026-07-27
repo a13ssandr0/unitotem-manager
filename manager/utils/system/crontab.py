@@ -1,4 +1,5 @@
 import os
+from getpass import getuser
 
 from crontab import CronTab
 
@@ -48,4 +49,4 @@ class UniCron(CronTab):
         } for job in self.findById()]
 
 
-CRONTAB = UniCron(user=os.getlogin())
+CRONTAB = UniCron(user=getuser())
