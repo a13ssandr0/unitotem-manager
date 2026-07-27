@@ -91,6 +91,14 @@ logger.debug('Got event loop {}', id(loop))
 # ── graceful shutdown ─────────────────────────────────────────────────────
 # Runs inside the asyncio thread; sets SHUTDOWN_EVENT, cleans up, stops loop.
 
+# Set once the local Qt webview is constructed (full mode only; see below).
+# With quitOnLastWindowClosed disabled (webview.app.WebviewApp), closing the
+# last window no longer makes Qt's exec() return on its own, so a real
+# shutdown must explicitly ask it to quit - otherwise the Qt thread (and thus
+# the whole process, since run() blocks on it) never exits.
+_webview_app = None
+
+
 async def _shutdown():
     if not SHUTDOWN_EVENT.is_set():
         SHUTDOWN_EVENT.set()
@@ -101,6 +109,8 @@ async def _shutdown():
 def _schedule_shutdown():
     """Thread-safe: schedule _shutdown() in the asyncio event loop."""
     asyncio.run_coroutine_threadsafe(_shutdown(), loop)
+    if _webview_app is not None:
+        _webview_app.request_quit()
 
 
 # signal.signal works from the main thread regardless of where asyncio runs
@@ -241,10 +251,11 @@ if not cmdargs.no_gui and not remote_manager.server_ip:
                 manager_url=f'wss://localhost:{cmdargs.port_secure}/remote',
                 instance_id='local-webview',
             )
+            _webview_app = webview_app  # let _schedule_shutdown() reach request_quit()
             # Propagate Qt quit → asyncio shutdown
             webview_app.qt_app.aboutToQuit.connect(_schedule_shutdown)
             logger.info('Starting local Qt6 webview (full mode)')
-            webview_app.run()          # blocks until the Qt window is closed
+            webview_app.run()          # blocks until request_quit() (see _schedule_shutdown above)
         else:
             asyncio_thread.join()
     except ImportError as e:
