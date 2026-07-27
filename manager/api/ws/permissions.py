@@ -14,7 +14,7 @@ def check_permissions(func, user):
             logger.debug(f'{name} requires no permissions to be executed')
             return
 
-        logger.debug(f'{name} requires {' or '.join(func.perms)} permission to be executed')
+        logger.debug(f'{name} requires {" or ".join(func.perms)} permission to be executed')
         perms = func.perms
     except AttributeError:
         logger.debug(f'{name} has no permissions set, assuming admin')

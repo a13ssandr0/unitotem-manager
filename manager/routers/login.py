@@ -111,7 +111,7 @@ async def login_page(request: Request, src: Optional[str] = '/'):
     get_vite_assets.cache_clear()
     ##
     assets = get_vite_assets("src/pages/login.vue")
-    return templates.TemplateResponse("base.html", {
+    return templates.TemplateResponse(request, "base.html", {
         "request": request,
         "assets": assets,
         "state": {
