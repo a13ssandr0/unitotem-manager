@@ -89,15 +89,10 @@
           <h2>Graphics Feature Status</h2>
           <ul class="ms-10">
             <li v-for="(value, key) in gpu" :key="key">
-              {{ key }}:
-              <span v-if="value === 'enabled'" class="text-green">Hardware accelerated</span>
-              <span v-else-if="value === 'enabled_on' || value === 'enabled_force'" class="text-green">Enabled</span>
-              <span v-else-if="value === 'disabled_off_ok'" class="text-yellow">Disabled</span>
-              <span v-else-if="value === 'disabled_off'" class="text-red">Disabled</span>
-              <span v-else-if="value === 'disabled_software'" class="text-yellow">Software only. Hardware acceleration disabled</span>
-              <span v-else-if="value === 'unavailable_off'" class="text-red">Unavailable</span>
-              <span v-else-if="value === 'unavailable_software'" class="text-yellow">Unavailable, software only</span>
-              <span v-else class="text-grey">{{ value }}</span>
+              {{ gpuFeatureLabels[key] || key }}:
+              <span :class="(gpuStatusLabels[value] || {class: 'text-red'}).class">
+                {{ (gpuStatusLabels[value] || {label: 'Unknown'}).label }}
+              </span>
             </li>
           </ul>
         </div>
@@ -115,6 +110,49 @@ const theme = useTheme()
 const textColor = computed(() => theme.global.current.value.colors['on-background'])
 const screenBGColor = computed(() => theme.global.current.value.colors['primary'])
 const screenFGColor = computed(() => theme.global.current.value.colors['secondary'])
+
+// Ported from Chromium's own content/browser/resources/gpu/info_view.ts
+// (appendFeatureInfo_'s featureLabelMap/statusMap) so labels/colors match
+// chrome://gpu exactly instead of being guessed at.
+const gpuFeatureLabels = {
+  '2d_canvas': 'Canvas',
+  'gpu_compositing': 'Compositing',
+  'webgl': 'WebGL',
+  'multisampling': 'WebGL multisampling',
+  'texture_sharing': 'Texture Sharing',
+  'video_decode': 'Video Decode',
+  'rasterization': 'Rasterization',
+  'opengl': 'OpenGL',
+  'metal': 'Metal',
+  'vulkan': 'Vulkan',
+  'multiple_raster_threads': 'Multiple Raster Threads',
+  'native_gpu_memory_buffers': 'Native GpuMemoryBuffers',
+  'protected_video_decode': 'Hardware Protected Video Decode',
+  'surface_control': 'Surface Control',
+  'vpx_decode': 'VPx Video Decode',
+  'canvas_oop_rasterization': 'Canvas out-of-process rasterization',
+  'raw_draw': 'Raw Draw',
+  'video_encode': 'Video Encode',
+  'direct_rendering_display_compositor': 'Direct Rendering Display Compositor',
+  'webgpu': 'WebGPU',
+  'skia_graphite': 'Skia Graphite',
+  'webnn': 'WebNN',
+  'trees_in_viz': 'TreesInViz',
+  'webgpu_on_vk_via_gl_interop': 'WebGPU interop',
+}
+const gpuStatusLabels = {
+  'disabled_software': {label: 'Software only. Hardware acceleration disabled', class: 'text-yellow'},
+  'disabled_off': {label: 'Disabled', class: 'text-red'},
+  'disabled_off_ok': {label: 'Disabled', class: 'text-yellow'},
+  'unavailable_software': {label: 'Software only, hardware acceleration unavailable', class: 'text-yellow'},
+  'unavailable_off': {label: 'Unavailable', class: 'text-red'},
+  'unavailable_off_ok': {label: 'Unavailable', class: 'text-yellow'},
+  'enabled_readback': {label: 'Hardware accelerated but at reduced performance', class: 'text-yellow'},
+  'enabled_force': {label: 'Hardware accelerated on all pages', class: 'text-green'},
+  'enabled': {label: 'Hardware accelerated', class: 'text-green'},
+  'enabled_on': {label: 'Enabled', class: 'text-green'},
+  'enabled_force_on': {label: 'Force enabled', class: 'text-green'},
+}
 
 const gpu = ref({})
 const displays = ref([])
