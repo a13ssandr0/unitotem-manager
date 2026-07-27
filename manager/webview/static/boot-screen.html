@@ -12,11 +12,49 @@
 
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-    html, body {
+    html {
       width: 100%; height: 100%;
+      overflow: hidden;
+    }
+
+    /* Content orientation (screen rotation without affecting the real
+       screen) is driven by document.body's [r] attribute - see
+       setOrientation()/getOrientation() below. Swapping width/height and
+       re-anchoring via transform-origin+top keeps the rotated box filling
+       the same physical viewport instead of just spinning in place and
+       clipping. */
+    body {
+      position: absolute;
+      width: 100vw; height: 100vh;
       overflow: hidden;
       background: rgb(0, 0, 0);
     }
+    body[r="1"] {
+      transform: rotate(90deg);
+      transform-origin: bottom left;
+      width: 100vh; height: 100vw;
+      top: -100vw;
+    }
+    body[r="2"] { transform: rotate(180deg); }
+    body[r="3"] {
+      transform: rotate(270deg);
+      transform-origin: top left;
+      width: 100vh; height: 100vw;
+      top: 100vh;
+    }
+
+    /* Content flip (e.g. for backwards projection) lives on a separate
+       wrapper from orientation - see setFlip()/getFlip() below - so the two
+       compose independently regardless of which is applied first/last;
+       combining both into a single transform on one element made flip
+       mirror along the already-rotated axes instead of the true screen
+       horizontal/vertical. */
+    main {
+      position: relative;
+      width: 100%; height: 100%;
+    }
+    main[f="1"] { transform: scaleX(-1); }
+    main[f="2"] { transform: scaleY(-1); }
 
     /* Each container occupies the full viewport; only one is visible at a time */
     .container { display: none; width: 100%; height: 100%; }
@@ -94,26 +132,28 @@
   </style>
 </head>
 <body>
-  <div id="boot-screen" class="container">
-    <div class="welcome">
-      <div class="glow">
-        <span class="loader">UniT&nbsp;&nbsp;tem</span>
+  <main id="content-root">
+    <div id="boot-screen" class="container">
+      <div class="welcome">
+        <div class="glow">
+          <span class="loader">UniT&nbsp;&nbsp;tem</span>
+        </div>
       </div>
     </div>
-  </div>
 
-  <iframe  id="web-frame"     class="container"
-           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-           allowfullscreen></iframe>
+    <iframe  id="web-frame"     class="container"
+             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+             allowfullscreen></iframe>
 
-  <img     id="image-display" class="container" alt="">
+    <img     id="image-display" class="container" alt="">
 
-  <video   id="video-display" class="container"
-           autoplay loop playsinline></video>
+    <video   id="video-display" class="container"
+             autoplay loop playsinline></video>
 
-  <div     id="audio-display" class="container">
-    <audio id="audio-player" autoplay loop></audio>
-  </div>
+    <div     id="audio-display" class="container">
+      <audio id="audio-player" autoplay loop></audio>
+    </div>
+  </main>
 
   <script>
     "use strict";
@@ -181,6 +221,30 @@
           break;
         }
       }
+    }
+
+    /**
+     * Called by the Python viewer via CEF ExecuteJavascript.
+     * orientation: 0=0deg, 1=90deg, 2=180deg, 3=270deg (clockwise)
+     */
+    function setOrientation(orientation) {
+      document.body.setAttribute('r', orientation);
+    }
+
+    function getOrientation() {
+      return +(document.body.getAttribute('r') || 0);
+    }
+
+    /**
+     * Called by the Python viewer via CEF ExecuteJavascript.
+     * flip: 0=none, 1=horizontal, 2=vertical
+     */
+    function setFlip(flip) {
+      document.getElementById('content-root').setAttribute('f', flip);
+    }
+
+    function getFlip() {
+      return +(document.getElementById('content-root').getAttribute('f') || 0);
     }
   </script>
 </body>

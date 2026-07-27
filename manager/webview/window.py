@@ -137,18 +137,21 @@ class WebviewWindow(QMainWindow):
         self.setGeometry(x, y, width, height)
 
     def set_orientation(self, orientation: int):
-        # Rotation is compositor-level on Wayland / Xrandr on X11.
-        # Apply it via CSS transform inside the page so CEF handles it regardless.
-        deg = orientation % 360
-        self._cef.execute_js(
-            f'document.body.style.transform="rotate({deg}deg)";'
-            f'document.body.style.transformOrigin="center center";'
-        )
+        # orientation is a quarter-turn index (0/1/2/3 = 0/90/180/270deg),
+        # not a raw degree value. boot-screen.html's setOrientation() applies
+        # it via a body[r] CSS attribute selector with the correct swapped
+        # width/height + transform-origin per rotation (a plain
+        # transform:rotate() would clip the content at 90/270deg, since the
+        # unrotated box still occupies the original, now-perpendicular,
+        # viewport dimensions).
+        self._cef.execute_js(f'setOrientation({orientation})')
 
     def set_flip(self, flip: int):
-        # flip: 0=none, 1=horizontal, 2=vertical, 3=both
-        sx = -1 if flip & 1 else 1
-        sy = -1 if flip & 2 else 1
-        self._cef.execute_js(
-            f'document.body.style.transform+=" scaleX({sx}) scaleY({sy})";'
-        )
+        # flip: 0=none, 1=horizontal, 2=vertical (mutually exclusive, no
+        # "both" state). Applied to a separate wrapper element from
+        # orientation (see boot-screen.html's setFlip()) so the two compose
+        # independently regardless of order - entangling them into a single
+        # element's transform meant setting orientation again erased any
+        # flip, and flip mirrored along the rotated axes instead of the
+        # screen's true horizontal/vertical.
+        self._cef.execute_js(f'setFlip({flip})')
