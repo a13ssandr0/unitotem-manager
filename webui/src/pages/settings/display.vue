@@ -90,7 +90,7 @@
           <ul class="ms-10">
             <li v-for="(value, key) in gpu" :key="key">
               {{ gpuFeatureLabels[key] || key }}:
-              <span :class="(gpuStatusLabels[value] || {class: 'text-red'}).class">
+              <span :style="{color: gpuStatusColors[(gpuStatusLabels[value] || {color: 'red'}).color].value}">
                 {{ (gpuStatusLabels[value] || {label: 'Unknown'}).label }}
               </span>
             </li>
@@ -110,6 +110,20 @@ const theme = useTheme()
 const textColor = computed(() => theme.global.current.value.colors['on-background'])
 const screenBGColor = computed(() => theme.global.current.value.colors['primary'])
 const screenFGColor = computed(() => theme.global.current.value.colors['secondary'])
+const isDark = computed(() => theme.global.current.value.dark)
+
+// Vuetify's static text-yellow utility class (Material "yellow", #FFEB3B) is
+// illegible on a light background regardless of theme - chrome://gpu itself
+// avoids exactly this by keying its --yellow CSS var off light/dark (see
+// content/browser/resources/gpu/info_view.html): a dark, muted olive in
+// light mode, a bright yellow in dark mode. Mirrored here, but keyed off
+// this app's own theme switcher rather than prefers-color-scheme, since the
+// user can override the OS preference in-app.
+const gpuStatusColors = {
+  green:  computed(() => isDark.value ? '#0F0' : '#080'),
+  yellow: computed(() => isDark.value ? '#FF0' : '#880'),
+  red:    computed(() => '#f00'),
+}
 
 // Ported from Chromium's own content/browser/resources/gpu/info_view.ts
 // (appendFeatureInfo_'s featureLabelMap/statusMap) so labels/colors match
@@ -141,17 +155,17 @@ const gpuFeatureLabels = {
   'webgpu_on_vk_via_gl_interop': 'WebGPU interop',
 }
 const gpuStatusLabels = {
-  'disabled_software': {label: 'Software only. Hardware acceleration disabled', class: 'text-yellow'},
-  'disabled_off': {label: 'Disabled', class: 'text-red'},
-  'disabled_off_ok': {label: 'Disabled', class: 'text-yellow'},
-  'unavailable_software': {label: 'Software only, hardware acceleration unavailable', class: 'text-yellow'},
-  'unavailable_off': {label: 'Unavailable', class: 'text-red'},
-  'unavailable_off_ok': {label: 'Unavailable', class: 'text-yellow'},
-  'enabled_readback': {label: 'Hardware accelerated but at reduced performance', class: 'text-yellow'},
-  'enabled_force': {label: 'Hardware accelerated on all pages', class: 'text-green'},
-  'enabled': {label: 'Hardware accelerated', class: 'text-green'},
-  'enabled_on': {label: 'Enabled', class: 'text-green'},
-  'enabled_force_on': {label: 'Force enabled', class: 'text-green'},
+  'disabled_software': {label: 'Software only. Hardware acceleration disabled', color: 'yellow'},
+  'disabled_off': {label: 'Disabled', color: 'red'},
+  'disabled_off_ok': {label: 'Disabled', color: 'yellow'},
+  'unavailable_software': {label: 'Software only, hardware acceleration unavailable', color: 'yellow'},
+  'unavailable_off': {label: 'Unavailable', color: 'red'},
+  'unavailable_off_ok': {label: 'Unavailable', color: 'yellow'},
+  'enabled_readback': {label: 'Hardware accelerated but at reduced performance', color: 'yellow'},
+  'enabled_force': {label: 'Hardware accelerated on all pages', color: 'green'},
+  'enabled': {label: 'Hardware accelerated', color: 'green'},
+  'enabled_on': {label: 'Enabled', color: 'green'},
+  'enabled_force_on': {label: 'Force enabled', color: 'green'},
 }
 
 const gpu = ref({})
