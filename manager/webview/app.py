@@ -146,6 +146,7 @@ class WebviewApp:
         self._screen_windows: dict[QScreen, int] = {}
         self._next_id = 0
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._ws = None
 
         # One fullscreen window per currently-connected screen (zero screens
         # means zero windows: the app must be able to start without any and
@@ -171,6 +172,7 @@ class WebviewApp:
         self.windows[self._next_id] = win
         self._screen_windows[screen] = self._next_id
         self._next_id += 1
+        self._notify_screens_changed()
         return self._next_id - 1
 
     def _on_screen_removed(self, screen: QScreen):
@@ -180,6 +182,20 @@ class WebviewApp:
             win = self.windows.pop(window_id, None)
             if win is not None:
                 win.close()
+        self._notify_screens_changed()
+
+    def _notify_screens_changed(self):
+        """
+        Push the current screen/window layout to the manager immediately
+        instead of waiting for the next reconnect, so a monitor plugged or
+        unplugged at runtime (screenAdded/screenRemoved, fired on this - the
+        Qt - thread) shows up on the Viewers page right away. The WS
+        connection itself lives on a different thread/event loop (see
+        run()/_ws_client()), so the actual send has to be scheduled onto that
+        loop rather than awaited directly here.
+        """
+        if self._ws_loop is not None and self._ws is not None:
+            asyncio.run_coroutine_threadsafe(self._send_webview_info(self._ws), self._ws_loop)
 
     def _open_window(self, screen_index: int = 0,
                      x: int = 0, y: int = 0,
@@ -202,6 +218,7 @@ class WebviewApp:
         win.show()
         self.windows[self._next_id] = win
         self._next_id += 1
+        self._notify_screens_changed()
         return self._next_id - 1
 
     # ── entry point ───────────────────────────────────────────────────────
@@ -248,6 +265,7 @@ class WebviewApp:
                     },
                     ssl=ssl_ctx,
                 ) as ws:
+                    self._ws = ws
                     await self._send_webview_info(ws)
                     async for raw in ws:
                         try:
@@ -257,6 +275,8 @@ class WebviewApp:
             except Exception:
                 # Retry until the manager is up (e.g. still starting)
                 await asyncio.sleep(3)
+            finally:
+                self._ws = None
 
     @staticmethod
     def _decode_frame(raw: str) -> dict:
@@ -321,3 +341,4 @@ class WebviewApp:
         elif target == 'RemoveWindow' and win:
             win.close()
             del self.windows[window_id]
+            self._notify_screens_changed()
