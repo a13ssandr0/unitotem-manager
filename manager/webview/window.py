@@ -33,11 +33,37 @@ class CefWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-    def embed_browser(self, url: str):
-        """Create the CEF browser child window. Must be called after show()."""
+    def embed_browser(self, url: str, width: int = None, height: int = None):
+        """
+        Create the CEF browser child window. Must be called after show().
+
+        width/height should be the caller's already-known target size rather
+        than this widget's own self.width()/height(): winId() forces native
+        window creation immediately, which can happen before Qt has finished
+        laying this widget out to its final size, and no later resizeEvent
+        fires to correct it since Qt doesn't consider the size to have
+        changed - the browser is then stuck at a stale (often tiny) size.
+        """
         winfo = cef.WindowInfo()
-        winfo.SetAsChild(int(self.winId()), [0, 0, max(self.width(), 1), max(self.height(), 1)])
+        w = max(width or self.width(), 1)
+        h = max(height or self.height(), 1)
+        winfo.SetAsChild(int(self.winId()), [0, 0, w, h])
         self.browser = cef.CreateBrowserSync(winfo, url=url)
+        # Since the window is already created at its final size, no
+        # subsequent resizeEvent (and thus no OnSize call) ever fires to
+        # kick off CEF's compositor - it needs at least one explicit OnSize
+        # to start painting, particularly with multi_threaded_message_loop
+        # (the compositor runs on its own thread and doesn't get an implicit
+        # first-paint trigger from our single-threaded message pump anymore).
+        # OnSize's signature is (windowHandle, msg, wparam, lparam), a Win32
+        # message passthrough reused generically - on Linux it just re-reads
+        # the window's current X11 geometry via the handle, so the other
+        # three args are unused placeholders (matches every example in
+        # vendor/cefpython: gtk2.py, gtk3.py, qt.py all call OnSize(handle,
+        # 0, 0, 0)). Passing width/height positionally there is wrong and
+        # raises TypeError (wrong arg count) - it was never actually
+        # exercised until this call started firing.
+        cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
 
     def execute_js(self, js: str):
         if self.browser:
@@ -46,7 +72,7 @@ class CefWidget(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.browser:
-            cef.WindowUtils.OnSize(int(self.winId()), 0, 0, self.width(), self.height())
+            cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
 
     def focusInEvent(self, event):
         super().focusInEvent(event)
@@ -79,6 +105,8 @@ class WebviewWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setScreen(screen)
         self.setGeometry(x, y, width, height)
+        self._content_width = width
+        self._content_height = height
 
         self._cef = CefWidget(self)
         self.setCentralWidget(self._cef)
@@ -87,7 +115,7 @@ class WebviewWindow(QMainWindow):
         super().show()
         # embed_browser() needs a valid, visible X11 window handle
         if self._cef.browser is None:
-            self._cef.embed_browser(_BOOT_URL)
+            self._cef.embed_browser(_BOOT_URL, self._content_width, self._content_height)
 
     # ── commands sent by the manager via WebSocket ────────────────────────
 
