@@ -1,9 +1,20 @@
 // UniTotem boot splash (script plugin theme)
 //
-// Wordmark "UniTotem" on black, matching the original boot animation design
-// recovered from git history (e94cadb:webview/src/frontend/boot-screen.html,
-// deleted during the Electron -> Qt6/CEF migration): bold white text, "o"
-// replaced by a spinning ring icon (white ring, one arc colored #FF3D00).
+// Wordmark "UniTotem" on black, matching manager/webview/static/boot-screen.html:
+// bold white text, "o" replaced by a spinning ring icon (white ring, one arc
+// colored #FF3D00). The wordmark and ring are pre-rendered PNGs (see
+// ../generate-assets.py) rather than drawn with Image.Text()/Image.Rotate()
+// primitives on hand-built glyphs, for two reasons:
+//   - Image.Text() needs plymouth-label + a system font in the initramfs,
+//     neither of which the kiosk image guarantees; without them it silently
+//     returns a 0x0 image and the splash is blank.
+//   - it lets the splash reuse the exact font and layout boot-screen.html
+//     renders live, instead of an approximation.
+// generate-assets.py emits 4 width tiers (1280/1920/2560/3840); this script
+// picks the closest tier for the smallest connected screen and does one
+// Image.Scale() to the exact pixel size that screen needs (at most 1.5x in
+// either direction - verified visually lossless against Plymouth's own
+// bilinear scaler for this artwork).
 //
 // Bottom status line: fed by both Plymouth.SetUpdateStatusFunction and
 // Plymouth.SetDisplayMessageFunction. Modern systemd sends the id of every
@@ -13,20 +24,11 @@
 // forwarder service is needed to show which unit is starting.
 //
 // Only Plymouth script primitives verified against the installed script.so
-// (strings /usr/lib/*/plymouth/script.so) are used below: CharAt, SubString,
-// Image.Text, Image.Rotate, Sprite, Window.Get*/SetBackground*Color.
+// (strings /usr/lib/*/plymouth/script.so) or already used by a real deployed
+// theme (unitotem-system's kiosk.script, for Math.Int) are used below.
 
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
-
-screen_width  = Window.GetWidth(0);
-screen_height = Window.GetHeight(0);
-
-// Matches boot-screen.html's viewport-relative sizing (body { font-size:
-// 1.3vw } * .loader's 7.5em = 9.75vw) instead of a fixed point size, so the
-// wordmark doesn't come out small/thin on a real display's resolution.
-wordmark_font = "Sans Bold " + (screen_width * 0.0975);
-status_font   = "Sans 16";
 
 // ---- Manual string helpers --------------------------------------------
 // The script language has no built-in length/split/replace: build them from
@@ -66,71 +68,153 @@ fun first_token(s) {
     return token;
 }
 
-// ---- Wordmark: "UniTotem", letter by letter ----------------------------
-// Matches the original boot-screen.html design (recovered from git history,
-// commit e94cadb:webview/src/frontend/boot-screen.html): bold text reading
-// "UniT" + a blank gap + "tem", with a spinning ring icon filling the gap
-// where the "o" would be - not a rotated text glyph.
+// ---- Multi-display sizing -----------------------------------------------
+// A script theme draws one shared scene onto a canvas sized to the largest
+// connected display; every display (whatever its own size) is centered
+// within that shared canvas by Plymouth itself. So centering our sprites on
+// the *global* center (Window.GetWidth()/GetHeight() with no index) puts
+// them at the center of every display simultaneously, and sizing the
+// wordmark from the *smallest* display guarantees it fits on all of them.
 
-wordmark_text = "UniTotem";
-spinner_index = 4; // the "o" in U-n-i-T-o-t-e-m, replaced by the ring icon
-
-letter_count  = string_length(wordmark_text);
-letter_image  = [];
-letter_sprite = [];
-letter_x      = [];
-total_width   = 0;
-
-// The spinner replaces the "o" glyph with a drawn icon (white ring with a
-// colored arc segment, spinner.png) instead of rendering the letter as text;
-// scaled to the "n" glyph's height so it sits naturally among the other characters.
-spinner_size = Image.Text("n", 1, 1, 1, 1, wordmark_font).GetHeight();
-
-for (i = 0; i < letter_count; i++) {
-    if (i == spinner_index) {
-        letter_image[i] = Image("spinner.png").Scale(spinner_size, spinner_size);
-    } else {
-        local.ch = String(wordmark_text).CharAt(i);
-        letter_image[i] = Image.Text(ch, 1, 1, 1, 1, wordmark_font);
+fun min_display_width() {
+    local.result = Window.GetWidth();
+    for (i = 0; i < 16; i++) {
+        local.w = Window.GetWidth(i);
+        if (!w) return result;
+        if (w < result) result = w;
     }
-    letter_sprite[i] = Sprite(letter_image[i]);
-    letter_x[i]      = total_width;
-    total_width     += letter_image[i].GetWidth();
+    return result;
 }
 
-wordmark_x = screen_width  / 2 - total_width / 2;
-wordmark_y = screen_height / 2 - letter_image[0].GetHeight() / 2;
-
-for (i = 0; i < letter_count; i++) {
-    letter_sprite[i].SetPosition(wordmark_x + letter_x[i], wordmark_y, 10);
+fun min_display_height() {
+    local.result = Window.GetHeight();
+    for (i = 0; i < 16; i++) {
+        local.h = Window.GetHeight(i);
+        if (!h) return result;
+        if (h < result) result = h;
+    }
+    return result;
 }
 
-// The spinning "o" keeps a fixed on-screen center; Rotate() changes the
-// image's bounding box each frame, so position is recomputed from that
-// center every tick.
-o_image    = letter_image[spinner_index];
-o_sprite   = letter_sprite[spinner_index];
-o_center_x = wordmark_x + letter_x[spinner_index] + o_image.GetWidth() / 2;
-o_center_y = wordmark_y + o_image.GetHeight() / 2;
+// Smallest generated tier that is still >= min_width, so the final
+// Image.Scale() below only ever has to shrink (or barely enlarge) it.
+fun pick_tier(min_width) {
+    local.tiers = [1280, 1920, 2560, 3840];
+    for (i = 0; i < 4; i++) {
+        if (tiers[i] >= min_width) return tiers[i];
+    }
+    return tiers[3];
+}
 
-spin_angle = 0;
+// ---- Wordmark + spinning ring --------------------------------------------
+// Geometry ratios below are measured from boot-screen.html's rendered CSS
+// boxes (see generate-assets.py's header for the full derivation) and are
+// exact relative to the *wordmark image*, so no "em" bookkeeping is needed
+// here beyond picking a source tier: whatever size the wordmark ends up at,
+// the ring sits at the same fraction of its width/height.
+WORDMARK_TO_SCREEN_WIDTH = 0.601; // wordmark width / smallest screen width
+RING_CENTER_X_FRAC       = 0.5179; // ring center X, as a fraction of wordmark width
+RING_CENTER_Y_FRAC       = 0.5734; // ring center Y, as a fraction of wordmark height
+// spinner-*.png is rendered by generate-assets.py at 2x the size it's shown
+// at (SPINNER_OVERSAMPLE there), so that the Scale() below is a genuine 2x
+// downsample rather than a near-1:1 copy - see that script's comment for why:
+// Image.Rotate()'s plain bilinear resampling visibly facets a rotating
+// circle into a rough polygon when the source doesn't have enough anti-
+// aliased pixels across the edge, which a same-size source doesn't provide.
+SPINNER_OVERSAMPLE       = 2;
+
+FADE_FRAMES = 40;             // 0.8s at Plymouth's default 50fps refresh rate
+SPIN_STEP   = 0.12566370614;  // 2*pi/50 rad/frame -> 1 revolution/second, clockwise
+
+wordmark_sprite     = Sprite();
+ring_sprite         = Sprite();
+ring_img            = 0;
+did_initial_layout  = 0;
+frame_count         = 0;
+spin_angle          = 0;
+status_margin       = 0;
+status_font         = "Sans 16";
+status_x_base       = 0;
+status_y_base       = 0;
+
+fun layout() {
+    local.screen_width  = Window.GetWidth();
+    local.screen_height = Window.GetHeight();
+    local.min_width      = min_display_width();
+    local.min_height     = min_display_height();
+
+    local.tier   = pick_tier(min_width);
+    local.wm_raw = Image("wordmark-" + tier + ".png");
+    local.rg_raw = Image("spinner-"  + tier + ".png");
+
+    local.target_w = Math.Int(min_width * WORDMARK_TO_SCREEN_WIDTH);
+    local.scale     = target_w / wm_raw.GetWidth();
+    local.target_h  = Math.Int(wm_raw.GetHeight() * scale);
+    local.ring_size = Math.Int(rg_raw.GetWidth()  * scale / SPINNER_OVERSAMPLE);
+    // Image.Rotate() pivots around (size/2, size/2) using integer division
+    // (script-lib-image.c:image_rotate). For a 0-indexed buffer of width W
+    // the true center is (W-1)/2, which integer-truncated W/2 only lands on
+    // exactly when W is odd; for even W the pivot is a constant 0.5px off,
+    // which makes the rotating ring visibly orbit that offset every frame
+    // instead of spinning in place. Forcing an odd size kills the wobble.
+    if (Math.Int(ring_size / 2) * 2 == ring_size)
+        ring_size += 1;
+
+    local.wordmark_img = wm_raw.Scale(target_w, target_h);
+    ring_img            = rg_raw.Scale(ring_size, ring_size);
+
+    local.wordmark_x = screen_width  / 2 - wordmark_img.GetWidth()  / 2;
+    local.wordmark_y = screen_height / 2 - wordmark_img.GetHeight() / 2;
+
+    local.ring_center_x = wordmark_x + wordmark_img.GetWidth()  * RING_CENTER_X_FRAC;
+    local.ring_center_y = wordmark_y + wordmark_img.GetHeight() * RING_CENTER_Y_FRAC;
+
+    wordmark_sprite.SetImage(wordmark_img);
+    wordmark_sprite.SetPosition(wordmark_x, wordmark_y, 10);
+
+    ring_sprite.SetImage(ring_img);
+    ring_sprite.SetPosition(ring_center_x - ring_img.GetWidth()  / 2,
+                             ring_center_y - ring_img.GetHeight() / 2, 11);
+
+    if (!did_initial_layout) {
+        // Fade the whole logo in from transparent instead of the HTML's old
+        // scale(0.75->2) zoom: Plymouth hands off to boot-screen.html at
+        // this exact on-screen size, so nothing may change size at handoff.
+        wordmark_sprite.SetOpacity(0);
+        ring_sprite.SetOpacity(0);
+        did_initial_layout = 1;
+    }
+
+    status_margin  = Math.Int(min_height * 0.0556); // 60px at 1080p, unchanged
+    status_font    = "Sans " + Math.Int(min_height * 0.01481); // 16px at 1080p
+    status_x_base  = screen_width  / 2;
+    status_y_base  = screen_height / 2 + min_height / 2 - status_margin;
+}
+layout();
+Plymouth.SetDisplayHotplugFunction(layout);
 
 fun refresh_callback() {
-    spin_angle += 0.09;
+    frame_count += 1;
+    if (frame_count <= FADE_FRAMES) {
+        local.t       = frame_count / FADE_FRAMES;
+        local.opacity = t * t; // ease-in, matching boot-screen.html's old fade-in curve
+        wordmark_sprite.SetOpacity(opacity);
+        ring_sprite.SetOpacity(opacity);
+    }
+
+    // Rotate() returns a buffer the same size as its source and rotates
+    // about that buffer's own center, so the sprite's top-left position
+    // (set once in layout()) never needs to move as the angle changes.
+    spin_angle += SPIN_STEP;
     if (spin_angle > 6.283185307)
         spin_angle -= 6.283185307;
-
-    local.rotated = o_image.Rotate(spin_angle);
-    o_sprite.SetImage(rotated);
-    o_sprite.SetX(o_center_x - rotated.GetWidth() / 2);
-    o_sprite.SetY(o_center_y - rotated.GetHeight() / 2);
+    ring_sprite.SetImage(ring_img.Rotate(spin_angle));
 }
 Plymouth.SetRefreshFunction(refresh_callback);
 
 // ---- Bottom status line -------------------------------------------------
 
 status_sprite = Sprite();
-status_sprite.SetPosition(0, screen_height - 60, 10);
 status_sprite.SetOpacity(0);
 
 fun show_status(text) {
@@ -140,8 +224,9 @@ fun show_status(text) {
     }
     local.image = Image.Text(text, 0.7, 0.7, 0.7, 1, status_font);
     status_sprite.SetImage(image);
-    status_sprite.SetX(screen_width / 2 - image.GetWidth() / 2);
-    status_sprite.SetY(screen_height - 60);
+    status_sprite.SetX(status_x_base - image.GetWidth() / 2);
+    status_sprite.SetY(status_y_base);
+    status_sprite.SetZ(10);
     status_sprite.SetOpacity(1);
 }
 
