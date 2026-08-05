@@ -61,17 +61,38 @@ WWW = FastAPI(
             HTTPException            : http_exception_handler,
         }
 )
+# Registered BEFORE the routers below, because routers.scheduler ends in a
+# catch-all "/{path:path}" that requires a session: with these two declared
+# after it, the catch-all matched first and the device's own screen showed the
+# login form instead of the welcome screen - on a first boot, where the
+# hotspot SSID, password and QR code are the only way in, and where nobody
+# can log in anyway since the screen is bolted to a wall.
+@WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
+async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
+    """
+    The two pages the local viewer shows on its own: the first-boot welcome
+    screen and the "no assets" placeholder.
+
+    Served without authentication, and only to loopback. They are only ever
+    fetched by the viewer running on this same machine, so anyone reaching
+    them from the network is not a legitimate caller - and the first-boot page
+    carries the hotspot's SSID and password, which must not be readable by
+    whoever happens to be on that network. Non-local callers get a 404 rather
+    than a 403, which does not confirm that the page exists at all.
+    """
+    if request.client is None or request.client.host not in ('127.0.0.1', '::1'):
+        logger.warning('Rejected non-local request for /unitotem-{} from {}',
+                       page, request.client.host if request.client else 'unknown')
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, f'{page}.html.j2',
+                                      {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
+
+
 WWW.include_router(routers.login.router)
 WWW.include_router(routers.websocket.remote.router)
 WWW.include_router(routers.websocket.web_ui.router)
 WWW.include_router(routers.scheduler.router)
 WWW.include_router(routers.backup.router)
-
-
-@WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
-async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
-    return templates.TemplateResponse(request, f'{page}.html.j2',
-                                      {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
 
 
 parser = ArgumentParser()
