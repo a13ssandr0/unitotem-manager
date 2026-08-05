@@ -48,7 +48,8 @@ Until then this violates "state changes reach the web UI purely through
 events" in CLAUDE.md. Note the manager itself stays perfectly healthy with
 zero screens - it is only the reported state that goes stale.
 
-OPEN, and worse than it looks - the built-in internal pages never render.
+FIXED this session - the built-in internal pages now render. They were
+never visible before.
 utils/models/assets.py:187-188 defines the 'no assets' and 'first boot'
 placeholder assets as https://localhost/unitotem-no-assets and
 .../unitotem-first-boot. The manager serves a self-signed certificate
@@ -60,10 +61,33 @@ https://localhost/unitotem-first-boot, the screen shows the error page, and
 from inside the VM `curl` gets 307 with -k and fails outright without it.
 This hits every real device on its very first boot, which is exactly when
 the welcome/hotspot/QR screen is the only thing the user can see.
-Possible fixes, to decide: serve these two pages from file:// like the boot
-screen; or implement RequestHandler.OnCertificateError and accept only
-https://localhost. A blanket --ignore-certificate-errors would also cover
-scheduled remote assets, which is not wanted.
+Fixed by pinning this node's own public key:
+--ignore-certificate-errors-spki-list is set from the SPKI hash of
+/etc/ssl/unitotem.pem (_own_cert_spki_hash in webview/app.py). Note that
+RequestHandler.OnCertificateError, the obvious candidate, does NOT work
+here and was tried first: the pages are loaded in an iframe by
+boot-screen.html, and Chromium rejects certificate errors on subframes
+without ever consulting the handler - the callback is simply never invoked.
+A blanket --ignore-certificate-errors would have worked but would also stop
+validating scheduled remote assets.
+
+OPEN, found immediately behind that one - the first-boot page requires
+authentication. With the certificate fixed, https://localhost/unitotem-
+first-boot 307s to /login?src=/unitotem-first-boot, so the device's own
+screen shows the login form instead of the welcome screen. Verified by
+screenshot: the kiosk displays username/password with hostname, IP and OS
+version. Nobody can log in there - it is the screen bolted to a wall - and
+on a true first boot this is where the hotspot SSID, password and QR code
+are supposed to appear. The internal pages need to be reachable without a
+session (they are only ever loaded from loopback by the local viewer).
+
+OPEN - viewer/playlist assignments do not survive a restart. _assignments
+in webview/controller.py:97 is a plain in-memory dict; there is a
+serialize_assignments() and a _pending_save, but nothing loads them back at
+startup. Reproduced twice: assign the Default playlist to local-webview,
+restart, and Viewers/list reports assignments={} with the viewer back on
+the boot screen. On a real device this means every reboot silently stops
+playback until someone reassigns the playlist by hand.
 
 PARTLY DONE - playback of real assets. A web-page asset was scheduled and
 the viewer did switch to it, which exercised the scheduler -> viewer path,
