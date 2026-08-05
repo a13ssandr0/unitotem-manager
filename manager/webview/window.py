@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QScreen
+from PySide6.QtGui import QColor, QPalette, QScreen
 from PySide6.QtWidgets import QMainWindow, QWidget, QSizePolicy
 
 try:
@@ -24,6 +24,21 @@ _FIT_NAMES  = ['contain', 'cover', 'fill']
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
 
 
+def _black_palette() -> QPalette:
+    """Palette whose every background role is black.
+
+    A display window must never show anything but black before its content is
+    up: the default palette is light, so each newly created window flashes
+    white for the frame or two between being mapped and CEF painting over it.
+    """
+    palette = QPalette()
+    black = QColor(0, 0, 0)
+    for role in (QPalette.ColorRole.Window, QPalette.ColorRole.Base,
+                 QPalette.ColorRole.Button):
+        palette.setColor(role, black)
+    return palette
+
+
 class CefWidget(QWidget):
     """Hosts a CEF browser as an X11 child window embedded inside this Qt widget."""
 
@@ -32,6 +47,11 @@ class CefWidget(QWidget):
         self.browser = None
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        # Black from the very first frame: between show() and CEF's first
+        # paint the widget is filled with the Qt palette's window colour,
+        # which on a kiosk reads as a white flash on every window creation.
+        self.setAutoFillBackground(True)
+        self.setPalette(_black_palette())
 
     def embed_browser(self, url: str, width: int = None, height: int = None):
         """
@@ -48,7 +68,15 @@ class CefWidget(QWidget):
         w = max(width or self.width(), 1)
         h = max(height or self.height(), 1)
         winfo.SetAsChild(int(self.winId()), [0, 0, w, h])
-        self.browser = cef.CreateBrowserSync(winfo, url=url)
+        # Same reason as the Qt palette above: a browser's own pre-document
+        # colour defaults to opaque white, and it is this one that covers the
+        # widget as soon as the CEF child window is mapped. Both the
+        # application-wide setting (WebviewApp.cef.Initialize) and this
+        # per-browser one are needed - the per-browser value wins where set,
+        # and leaving it unset falls back to CefSettings only when its alpha
+        # is fully transparent, which is not a state we want to rely on.
+        self.browser = cef.CreateBrowserSync(
+            winfo, settings={'background_color': 0xFF000000}, url=url)
         # Since the window is already created at its final size, no
         # subsequent resizeEvent (and thus no OnSize call) ever fires to
         # kick off CEF's compositor - it needs at least one explicit OnSize
@@ -103,6 +131,11 @@ class WebviewWindow(QMainWindow):
             Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        # The window itself is painted before its child widget is, so it needs
+        # the same black background - otherwise the flash simply moves one
+        # level up. See _black_palette().
+        self.setAutoFillBackground(True)
+        self.setPalette(_black_palette())
         self.setScreen(screen)
         self.setGeometry(x, y, width, height)
         self._content_width = width

@@ -131,6 +131,12 @@ class WebviewApp:
                 'log_severity'                 : cef.LOGSEVERITY_WARNING,
                 'remote_debugging_port'        : CDP_PORT,
                 'cache_path'                   : cache_path,
+                # Paint black, not white, before a document has loaded. CEF's
+                # documented default for a windowed browser is opaque white
+                # (see vendor/cefpython/api/ApplicationSettings.md), which on a
+                # kiosk shows up as a full-screen white flash every time a
+                # window is created. 32-bit ARGB, alpha must be fully opaque.
+                'background_color'             : 0xFF000000,
             },
             switches={
                 'no-proxy-server'  : '',
