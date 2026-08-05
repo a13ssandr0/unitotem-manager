@@ -376,6 +376,27 @@ class AssetsManager(BaseModel, validate_assignment=True):
         self._waiting_evt.clear()
         self._waiting_timer.set_timeout(self.current.duration or inf)
 
+    def revalidate_current(self):
+        """Re-pick what should be playing after the set of enabled assets changed.
+
+        The playback loop parks on `_waiting_evt`, and that event is only ever
+        pulsed by `__set_current`. A playlist that started with nothing enabled
+        therefore sits on the placeholder for good: enabling an asset later
+        changes a flag nobody is watching, so the loop is never woken and the
+        screen stays on the welcome page until the manager is restarted.
+        Anything that adds, removes, enables or disables an asset has to come
+        through here.
+        """
+        if not self.has_enabled():
+            # Nothing left to play: stop showing an asset that is now disabled.
+            if self._current >= 0:
+                self.__set_current(-1)
+        elif self._current < 0 or not self.assets[self._current].enabled:
+            # Either the playlist was parked with nothing to show, or what it
+            # was showing has just been disabled. next_a() picks the next
+            # enabled asset and pulses the event, which restarts the loop.
+            self.next_a()
+
     def count_enabled(self):
         """Count enabled assets"""
         return sum(self.assets)
