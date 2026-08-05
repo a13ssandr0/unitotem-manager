@@ -21,13 +21,17 @@ import os
 import socket
 import ssl
 import threading
-from base64 import b64decode
+import subprocess
+from base64 import b64decode, b64encode
+from hashlib import sha256
 from typing import Optional
 
 from loguru import logger
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QScreen
 from PySide6.QtWidgets import QApplication
+
+from utils import constants as const
 
 from .window import WebviewWindow
 
@@ -80,6 +84,43 @@ class WebviewApp:
         num = display.split(':', 1)[-1].split('.', 1)[0]
         return num.lstrip('-').isdigit() and os.path.exists(f'/tmp/.X11-unix/X{num}')
 
+    @staticmethod
+    def _own_cert_spki_hash(certfile: str) -> Optional[str]:
+        """
+        base64(sha256(SubjectPublicKeyInfo)) of this node's own certificate, in
+        the form Chromium's --ignore-certificate-errors-spki-list expects.
+
+        The manager's internal pages (the first-boot welcome screen and the
+        "no assets" placeholder, utils/models/assets.py) are served by this
+        very node over https with a self-signed certificate, which CEF
+        validates like any other site and rejects - so a device would show
+        Chromium's grey error page exactly when the welcome screen is the only
+        thing its user can see.
+
+        Pinning that one public key is the narrowest fix that actually works
+        here. RequestHandler.OnCertificateError is not an option despite being
+        the obvious candidate: these pages are loaded in an *iframe* by
+        boot-screen.html, and Chromium refuses certificate errors on subframes
+        outright instead of consulting the handler (verified - the callback is
+        never invoked). CefSettings.ignore_certificate_errors would have worked
+        too, but it disables validation for scheduled remote assets as well.
+
+        Returns None if the certificate cannot be read, in which case nothing
+        is pinned and behaviour is unchanged.
+        """
+        try:
+            der = subprocess.run(
+                ['openssl', 'x509', '-in', certfile, '-pubkey', '-noout'],
+                capture_output=True, check=True).stdout
+            spki = subprocess.run(
+                ['openssl', 'pkey', '-pubin', '-outform', 'der'],
+                input=der, capture_output=True, check=True).stdout
+        except (OSError, subprocess.CalledProcessError) as exc:
+            logger.warning('Cannot read own certificate {} ({}); the local '
+                           'welcome/no-assets pages will fail to load', certfile, exc)
+            return None
+        return b64encode(sha256(spki).digest()).decode()
+
     def __init__(self, manager_url: str, instance_id: str):
         if cef is None:
             raise ImportError(
@@ -124,6 +165,19 @@ class WebviewApp:
         # pumped from a QTimer in run() (the pattern used by every cefpython
         # example). See the QT_NO_GLIB comment above for the fix to the CPU
         # busy-loop this used to cause.
+        switches = {
+            'no-proxy-server'  : '',
+            'disable-extensions': '',
+            # Allow videos and audio to auto-play without user interaction
+            'autoplay-policy'  : 'no-user-gesture-required',
+            'remote-debugging-address': '127.0.0.1',
+        }
+        # See _own_cert_spki_hash(): trust this node's own certificate, and
+        # only that one, so its locally served pages render instead of an error.
+        spki = self._own_cert_spki_hash(const.certfile)
+        if spki:
+            switches['ignore-certificate-errors-spki-list'] = spki
+
         cef.Initialize(
             settings={
                 'windowless_rendering_enabled' : False,
@@ -138,13 +192,7 @@ class WebviewApp:
                 # window is created. 32-bit ARGB, alpha must be fully opaque.
                 'background_color'             : 0xFF000000,
             },
-            switches={
-                'no-proxy-server'  : '',
-                'disable-extensions': '',
-                # Allow videos and audio to auto-play without user interaction
-                'autoplay-policy'  : 'no-user-gesture-required',
-                'remote-debugging-address': '127.0.0.1',
-            },
+            switches=switches,
         )
 
         self.qt_app = QApplication.instance() or QApplication([])
