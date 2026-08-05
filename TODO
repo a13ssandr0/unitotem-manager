@@ -71,15 +71,18 @@ without ever consulting the handler - the callback is simply never invoked.
 A blanket --ignore-certificate-errors would have worked but would also stop
 validating scheduled remote assets.
 
-OPEN, found immediately behind that one - the first-boot page requires
-authentication. With the certificate fixed, https://localhost/unitotem-
-first-boot 307s to /login?src=/unitotem-first-boot, so the device's own
-screen shows the login form instead of the welcome screen. Verified by
-screenshot: the kiosk displays username/password with hostname, IP and OS
-version. Nobody can log in there - it is the screen bolted to a wall - and
-on a true first boot this is where the hotspot SSID, password and QR code
-are supposed to appear. The internal pages need to be reachable without a
-session (they are only ever loaded from loopback by the local viewer).
+FIXED this session, found immediately behind that one - the first-boot page
+required authentication. routers.scheduler ends in a catch-all
+"/{path:path}" guarded by Depends(LOGMAN), and it was registered before
+/unitotem-{page}, so the catch-all matched and the device's own screen
+showed the login form. The route is now declared before the routers and is
+served without a session but only to loopback (non-local callers get 404,
+which also keeps the hotspot SSID and password off the network). Verified:
+200 from inside the VM, 404 from the host, and the welcome screen with
+hostname/IP/OS renders on the framebuffer.
+
+MINOR - the welcome page shows a scrollbar on the right in the viewer.
+Cosmetic, but it is a kiosk screen and nothing should ever scroll there.
 
 OPEN - viewer/playlist assignments do not survive a restart. _assignments
 in webview/controller.py:97 is a plain in-memory dict; there is a
