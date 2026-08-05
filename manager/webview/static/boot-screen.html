@@ -189,7 +189,56 @@
      * @param {string} fit       - 'contain' | 'cover' | 'fill'
      * @param {string} bg_color  - CSS colour, e.g. 'rgb(0,0,0)'
      */
-    function show(src, container, fit, bg_color) {
+    /**
+     * Work out which container an asset belongs in when nobody told us.
+     *
+     * The manager leaves an asset's media type unknown whenever it cannot know
+     * it - a plain URL, which may just as well point straight at a JPEG or an
+     * MP4 as at a page. Asking the server for the Content-Type is the only way
+     * to tell, and it is what this viewer did before the Qt/CEF migration.
+     * Anything that is not recognisable media is shown as a web page, which is
+     * both the sane default and what the previous implementation did on error.
+     */
+    async function detectContainer(src) {
+      try {
+        const resp = await fetch(src, { method: 'HEAD' });
+        const mime = resp.headers.get('Content-Type') || '';
+        if (mime.startsWith('audio')) return 'audio';
+        if (mime.startsWith('video')) return 'video';
+        if (mime.startsWith('image')) return 'image';
+      } catch (err) {
+        console.log('HEAD probe failed for', src, err);
+      }
+      return 'web';
+    }
+
+    /**
+     * Average colour of an image, used as its backdrop when no explicit
+     * bg_color was set, so a picture that does not match the screen's aspect
+     * ratio is letterboxed with something close to its own colour instead of
+     * hard black bars. Scaling to a single pixel makes the browser do the
+     * averaging for us.
+     */
+    function applyDominantColour(img) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext('2d');
+        context.drawImage(img, 0, 0, 1, 1);
+        const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+        const colour = `rgb(${r},${g},${b})`;
+        img.style.backgroundColor = colour;
+        document.body.style.backgroundColor = colour;
+      } catch (err) {
+        // A cross-origin image taints the canvas and getImageData throws;
+        // black is the documented default, so just keep it.
+        console.log('Cannot sample image colour', err);
+      }
+    }
+
+    async function show(src, container, fit, bg_color) {
+      if (!container) container = await detectContainer(src);
+
       document.body.style.backgroundColor = bg_color || 'rgb(0,0,0)';
       hideAll();
 
@@ -209,6 +258,9 @@
         case 'image':
           el.style.display    = 'block';
           el.style.objectFit  = fit;
+          el.style.backgroundColor = bg_color || '';
+          // Sample the picture only when no colour was chosen for it.
+          el.onload = bg_color ? null : () => { applyDominantColour(el); el.onload = null; };
           el.src = src;
           break;
 

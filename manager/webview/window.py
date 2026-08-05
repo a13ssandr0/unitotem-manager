@@ -160,7 +160,11 @@ class WebviewWindow(QMainWindow):
         fit:       FitEnum int value → 'contain' | 'cover' | 'fill'
         bg_color:  CSS colour string e.g. 'rgb(0,0,0)'
         """
-        cont = _CONTAINERS[container] if 0 <= container < len(_CONTAINERS) else 'boot'
+        # A negative index means the media type is unknown: pass null so the
+        # page probes the URL and decides for itself (see show() in
+        # boot-screen.html). Falling back to 'boot' here instead, as this used
+        # to, made such an asset invisible - the logo just stayed up.
+        cont = _CONTAINERS[container] if 0 <= container < len(_CONTAINERS) else None
         fit_s = _FIT_NAMES[fit] if 0 <= fit < len(_FIT_NAMES) else 'contain'
         self._cef.execute_js(
             f'show({json.dumps(src)}, {json.dumps(cont)}, {json.dumps(fit_s)}, {json.dumps(bg_color)})'
