@@ -1,0 +1,88 @@
+<!--
+  UniTotem manager test VM. See VM-TESTING.md for the procedure this belongs to.
+
+  Run under qemu:///system (not session) because only the system instance can
+  attach a tap to libvirt's 'default' NAT bridge, which is what gives the guest
+  a real, routable-from-the-host IP - so the manager can be reached on its own
+  default ports 80/443 with no port forwarding anywhere.
+
+  The MAC is fixed and matched by a static DHCP reservation on the 'default'
+  network, so the guest always comes up as 192.168.122.50.
+
+  Disk images live under /var/tmp/unitotem-vm/ rather than the source tree
+  because qemu:///system runs QEMU as libvirt-qemu, which cannot traverse
+  /home/<user> (mode 0750).
+-->
+<domain type='kvm'>
+  <name>unitotem-test</name>
+  <memory unit='MiB'>4096</memory>
+  <vcpu placement='static'>4</vcpu>
+  <os firmware='efi'>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
+    <nvram>/var/tmp/unitotem-vm/OVMF_VARS.fd</nvram>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' cache='writeback'/>
+      <source file='/var/tmp/unitotem-vm/overlay.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <interface type='network'>
+      <source network='default'/>
+      <mac address='52:54:00:11:70:01'/>
+      <model type='virtio'/>
+    </interface>
+    <!--
+      heads='2' becomes virtio-vga,max_outputs=2: the guest gets a second
+      connector (Virtual-2), initially disconnected, which the multi-monitor
+      hot-plug test forces on via DRM debugfs.
+
+      accel3d='yes' turns the device into virtio-vga-gl, so the guest gets a
+      real GPU through virglrenderer instead of falling back to llvmpipe. This
+      matters beyond speed: a software-only guest is not generic hardware, and
+      a viewer that only works there would be passing its tests for the wrong
+      reason. It needs the egl-headless graphics below to have a GL context,
+      and libvirt-qemu needs access to the host render node (see VM-TESTING.md).
+    -->
+    <video>
+      <model type='virtio' heads='2' primary='yes'>
+        <acceleration accel3d='yes'/>
+      </model>
+    </video>
+    <!--
+      Two graphics devices on purpose: egl-headless supplies the OpenGL context
+      virgl needs (plain VNC has none), while VNC stays the thing you can
+      actually look at and, more importantly, keeps `virsh screenshot` working,
+      which is how the viewer is inspected without a GUI client.
+    -->
+    <graphics type='egl-headless'>
+      <gl rendernode='/dev/dri/renderD128'/>
+    </graphics>
+    <graphics type='vnc' port='5901' autoport='no' listen='127.0.0.1'/>
+    <!-- Boot/early-crash diagnostics: everything the kernel and systemd print
+         before sshd exists ends up in this file. -->
+    <serial type='file'>
+      <source path='/var/tmp/unitotem-vm/serial.log'/>
+      <target port='0'/>
+    </serial>
+    <console type='file'>
+      <source path='/var/tmp/unitotem-vm/serial.log'/>
+      <target type='serial' port='0'/>
+    </console>
+    <channel type='unix'>
+      <target type='virtio' name='org.qemu.guest_agent.0'/>
+    </channel>
+    <memballoon model='virtio'/>
+  </devices>
+</domain>

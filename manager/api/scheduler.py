@@ -87,6 +87,12 @@ class Scheduler(WSAPIBase):
             if isinstance(element, str):
                 element = {'url': element}
             element.pop('uuid', None)
+            # A URL with no media type stays MediaType.undefined, and the
+            # viewer maps that to container index 0 - the boot screen - so the
+            # asset silently never appears: the logo just stays up. Uploads get
+            # their type from the file's MIME (see add_file below); a scheduled
+            # URL is a web page unless the caller says otherwise.
+            element.setdefault('media_type', MediaType.web)
             am.append(element)
         am.save()
 
@@ -132,7 +138,13 @@ class Scheduler(WSAPIBase):
             asset.name = name
         if url is not None and asset.url != url:
             asset.url = url
-            asset.media_type = MediaType.undefined
+            # Re-derive the type for the new URL. Never leave it undefined:
+            # that maps to the viewer's boot container and the asset would
+            # simply never show. An uploaded file's MIME is known, anything
+            # else is treated as a web page.
+            filename = url.removeprefix('file:')
+            info = upload_manager.files_info.get(filename) if url.startswith('file:') else None
+            asset.media_type = info.mime if info is not None else MediaType.web
         if duration is not None and asset.duration != duration:
             asset.update_duration(duration)
         if fit is not None and asset.fit != fit:

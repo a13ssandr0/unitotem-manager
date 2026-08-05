@@ -183,6 +183,10 @@ start_fs_usage_cache()
 webview_manager = WebviewManager.init(REMOTE_WS)
 for am in playlists_manager.playlists.values():
     webview_manager.add_playlist_loop(am)
+# After the loops exist, so assignments pointing at a playlist that is gone can
+# be recognised and dropped. Viewers are not connected yet: each one picks its
+# playlist back up when it registers.
+webview_manager.load_assignments()
 
 
 # ── async tasks ───────────────────────────────────────────────────────────
