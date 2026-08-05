@@ -34,6 +34,7 @@
     <v-navigation-drawer v-model="drawer" app clipped>
       <v-list density="compact" color="primary">
         <v-list-item to="/" exact prepend-icon="mdi-view-dashboard" title="Scheduler"></v-list-item>
+        <v-list-item to="/viewers" prepend-icon="mdi-monitor-multiple" title="Viewers"></v-list-item>
 
         <v-divider class="my-2"></v-divider>
         <v-list-subheader>Settings</v-list-subheader>
