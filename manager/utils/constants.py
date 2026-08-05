@@ -16,11 +16,3 @@ uploads_folder = Path(__file__).joinpath('../../uploaded').resolve()
 static_folder = Path(__file__).joinpath('../../static').resolve()
 
 def_duration = 30
-
-# class Arguments(BaseModel):
-#     no_gui: bool = Field(False, description='Start UniTotem Manager without webview gui (for testing)')
-#     http_bind: IPv4Address = default_bind
-#     http_port: int = Field(default_port, gt=0, le=65525)
-#     https_bind: IPv4Address = default_bind_secure
-#     https_port: int = Field(default_port_secure, gt=0, le=65525)
-#     config: Path = default_config_file

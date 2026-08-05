@@ -84,21 +84,21 @@ hostname/IP/OS renders on the framebuffer.
 MINOR - the welcome page shows a scrollbar on the right in the viewer.
 Cosmetic, but it is a kiosk screen and nothing should ever scroll there.
 
-OPEN - the image dominant-colour backdrop is still not applied, and the
-cause is the viewer page's origin. boot-screen.html is loaded from file://,
-so every asset is cross-origin to it:
-  - drawing a remote image into a canvas taints it and getImageData throws
-    SecurityError, so applyDominantColour() falls back to black - which is
-    what a scheduled image currently shows in its letterbox bars;
-  - the same origin rule already defeated the client-side HEAD probe, which
-    is why probe_media_type() ended up in the backend (api/scheduler.py).
-The Electron build did not hit this: its page ran with Electron's own
-webPreferences and the check did not apply.
-Fix to apply, consistent with the probe: compute the average colour in the
-backend, where there is no origin at all, and send it as bg_color. Pillow is
-already in the venv. Setting img.crossOrigin='anonymous' is not a solution -
-it only works when the remote server sends CORS headers, which an arbitrary
-scheduled image will not.
+FIXED this session - the image dominant-colour backdrop works again.
+Three separate things were in the way, only one of them the obvious one:
+  - the backend flattened "no colour chosen" into an explicit rgb(0,0,0)
+    before sending it, so the viewer could not tell it apart from a
+    deliberate black and never sampled the picture. It now sends null.
+  - boot-screen.html is loaded over file://, so a scheduled image is
+    cross-origin: drawing it into a canvas tainted it and getImageData threw
+    SecurityError. CEF now runs with --disable-web-security and
+    --allow-file-access-from-files, which is defensible here - this browser
+    only ever shows what the operator scheduled, with no address bar, no user
+    input and no cross-origin credentials to steal.
+  - the client-side HEAD probe was refused for the same origin reason, which
+    is why probe_media_type() lives in the backend.
+Verified: a letterboxed image now has bars at srgb(159,113,106), its own
+average colour, instead of black.
 
 FIXED this session - viewer/playlist assignments now survive a restart, and
 a disconnect no longer throws them away. They were only ever an in-memory
