@@ -75,11 +75,10 @@ modified and a broken VM is thrown away with `rm overlay.qcow2` + the
 > fails to start with a permissions error that does not mention the home directory
 > at all. `/var/tmp` is world-traversable and on the big filesystem.
 
-Define the domain and pin its address (the XML is
-`unitotem-system/work/vm-test/unitotem-test.xml`):
+Define the domain and pin its address (the XML is versioned with this repo):
 
 ```bash
-virsh -c qemu:///system define $SYS/work/vm-test/unitotem-test.xml
+virsh -c qemu:///system define tools/unitotem-test.xml
 virsh -c qemu:///system net-update default add ip-dhcp-host \
   "<host mac='52:54:00:11:70:01' name='unitotem-test' ip='192.168.122.50'/>" \
   --live --config
