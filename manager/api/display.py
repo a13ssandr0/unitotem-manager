@@ -5,6 +5,7 @@ import aiohttp
 
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
+from utils.models.viewer import viewer_settings
 from webview.controller import WebviewManager
 
 # Must match webview.app.CDP_PORT. Duplicated as a plain literal (rather than
@@ -96,3 +97,17 @@ class Display(WSAPIBase):
     def removeWindow(self, viewer_id: str, window_id: int):
         asyncio.create_task(_vm().remove_window(viewer_id, window_id))
         return WSBroadcast()
+
+    def getAllowInsecureCerts(self):
+        """Whether the viewer displays assets whose certificate does not
+        validate. Admin-only, like every other method here (a method with no
+        explicit permission requires admin - see api.ws.permissions)."""
+        return WSBroadcast(allow=viewer_settings.allow_insecure_certs)
+
+    def setAllowInsecureCerts(self, allow: bool):
+        """Stored now, applied by the viewer the next time it starts: CEF
+        takes it as a command-line switch at initialisation and Chromium
+        offers no way to change it on a running browser."""
+        viewer_settings.allow_insecure_certs = allow
+        viewer_settings.save()
+        return WSBroadcast(self.getAllowInsecureCerts, allow=viewer_settings.allow_insecure_certs)

@@ -85,6 +85,33 @@
       </div>
       <v-spacer style="height: 20px"></v-spacer>
       <div class="d-flex justify-center align-center mb-4">
+        <div style="max-width: 700px">
+          <h2>Certificates</h2>
+          <v-switch
+            v-model="allowInsecureCerts"
+            @update:model-value="setAllowInsecureCerts"
+            color="primary"
+            hide-details
+            density="compact"
+            class="ms-10"
+            label="Accept invalid certificates for scheduled assets"
+          ></v-switch>
+          <div class="ms-10 text-caption text-medium-emphasis">
+            Lets the viewer show https assets whose certificate does not validate
+            (self-signed, expired or issued for another name). The connection is no
+            longer authenticated: anyone able to intercept it can replace what is
+            shown on the screen. Leave it off unless your assets are served from a
+            host with a certificate this node cannot verify.
+          </div>
+          <div class="ms-10 mt-1 text-caption text-warning" v-if="allowInsecureCertsDirty">
+            <v-icon icon="mdi-alert-outline" size="small" class="me-1"></v-icon>
+            Saved. The viewer applies this at startup: restart it (or reboot the
+            node) for the change to take effect.
+          </div>
+        </div>
+      </div>
+      <v-spacer style="height: 20px"></v-spacer>
+      <div class="d-flex justify-center align-center mb-4">
         <div>
           <h2>Graphics Feature Status</h2>
           <ul class="ms-10">
@@ -169,6 +196,10 @@ const gpuStatusLabels = {
 }
 
 const gpu = ref({})
+const allowInsecureCerts = ref(false)
+// Set once the switch has been changed here, to show the "restart the viewer"
+// notice only when there is actually a pending change to apply.
+const allowInsecureCertsDirty = ref(false)
 const displays = ref([])
 const orientation = ref(0)
 const flip = ref(0)
@@ -194,15 +225,26 @@ watch(displays, (_displays) => {
 )
 
 const sendCommand = window.sendCommand;
+
+function setAllowInsecureCerts(value) {
+  allowInsecureCertsDirty.value = true;
+  sendCommand('Settings/Display/setAllowInsecureCerts', {allow: value});
+}
+
 // getDisplays/getBounds/getOrientation/getFlip all require a viewer_id -
 // resolve it first (defaulting to the first known viewer, usually the
 // local one) before fetching anything that depends on it.
-window.setInitCommands("Settings/Display/getGPUFeatureStats", "Viewers/list")
+window.setInitCommands("Settings/Display/getGPUFeatureStats",
+                       "Settings/Display/getAllowInsecureCerts",
+                       "Viewers/list")
 
 onWSMessage = (data) => {
   switch (data.target) {
     case "Settings/Display/getGPUFeatureStats":
       gpu.value = data.features;
+      break;
+    case "Settings/Display/getAllowInsecureCerts":
+      allowInsecureCerts.value = data.allow;
       break;
     case "Viewers/list": {
       // Re-broadcast whenever a webview's screens/windows change (see
