@@ -5,25 +5,24 @@
         <h2 class="text-h5 mb-4">Viewer Assignment Matrix</h2>
         <p class="text-body-2 text-medium-emphasis mb-6">
           Assign each connected viewer to a playlist. Each row is a playlist,
-          each column is a viewer. Select the cell to assign.
+          each column is a window (one screen = one window). The same playlist may drive several windows.
         </p>
       </v-col>
     </v-row>
 
     <!-- Assignment matrix -->
-    <v-row v-if="viewers.length && playlists.length">
+    <v-row v-if="windows.length && playlists.length">
       <v-col>
         <v-table density="comfortable" class="assignment-table">
           <thead>
             <tr>
               <th class="playlist-col">Playlist</th>
-              <th v-for="viewer in viewers" :key="viewer.instance_id" class="text-center viewer-col">
+              <th v-for="win in windows" :key="win.key" class="text-center viewer-col">
                 <div class="d-flex flex-column align-center ga-1">
                   <v-icon size="small">mdi-monitor</v-icon>
-                  <span class="text-caption font-weight-medium">{{ viewer.hostname }}</span>
-                  <v-chip size="x-small" :color="viewer.connected ? 'success' : 'error'" variant="flat">
-                    {{ viewer.connected ? 'online' : 'offline' }}
-                  </v-chip>
+                  <span class="text-caption font-weight-medium">{{ win.hostname }}</span>
+                  <span class="text-caption text-medium-emphasis">{{ win.screen_label }}</span>
+                  <span class="text-caption text-disabled">{{ win.width }}x{{ win.height }}</span>
                 </div>
               </th>
             </tr>
@@ -41,14 +40,14 @@
                   </div>
                 </div>
               </td>
-              <td v-for="viewer in viewers" :key="viewer.instance_id" class="text-center">
+              <td v-for="win in windows" :key="win.key" class="text-center">
                 <v-btn
-                  :icon="isAssigned(playlist.playlist_id, viewer.instance_id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
-                  :color="isAssigned(playlist.playlist_id, viewer.instance_id) ? 'primary' : undefined"
+                  :icon="isAssigned(playlist.playlist_id, win) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
+                  :color="isAssigned(playlist.playlist_id, win) ? 'primary' : undefined"
                   variant="text"
                   size="small"
-                  :loading="pending === `${playlist.playlist_id}:${viewer.instance_id}`"
-                  @click="toggle(playlist.playlist_id, viewer.instance_id)"
+                  :loading="pending === `${playlist.playlist_id}:${win.key}`"
+                  @click="toggle(playlist.playlist_id, win)"
                 />
               </td>
             </tr>
@@ -131,7 +130,8 @@ const sendCommand = window.sendCommand;
 
 const viewersMap = ref({})    // instance_id → viewer info
 const playlists = ref([])
-const assignments = ref({})   // instance_id → playlist_id
+// One entry per window: {webview_id, window_id, playlist_id}
+const assignments = ref([])
 const pending = ref(null)
 
 const viewers = computed(() =>
@@ -142,22 +142,40 @@ const viewers = computed(() =>
   }))
 )
 
-function isAssigned(playlistId, viewerId) {
-  return assignments.value[viewerId] === playlistId
+// One column per window, grouped by host: a screen is a window, and each one
+// gets its own playlist. The screen name comes from the viewer, which is the
+// only place that knows which output a window sits on.
+const windows = computed(() =>
+  viewers.value.flatMap(viewer =>
+    (viewer.windows ?? []).map(win => ({
+      key: `${viewer.instance_id}:${win.window_id}`,
+      viewer_id: viewer.instance_id,
+      window_id: win.window_id,
+      hostname: viewer.hostname,
+      screen_label: win.screen_name ?? `window ${win.window_id}`,
+      width: win.width,
+      height: win.height,
+      assigned_playlist: win.assigned_playlist,
+    }))
+  )
+)
+
+function isAssigned(playlistId, win) {
+  return win.assigned_playlist === playlistId
 }
 
 function playlistName(playlistId) {
   return playlists.value.find(p => p.playlist_id === playlistId)?.name ?? playlistId
 }
 
-async function toggle(playlistId, viewerId) {
-  const key = `${playlistId}:${viewerId}`
-  pending.value = key
+async function toggle(playlistId, win) {
+  pending.value = `${playlistId}:${win.key}`
   try {
-    if (isAssigned(playlistId, viewerId)) {
-      sendCommand('Viewers/unassign', { viewer_id: viewerId })
+    if (isAssigned(playlistId, win)) {
+      sendCommand('Viewers/unassign', { viewer_id: win.viewer_id, window_id: win.window_id })
     } else {
-      sendCommand('Viewers/assign', { viewer_id: viewerId, playlist_id: playlistId })
+      sendCommand('Viewers/assign',
+                  { viewer_id: win.viewer_id, window_id: win.window_id, playlist_id: playlistId })
     }
   } finally {
     pending.value = null
