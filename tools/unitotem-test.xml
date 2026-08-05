@@ -48,27 +48,15 @@
       connector (Virtual-2), initially disconnected, which the multi-monitor
       hot-plug test forces on via DRM debugfs.
 
-      accel3d='yes' turns the device into virtio-vga-gl, so the guest gets a
-      real GPU through virglrenderer instead of falling back to llvmpipe. This
-      matters beyond speed: a software-only guest is not generic hardware, and
-      a viewer that only works there would be passing its tests for the wrong
-      reason. It needs the egl-headless graphics below to have a GL context,
-      and libvirt-qemu needs access to the host render node (see VM-TESTING.md).
+      3D acceleration (accel3d='yes' plus an egl-headless graphics device) is
+      NOT enabled here, and the reason is the host rather than this file: see
+      VM-TESTING.md, "GPU acceleration". Turning it on without that host-side
+      prerequisite makes the domain fail to start outright, which is worse
+      than a guest on llvmpipe.
     -->
     <video>
-      <model type='virtio' heads='2' primary='yes'>
-        <acceleration accel3d='yes'/>
-      </model>
+      <model type='virtio' heads='2' primary='yes'/>
     </video>
-    <!--
-      Two graphics devices on purpose: egl-headless supplies the OpenGL context
-      virgl needs (plain VNC has none), while VNC stays the thing you can
-      actually look at and, more importantly, keeps `virsh screenshot` working,
-      which is how the viewer is inspected without a GUI client.
-    -->
-    <graphics type='egl-headless'>
-      <gl rendernode='/dev/dri/renderD128'/>
-    </graphics>
     <graphics type='vnc' port='5901' autoport='no' listen='127.0.0.1'/>
     <!-- Boot/early-crash diagnostics: everything the kernel and systemd print
          before sshd exists ends up in this file. -->

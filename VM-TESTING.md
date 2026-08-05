@@ -371,5 +371,33 @@ holds the locally built amd64 wheel, since the fork's CI only publishes arm64.
 - The kiosk image's root filesystem is read-only by design. `apt-get dist-upgrade`
   therefore cannot work on it at all (real devices update over OTA), so the
   Updates page can only be exercised meaningfully on a headless/server install.
-- There is no GPU acceleration; CEF falls back to software rendering. Video
-  playback is testable but not representative of performance on real hardware.
+### GPU acceleration
+
+The guest currently runs on `llvmpipe` (`glxinfo -B` reports `Accelerated: no`,
+and the kernel logs `[drm] features: -virgl`), so CEF rasterises in software.
+That is a real difference from a device in the field and worth removing, but it
+is blocked on the host, not on the domain XML.
+
+What is needed, and what is already done:
+
+- `<acceleration accel3d='yes'/>` on the video model, which turns the device
+  into `virtio-vga-gl`, plus a `<graphics type='egl-headless'>` device to give
+  virgl the OpenGL context that plain VNC does not have. Both are written up in
+  `tools/unitotem-test.xml` and were verified to be stored correctly by libvirt.
+- `libvirt-qemu` must be able to open the host's render node:
+  `sudo usermod -aG render libvirt-qemu`. Done.
+
+What still blocks it: QEMU refuses to start with `egl: render node init failed`.
+`/dev/dri/renderD128` on this host is an NVIDIA card on the proprietary driver,
+and QEMU's egl-headless needs working EGL+GBM on it. `libnvidia-egl-gbm` and
+`15_nvidia_gbm.json` are both installed, so the remaining suspect is
+`nvidia_drm.modeset`, which could not be read (the parameter is root-only) and
+which requires a kernel parameter plus a host reboot to change.
+
+Until that is settled the domain keeps `accel3d` off deliberately: enabling it
+without the host-side prerequisite does not degrade to software, it makes the
+domain fail to start altogether.
+
+Note also `virsh undefine --nvram` deletes the domain's `OVMF_VARS.fd`, so an
+undefine/define cycle loses the UEFI variables; recreate it from
+`/usr/share/OVMF/OVMF_VARS_4M.fd` before starting, or use `--keep-nvram`.
