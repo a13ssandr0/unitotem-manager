@@ -21,7 +21,10 @@ class PlaylistLoop:
     def __init__(self, playlist: AssetsManager, remote_ws: WSManager):
         self.playlist = playlist
         self.remote_ws = remote_ws
-        self.assigned_webviews: set[str] = set()
+        # (webview_id, window_id): a totem drives one window per screen, and
+        # each window gets its own playlist - two monitors on one node can show
+        # different things. The same playlist may of course drive many windows.
+        self.assigned_webviews: set[tuple[str, int]] = set()
         self._task: Optional[asyncio.Task] = None
 
     def start(self):
@@ -37,11 +40,37 @@ class PlaylistLoop:
             self._task.cancel()
             self._task = None
 
-    def assign(self, webview_id: str):
-        self.assigned_webviews.add(webview_id)
+    def assign(self, webview_id: str, window_id: int):
+        self.assigned_webviews.add((webview_id, window_id))
 
-    def unassign(self, webview_id: str):
-        self.assigned_webviews.discard(webview_id)
+    def unassign(self, webview_id: str, window_id: int):
+        self.assigned_webviews.discard((webview_id, window_id))
+
+    def _show_payload(self, asset, window_id: int) -> dict:
+        """The 'Show' command for one asset on one window.
+
+        Built in a single place because both the playback loop and the
+        immediate push on assignment need it, and when they were written out
+        twice they drifted apart.
+        """
+        url = asset.url
+        if url.startswith('file:'):
+            url = 'https://localhost/uploaded/' + url.removeprefix('file:')
+        return dict(
+            src=url,
+            window_id=window_id,
+            # -1 (undefined) is passed through as "unknown": the viewer then
+            # probes the URL itself and picks a container, which is how this
+            # worked before the Qt/CEF migration and is the only way a plain
+            # URL pointing straight at an image or a video can land anywhere
+            # but an iframe.
+            container=asset.media_type + 1 if asset.media_type >= 0 else -1,
+            fit=asset.fit,
+            # None means "no colour chosen", which the viewer needs to tell
+            # apart from a deliberate black: only in the first case does it
+            # sample the picture's own average colour for the letterbox bars.
+            bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None,
+        )
 
     async def _run(self):
         logger.info('Starting playlist loop: {} ({})', self.playlist.name, self.playlist.playlist_id)
@@ -51,44 +80,18 @@ class PlaylistLoop:
                     break
                 if not self.assigned_webviews:
                     continue
-                url = asset.url
-                if url.startswith('file:'):
-                    url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-                data = dict(
-                    src=url,
-                    # -1 (undefined) is passed through as "unknown": the
-                    # viewer then probes the URL itself and picks a container,
-                    # which is how this worked before the Qt/CEF migration and
-                    # is the only way a plain URL pointing straight at an image
-                    # or a video can land anywhere but an iframe.
-                    container=asset.media_type + 1 if asset.media_type >= 0 else -1,
-                    fit=asset.fit,
-                    # None means "no colour chosen", which the viewer needs to tell
-            # apart from a deliberate black: only in the first case does it
-            # sample the picture's own average colour for the letterbox bars.
-            bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None
-                )
-                for webview_id in list(self.assigned_webviews):
-                    await self.remote_ws.multicast(webview_id, 'Show', **data)
+                for webview_id, window_id in list(self.assigned_webviews):
+                    await self.remote_ws.multicast(
+                        webview_id, 'Show', **self._show_payload(asset, window_id))
         except asyncio.CancelledError:
             logger.info('Playlist loop stopped: {}', self.playlist.playlist_id)
 
-    async def send_current(self, webview_id: str):
-        """Push the current asset of this playlist to a specific webview immediately"""
-        asset = self.playlist.current
-        url = asset.url
-        if url.startswith('file:'):
-            url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-        data = dict(
-            src=url,
-            container=asset.media_type + 1 if asset.media_type >= 0 else -1,
-            fit=asset.fit,
-            # None means "no colour chosen", which the viewer needs to tell
-            # apart from a deliberate black: only in the first case does it
-            # sample the picture's own average colour for the letterbox bars.
-            bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None
-        )
-        await self.remote_ws.multicast(webview_id, 'Show', **data)
+    async def send_current(self, webview_id: str, window_id: int):
+        """Push this playlist's current asset to one window straight away,
+        so a freshly assigned screen does not sit on the boot logo until the
+        next rotation."""
+        await self.remote_ws.multicast(
+            webview_id, 'Show', **self._show_payload(self.playlist.current, window_id))
 
 
 class WebviewManager:
@@ -108,8 +111,14 @@ class WebviewManager:
         self.remote_ws = remote_ws
         self._loops: dict[str, PlaylistLoop] = {}       # playlist_id → loop
         self._webviews: dict[str, dict] = {}             # instance_id → info dict
-        self._assignments: dict[str, str] = {}          # instance_id → playlist_id
+        # (instance_id, window_id) → playlist_id. Keyed on the window, not on
+        # the viewer: one screen is one window, and a node driving two screens
+        # must be able to show a different playlist on each.
+        self._assignments: dict[tuple[str, int], str] = {}
         self._pending_save: Optional[asyncio.Task] = None
+        # Viewer → playlist entries read from the pre-per-window file format,
+        # waiting for the viewer to connect so its windows can be resolved.
+        self._legacy_assignments: dict[str, str] = {}
 
     @classmethod
     def get_instance(cls) -> WebviewManager:
@@ -134,8 +143,8 @@ class WebviewManager:
         if loop:
             loop.stop()
             # Unassign all webviews assigned to this playlist
-            for vid in [v for v, pid in self._assignments.items() if pid == playlist_id]:
-                del self._assignments[vid]
+            for key in [k for k, pid in self._assignments.items() if pid == playlist_id]:
+                del self._assignments[key]
             self._save_assignments()
 
     # ── Webview registration ───────────────────────────────────────────────
@@ -147,17 +156,46 @@ class WebviewManager:
         # from a previous run (loaded from disk at startup) or from it having
         # just dropped the connection. Without this a reboot leaves every
         # screen on the boot logo until somebody reassigns it by hand.
-        playlist_id = self._assignments.get(instance_id)
-        if playlist_id and playlist_id in self._loops:
-            logger.info('Restoring assignment of {} to playlist {}', instance_id, playlist_id)
-            self._loops[playlist_id].assign(instance_id)
-            asyncio.create_task(self._loops[playlist_id].send_current(instance_id))
+        self._restore_assignments(instance_id)
+
+    def _restore_assignments(self, instance_id: str):
+        """Attach a viewer's windows to the playlists they were assigned.
+
+        Deliberately driven by the window list rather than by connection:
+        a viewer registers before it has reported its screens, so at that
+        moment there is nothing to attach to. This runs again on every info
+        update and is idempotent, which is also what makes a screen plugged in
+        later pick its playlist back up.
+        """
+        info = self._webviews.get(instance_id, {})
+        window_ids = [w['window_id'] for w in info.get('windows', [])]
+        if not window_ids:
+            return
+
+        legacy = self._legacy_assignments.pop(instance_id, None)
+        if legacy is not None:
+            # Only now are the windows known, so an entry saved before
+            # assignments were per-window can be spread over all of them,
+            # which is what it meant.
+            for window_id in window_ids:
+                self._assignments.setdefault((instance_id, window_id), legacy)
+            self._save_assignments()
+
+        for window_id in window_ids:
+            playlist_id = self._assignments.get((instance_id, window_id))
+            loop = self._loops.get(playlist_id) if playlist_id else None
+            if loop and (instance_id, window_id) not in loop.assigned_webviews:
+                logger.info('Restoring window {} of {} to playlist {}',
+                            window_id, instance_id, playlist_id)
+                loop.assign(instance_id, window_id)
+                asyncio.create_task(loop.send_current(instance_id, window_id))
 
     def update_webview_info(self, instance_id: str, info: dict):
         if instance_id in self._webviews:
             self._webviews[instance_id].update(info)
         else:
             self._webviews[instance_id] = info
+        self._restore_assignments(instance_id)
 
     def unregister_webview(self, instance_id: str):
         logger.info('Webview disconnected: {}', instance_id)
@@ -166,9 +204,9 @@ class WebviewManager:
         # no longer there, but KEEP the assignment: a viewer that disconnects
         # has not been unassigned, it is merely absent (restarted, rebooted,
         # network blip), and it must resume its playlist when it comes back.
-        playlist_id = self._assignments.get(instance_id)
-        if playlist_id and playlist_id in self._loops:
-            self._loops[playlist_id].unassign(instance_id)
+        for (vid, window_id), playlist_id in self._assignments.items():
+            if vid == instance_id and playlist_id in self._loops:
+                self._loops[playlist_id].unassign(vid, window_id)
 
     # ── Assignment persistence ────────────────────────────────────────────
 
@@ -190,7 +228,10 @@ class WebviewManager:
         try:
             tmp = path.with_suffix('.tmp')
             with open(tmp, 'w') as f:
-                json.dump(self._assignments, f, indent=4)
+                # A list of records rather than a mapping: the key is a pair,
+                # which JSON cannot express as an object key.
+                json.dump([{'webview_id': vid, 'window_id': wid, 'playlist_id': pid}
+                           for (vid, wid), pid in self._assignments.items()], f, indent=4)
             tmp.replace(path)   # atomic: a power cut cannot leave a half file
         except OSError as exc:
             logger.error('Cannot save viewer assignments to {}: {}', path, exc)
@@ -212,40 +253,61 @@ class WebviewManager:
         except (OSError, ValueError) as exc:
             logger.error('Cannot read viewer assignments from {}: {}', path, exc)
             return
-        if not isinstance(stored, dict):
+        if isinstance(stored, dict):
+            # Format written before assignments became per-window: one playlist
+            # for the whole viewer. Read as "every window of that viewer", which
+            # is what it meant, so an already-updated node keeps playing.
+            stored = [{'webview_id': vid, 'window_id': None, 'playlist_id': pid}
+                      for vid, pid in stored.items()]
+        if not isinstance(stored, list):
             logger.error('Ignoring malformed viewer assignments in {}', path)
             return
-        for webview_id, playlist_id in stored.items():
-            if playlist_id in self._loops:
-                self._assignments[webview_id] = playlist_id
-            else:
+        for record in stored:
+            try:
+                webview_id  = record['webview_id']
+                playlist_id = record['playlist_id']
+                window_id   = record.get('window_id')
+            except (TypeError, KeyError):
+                logger.warning('Ignoring malformed assignment record: {}', record)
+                continue
+            if playlist_id not in self._loops:
                 logger.warning('Dropping assignment of {} to unknown playlist {}',
                                webview_id, playlist_id)
+                continue
+            if window_id is None:
+                # Legacy record: remembered separately and applied to whatever
+                # windows the viewer turns out to have when it registers.
+                self._legacy_assignments[webview_id] = playlist_id
+            else:
+                self._assignments[(webview_id, window_id)] = playlist_id
         logger.info('Restored {} viewer assignment(s)', len(self._assignments))
 
     # ── Assignment management ─────────────────────────────────────────────
 
-    def assign(self, webview_id: str, playlist_id: str):
-        # Remove from previous assignment
-        old_pid = self._assignments.get(webview_id)
+    def assign(self, webview_id: str, window_id: int, playlist_id: str):
+        # A window shows one playlist at a time, so detach it from the previous
+        # one first. The reverse is not true: a playlist may drive any number
+        # of windows.
+        old_pid = self._assignments.get((webview_id, window_id))
         if old_pid and old_pid in self._loops:
-            self._loops[old_pid].unassign(webview_id)
+            self._loops[old_pid].unassign(webview_id, window_id)
 
-        self._assignments[webview_id] = playlist_id
+        self._assignments[(webview_id, window_id)] = playlist_id
         self._save_assignments()
         if playlist_id in self._loops:
-            self._loops[playlist_id].assign(webview_id)
-            # Push current asset immediately to the newly assigned webview
-            asyncio.create_task(self._loops[playlist_id].send_current(webview_id))
+            self._loops[playlist_id].assign(webview_id, window_id)
+            # Push the current asset immediately, so the window does not sit on
+            # the boot logo until the playlist happens to rotate
+            asyncio.create_task(self._loops[playlist_id].send_current(webview_id, window_id))
 
-    def unassign(self, webview_id: str):
-        playlist_id = self._assignments.pop(webview_id, None)
+    def unassign(self, webview_id: str, window_id: int):
+        playlist_id = self._assignments.pop((webview_id, window_id), None)
         self._save_assignments()
         if playlist_id and playlist_id in self._loops:
-            self._loops[playlist_id].unassign(webview_id)
+            self._loops[playlist_id].unassign(webview_id, window_id)
 
-    def get_assignment(self, webview_id: str) -> Optional[str]:
-        return self._assignments.get(webview_id)
+    def get_assignment(self, webview_id: str, window_id: int) -> Optional[str]:
+        return self._assignments.get((webview_id, window_id))
 
     # ── Display / window control ──────────────────────────────────────────
 
@@ -286,10 +348,16 @@ class WebviewManager:
     # ── Queries ───────────────────────────────────────────────────────────
 
     def get_webviews(self) -> dict[str, dict]:
+        """Every connected viewer, with each of its windows carrying the
+        playlist assigned to that window - the web UI draws one column per
+        window, not per viewer."""
         return {
             vid: {
                 **info,
-                'assigned_playlist': self._assignments.get(vid),
+                'windows': [
+                    {**w, 'assigned_playlist': self._assignments.get((vid, w['window_id']))}
+                    for w in info.get('windows', [])
+                ],
             }
             for vid, info in self._webviews.items()
         }
@@ -300,11 +368,13 @@ class WebviewManager:
     def get_webview_windows(self, webview_id: str) -> list:
         return self._webviews.get(webview_id, {}).get('windows', [])
 
-    def get_assignments(self) -> dict[str, str]:
-        return dict(self._assignments)
+    def get_assignments(self) -> list[dict]:
+        """Flat list, since the key is a (viewer, window) pair and JSON has no
+        way to express that as an object key."""
+        return self.serialize_assignments()
 
     def serialize_assignments(self) -> list[dict]:
         return [
-            {'webview_id': vid, 'playlist_id': pid}
-            for vid, pid in self._assignments.items()
+            {'webview_id': vid, 'window_id': wid, 'playlist_id': pid}
+            for (vid, wid), pid in self._assignments.items()
         ]
