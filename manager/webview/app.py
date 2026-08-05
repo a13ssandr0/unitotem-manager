@@ -32,6 +32,7 @@ from PySide6.QtGui import QScreen
 from PySide6.QtWidgets import QApplication
 
 from utils import constants as const
+from utils.browser import user_agent
 
 from .window import WebviewWindow
 
@@ -171,6 +172,17 @@ class WebviewApp:
             # Allow videos and audio to auto-play without user interaction
             'autoplay-policy'  : 'no-user-gesture-required',
             'remote-debugging-address': '127.0.0.1',
+            # boot-screen.html is loaded over file://, so every asset it shows
+            # is cross-origin to it and the same-origin policy gets in the way
+            # of the viewer's own job: drawing a scheduled image into a canvas
+            # taints it, which is what stops the average-colour backdrop from
+            # being computed. This browser only ever displays what the operator
+            # scheduled, in a kiosk with no address bar, no user input and no
+            # credentials to steal cross-origin, so the policy protects nothing
+            # here while breaking a feature. Chromium requires a dedicated
+            # user-data-dir for this, which cache_path above already provides.
+            'disable-web-security': '',
+            'allow-file-access-from-files': '',
         }
         # See _own_cert_spki_hash(): trust this node's own certificate, and
         # only that one, so its locally served pages render instead of an error.
@@ -191,6 +203,9 @@ class WebviewApp:
                 # kiosk shows up as a full-screen white flash every time a
                 # window is created. 32-bit ARGB, alpha must be fully opaque.
                 'background_color'             : 0xFF000000,
+                # Same identity the backend's media type probe uses, so what it
+                # is told about an asset is what this browser would be told.
+                'user_agent'                   : user_agent(),
             },
             switches=switches,
         )
