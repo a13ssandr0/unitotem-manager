@@ -401,9 +401,28 @@ and every prerequisite that can be checked has been checked and is in order:
 It was retried from a freshly defined domain, in case the first attempt had been
 confused by a stale definition, and failed identically. So the failure is inside
 EGL/GBM initialisation on this NVIDIA render node rather than anything missing
-around it - QEMU's egl-headless on the proprietary driver is the suspect. Worth
-retrying after a driver or QEMU update; an AMD/Intel render node would very
-likely just work.
+around it - QEMU's egl-headless on the proprietary driver is the suspect.
+
+The obvious escapes were checked and are closed on this host:
+
+- **No AMD/Intel render node exists.** The CPU is an i9-10900X, an X-series part
+  with no integrated GPU, and both cards are NVIDIA. A Mesa-backed render node
+  would almost certainly just work, but there is none to use here.
+- **nouveau cannot simply be loaded instead.** The NVIDIA packaging ships
+  `/usr/lib/modprobe.d/nvidia-graphics-drivers.conf` with `blacklist nouveau`
+  *and* `alias nouveau off`, so `modprobe nouveau` fails with the confusing
+  `could not find module by name='off'` - it is the alias being resolved, not a
+  missing module. Note that grepping only `/etc/modprobe.d/` for `blacklist`
+  misses this entirely. Getting nouveau onto the second card would mean loading
+  it alongside a live proprietary driver, a combination that packaging
+  deliberately prevents, on the GPU driving the developer's own desktop.
+
+So the test VM renders in software, and that is accepted for now. It is worth
+knowing what this does and does not affect: everything the manager is normally
+tested for - scheduling, screen hot-plug, assignment persistence, asset
+classification, CEF's own behaviour - does not depend on the GPU. What genuinely
+does (video decode performance, the Display page's GPU feature status) has to be
+judged on a real device anyway, which is the deployment target.
 
 Until that is settled the domain keeps `accel3d` off deliberately: enabling it
 without the host-side prerequisite does not degrade to software, it makes the
