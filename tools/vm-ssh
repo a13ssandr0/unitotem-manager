@@ -1,0 +1,13 @@
+#!/bin/sh
+# Run a command in the test VM (or open a shell with no arguments).
+#
+#   tools/vm-ssh                        # interactive shell
+#   tools/vm-ssh systemctl status unitotem-manager
+#
+# Always non-interactive on the authentication side: see vm-env.sh for why
+# SSH_ASKPASS must never be allowed to open a window.
+set -e
+. "$(dirname "$0")/vm-env.sh"
+
+# shellcheck disable=SC2086  # VM_SSH_OPTS is deliberately word-split
+exec ssh $VM_SSH_OPTS "$VM_USER@$VM_HOST" "$@"
