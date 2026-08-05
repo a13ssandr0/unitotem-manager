@@ -143,6 +143,9 @@ class Scheduler(WSAPIBase):
             if 'media_type' not in element:
                 element['media_type'] = probe_media_type(element['url'])
             am.append(element)
+        # An asset that arrives already enabled must be able to restart a
+        # playlist that had nothing to play.
+        am.revalidate_current()
         am.save()
 
     @UserPerms.requires.scheduler
@@ -162,6 +165,9 @@ class Scheduler(WSAPIBase):
                 })
             else:
                 invalid.append(element)
+        # Same reason as add_url(): a newly added enabled asset must be able to
+        # wake a playlist that was parked with nothing to show.
+        am.revalidate_current()
         am.save()
         if invalid:
             return WSResponse(error='Invalid elements', extra=invalid)
@@ -205,6 +211,9 @@ class Scheduler(WSAPIBase):
             asset.dis_date = dis_date
         if enabled is not None and asset.enabled != enabled:
             asset.enabled = enabled
+            # Enabling or disabling changes what should be on screen right now,
+            # and the playback loop cannot notice a flag on its own.
+            am.revalidate_current()
         am.save()
 
     @UserPerms.requires.scheduler
@@ -219,6 +228,9 @@ class Scheduler(WSAPIBase):
     def delete(self, uuid: str, playlist_id: Optional[str] = None):
         am = playlists_manager.get(playlist_id)
         del am[uuid]
+        # Deleting what was playing, or the last enabled asset, has to move the
+        # playlist on rather than leave it pointing at something that is gone.
+        am.revalidate_current()
         am.save()
 
     @UserPerms.requires.scheduler

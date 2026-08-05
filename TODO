@@ -135,11 +135,14 @@ Verified on the VM with two real screens: Default on window 0, a second
 playlist on window 1, each showing its own asset (checked through CEF's
 DevTools target list and both framebuffer heads).
 
-OPEN - a playlist parked with no enabled assets does not seem to wake when one
-is enabled later: the window kept showing the first-boot placeholder until the
-manager was restarted, after which it played correctly. Pre-existing, not
-introduced by the per-window change. Look at AssetsManager.iter_wait and
-_waiting_evt.
+FIXED this session - a playlist parked with nothing enabled now wakes up.
+iter_wait() blocks on _waiting_evt, and that event is pulsed only inside
+__set_current, so enabling an asset later changed a flag nobody was watching:
+the screen stayed on the placeholder until a restart. AssetsManager gains
+revalidate_current(), called by every scheduler operation that adds, removes,
+enables or disables an asset. Verified on the VM with no restart at all:
+disabling the only enabled asset falls back to the placeholder, re-enabling it
+brings the content straight back.
 
 WAS OPEN, superseded - assignment per viewer instead of per window.
 
