@@ -15,6 +15,10 @@
     html {
       width: 100%; height: 100%;
       overflow: hidden;
+      /* Wordmark em size, in px; kept in sync with the smallest connected
+         screen's plymouth splash (unitotem.script) via updateBootScale()
+         below, so the boot-screen handoff never changes the logo's size. */
+      --boot-em: 240px;
     }
 
     /* Content orientation (screen rotation without affecting the real
@@ -56,6 +60,17 @@
     main[f="1"] { transform: scaleX(-1); }
     main[f="2"] { transform: scaleY(-1); }
 
+    /* Wraps every container so a one-time post-handoff transform (see
+       beginOrientationIntro() below) can visually cancel out body[r]'s
+       rotation and main[f]'s flip and reveal them smoothly, instead of
+       snapping instantly into whatever orientation/flip was configured
+       before this page even loaded. */
+    #orient-intro {
+      position: relative;
+      width: 100%; height: 100%;
+      transform-origin: center center;
+    }
+
     /* Each container occupies the full viewport; only one is visible at a time */
     .container { display: none; width: 100%; height: 100%; }
 
@@ -67,15 +82,9 @@
       user-select: none;
     }
 
-    .welcome {
-      transform: scale(0.75);
-      opacity: 0;
-      filter: blur(4px);
-      animation: scale 3s forwards cubic-bezier(0.5, 1, 0.89, 1),
-                 fade-in 0.8s 0.1s forwards cubic-bezier(0.11, 0, 0.5, 0);
-    }
-    @keyframes scale { 100% { transform: scale(2); } }
-    @keyframes fade-in { 100% { opacity: 1; filter: blur(0); } }
+    /* No zoom/fade-in here: Plymouth's unitotem.script already fades the
+       wordmark in before handoff, at this exact on-screen size, so it must
+       appear at full size and opacity from the very first frame. */
 
     .glow {
       animation: glow 1.5s linear infinite alternate;
@@ -88,7 +97,7 @@
     /* "o" replaced by a blank gap (two nbsp) filled by the spinning ring below */
     .loader {
       display: inline-block;
-      font-size: 7.5em;
+      font-size: var(--boot-em);
       font-family: "Noto Sans", sans-serif;
       font-weight: bold;
       color: #fff;
@@ -133,25 +142,25 @@
 </head>
 <body>
   <main id="content-root">
-    <div id="boot-screen" class="container">
-      <div class="welcome">
+    <div id="orient-intro">
+      <div id="boot-screen" class="container">
         <div class="glow">
           <span class="loader">UniT&nbsp;&nbsp;tem</span>
         </div>
       </div>
-    </div>
 
-    <iframe  id="web-frame"     class="container"
-             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-             allowfullscreen></iframe>
+      <iframe  id="web-frame"     class="container"
+               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+               allowfullscreen></iframe>
 
-    <img     id="image-display" class="container" alt="">
+      <img     id="image-display" class="container" alt="">
 
-    <video   id="video-display" class="container"
-             autoplay loop playsinline></video>
+      <video   id="video-display" class="container"
+               autoplay loop playsinline></video>
 
-    <div     id="audio-display" class="container">
-      <audio id="audio-player" autoplay loop></audio>
+      <div     id="audio-display" class="container">
+        <audio id="audio-player" autoplay loop></audio>
+      </div>
     </div>
   </main>
 
@@ -229,6 +238,8 @@
      */
     function setOrientation(orientation) {
       document.body.setAttribute('r', orientation);
+      updateBootScale();
+      scheduleOrientationIntro();
     }
 
     function getOrientation() {
@@ -241,10 +252,67 @@
      */
     function setFlip(flip) {
       document.getElementById('content-root').setAttribute('f', flip);
+      scheduleOrientationIntro();
     }
 
     function getFlip() {
       return +(document.getElementById('content-root').getAttribute('f') || 0);
+    }
+
+    /**
+     * Wordmark em size, in px: kept at content_width/8 so the boot-screen
+     * logo is always ~60% of the (post-rotation) content width, matching
+     * unitotem.script's own sizing rule on the Plymouth side.
+     */
+    function updateBootScale() {
+      const width = document.getElementById('content-root').clientWidth;
+      document.documentElement.style.setProperty('--boot-em', (width / 8) + 'px');
+    }
+    window.addEventListener('load', updateBootScale);
+    window.addEventListener('resize', updateBootScale);
+
+    /**
+     * Plymouth always renders the splash in the screen's native orientation
+     * (it has no way to know a per-window rotation/flip setting - see the
+     * design notes for why). If this page loads with a rotation or flip
+     * already configured, body[r]/main[f] would otherwise snap the content
+     * into that orientation on the very first frame, an abrupt jump right
+     * after Plymouth's upright handoff. Instead, #orient-intro starts with
+     * an inline transform that exactly cancels body's rotation and main's
+     * flip (plus the size difference between the native and the post-
+     * rotation content width - see the "k" factor below) so the first
+     * painted frame still matches Plymouth exactly, then animates that
+     * transform away to reveal the real configured orientation/flip.
+     *
+     * setOrientation()/setFlip() are two independent calls that may arrive
+     * back-to-back; the short delay lets both land before we read their
+     * combined final state.
+     */
+    let introScheduled = false;
+    function scheduleOrientationIntro() {
+      if (introScheduled) return;
+      introScheduled = true;
+      setTimeout(beginOrientationIntro, 50);
+    }
+
+    function beginOrientationIntro() {
+      const wrap = document.getElementById('orient-intro');
+      const r = getOrientation();
+      const f = getFlip();
+      const contentWidth = document.getElementById('content-root').clientWidth;
+      const k = contentWidth ? window.innerWidth / contentWidth : 1;
+      const flipX = f === 1 ? -1 : 1;
+      const flipY = f === 2 ? -1 : 1;
+
+      wrap.style.transition = 'none';
+      wrap.style.transform = `scale(${k * flipX}, ${k * flipY}) rotate(${-r * 90}deg)`;
+      void wrap.offsetWidth; // force layout so the start transform is painted before animating
+      wrap.style.transition = 'transform 0.6s ease-out';
+      wrap.style.transform = 'none';
+      wrap.addEventListener('transitionend', () => {
+        wrap.style.transition = '';
+        wrap.style.transform = '';
+      }, { once: true });
     }
   </script>
 </body>

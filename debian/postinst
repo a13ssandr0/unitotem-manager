@@ -66,13 +66,19 @@ EOF
 	# ── Plymouth theme ────────────────────────────────────────────────────────
 	# Registered as a high-priority alternative so it becomes the default
 	# automatically (update-alternatives picks the highest priority unless an
-	# admin has manually pinned another theme via --config). update-initramfs
-	# embeds it into initrd; the plymouth package's own initramfs-tools hook
-	# does the actual copying, no custom hook needed. Re-run on every upgrade
-	# too, in case the theme's script/images changed.
+	# admin has manually pinned another theme via --config). But some kiosk
+	# images pin a placeholder theme via `plymouth-set-default-theme`, which
+	# puts the alternative in manual mode - update-alternatives --install
+	# alone can't override that, so select unitotem explicitly too. update-
+	# initramfs embeds it into initrd; the plymouth package's own initramfs-
+	# tools hook does the actual copying, no custom hook needed. Re-run on
+	# every upgrade too, in case the theme's script/images changed.
 	if [ -f /usr/share/plymouth/themes/unitotem/unitotem.plymouth ]; then
 		update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
 			default.plymouth /usr/share/plymouth/themes/unitotem/unitotem.plymouth 100
+		if command -v plymouth-set-default-theme >/dev/null; then
+			plymouth-set-default-theme unitotem || true
+		fi
 		if command -v update-initramfs >/dev/null; then
 			update-initramfs -u
 		fi
