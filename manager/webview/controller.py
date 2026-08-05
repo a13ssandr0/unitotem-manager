@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 
 from api.commons import SHUTDOWN_EVENT
 from utils.models.assets import AssetsManager
+from utils.models.command_line import cmdargs
 
 if TYPE_CHECKING:
     from api.ws.wsmanager import WSManager
@@ -122,12 +125,22 @@ class WebviewManager:
             # Unassign all webviews assigned to this playlist
             for vid in [v for v, pid in self._assignments.items() if pid == playlist_id]:
                 del self._assignments[vid]
+            self._save_assignments()
 
     # ── Webview registration ───────────────────────────────────────────────
 
     def register_webview(self, instance_id: str, info: dict):
         logger.info('Webview connected: {} ({})', info.get('hostname', instance_id), instance_id)
         self._webviews[instance_id] = info
+        # Restore what this viewer was already assigned to, whether that comes
+        # from a previous run (loaded from disk at startup) or from it having
+        # just dropped the connection. Without this a reboot leaves every
+        # screen on the boot logo until somebody reassigns it by hand.
+        playlist_id = self._assignments.get(instance_id)
+        if playlist_id and playlist_id in self._loops:
+            logger.info('Restoring assignment of {} to playlist {}', instance_id, playlist_id)
+            self._loops[playlist_id].assign(instance_id)
+            asyncio.create_task(self._loops[playlist_id].send_current(instance_id))
 
     def update_webview_info(self, instance_id: str, info: dict):
         if instance_id in self._webviews:
@@ -138,10 +151,66 @@ class WebviewManager:
     def unregister_webview(self, instance_id: str):
         logger.info('Webview disconnected: {}', instance_id)
         self._webviews.pop(instance_id, None)
-        # Remove from any assigned loop
-        playlist_id = self._assignments.pop(instance_id, None)
+        # Detach from the loop so it stops sending assets to something that is
+        # no longer there, but KEEP the assignment: a viewer that disconnects
+        # has not been unassigned, it is merely absent (restarted, rebooted,
+        # network blip), and it must resume its playlist when it comes back.
+        playlist_id = self._assignments.get(instance_id)
         if playlist_id and playlist_id in self._loops:
             self._loops[playlist_id].unassign(instance_id)
+
+    # ── Assignment persistence ────────────────────────────────────────────
+
+    @staticmethod
+    def _assignments_path() -> Path:
+        """Kept beside the playlists it refers to, not inside playlists.json:
+        that file is rewritten by every playlist operation, and which screen
+        shows what is viewer state rather than playlist state."""
+        return Path(cmdargs.assets_file).parent / 'viewer_assignments.json'
+
+    def _save_assignments(self):
+        """Write the viewer -> playlist map so it survives a restart.
+
+        Playback on a totem must come back on its own after a reboot; needing
+        someone to reopen the Viewers page and reassign every screen by hand is
+        not an option for a device hanging on a wall.
+        """
+        path = self._assignments_path()
+        try:
+            tmp = path.with_suffix('.tmp')
+            with open(tmp, 'w') as f:
+                json.dump(self._assignments, f, indent=4)
+            tmp.replace(path)   # atomic: a power cut cannot leave a half file
+        except OSError as exc:
+            logger.error('Cannot save viewer assignments to {}: {}', path, exc)
+
+    def load_assignments(self):
+        """Read back the viewer -> playlist map saved by _save_assignments().
+
+        Called at startup, before any viewer connects: the assignments simply
+        sit here until the matching viewer registers, at which point
+        register_webview() attaches it to its loop. Assignments pointing at a
+        playlist that no longer exists are dropped.
+        """
+        path = self._assignments_path()
+        if not path.exists():
+            return
+        try:
+            with open(path) as f:
+                stored = json.load(f)
+        except (OSError, ValueError) as exc:
+            logger.error('Cannot read viewer assignments from {}: {}', path, exc)
+            return
+        if not isinstance(stored, dict):
+            logger.error('Ignoring malformed viewer assignments in {}', path)
+            return
+        for webview_id, playlist_id in stored.items():
+            if playlist_id in self._loops:
+                self._assignments[webview_id] = playlist_id
+            else:
+                logger.warning('Dropping assignment of {} to unknown playlist {}',
+                               webview_id, playlist_id)
+        logger.info('Restored {} viewer assignment(s)', len(self._assignments))
 
     # ── Assignment management ─────────────────────────────────────────────
 
@@ -152,6 +221,7 @@ class WebviewManager:
             self._loops[old_pid].unassign(webview_id)
 
         self._assignments[webview_id] = playlist_id
+        self._save_assignments()
         if playlist_id in self._loops:
             self._loops[playlist_id].assign(webview_id)
             # Push current asset immediately to the newly assigned webview
@@ -159,6 +229,7 @@ class WebviewManager:
 
     def unassign(self, webview_id: str):
         playlist_id = self._assignments.pop(webview_id, None)
+        self._save_assignments()
         if playlist_id and playlist_id in self._loops:
             self._loops[playlist_id].unassign(webview_id)
 
