@@ -99,12 +99,18 @@ Images, video, fit, bg_color, default duration and per-asset volume are all
 still untested.
 
 === NEXT ===
-- Probe Qt's behaviour with zero screens, then fix the stale-screen report.
-- Run the playback tests (VM-TESTING.md section 7, item 7).
-- Updates page: apt/dpkg frontend rework. A design study exists (pty +
-  APT::Status-Fd + debconf passthrough, dropping sudo); stage 0 of it is a
-  small bug fix - the current non-interactive invocation actually fails hard
-  on a conffile prompt, leaving the package unconfigured.
+Decided, in order:
+1. Updates page, as specified in CLAUDE.md: xterm.js console, daily
+   background check, navbar hint. The apt/dpkg frontend rework goes with it -
+   a design study exists (pty + APT::Status-Fd + debconf passthrough,
+   dropping sudo entirely), and its stage 0 is a small bug fix, because the
+   current non-interactive invocation does not merely default prompts, it
+   fails hard on a conffile prompt and leaves the package unconfigured.
+2. Last-screen detection via python-xlib in a thread, listening for RandR
+   events (option a above). Adds a dependency, so it needs a venv rebuild in
+   the VM and a .deb rebuild for real installs.
+3. Persist viewer/playlist assignments across restarts.
+4. The remaining playback tests (VM-TESTING.md section 7, item 7).
 
 === BACKLOG ===
 <!-- Settings/Network/wifi-scan -->
