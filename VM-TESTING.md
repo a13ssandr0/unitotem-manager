@@ -386,12 +386,24 @@ What is needed, and what is already done:
 - `libvirt-qemu` must be able to open the host's render node:
   `sudo usermod -aG render libvirt-qemu`. Done.
 
-What still blocks it: QEMU refuses to start with `egl: render node init failed`.
-`/dev/dri/renderD128` on this host is an NVIDIA card on the proprietary driver,
-and QEMU's egl-headless needs working EGL+GBM on it. `libnvidia-egl-gbm` and
-`15_nvidia_gbm.json` are both installed, so the remaining suspect is
-`nvidia_drm.modeset`, which could not be read (the parameter is root-only) and
-which requires a kernel parameter plus a host reboot to change.
+What still blocks it: QEMU refuses to start with `egl: render node init failed`,
+and every prerequisite that can be checked has been checked and is in order:
+
+| | |
+|---|---|
+| `libvirt-qemu` in group `render` | yes - the running QEMU has gid 992 |
+| `nvidia_drm.modeset` | `Y` |
+| GBM backend | `/usr/lib/x86_64-linux-gnu/gbm/nvidia-drm_gbm.so` present |
+| EGL vendor | `10_nvidia.json` present |
+| AppArmor | no denials for the render node |
+| Domain XML | stored with `accel3d='yes'` and the egl-headless device |
+
+It was retried from a freshly defined domain, in case the first attempt had been
+confused by a stale definition, and failed identically. So the failure is inside
+EGL/GBM initialisation on this NVIDIA render node rather than anything missing
+around it - QEMU's egl-headless on the proprietary driver is the suspect. Worth
+retrying after a driver or QEMU update; an AMD/Intel render node would very
+likely just work.
 
 Until that is settled the domain keeps `accel3d` off deliberately: enabling it
 without the host-side prerequisite does not degrade to software, it makes the
