@@ -22,12 +22,14 @@ class Viewers(WSAPIBase):
             assignments=_vm().get_assignments(),
         )
 
-    def assign(self, viewer_id: str, playlist_id: str):
-        _vm().assign(viewer_id, playlist_id)
+    def assign(self, viewer_id: str, window_id: int, playlist_id: str):
+        """Put one window on one playlist. A window shows a single playlist,
+        while a playlist may drive as many windows as wanted."""
+        _vm().assign(viewer_id, window_id, playlist_id)
         return self.list()
 
-    def unassign(self, viewer_id: str):
-        _vm().unassign(viewer_id)
+    def unassign(self, viewer_id: str, window_id: int):
+        _vm().unassign(viewer_id, window_id)
         return self.list()
 
     def addWindow(self, viewer_id: str, display: int = 0,
