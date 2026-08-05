@@ -48,8 +48,28 @@ Until then this violates "state changes reach the web UI purely through
 events" in CLAUDE.md. Note the manager itself stays perfectly healthy with
 zero screens - it is only the reported state that goes stale.
 
-NOT YET DONE - playback of real assets (image/video/web page, fit, bg_color,
-default duration, per-asset volume) has not been exercised this session.
+OPEN, and worse than it looks - the built-in internal pages never render.
+utils/models/assets.py:187-188 defines the 'no assets' and 'first boot'
+placeholder assets as https://localhost/unitotem-no-assets and
+.../unitotem-first-boot. The manager serves a self-signed certificate
+(/etc/ssl/unitotem.pem), CEF validates it like any other site, and there is
+no certificate-error handling anywhere in manager/ - so instead of the
+welcome screen a device shows Chromium's grey broken-page error. Confirmed
+in the VM: the CDP target list has an iframe on
+https://localhost/unitotem-first-boot, the screen shows the error page, and
+from inside the VM `curl` gets 307 with -k and fails outright without it.
+This hits every real device on its very first boot, which is exactly when
+the welcome/hotspot/QR screen is the only thing the user can see.
+Possible fixes, to decide: serve these two pages from file:// like the boot
+screen; or implement RequestHandler.OnCertificateError and accept only
+https://localhost. A blanket --ignore-certificate-errors would also cover
+scheduled remote assets, which is not wanted.
+
+PARTLY DONE - playback of real assets. A web-page asset was scheduled and
+the viewer did switch to it, which exercised the scheduler -> viewer path,
+but the render could not be judged because of the certificate bug above.
+Images, video, fit, bg_color, default duration and per-asset volume are all
+still untested.
 
 === NEXT ===
 - Probe Qt's behaviour with zero screens, then fix the stale-screen report.
