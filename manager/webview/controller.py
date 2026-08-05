@@ -63,7 +63,10 @@ class PlaylistLoop:
                     # or a video can land anywhere but an iframe.
                     container=asset.media_type + 1 if asset.media_type >= 0 else -1,
                     fit=asset.fit,
-                    bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
+                    # None means "no colour chosen", which the viewer needs to tell
+            # apart from a deliberate black: only in the first case does it
+            # sample the picture's own average colour for the letterbox bars.
+            bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None
                 )
                 for webview_id in list(self.assigned_webviews):
                     await self.remote_ws.multicast(webview_id, 'Show', **data)
@@ -80,7 +83,10 @@ class PlaylistLoop:
             src=url,
             container=asset.media_type + 1 if asset.media_type >= 0 else -1,
             fit=asset.fit,
-            bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
+            # None means "no colour chosen", which the viewer needs to tell
+            # apart from a deliberate black: only in the first case does it
+            # sample the picture's own average colour for the letterbox bars.
+            bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None
         )
         await self.remote_ws.multicast(webview_id, 'Show', **data)
 

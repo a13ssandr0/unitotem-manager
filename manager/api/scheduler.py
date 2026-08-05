@@ -3,7 +3,7 @@ from typing import Optional, Union
 import requests
 from loguru import logger
 
-from utils import constants as const
+from utils.browser import user_agent
 
 from pydantic import FutureDatetime
 from pydantic_extra_types.color import Color
@@ -45,7 +45,7 @@ def probe_media_type(url: str) -> MediaType:
     # default python-requests User-Agent with 403 and an HTML or text/plain
     # error body, which is exactly the kind of answer that must not be mistaken
     # for the asset's own type.
-    headers = {'User-Agent': f'UniTotem/{const.__version__} (https://github.com/a13ssandr0/unitotem-manager)'}
+    headers = {'User-Agent': user_agent()}
     mime = ''
     try:
         resp = requests.head(url, timeout=5, allow_redirects=True,
