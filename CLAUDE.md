@@ -143,6 +143,15 @@ must be associated to it but no playlist should be connected to that window auto
 If a screen is removed the corresponding window must be closed, the playlist outputting to that window must be unaware of 
 the change.
 
+The program must keep running normally with zero screens connected, both at startup and
+after the last connected screen is disconnected at runtime — the management UI, scheduler
+and API must remain fully reachable and functional regardless of screen count.
+
+Screen/window state changes must reach the web UI purely through events, with no polling
+anywhere along the chain: the update must be pushed the moment the change is detected, using
+the same message the web UI already uses at initialization, so an already-open page reacts
+without needing to re-request anything.
+
 
 # Running
 Running the program must allow the following modes:
@@ -152,4 +161,100 @@ Running the program must allow the following modes:
 At startup program must check for configuration files presence and for internet connection:
 if no configuration file is present this is the first run after installation/reset, shows welcome screen,
 if internet is also not available starts a hotspot and displays SSID and password on the welcome screen together with a
-QR code, if possible configuration page should be advertised as captive portal 
+QR code, if possible configuration page should be advertised as captive portal
+
+
+# Rules
+
+Everything above describes *what* UniTotem must do. This section describes *how* to work on it.
+These rules are binding.
+
+## Language
+All code, comments, identifiers, log messages, commit messages and repository documentation are
+written in **English**, without exception. This holds even when the conversation itself is in
+another language.
+
+## Progress tracking
+Project status and planning live in the `TODO` file at the repository root, not only in commit
+messages. It is structured as:
+
+- `=== CURRENT WORK ===` — what is being worked on *right now*. Always kept at the top so the next
+  session immediately sees where the previous one stopped, with enough detail to resume without
+  re-deriving the context (what was verified, what is still open, which files are involved).
+- `=== NEXT ===` — the planned next steps.
+- `=== BACKLOG ===` — the long-standing wish list. Entries already done are kept, commented out
+  with `<!-- -->`; never delete them, they are the project's history.
+
+`TODO` is updated *during* the work, not only at the end: when a task is picked up, when something
+is verified, and when the session stops.
+
+## Gotchas and new rules
+Every gotcha discovered while working (a non-obvious environment behaviour, a dead end that must
+not be retried, a trap that cost real debugging time) and every new rule given by the user is
+written into this file, in this section, as soon as it is found. A commit message is not enough:
+commit messages are not read at the start of the next session, this file is.
+
+System- or OS-level changes (kiosk image, systemd units, X11 session, packaging on the target)
+additionally go into `unitotem-system/debian-kiosk.md`, which is the reference document for the
+kiosk image.
+
+## Running the project
+- **Never change the default ports.** The manager listens on 80 (redirect) and 443. Do not move it
+  to 8080/8443 "just for a test" — the user connects to the same instance and a moved port silently
+  breaks their session. In the test VM the remapping is done by QEMU's port forwarding on the host
+  side, which leaves the guest-side ports untouched.
+- **Leave it running.** After a test session the manager stays up and reachable, so the user can
+  try it out. Shut it down only when explicitly asked to.
+
+## Committing
+Commit and push after every completed piece of work — no need to be asked. Keep commits coherent
+(one concern each) and their messages in English.
+
+## Testing
+Testing happens in the QEMU test VM, which runs the real kiosk image. **The full procedure is in
+`VM-TESTING.md`** — create the VM, boot it, deploy, test multi-monitor, and every known trap. Read
+it before doing anything with the VM instead of rediscovering it. The essentials:
+
+- **Deploy with `rsync`, not with a Debian package.** Building a `.deb` is a multi-minute detour
+  through a Docker container; the normal iteration is rsync the code into the VM and restart the
+  service. Build a package only when the packaging itself is what is being tested.
+- **Keep the number of steps minimal** for every test, unless the user explicitly asks for the long
+  path. Prefer the shortest route that still exercises the real thing.
+- **SSH into the VM as `root`, password `unitotem`** (a key is set up to avoid repeated password
+  prompts). The VM's serial console is also wired to a file and is the way to debug anything that
+  happens before or below the point where SSH works.
+- **Multi-monitor hot-plug** is done with `-device virtio-vga,max_outputs=2` plus forcing the DRM
+  connector from debugfs (`echo on > /sys/kernel/debug/dri/0/Virtual-2/force`). **SPICE does not
+  work for this and must not be retried** — `spice-vdagentd` refuses to run without a logind
+  session, which this kiosk's X11-without-display-manager design does not have. See `VM-TESTING.md`
+  for the full list of dead ends.
+
+## Gotchas
+
+Each of these cost real debugging time at least once. `VM-TESTING.md` has the fuller version of
+the VM-specific ones.
+
+- **ssh must never be able to prompt graphically.** On KDE, a missing key or an unknown host key
+  makes ssh spawn `ksshaskpass`, which steals focus and blocks automation until a human clicks it.
+  Always run with `SSH_ASKPASS_REQUIRE=never` and `-o BatchMode=yes` — `tools/vm-env.sh` does both,
+  so prefer `tools/vm-ssh` over calling ssh directly.
+- **A missing Qt xcb library reports the wrong library.** Qt aborts with an uncatchable SIGABRT
+  saying *"xcb-cursor0 or libxcb-cursor0 is needed"* regardless of which xcb library is actually
+  absent. Ask the linker instead: `ldd .../PySide6/Qt/plugins/platforms/libqxcb.so | grep "not found"`.
+- **`rsync -a` into `/etc/sudoers.d/` produces a file sudo refuses to parse**, because it preserves
+  the source's uid. Always `chown root:root` afterwards.
+- **A stale `manager/static/manifest.json` silently serves the previous JS bundle.** `base.html`
+  resolves hashed bundle names through the manifest at render time, so deploying `assets/` without
+  it means the change appears not to work, with no error anywhere.
+- **journald on the kiosk image discards INFO and below** (`MaxLevelStore=warning`), so
+  `journalctl -u unitotem-manager` can show nothing at all while the service logs busily. Run the
+  entry point by hand to see real output.
+- **After forcing a DRM connector on, X needs time to re-probe before it has a mode list.**
+  Assigning a mode immediately fails with `xrandr: cannot find mode`, the output never activates,
+  and it looks like the manager missed the hot-plug event. Poll `xrandr --query` first.
+- **CEF paints opaque white before a document loads**, at both application and per-browser level,
+  which is a full-screen flash on a kiosk. Both settings are now pinned to `0xFF000000`, alongside
+  a black Qt palette on the window and its widget (`manager/webview/window.py`).
+- **`sudo` strips `DEBIAN_FRONTEND` and closes every file descriptor ≥ 3.** Anything relying on an
+  inherited environment variable or on `APT::Status-Fd` therefore silently does nothing when run
+  through sudo. The manager runs as root; it does not need sudo in the first place. 
