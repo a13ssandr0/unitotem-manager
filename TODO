@@ -84,6 +84,22 @@ hostname/IP/OS renders on the framebuffer.
 MINOR - the welcome page shows a scrollbar on the right in the viewer.
 Cosmetic, but it is a kiosk screen and nothing should ever scroll there.
 
+OPEN - the image dominant-colour backdrop is still not applied, and the
+cause is the viewer page's origin. boot-screen.html is loaded from file://,
+so every asset is cross-origin to it:
+  - drawing a remote image into a canvas taints it and getImageData throws
+    SecurityError, so applyDominantColour() falls back to black - which is
+    what a scheduled image currently shows in its letterbox bars;
+  - the same origin rule already defeated the client-side HEAD probe, which
+    is why probe_media_type() ended up in the backend (api/scheduler.py).
+The Electron build did not hit this: its page ran with Electron's own
+webPreferences and the check did not apply.
+Fix to apply, consistent with the probe: compute the average colour in the
+backend, where there is no origin at all, and send it as bg_color. Pillow is
+already in the venv. Setting img.crossOrigin='anonymous' is not a solution -
+it only works when the remote server sends CORS headers, which an arbitrary
+scheduled image will not.
+
 OPEN - viewer/playlist assignments do not survive a restart. _assignments
 in webview/controller.py:97 is a plain in-memory dict; there is a
 serialize_assignments() and a _pending_save, but nothing loads them back at

@@ -1,5 +1,10 @@
 from typing import Optional, Union
 
+import requests
+from loguru import logger
+
+from utils import constants as const
+
 from pydantic import FutureDatetime
 from pydantic_extra_types.color import Color
 
@@ -18,6 +23,54 @@ def _make_asset_broadcast(am: AssetsManager) -> WSBroadcast:
         items=am.serialize_assets(),
         current=am.current.uuid
     )
+
+
+def probe_media_type(url: str) -> MediaType:
+    """
+    Ask the server what a URL actually serves, so an address pointing straight
+    at a picture or a video is shown as one instead of in an iframe.
+
+    This probe belongs here rather than in the viewer page, even though the
+    pre-Qt implementation did it in the browser: that page is loaded over
+    file://, so a cross-origin HEAD is refused before it is even sent and every
+    URL would come back looking like a web page. The manager has no such limit.
+
+    Returns MediaType.undefined when the answer cannot be obtained, which the
+    viewer treats as "decide for yourself" and ultimately renders as a page -
+    the same outcome the old implementation had on error.
+    """
+    if not url.lower().startswith(('http://', 'https://')):
+        return MediaType.undefined
+    # Identify ourselves: several large sites (Wikimedia among them) answer a
+    # default python-requests User-Agent with 403 and an HTML or text/plain
+    # error body, which is exactly the kind of answer that must not be mistaken
+    # for the asset's own type.
+    headers = {'User-Agent': f'UniTotem/{const.__version__} (https://github.com/a13ssandr0/unitotem-manager)'}
+    mime = ''
+    try:
+        resp = requests.head(url, timeout=5, allow_redirects=True,
+                             verify=False, headers=headers)
+        # Plenty of servers refuse HEAD, or refuse an unfamiliar client
+        # outright (Wikimedia answers 400 unless the User-Agent carries a
+        # contact address). Any unsuccessful answer is retried as a one-byte
+        # ranged GET, which is cheap and is what such servers do accept.
+        if not resp.ok:
+            resp = requests.get(url, timeout=5, allow_redirects=True, verify=False,
+                                headers={**headers, 'Range': 'bytes=0-0'}, stream=True)
+            resp.close()
+        if resp.ok:
+            mime = resp.headers.get('Content-Type', '')
+        else:
+            logger.warning('Media type probe for {} returned HTTP {}', url, resp.status_code)
+    except requests.RequestException as exc:
+        logger.warning('Cannot determine the media type of {}: {}', url, exc)
+        return MediaType.undefined
+    for kind in ('image', 'video', 'audio'):
+        if kind in mime:
+            return MediaType[kind]
+    # An empty mime means the probe gave no usable answer: leave it undefined
+    # so the viewer decides, instead of asserting it is a web page.
+    return MediaType.web if mime else MediaType.undefined
 
 
 class Scheduler(WSAPIBase):
@@ -87,12 +140,8 @@ class Scheduler(WSAPIBase):
             if isinstance(element, str):
                 element = {'url': element}
             element.pop('uuid', None)
-            # A URL with no media type stays MediaType.undefined, and the
-            # viewer maps that to container index 0 - the boot screen - so the
-            # asset silently never appears: the logo just stays up. Uploads get
-            # their type from the file's MIME (see add_file below); a scheduled
-            # URL is a web page unless the caller says otherwise.
-            element.setdefault('media_type', MediaType.web)
+            if 'media_type' not in element:
+                element['media_type'] = probe_media_type(element['url'])
             am.append(element)
         am.save()
 
@@ -138,13 +187,12 @@ class Scheduler(WSAPIBase):
             asset.name = name
         if url is not None and asset.url != url:
             asset.url = url
-            # Re-derive the type for the new URL. Never leave it undefined:
-            # that maps to the viewer's boot container and the asset would
-            # simply never show. An uploaded file's MIME is known, anything
-            # else is treated as a web page.
+            # Re-derive from the upload manager when the file is known;
+            # otherwise leave it undefined on purpose, which tells the viewer
+            # to probe the URL and choose the container itself.
             filename = url.removeprefix('file:')
             info = upload_manager.files_info.get(filename) if url.startswith('file:') else None
-            asset.media_type = info.mime if info is not None else MediaType.web
+            asset.media_type = info.mime if info is not None else probe_media_type(url)
         if duration is not None and asset.duration != duration:
             asset.update_duration(duration)
         if fit is not None and asset.fit != fit:

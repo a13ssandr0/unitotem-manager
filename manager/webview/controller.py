@@ -56,7 +56,12 @@ class PlaylistLoop:
                     url = 'https://localhost/uploaded/' + url.removeprefix('file:')
                 data = dict(
                     src=url,
-                    container=asset.media_type + 1,
+                    # -1 (undefined) is passed through as "unknown": the
+                    # viewer then probes the URL itself and picks a container,
+                    # which is how this worked before the Qt/CEF migration and
+                    # is the only way a plain URL pointing straight at an image
+                    # or a video can land anywhere but an iframe.
+                    container=asset.media_type + 1 if asset.media_type >= 0 else -1,
                     fit=asset.fit,
                     bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
                 )
@@ -73,7 +78,7 @@ class PlaylistLoop:
             url = 'https://localhost/uploaded/' + url.removeprefix('file:')
         data = dict(
             src=url,
-            container=asset.media_type + 1,
+            container=asset.media_type + 1 if asset.media_type >= 0 else -1,
             fit=asset.fit,
             bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
         )
