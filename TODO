@@ -100,19 +100,19 @@ already in the venv. Setting img.crossOrigin='anonymous' is not a solution -
 it only works when the remote server sends CORS headers, which an arbitrary
 scheduled image will not.
 
-OPEN - viewer/playlist assignments do not survive a restart. _assignments
-in webview/controller.py:97 is a plain in-memory dict; there is a
-serialize_assignments() and a _pending_save, but nothing loads them back at
-startup. Reproduced twice: assign the Default playlist to local-webview,
-restart, and Viewers/list reports assignments={} with the viewer back on
-the boot screen. On a real device this means every reboot silently stops
-playback until someone reassigns the playlist by hand.
+FIXED this session - viewer/playlist assignments now survive a restart, and
+a disconnect no longer throws them away. They were only ever an in-memory
+dict (serialize_assignments() had no caller at all), and unregister_webview
+deleted the entry outright, so a viewer that merely dropped its connection
+lost its playlist. Assignments are written beside the playlists and read
+back at startup; a viewer picks its playlist up again when it registers.
+Verified: schedule a URL, restart the manager, the page comes back on its
+own.
 
-PARTLY DONE - playback of real assets. A web-page asset was scheduled and
-the viewer did switch to it, which exercised the scheduler -> viewer path,
-but the render could not be judged because of the certificate bug above.
-Images, video, fit, bg_color, default duration and per-asset volume are all
-still untested.
+PARTLY DONE - playback of real assets. Verified end to end: a web page and
+an image both reach the screen through the scheduler, the image lands in the
+image container with fit=contain applied. Still untested: video, audio,
+cover/fill, explicit bg_color, default duration and per-asset volume.
 
 === NEXT ===
 Decided, in order:
@@ -125,7 +125,7 @@ Decided, in order:
 2. Last-screen detection via python-xlib in a thread, listening for RandR
    events (option a above). Adds a dependency, so it needs a venv rebuild in
    the VM and a .deb rebuild for real installs.
-3. Persist viewer/playlist assignments across restarts.
+3. Compute the image backdrop colour in the backend (see the CORS entry).
 4. The remaining playback tests (VM-TESTING.md section 7, item 7).
 
 === BACKLOG ===
