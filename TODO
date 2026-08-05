@@ -114,6 +114,23 @@ an image both reach the screen through the scheduler, the image lands in the
 image container with fit=contain applied. Still untested: video, audio,
 cover/fill, explicit bg_color, default duration and per-asset volume.
 
+FIXED this session - the Viewers page was unreachable. The route /viewers
+and the page itself both existed and worked (an assignment matrix, playlists
+as rows and viewers as columns), but base.vue's navigation drawer had no
+entry for it, so the only way in was typing the URL. Added next to Scheduler,
+which is where it belongs - it is a top-level page, not a setting.
+
+OPEN - assignment is per viewer, not per window, which the spec does not
+allow for. CLAUDE.md asks for "all connected viewer windows grouped by host"
+with a playlist assignable "to each window", so that a host driving two
+screens can show a different playlist on each. Both ends currently key on the
+viewer instance instead: webview/controller.py's _assignments is
+instance_id -> playlist_id, PlaylistLoop.assigned_webviews is a set of
+instance ids, and viewers.vue's matrix has one column per viewer. A node with
+two monitors can therefore only ever show the same playlist on both. Fixing
+it means keying assignments on (instance_id, window_id) through the
+controller, the Show command and the page.
+
 === NEXT ===
 Decided, in order:
 1. Updates page, as specified in CLAUDE.md: xterm.js console, daily
