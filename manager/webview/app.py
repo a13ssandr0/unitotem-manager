@@ -173,16 +173,55 @@ class WebviewApp:
         # One fullscreen window per currently-connected screen (zero screens
         # means zero windows: the app must be able to start without any and
         # keep running, picking up screens as they're connected below).
-        for screen in self.qt_app.screens():
+        for screen in self._real_screens():
             self._open_window_for_screen(screen)
         self.qt_app.screenAdded.connect(self._open_window_for_screen)
         self.qt_app.screenRemoved.connect(self._on_screen_removed)
 
     # ── window management ─────────────────────────────────────────────────
 
+    @staticmethod
+    def _is_placeholder(screen: QScreen) -> bool:
+        """
+        Whether this is Qt's stand-in for "no screen at all" rather than a
+        real output.
+
+        QGuiApplication always keeps at least one QScreen, so with every
+        output disconnected the xcb backend leaves behind a placeholder named
+        after the X display itself (':0.0') instead of after a RandR output.
+        Observed transitions on the test VM:
+
+          0 outputs            -> one screen  ':0.0'      0x0
+          first output plugged -> screenAdded 'Virtual-1', then
+                                  screenRemoved ':0.0'
+          last output unplugged-> the existing QScreen is *renamed in place*
+                                  to ':0.0', keeping its now-stale geometry,
+                                  and NO signal of any kind is emitted
+
+        Without this check the manager opens a window on the placeholder when
+        it starts with no monitor attached, and reports a screen that is not
+        there. Real outputs are named after their RandR output (HDMI-1,
+        Virtual-1, ...), which never begins with ':'; the geometry test covers
+        the freshly-created placeholder, whose size is 0x0.
+
+        This does NOT cover the last-output-unplugged case: in a process that
+        owns a window on that screen, Qt keeps the QScreen under its original
+        name and geometry indefinitely (measured: still 'Virtual-1' 1280x800
+        more than 20s after the output was gone). Detecting that needs a RandR
+        event source of our own, independent of Qt - see TODO.
+        """
+        return screen.name().startswith(':') or screen.geometry().isEmpty()
+
+    def _real_screens(self) -> list[QScreen]:
+        """Connected outputs only, with Qt's placeholder filtered out."""
+        return [s for s in self.qt_app.screens() if not self._is_placeholder(s)]
+
     def _open_window_for_screen(self, screen: QScreen) -> int:
         """Open a fullscreen window on a newly-detected screen. No playlist
         is assigned automatically (assignment is a separate, explicit step)."""
+        if self._is_placeholder(screen):
+            # Not a real output - see _is_placeholder(). Nothing to show it on.
+            return -1
         geom = screen.geometry()
         win = WebviewWindow(
             window_id=self._next_id,
@@ -234,7 +273,7 @@ class WebviewApp:
                      width: int = 0, height: int = 0) -> int:
         """Open an extra window on an already-connected screen, at a
         possibly custom size (used by the remote 'AddWindow' command)."""
-        screens = self.qt_app.screens()
+        screens = self._real_screens()
         if not screens:
             # AddWindow with no screens connected: log and no-op rather than
             # raising, since this runs inside a Qt slot (_handle_command) -
@@ -341,7 +380,7 @@ class WebviewApp:
     async def _send_webview_info(self, ws):
         """Announce screen geometry and open windows to the manager."""
         screens = []
-        for i, s in enumerate(self.qt_app.screens()):
+        for i, s in enumerate(self._real_screens()):
             g = s.geometry()
             screens.append({
                 'index': i, 'name': s.name(),

@@ -15,15 +15,38 @@ Verified this session, on the current code, with no manager restarts:
   - no white flash observed on window creation after the black-background fix
     (sampled at ~3fps, which would miss a single-frame artefact)
 
-OPEN - zero screens reports a stale screen. With every DRM connector forced
-off, the manager correctly stays up and the web UI stays fully usable, but
-Viewers/list still reports 1 screen ('Virtual-1', old 1280x800 geometry) and
-1 window, and no event is pushed when the last screen goes away. Qt seems not
-to emit screenRemoved for the final screen (it appears to keep a placeholder
-QScreen), so manager/webview/app.py's screenAdded/screenRemoved pair cannot
-see it. Needs a probe of what QApplication.screens() actually returns with
-zero connected outputs before choosing a fix. This violates the "state
-changes reach the web UI purely through events" requirement in CLAUDE.md.
+FIXED this session - starting with zero screens no longer invents a screen.
+QGuiApplication always keeps at least one QScreen, so with no output at all
+the xcb backend leaves a placeholder named after the X display (':0.0', 0x0)
+where a real output would be named after its RandR output. The manager was
+treating it as a real screen: it opened a window on it and reported it.
+_is_placeholder()/_real_screens() in manager/webview/app.py now filter it.
+Verified: booting with every connector forced off reports screens=[]
+windows=[], and plugging one in then opens exactly one window.
+
+OPEN - unplugging the LAST screen goes unnoticed. Viewers/list keeps
+reporting that screen and its window, and nothing is pushed. Root cause,
+measured directly on the VM:
+  - Qt emits NO signal whatsoever for this transition - not screenRemoved,
+    not screenAdded, not geometryChanged/availableGeometryChanged/
+    physicalSizeChanged/refreshRateChanged, not primaryScreenChanged.
+  - In a bare QGuiApplication with no windows, Qt renames the QScreen in
+    place to ':0.0' a few seconds later (geometry stays stale).
+  - In the manager, which owns a window on that screen, not even the rename
+    happens: it is still 'Virtual-1' 1280x800 more than 20s later.
+So there is nothing in Qt's API to observe, and _is_placeholder() cannot
+catch it either. Fixing it needs a RandR event source of our own. Options,
+not yet decided (the first two are the realistic ones):
+  a) python-xlib in a thread, selecting RRScreenChangeNotify/RROutputChange
+     on the root window - clean and genuinely event-driven, but adds a
+     dependency to requirements.txt and therefore a venv/.deb rebuild;
+  b) QAbstractNativeEventFilter over xcb events - no new dependency, but the
+     RandR event base has to be worked out to identify the events;
+  c) udev/DRM monitoring (pyudev) - another dependency, further from the
+     X-level truth Qt itself uses.
+Until then this violates "state changes reach the web UI purely through
+events" in CLAUDE.md. Note the manager itself stays perfectly healthy with
+zero screens - it is only the reported state that goes stale.
 
 NOT YET DONE - playback of real assets (image/video/web page, fit, bg_color,
 default duration, per-asset volume) has not been exercised this session.
