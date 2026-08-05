@@ -1,3 +1,42 @@
+=== CURRENT WORK ===
+(2026-08-05) Qt6+CEF viewer: testing in the VM.
+
+Test VM rebuilt from scratch on kiosk-2026-08-04-amd64, now running under
+libvirt as domain 'unitotem-test' with a fixed IP (192.168.122.50) instead of
+port forwarding, so the manager keeps its real default ports 80/443.
+Full procedure written down in VM-TESTING.md; helpers in tools/.
+
+Verified this session, on the current code, with no manager restarts:
+  - viewer starts, boot screen renders, CEF subprocesses healthy
+  - hot-plug  -> Viewers/list pushed within ~1s, correct geometry
+  - hot-unplug -> pushed within ~1s, back to 1 screen/1 window
+  - window_id increments and is never reused (0 -> 1 -> 2)
+  - systemctl stop returns in 66ms (the CEF/SIGTERM hang stays fixed)
+  - no white flash observed on window creation after the black-background fix
+    (sampled at ~3fps, which would miss a single-frame artefact)
+
+OPEN - zero screens reports a stale screen. With every DRM connector forced
+off, the manager correctly stays up and the web UI stays fully usable, but
+Viewers/list still reports 1 screen ('Virtual-1', old 1280x800 geometry) and
+1 window, and no event is pushed when the last screen goes away. Qt seems not
+to emit screenRemoved for the final screen (it appears to keep a placeholder
+QScreen), so manager/webview/app.py's screenAdded/screenRemoved pair cannot
+see it. Needs a probe of what QApplication.screens() actually returns with
+zero connected outputs before choosing a fix. This violates the "state
+changes reach the web UI purely through events" requirement in CLAUDE.md.
+
+NOT YET DONE - playback of real assets (image/video/web page, fit, bg_color,
+default duration, per-asset volume) has not been exercised this session.
+
+=== NEXT ===
+- Probe Qt's behaviour with zero screens, then fix the stale-screen report.
+- Run the playback tests (VM-TESTING.md section 7, item 7).
+- Updates page: apt/dpkg frontend rework. A design study exists (pty +
+  APT::Status-Fd + debconf passthrough, dropping sudo); stage 0 of it is a
+  small bug fix - the current non-interactive invocation actually fails hard
+  on a conffile prompt, leaving the package unconfigured.
+
+=== BACKLOG ===
 <!-- Settings/Network/wifi-scan -->
 <!-- Images in settings breadcrumb -->
 <!-- Show last updates log if available -->

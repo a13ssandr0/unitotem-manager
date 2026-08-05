@@ -1,0 +1,49 @@
+#!/bin/sh
+# Deploy the working copy to the test VM and restart the manager.
+#
+#   tools/vm-deploy              # sync + restart
+#   tools/vm-deploy --no-restart # sync only
+#
+# This is the normal iteration path - building a .deb is only for testing the
+# packaging itself. See VM-TESTING.md.
+set -e
+. "$(dirname "$0")/vm-env.sh"
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+RESTART=1
+[ "$1" = "--no-restart" ] && RESTART=0
+
+if [ ! -f "$REPO/manager/static/manifest.json" ]; then
+    echo "manager/static/manifest.json is missing - run 'npm run build' in webui/ first." >&2
+    echo "Templates resolve hashed bundle names through it; without it nothing renders." >&2
+    exit 1
+fi
+
+# manager/static/ is included deliberately: it holds the built web UI, and
+# manifest.json must travel with assets/ or the server keeps serving the old
+# hashed bundles with no error anywhere.
+# shellcheck disable=SC2086
+rsync -a --delete --info=stats1 \
+    --rsync-path="$VM_RSYNC_PATH" \
+    -e "ssh $VM_SSH_OPTS" \
+    --exclude '__pycache__' \
+    --exclude 'uploaded' \
+    "$REPO/manager/api" \
+    "$REPO/manager/routers" \
+    "$REPO/manager/templates" \
+    "$REPO/manager/utils" \
+    "$REPO/manager/webview" \
+    "$REPO/manager/resources" \
+    "$REPO/manager/static" \
+    "$REPO/manager/init.py" \
+    "$REPO/manager/main.py" \
+    "$REPO/manager/requirements.txt" \
+    "$VM_USER@$VM_HOST:$VM_APP_DIR/"
+
+if [ "$RESTART" = 1 ]; then
+    # shellcheck disable=SC2086
+    ssh $VM_SSH_OPTS "$VM_USER@$VM_HOST" 'systemctl restart unitotem-manager'
+    echo "deployed and restarted - https://$VM_HOST/"
+else
+    echo "deployed (service not restarted)"
+fi
