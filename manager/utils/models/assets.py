@@ -139,7 +139,13 @@ class Asset(BaseModel, validate_assignment=True):
             elif 'audio' in v:
                 return MediaType.audio
             else:
-                return MediaType.undefined
+                # Anything the classifier cannot place falls back to web, not
+                # to undefined: the viewer maps a media type to a container by
+                # index (undefined -> the boot screen), so an unrecognised type
+                # would make the asset silently invisible - the logo simply
+                # stays up with no error anywhere. The browser is the one
+                # container that can make a decent attempt at any content.
+                return MediaType.web
         else:
             return v
 
