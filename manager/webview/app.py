@@ -467,11 +467,16 @@ class WebviewApp:
                 'x': g.x(), 'y': g.y(),
                 'width': g.width(), 'height': g.height(),
             })
+        # window_id → screen name, so the web UI can label a window by the
+        # output it occupies ('HDMI-1') instead of by a bare number. Only known
+        # here, where windows are created against a QScreen.
+        window_screen = {wid: screen.name() for screen, wid in self._screen_windows.items()}
         windows = []
         for wid, win in self.windows.items():
             g = win.geometry()
             windows.append({
                 'window_id': wid,
+                'screen_name': window_screen.get(wid),
                 'x': g.x(), 'y': g.y(),
                 'width': g.width(), 'height': g.height(),
             })
