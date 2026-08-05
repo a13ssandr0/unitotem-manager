@@ -243,6 +243,13 @@ the VM-specific ones.
   absent. Ask the linker instead: `ldd .../PySide6/Qt/plugins/platforms/libqxcb.so | grep "not found"`.
 - **`rsync -a` into `/etc/sudoers.d/` produces a file sudo refuses to parse**, because it preserves
   the source's uid. Always `chown root:root` afterwards.
+- **A web UI tab left open across a deploy stops navigating, and it is not a bug.** The bundle
+  names are content-hashed and `tools/vm-deploy` rsyncs with `--delete`, so the old chunks are
+  gone; a tab still running the previous `main` chunk asks for a lazy-loaded page that no longer
+  exists and the click appears to do nothing, with no visible error. Reload the page (Ctrl+Shift+R)
+  before concluding anything is broken. A quick way to check the real state without a browser is
+  to drive CEF's own DevTools endpoint on the VM (`http://127.0.0.1:9223/json/new?<url>`, then
+  `Runtime.evaluate` over the target's WebSocket) — that is how this was diagnosed.
 - **A stale `manager/static/manifest.json` silently serves the previous JS bundle.** `base.html`
   resolves hashed bundle names through the manifest at render time, so deploying `assets/` without
   it means the change appears not to work, with no error anywhere.

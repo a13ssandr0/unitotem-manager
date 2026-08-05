@@ -33,6 +33,7 @@ from PySide6.QtWidgets import QApplication
 
 from utils import constants as const
 from utils.browser import user_agent
+from utils.models.viewer import viewer_settings
 
 from .window import WebviewWindow
 
@@ -189,6 +190,22 @@ class WebviewApp:
         spki = self._own_cert_spki_hash(const.certfile)
         if spki:
             switches['ignore-certificate-errors-spki-list'] = spki
+
+        # Opt-in, off by default (Settings/Display/setAllowInsecureCerts):
+        # show scheduled assets even when their certificate does not validate.
+        # This is deliberately the blunt Chromium switch and not
+        # RequestHandler.OnCertificateError - see _own_cert_spki_hash(), the
+        # handler is never consulted for the iframe the assets live in. The
+        # CefSettings equivalent no longer exists either: this CEF version
+        # removed the ignore_certificate_errors application setting (see
+        # vendor/cefpython/docs/Migration-guide.md). Being an initialisation
+        # switch, it only takes effect on a viewer restart, which is what the
+        # web UI tells the operator.
+        if viewer_settings.allow_insecure_certs:
+            logger.warning('Certificate validation is disabled for scheduled assets: '
+                           'anything able to intercept the connection can choose '
+                           'what this node displays')
+            switches['ignore-certificate-errors'] = ''
 
         cef.Initialize(
             settings={
