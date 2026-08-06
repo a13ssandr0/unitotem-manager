@@ -10,6 +10,10 @@
             background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
             background-size: 400% 400%;
             animation: gradient 5s ease infinite;
+            /* The browser's default 8px body margin plus a full-viewport height
+               adds up to more than the viewport, which is what put a scrollbar
+               on a kiosk screen that can never be scrolled. */
+            margin: 0;
             height: 100vh;
             color: white;
             font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
