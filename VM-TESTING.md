@@ -275,6 +275,88 @@ the VM does not get far enough to run sshd.
 The second form is how the push tests are verified: leave it watching, cause a
 change, and see whether the backend pushed a frame on its own.
 
+### Copying single files in
+
+`tools/vm-deploy` covers the working copy; for a one-off file, `scp` needs
+`-O`:
+
+```bash
+. tools/vm-env.sh
+scp -O $VM_SSH_OPTS somefile root@192.168.122.50:/var/tmp/
+```
+
+> **Plain `scp` fails against this guest with `subsystem request failed on
+> channel 0`.** Modern OpenSSH defaults to the SFTP protocol, and the kiosk
+> image's sshd has no `sftp-server` subsystem. `-O` forces the legacy SCP
+> protocol, which works. `rsync` is unaffected (it is unpacked into
+> `/var/opt/rsync/`, see `$VM_RSYNC_PATH`).
+
+### Measuring CPU
+
+Anything about the manager's CPU cost has to be measured from
+`/proc/<pid>/stat` **utime+stime deltas over a wall-clock window**, summed over
+the *whole process tree*. Two traps make any other method wrong:
+
+- `ps pcpu` is a lifetime average, so a process that has been burning a core
+  for the last minute still reads low if it has been up for an hour;
+- the load lives in CEF's subprocesses, not in the Python process. The main pid
+  reads ~1% while the tree is at 160%.
+
+A helper that does this — per-process, per-thread, plus CEF subprocess counts
+broken down by `--type=` — is kept at `/var/tmp/cpumeas.py` on the guest:
+
+```bash
+tools/vm-ssh 'python3 /var/tmp/cpumeas.py 15 --threads'
+```
+
+Interpreting the result: `ThreadPoolForeground` and `VizCompositorThread` at the
+top mean software rasterisation, not a busy loop. See the `## Gotchas` entry in
+`CLAUDE.md` on what actually triggers it (re-plugging a screen).
+
+### Video test assets
+
+The `cefpython3` build in the venv has **no proprietary codecs**: H.264, AAC and
+Theora are all refused (`canPlayType` returns `""`, and an H.264 file fails with
+`DEMUXER_ERROR_NO_SUPPORTED_STREAMS`). Use WebM/VP9, AV1, Opus, Vorbis or MP3.
+
+blender.org no longer serves Big Buck Bunny as playable files — everything under
+`peach/bigbuckbunny_movies/` is a `.zip` — so the test asset is produced on the
+host and rsynced into the guest's uploads folder, where the manager's watchdog
+picks it up on its own:
+
+```bash
+cd /var/tmp/unitotem-vm
+curl -sLO https://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_h264.mov.zip
+unzip -oq big_buck_bunny_1080p_h264.mov.zip
+ffmpeg -i big_buck_bunny_1080p_h264.mov -c:v libvpx-vp9 -b:v 4M \
+       -deadline realtime -cpu-used 8 -row-mt 1 -tile-columns 2 \
+       -c:a libopus -b:a 128k BigBuckBunny_1080p_vp9.webm
+
+. tools/vm-env.sh
+rsync -a --rsync-path="$VM_RSYNC_PATH" -e "ssh $VM_SSH_OPTS" \
+    BigBuckBunny_1080p_vp9.webm \
+    root@192.168.122.50:/var/unitotem-manager/uploaded/
+```
+
+Then schedule it and disable everything else in the playlist:
+
+```bash
+.venv/bin/python tools/ws-probe.py \
+  --send Scheduler/add_file \
+  --args '{"items":[{"url":"BigBuckBunny_1080p_vp9.webm","enabled":true}]}'
+```
+
+Whether it is really playing is checked through CEF's DevTools rather than by
+looking at the screen (`/var/tmp/cdp.py` on the guest evaluates an expression in
+every page target):
+
+```bash
+tools/vm-ssh '/var/unitotem-venv/bin/python3 /var/tmp/cdp.py \
+  "(()=>{const v=document.querySelector(\"video\");
+    return v?{t:v.currentTime,paused:v.paused,w:v.videoWidth,
+              err:v.error&&v.error.message}:\"none\"})()"'
+```
+
 ---
 
 ## 5. Leave it running
@@ -299,9 +381,13 @@ DRM-core feature, not virtio-specific, and the real source of truth:
 tools/vm-ssh 'export DISPLAY=:0 XAUTHORITY=/run/unitotem-x11.auth
   # plug: fires a real DRM/udev hot-plug event
   echo on > /sys/kernel/debug/dri/0/Virtual-2/force
-  # wait for X to re-probe, THEN assign a mode
-  for i in $(seq 1 20); do xrandr --query | sed -n "/^Virtual-2/,\$p" | grep -q 3840x2160 && break; sleep 1; done
-  xrandr --output Virtual-2 --mode 3840x2160 --right-of Virtual-1'
+  # wait for X to re-probe, THEN read the mode list and pick from it
+  for i in $(seq 1 20); do
+    MODE=$(xrandr --query | sed -n "/^Virtual-2/,/^[A-Za-z]/p" \
+           | grep -oE "^ +[0-9]+x[0-9]+" | head -1 | tr -d " ")
+    [ -n "$MODE" ] && break; sleep 1
+  done
+  xrandr --output Virtual-2 --mode "$MODE" --right-of Virtual-1'
 
 tools/vm-ssh 'export DISPLAY=:0 XAUTHORITY=/run/unitotem-x11.auth
   # unplug: the CRTC has to be torn down too, exactly like real hardware -
@@ -314,6 +400,14 @@ Watch the effect with `tools/ws-probe.py --watch Viewers/list` running in anothe
 shell: a frame must arrive within about a second of each change, with the new
 screen's geometry matching the mode just assigned, and `window_id` values that
 increment and are never reused.
+
+> **Do not hard-code the second output's mode.** `Virtual-2` does not offer the
+> same list as `Virtual-1`, and the list is not stable across virtio versions:
+> it currently starts at 5120x2160 and contains neither 3840x2160-as-first nor
+> 1280x800 at all. Asking for a mode that is absent prints
+> `xrandr: cannot find mode`, the output never activates, and a whole hot-plug
+> test then silently exercises nothing while appearing to pass. Read the list
+> back from `xrandr --query` and pick from it, as above.
 
 > **After `force on`, X needs a moment to re-probe before the mode list exists.**
 > Assigning a mode immediately fails with `xrandr: cannot find mode ...`, and
