@@ -272,6 +272,25 @@ the VM-specific ones.
   compositing every pixel on the CPU. Do not go looking for a busy loop; the number is expected
   wherever there is no working GPU, and only means something when compared before and after a
   change on the same machine.
+- **What actually triggers that near-full-core state is re-plugging a screen, and it is a bug.**
+  An idle manager costs ~1% of a core and stays there across restarts and reboots. The load
+  appears only when a screen is hot-plugged onto an instance that has *already had one unplugged*:
+  the first plug is quiet, every plug after an unplug is not. Measured on the test VM at
+  5120x2160: 161% of a core (a fresh renderer at 110% plus the GPU process at 50%), and 28% at
+  1024x768 — it scales with the surface area, and it stops the instant the screen goes away. The
+  hot threads are `ThreadPoolForeground` ×2 and `VizCompositorThread`, i.e. the llvmpipe raster
+  path, while the Python main thread stays at 1%. Alongside it, **renderer subprocesses leak on
+  screen removal** (2 → 4 → 5 → 6 across plug/unplug cycles, never reclaimed), which is where
+  "6 renderers for 2 windows" came from. Both are open findings, not fixed.
+- **Measure this kind of thing with `/proc/<pid>/stat` deltas over the whole process tree.**
+  `ps pcpu` is a lifetime average and will report a quiet number for a process that started
+  burning a core a minute ago. The load also sits in CEF *subprocesses*, not in the Python
+  process, so measuring the main pid alone reports ~1% while the tree is at 160%.
+- **This cefpython3 build has no proprietary codecs.** `canPlayType` says no to
+  `avc1` (H.264), `mp4a.40.2` (AAC) and Theora, and an H.264 MP4 fails with
+  `DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no supported streams`. VP8, VP9, AV1,
+  Opus, Vorbis and MP3 all work. Any video test asset has to be WebM/VP9 or AV1 — and a kiosk
+  that cannot play the single most common video format on the web is a finding in its own right.
 - **`sudo` strips `DEBIAN_FRONTEND` and closes every file descriptor ≥ 3.** Anything relying on an
   inherited environment variable or on `APT::Status-Fd` therefore silently does nothing when run
   through sudo. The manager runs as root; it does not need sudo in the first place. 
