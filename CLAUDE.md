@@ -262,6 +262,16 @@ the VM-specific ones.
 - **CEF paints opaque white before a document loads**, at both application and per-browser level,
   which is a full-screen flash on a kiosk. Both settings are now pinned to `0xFF000000`, alongside
   a black Qt palette on the window and its widget (`manager/webview/window.py`).
+- **The manager sitting near a full core on an idle kiosk is software rendering, not a runaway
+  loop.** Measured on the test VM: the backend alone (`--no_gui=true`) costs 0% of a core, so all
+  of it is the viewer; the CEF pump interval makes no difference (84% at 10ms, 85% at 50ms)
+  because CEF does its UI-thread work *inside* `MessageLoopWork` — asking less often just makes
+  each call do more; and setting `QT_NO_GLIB` before the process starts rather than at runtime
+  changes nothing either. `Settings/Display/getGPUFeatureStats` reports
+  `gpu_compositing: disabled_software` and `rasterization: unavailable_off`, i.e. Chromium is
+  compositing every pixel on the CPU. Do not go looking for a busy loop; the number is expected
+  wherever there is no working GPU, and only means something when compared before and after a
+  change on the same machine.
 - **`sudo` strips `DEBIAN_FRONTEND` and closes every file descriptor ≥ 3.** Anything relying on an
   inherited environment variable or on `APT::Status-Fd` therefore silently does nothing when run
   through sudo. The manager runs as root; it does not need sudo in the first place. 
