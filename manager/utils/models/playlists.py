@@ -7,6 +7,7 @@ from typing import Optional
 
 from loguru import logger
 
+from utils.environment import environ
 from utils.models.assets import AssetsManager
 from utils.models.command_line import cmdargs
 
@@ -70,6 +71,12 @@ class PlaylistsManager:
         return Path(cmdargs.assets_file).parent / 'playlists.json'
 
     def _save_index(self):
+        # A configuration has been written, so this node is no longer on its
+        # first boot: the welcome screen must give way to the "no assets"
+        # placeholder when a playlist runs empty. Mirrors the original
+        # behaviour, where saving or loading the configuration cleared the flag
+        # and only a reset set it again.
+        environ._unitotem_first_boot = False
         index = {
             'default': self._default_id,
             'playlists': {pid: str(am._filepath) for pid, am in self._playlists.items()}
@@ -80,6 +87,8 @@ class PlaylistsManager:
     def load(self):
         index_path = self._index_path()
         if index_path.exists():
+            # Configuration found on disk: the node has been set up before.
+            environ._unitotem_first_boot = False
             with open(index_path) as f:
                 index = json.load(f)
             self._default_id = index.get('default')
