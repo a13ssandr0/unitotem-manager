@@ -391,6 +391,14 @@ class WebviewApp:
 
         cef_timer = QTimer()
         cef_timer.timeout.connect(cef.MessageLoopWork)
+        # 10ms, as in the cefpython examples. Raising it does NOT save CPU here:
+        # measured on the test VM with static content, the main thread sits at
+        # 84% of a core at 10ms and 85% at 50ms - five times fewer ticks, no
+        # difference. Whatever is spinning is the Qt event loop itself, not how
+        # often CEF's queue is drained, so a longer interval would only cost
+        # input latency for nothing. Leave it alone until the real cause is
+        # found. Not the way out either: external_message_pump and
+        # multi_threaded_message_loop, both dead ends on Linux (see CLAUDE.md).
         cef_timer.start(10)
 
         # cef.MessageLoopWork is a C-extension function: PySide6 can invoke it
