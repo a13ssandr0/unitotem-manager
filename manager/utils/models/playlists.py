@@ -111,15 +111,25 @@ class PlaylistsManager:
         else:
             # Legacy: single assets.json → become the default playlist
             am = AssetsManager()
+            configured = True
             try:
                 am.load(cmdargs.assets_file)
             except FileNotFoundError:
                 logger.warning('No assets file found, starting with empty default playlist')
+                configured = False
             am._filepath = self._playlist_path(am.playlist_id)
             self._playlists[am.playlist_id] = am
             self._default_id = am.playlist_id
             am.save()
             self._save_index()
+            # _save_index() clears the first-boot flag, because writing a
+            # configuration normally means somebody configured the node. The
+            # write above is our own bootstrap, not an operator doing anything,
+            # so the flag has to be restored to the truth: a node with neither
+            # playlists.json nor a legacy assets.json has never been set up and
+            # must show the welcome screen with the hotspot credentials, which
+            # are the only way into a node that has no network yet.
+            environ._unitotem_first_boot = not configured
 
     def serialize(self) -> list[dict]:
         return [
