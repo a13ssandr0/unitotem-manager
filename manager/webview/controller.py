@@ -8,11 +8,38 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 
 from api.commons import SHUTDOWN_EVENT
-from utils.models.assets import AssetsManager
+from utils.models.assets import Asset, AssetsManager, idle_asset
 from utils.models.command_line import cmdargs
 
 if TYPE_CHECKING:
     from api.ws.wsmanager import WSManager
+
+
+def show_payload(asset: Asset, window_id: int) -> dict:
+    """The 'Show' command for one asset on one window.
+
+    Built in a single place because the playback loop, the immediate push on
+    assignment and the idle push for an unassigned window all need it, and when
+    it was written out twice the copies drifted apart.
+    """
+    url = asset.url
+    if url.startswith('file:'):
+        url = 'https://localhost/uploaded/' + url.removeprefix('file:')
+    return dict(
+        src=url,
+        window_id=window_id,
+        # -1 (undefined) is passed through as "unknown": the viewer then
+        # probes the URL itself and picks a container, which is how this
+        # worked before the Qt/CEF migration and is the only way a plain
+        # URL pointing straight at an image or a video can land anywhere
+        # but an iframe.
+        container=asset.media_type + 1 if asset.media_type >= 0 else -1,
+        fit=asset.fit,
+        # None means "no colour chosen", which the viewer needs to tell
+        # apart from a deliberate black: only in the first case does it
+        # sample the picture's own average colour for the letterbox bars.
+        bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None,
+    )
 
 
 class PlaylistLoop:
@@ -46,32 +73,6 @@ class PlaylistLoop:
     def unassign(self, webview_id: str, window_id: int):
         self.assigned_webviews.discard((webview_id, window_id))
 
-    def _show_payload(self, asset, window_id: int) -> dict:
-        """The 'Show' command for one asset on one window.
-
-        Built in a single place because both the playback loop and the
-        immediate push on assignment need it, and when they were written out
-        twice they drifted apart.
-        """
-        url = asset.url
-        if url.startswith('file:'):
-            url = 'https://localhost/uploaded/' + url.removeprefix('file:')
-        return dict(
-            src=url,
-            window_id=window_id,
-            # -1 (undefined) is passed through as "unknown": the viewer then
-            # probes the URL itself and picks a container, which is how this
-            # worked before the Qt/CEF migration and is the only way a plain
-            # URL pointing straight at an image or a video can land anywhere
-            # but an iframe.
-            container=asset.media_type + 1 if asset.media_type >= 0 else -1,
-            fit=asset.fit,
-            # None means "no colour chosen", which the viewer needs to tell
-            # apart from a deliberate black: only in the first case does it
-            # sample the picture's own average colour for the letterbox bars.
-            bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None,
-        )
-
     async def _run(self):
         logger.info('Starting playlist loop: {} ({})', self.playlist.name, self.playlist.playlist_id)
         try:
@@ -82,7 +83,7 @@ class PlaylistLoop:
                     continue
                 for webview_id, window_id in list(self.assigned_webviews):
                     await self.remote_ws.multicast(
-                        webview_id, 'Show', **self._show_payload(asset, window_id))
+                        webview_id, 'Show', **show_payload(asset, window_id))
         except asyncio.CancelledError:
             logger.info('Playlist loop stopped: {}', self.playlist.playlist_id)
 
@@ -91,7 +92,7 @@ class PlaylistLoop:
         so a freshly assigned screen does not sit on the boot logo until the
         next rotation."""
         await self.remote_ws.multicast(
-            webview_id, 'Show', **self._show_payload(self.playlist.current, window_id))
+            webview_id, 'Show', **show_payload(self.playlist.current, window_id))
 
 
 class WebviewManager:
@@ -119,6 +120,10 @@ class WebviewManager:
         # Viewer → playlist entries read from the pre-per-window file format,
         # waiting for the viewer to connect so its windows can be resolved.
         self._legacy_assignments: dict[str, str] = {}
+        # Windows already parked on the idle page, so _restore_assignments -
+        # which runs on every info update - does not reload it under them each
+        # time a screen is plugged or unplugged elsewhere on the same node.
+        self._idle_windows: set[tuple[str, int]] = set()
 
     @classmethod
     def get_instance(cls) -> WebviewManager:
@@ -145,6 +150,12 @@ class WebviewManager:
             # Unassign all webviews assigned to this playlist
             for key in [k for k, pid in self._assignments.items() if pid == playlist_id]:
                 del self._assignments[key]
+                # Deleting a playlist leaves its windows with nothing to show;
+                # they must fall back to the idle page like any other
+                # unassigned window rather than freeze on the last asset.
+                if key not in self._idle_windows:
+                    self._idle_windows.add(key)
+                    asyncio.create_task(self._send_idle(*key))
             self._save_assignments()
 
     # ── Webview registration ───────────────────────────────────────────────
@@ -158,14 +169,34 @@ class WebviewManager:
         # screen on the boot logo until somebody reassigns it by hand.
         self._restore_assignments(instance_id)
 
+    async def _send_idle(self, instance_id: str, window_id: int):
+        """Park one window on the idle page.
+
+        A window with no playlist assigned would otherwise never be told
+        anything at all, and would sit on boot-screen.html for as long as it
+        exists - a spinner that means "loading" while nothing is loading, and
+        (before the boot screen was made compositor-only) the single largest
+        item in an idle node's CPU budget: 38% of a core at 1280x800, 178% at
+        5120x2160, measured on the test VM.
+
+        It shows the same page an assigned-but-empty playlist shows, welcome
+        screen included where that still applies - see idle_asset().
+        """
+        await self.remote_ws.multicast(
+            instance_id, 'Show', **show_payload(idle_asset(), window_id))
+
     def _restore_assignments(self, instance_id: str):
-        """Attach a viewer's windows to the playlists they were assigned.
+        """Attach a viewer's windows to the playlists they were assigned, and
+        park the rest on the idle page.
 
         Deliberately driven by the window list rather than by connection:
         a viewer registers before it has reported its screens, so at that
         moment there is nothing to attach to. This runs again on every info
         update and is idempotent, which is also what makes a screen plugged in
-        later pick its playlist back up.
+        later pick its playlist back up - and, for a window that has no
+        playlist, what gets it off the boot screen. This is the only place that
+        sees the whole per-window assignment picture, which is why the idle
+        push belongs here rather than in the viewer or in the page.
         """
         info = self._webviews.get(instance_id, {})
         window_ids = [w['window_id'] for w in info.get('windows', [])]
@@ -184,11 +215,18 @@ class WebviewManager:
         for window_id in window_ids:
             playlist_id = self._assignments.get((instance_id, window_id))
             loop = self._loops.get(playlist_id) if playlist_id else None
-            if loop and (instance_id, window_id) not in loop.assigned_webviews:
-                logger.info('Restoring window {} of {} to playlist {}',
-                            window_id, instance_id, playlist_id)
-                loop.assign(instance_id, window_id)
-                asyncio.create_task(loop.send_current(instance_id, window_id))
+            if loop:
+                self._idle_windows.discard((instance_id, window_id))
+                if (instance_id, window_id) not in loop.assigned_webviews:
+                    logger.info('Restoring window {} of {} to playlist {}',
+                                window_id, instance_id, playlist_id)
+                    loop.assign(instance_id, window_id)
+                    asyncio.create_task(loop.send_current(instance_id, window_id))
+            elif (instance_id, window_id) not in self._idle_windows:
+                logger.info('Window {} of {} has no playlist: showing the idle page',
+                            window_id, instance_id)
+                self._idle_windows.add((instance_id, window_id))
+                asyncio.create_task(self._send_idle(instance_id, window_id))
 
     def update_webview_info(self, instance_id: str, info: dict):
         if instance_id in self._webviews:
@@ -200,6 +238,11 @@ class WebviewManager:
     def unregister_webview(self, instance_id: str):
         logger.info('Webview disconnected: {}', instance_id)
         self._webviews.pop(instance_id, None)
+        # A viewer that comes back has restarted its browser and is on the boot
+        # screen again, so forget that its windows were ever parked - otherwise
+        # they would be left spinning, with this side believing they are idle.
+        self._idle_windows = {(vid, wid) for vid, wid in self._idle_windows
+                              if vid != instance_id}
         # Detach from the loop so it stops sending assets to something that is
         # no longer there, but KEEP the assignment: a viewer that disconnects
         # has not been unassigned, it is merely absent (restarted, rebooted,
@@ -295,6 +338,7 @@ class WebviewManager:
         self._assignments[(webview_id, window_id)] = playlist_id
         self._save_assignments()
         if playlist_id in self._loops:
+            self._idle_windows.discard((webview_id, window_id))
             self._loops[playlist_id].assign(webview_id, window_id)
             # Push the current asset immediately, so the window does not sit on
             # the boot logo until the playlist happens to rotate
@@ -305,6 +349,11 @@ class WebviewManager:
         self._save_assignments()
         if playlist_id and playlist_id in self._loops:
             self._loops[playlist_id].unassign(webview_id, window_id)
+        # The window keeps showing whatever the playlist last gave it unless it
+        # is told otherwise, so send it back to the idle page explicitly.
+        if (webview_id, window_id) not in self._idle_windows:
+            self._idle_windows.add((webview_id, window_id))
+            asyncio.create_task(self._send_idle(webview_id, window_id))
 
     def get_assignment(self, webview_id: str, window_id: int) -> Optional[str]:
         return self._assignments.get((webview_id, window_id))

@@ -194,6 +194,21 @@ no_assets = Asset(url='https://localhost/unitotem-no-assets', duration=0, media_
 first_boot = Asset(url='https://localhost/unitotem-first-boot', duration=0, media_type=MediaType.web)
 
 
+def idle_asset() -> Asset:
+    """What a window shows when there is nothing for it to play.
+
+    Two situations reach this: a playlist that has run out of enabled assets,
+    and a window with no playlist assigned at all. They look the same to a
+    person standing in front of the totem, so they must show the same thing,
+    and the first-boot precedence has to hold for both - a node that has not
+    been configured yet shows the welcome screen with the hotspot credentials,
+    which is the only way anybody can get into it (see the flag's handling in
+    utils/models/playlists.py). Kept in one function precisely so the two
+    callers cannot drift apart.
+    """
+    return first_boot if environ._unitotem_first_boot else no_assets
+
+
 class AssetsManager(BaseModel, validate_assignment=True):
     playlist_id: str = Field(default_factory=lambda: os.urandom(8).hex())
     name: str = 'Default'
@@ -366,7 +381,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
     def current(self) -> Asset:
         if 0 <= self._current < self.assets.__len__():
             return self.assets[self._current]
-        return first_boot if environ._unitotem_first_boot else no_assets
+        return idle_asset()
 
     def __set_current(self, value):
         self._current = value
