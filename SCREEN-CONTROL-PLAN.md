@@ -522,8 +522,23 @@ library.
 
 **VM** — the §4 acceptance test; `--auto` restoring the mode; the zero-screens path;
 cron firing `screenctl.py` under cron's minimal environment; graceful degradation with
-no I2C and no EDID. **The VM's virtio-vga has no EDID and no I2C, so DDC/CI cannot be
-exercised there at all** — it can only prove that absence is handled.
+no I2C and no EDID.
+
+On **virtio-vga** there is no EDID and no I2C, so DDC/CI cannot be exercised at all —
+that configuration can only prove that absence is handled. But the test VM can now also
+run with a **real GTX 1060 passed through** (`tools/unitotem-test-gpu.xml`, procedure in
+`VM-TESTING.md`), and the card drives a **physical 4K monitor on DP-1**. That gives the
+guest a real EDID on a real I2C bus, so **the DDC/CI path is testable in the VM after
+all** — detection, the EDID join, `getvcp`, and input/volume/mute against actual
+hardware. Switching between the two domains is one `undefine --keep-nvram` plus
+`define`, so the sensible plan is: functional and degradation work on virtio, DDC/CI
+verification on the GPU configuration.
+
+Two constraints that come with the GPU configuration: the proprietary NVIDIA driver
+**removes the DRM connector debugfs**, so the `force` hot-plug trick is unavailable
+(CRTC off/on is the working proxy), and it **refuses arbitrary modelines** (`BadMatch`).
+Neither blocks the §4 acceptance test, which uses `xrandr --output X --off`/`--auto` on
+a connected output.
 
 **Real hardware, only the user can do it** — any DDC/CI power, input or volume change on
 a real monitor; whether `0xD6 <- 01` wakes it; the entire CEC path (a Raspberry Pi
