@@ -1,4 +1,59 @@
 === CURRENT WORK ===
+(2026-08-07) Viewer idle CPU: root cause found and fixed (9977db2).
+
+The question was whether the post-replug CPU storm is a Chromium/software-
+rasterisation artefact or a UniTotem bug. It is a UniTotem bug, in our own
+boot-screen.html, and it has nothing to do with re-plugging.
+
+Control experiment (the decisive one), standalone CEF in a raw Xlib window with
+no Qt and none of the manager's code, same VM, same 5120x2160 surface:
+
+  truly static page                       0.0 % of a core
+  boot-screen.html as shipped           178.6 %
+  boot-screen.html, animations paused     0.5 %
+
+So CEF is innocent. In the manager, the same window on the same screen with the
+same re-plug history measures 31.9 % on the logo, 1.4 % as soon as show() puts
+content in the iframe, 32.2 % back on the logo. Per animation, at 5120x2160:
+both paused 1.6 %, glow (text-shadow) alone 203.8 %, rotation (ring) alone
+58.7 %.
+
+Fix: animate opacity/transform instead of paint properties, and step the frame
+rate. Manager, whole process tree, before -> after:
+
+  step                             at 4c96a0f    after 9977db2
+  A  single screen 1280x800            1.6            1.0
+  B  first plug   @ 5120x2160        187.8           30.5
+  C  unplug                            1.5            1.2
+  D  second plug  @ 5120x2160        187.6           31.0
+  E  unplug                            1.3            1.2
+  F  third plug   @ 1024x768          35.7            9.3
+  G  unplug                            1.3            1.2
+
+An ordinary single-screen 1280x800 node idling on the logo: 38.5 % -> 6.9 %.
+Rendering unchanged (RMSE 0.8 %, 0.13 % of pixels differing by >3 %).
+
+STILL OPEN, and a product decision rather than a bug:
+  - The residual (~30 % at 5120x2160, ~7 % at 1280x800) is software compositing
+    and cannot be removed in CSS: with no GPU every animated frame re-composites
+    the whole surface. A single compositor-animated ring and nothing else still
+    costs 51.9 % at 60fps / 18.1 % at 20fps at 5120x2160. The only remaining
+    levers are stopping the animation or getting a GPU.
+  - Should an idle, unassigned screen show a *spinner* at all? It means
+    "loading" and it will spin forever. Stopping it once the viewer has
+    connected would take the idle cost to ~0 on any backend, but that is a
+    visible design change and was deliberately not made here.
+  - Not investigated: whether the assignment model should reuse window_id for a
+    screen that comes back, so a re-plugged monitor resumes its playlist instead
+    of landing on the logo. Today it never does.
+
+Measurement helpers left on the CPU test VM (192.168.122.51, domain
+'unitotem-cpu', virtio-vga heads=2): /var/tmp/cpumeas.py (tree + per-thread
+deltas), /var/tmp/cefctl.py (standalone CEF host, CDP on 9333),
+/var/tmp/ctl2.sh (run a URL in it at a geometry and measure), /var/tmp/plug.sh
+(force Virtual-2 on/off), /var/tmp/seq.sh (the whole A-G sequence),
+/var/tmp/cdp.py, /var/tmp/anim.py, /var/tmp/shot.py.
+
 (2026-08-06) Idle-CPU investigation and GPU acceleration in the test VM.
 
 OPEN, and the real answer to the "70-85% of a core while idle" mystery: the
@@ -27,16 +82,19 @@ fixed during the measurement session):
     had simply been hot-plug-tested. Re-verified on the GPU configuration after
     the fix: the count now stays at 2 renderers / 8 processes across four
     off/on cycles instead of climbing to 7 / 14.
- 2. STILL OPEN. A re-plugged screen sends CEF into a continuous full-surface
-    repaint. The
-    burn is in a freshly created renderer (ThreadPoolForeground x2, ~44% each)
-    plus VizCompositorThread in the GPU process (~50%), i.e. the llvmpipe
-    raster/composite path; the Python main thread stays at 1% throughout,
-    which is why --no_gui=true measured 0%. It scales with surface area
-    (11.1 Mpx -> 161%, 0.79 Mpx -> 28%), so the historical 70-85% corresponds
-    to a ~1080p-1440p second output. The content on screen the whole time is
-    the static boot-screen.html with the unitotem-no-assets iframe - nothing
-    that should be animating at all.
+ 2. FIXED in 9977db2, and the diagnosis above was wrong about what triggers it.
+    The burn is not caused by re-plugging at all: it is boot-screen.html's two
+    infinite CSS animations, which drove paint-only properties (text-shadow on
+    .glow, box-shadow riding along in the ring's rotation keyframes) and so
+    made Chromium re-rasterise the whole wordmark every frame. Hot-plug only
+    came into it because window_id increments and is never reused, so a newly
+    plugged screen gets a window with no entry in viewer_assignments.json,
+    never receives a Show command, and sits on the logo forever - which is
+    also why the first plug of a session could look quiet and later ones did
+    not. See the CLAUDE.md gotcha for the three measurements that settle it
+    (standalone-CEF control, same-window before/after, per-animation pause).
+    Note the row "A single screen 1.4%" above is quiet for the same reason in
+    reverse: window 0 *is* assigned, so its logo is display:none.
 
 The old QXcbEventQueue at 8.3% is a symptom of the same X traffic, not a cause.
 
