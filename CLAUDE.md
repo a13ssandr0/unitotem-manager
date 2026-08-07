@@ -299,7 +299,11 @@ the VM-specific ones.
   go hunting for a repaint loop in that number — cut frames or surface, or get a GPU.
   Earlier measurements with a GTX 1060 passed through (115% at 3840x2160 on nouveau, ~60% on the
   proprietary driver, against 161% at 5120x2160 on llvmpipe) are consistent with this: hardware
-  only made the same wasted animation cheaper.
+  only made the same wasted animation cheaper. **The two together are what actually fix it**:
+  re-measured on `f447c9f` with the GPU passed through and the proprietary driver, four
+  unplug/re-plug cycles at 3840x2160 cost **6.7–8.2% of a core** with the process count flat at
+  8 / 2 renderers — against ~60% for the same test with only the renderer-leak fix, and 161%
+  where this started.
 - **Measure this kind of thing with `/proc/<pid>/stat` deltas over the whole process tree.**
   `ps pcpu` is a lifetime average and will report a quiet number for a process that started
   burning a core a minute ago. The load also sits in CEF *subprocesses*, not in the Python
