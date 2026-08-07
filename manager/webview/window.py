@@ -144,6 +144,20 @@ class WebviewWindow(QMainWindow):
         self._cef = CefWidget(self)
         self.setCentralWidget(self._cef)
 
+    def closeEvent(self, event):
+        # Qt delivers a close event only to the widget close() was called on,
+        # never to its children, so CefWidget.closeEvent below does not fire
+        # when this window is closed - which is how every window disappears
+        # (a screen being unplugged, or a RemoveWindow command). The CEF
+        # browser it hosts was therefore never shut down: it outlived its
+        # window, keeping its renderer process alive with nothing to draw on.
+        # That is the "renderers are never reclaimed" leak, measured going
+        # 2 -> 4 -> 5 -> 6 across hot-plug cycles and confirmed on CEF's own
+        # DevTools target list, which still listed the removed window's page.
+        # Forward the close explicitly so the browser goes with the window.
+        self._cef.close()
+        super().closeEvent(event)
+
     def show(self):
         super().show()
         # embed_browser() needs a valid, visible X11 window handle
