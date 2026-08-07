@@ -1,0 +1,97 @@
+<!--
+  UniTotem manager test VM, GPU-passthrough variant. See VM-TESTING.md,
+  "GPU acceleration", for the procedure this belongs to.
+
+  Same domain name, same disk, same MAC and therefore the same 192.168.122.50 as
+  tools/unitotem-test.xml - the two files are alternative definitions of one VM,
+  swapped by destroying the domain, undefining it with the "keep-nvram" flag,
+  defining the other file and starting it again. See VM-TESTING.md for the exact
+  commands, which cannot be repeated here: a double hyphen is illegal inside an
+  XML comment, so command lines carrying long options cannot be written in one.
+
+  Undefining without keeping the NVRAM deletes /var/tmp/unitotem-vm/OVMF_VARS.fd
+  and the VM stops booting until it is recreated from the OVMF template.
+
+  What differs from the virtio definition:
+
+  - No <video> and no <graphics>. The guest's only display adapter is the
+    passed-through GTX 1060, so there is no VNC console and 'virsh screenshot'
+    no longer works. The serial console file is the only pre-SSH diagnostic
+    left, which is why it matters more here than in the virtio definition.
+
+  - Two <hostdev> entries for the card: the GPU (17:00.0) and its HDMI audio
+    function (17:00.1). They are functions of one device, not two slots, hence
+    slot='0x00' function='0x1' on the audio source address; getting that wrong
+    makes libvirt refuse to start the domain. Both sit alone in IOMMU group 7 on
+    this host, so the group can be handed over whole.
+
+  - An <shmem> region for Looking Glass, which is how the guest's framebuffer
+    reaches the host now that there is no emulated display. 256 MiB is more than
+    the formula needs even at 5120x2160 (width * height * 4 * 2, rounded up to a
+    power of two) and matches the /dev/shm/looking-glass that already exists.
+-->
+<domain type='kvm'>
+  <name>unitotem-test</name>
+  <memory unit='MiB'>4096</memory>
+  <vcpu placement='static'>4</vcpu>
+  <os firmware='efi'>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
+    <nvram>/var/tmp/unitotem-vm/OVMF_VARS.fd</nvram>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' cache='writeback'/>
+      <source file='/var/tmp/unitotem-vm/overlay.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <interface type='network'>
+      <source network='default'/>
+      <mac address='52:54:00:11:70:01'/>
+      <model type='virtio'/>
+    </interface>
+    <!-- No emulated display at all: the 1060 below is the guest's only GPU. -->
+    <video>
+      <model type='none'/>
+    </video>
+    <hostdev mode='subsystem' type='pci' managed='yes'>
+      <source>
+        <address domain='0x0000' bus='0x17' slot='0x00' function='0x0'/>
+      </source>
+    </hostdev>
+    <hostdev mode='subsystem' type='pci' managed='yes'>
+      <source>
+        <address domain='0x0000' bus='0x17' slot='0x00' function='0x1'/>
+      </source>
+    </hostdev>
+    <shmem name='looking-glass'>
+      <model type='ivshmem-plain'/>
+      <size unit='M'>256</size>
+    </shmem>
+    <!-- Boot/early-crash diagnostics: everything the kernel and systemd print
+         before sshd exists ends up in this file. With no VNC console this is
+         the only way to see anything that happens below the SSH layer. -->
+    <serial type='file'>
+      <source path='/var/tmp/unitotem-vm/serial.log'/>
+      <target port='0'/>
+    </serial>
+    <console type='file'>
+      <source path='/var/tmp/unitotem-vm/serial.log'/>
+      <target type='serial' port='0'/>
+    </console>
+    <channel type='unix'>
+      <target type='virtio' name='org.qemu.guest_agent.0'/>
+    </channel>
+    <memballoon model='virtio'/>
+  </devices>
+</domain>

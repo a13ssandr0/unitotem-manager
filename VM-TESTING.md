@@ -466,62 +466,137 @@ holds the locally built amd64 wheel, since the fork's CI only publishes arm64.
   Updates page can only be exercised meaningfully on a headless/server install.
 ### GPU acceleration
 
-The guest currently runs on `llvmpipe` (`glxinfo -B` reports `Accelerated: no`,
-and the kernel logs `[drm] features: -virgl`), so CEF rasterises in software.
-That is a real difference from a device in the field and worth removing, but it
-is blocked on the host, not on the domain XML.
+**Solved, by PCI passthrough rather than by virgl.** The guest can run on a real
+GTX 1060 with full hardware acceleration; `tools/unitotem-test-gpu.xml` is the
+alternative domain definition that does it, and the file's own header comment
+explains what differs from the virtio one.
 
-What is needed, and what is already done:
+The virtio route was abandoned, and should not be retried on this host: QEMU's
+`egl-headless`, which `accel3d='yes'` needs, fails with
+`egl: render node init failed` on the proprietary NVIDIA render node even though
+every checkable prerequisite is in order (`libvirt-qemu` in group `render`,
+`nvidia_drm.modeset=Y`, the GBM backend and EGL vendor JSON both present, no
+AppArmor denials, the XML stored correctly, retried from a freshly defined
+domain). There is no Mesa render node to fall back to: the CPU is an i9-10900X
+with no integrated graphics and both cards are NVIDIA.
 
-- `<acceleration accel3d='yes'/>` on the video model, which turns the device
-  into `virtio-vga-gl`, plus a `<graphics type='egl-headless'>` device to give
-  virgl the OpenGL context that plain VNC does not have. Both are written up in
-  `tools/unitotem-test.xml` and were verified to be stored correctly by libvirt.
-- `libvirt-qemu` must be able to open the host's render node:
-  `sudo usermod -aG render libvirt-qemu`. Done.
+#### Switching the domain between virtio and the GPU
 
-What still blocks it: QEMU refuses to start with `egl: render node init failed`,
-and every prerequisite that can be checked has been checked and is in order:
+```bash
+virsh -c qemu:///system destroy unitotem-test
+virsh -c qemu:///system undefine --keep-nvram unitotem-test
+virsh -c qemu:///system define tools/unitotem-test-gpu.xml   # or unitotem-test.xml
+virsh -c qemu:///system start unitotem-test
+```
 
-| | |
-|---|---|
-| `libvirt-qemu` in group `render` | yes - the running QEMU has gid 992 |
-| `nvidia_drm.modeset` | `Y` |
-| GBM backend | `/usr/lib/x86_64-linux-gnu/gbm/nvidia-drm_gbm.so` present |
-| EGL vendor | `10_nvidia.json` present |
-| AppArmor | no denials for the render node |
-| Domain XML | stored with `accel3d='yes'` and the egl-headless device |
+> **Always `--keep-nvram`, never `--nvram`.** The latter deletes
+> `/var/tmp/unitotem-vm/OVMF_VARS.fd` and the VM stops booting until it is
+> recreated from `/usr/share/OVMF/OVMF_VARS_4M.fd`.
 
-It was retried from a freshly defined domain, in case the first attempt had been
-confused by a stale definition, and failed identically. So the failure is inside
-EGL/GBM initialisation on this NVIDIA render node rather than anything missing
-around it - QEMU's egl-headless on the proprietary driver is the suspect.
+Back up `overlay.qcow2` before a driver experiment; `cp --reflink=auto` makes the
+copy nearly free on this filesystem and restores a broken guest in seconds.
 
-The obvious escapes were checked and are closed on this host:
+#### What the passthrough definition needs
 
-- **No AMD/Intel render node exists.** The CPU is an i9-10900X, an X-series part
-  with no integrated GPU, and both cards are NVIDIA. A Mesa-backed render node
-  would almost certainly just work, but there is none to use here.
-- **nouveau cannot simply be loaded instead.** The NVIDIA packaging ships
-  `/usr/lib/modprobe.d/nvidia-graphics-drivers.conf` with `blacklist nouveau`
-  *and* `alias nouveau off`, so `modprobe nouveau` fails with the confusing
-  `could not find module by name='off'` - it is the alias being resolved, not a
-  missing module. Note that grepping only `/etc/modprobe.d/` for `blacklist`
-  misses this entirely. Getting nouveau onto the second card would mean loading
-  it alongside a live proprietary driver, a combination that packaging
-  deliberately prevents, on the GPU driving the developer's own desktop.
+- Both functions of the card, `17:00.0` (GPU) and `17:00.1` (HDMI audio). They
+  are functions of one device, so the audio `<source>` address is
+  `slot='0x00' function='0x1'`, not a separate slot; getting that wrong makes
+  libvirt refuse to start the domain. They are alone in IOMMU group 7, so the
+  group can be handed over whole, and they are already bound to `vfio-pci`.
+- `<video><model type='none'/></video>` and no `<graphics>` at all.
+- The serial console file, which becomes the *only* pre-SSH diagnostic once the
+  VNC console is gone.
 
-So the test VM renders in software, and that is accepted for now. It is worth
-knowing what this does and does not affect: everything the manager is normally
-tested for - scheduling, screen hot-plug, assignment persistence, asset
-classification, CEF's own behaviour - does not depend on the GPU. What genuinely
-does (video decode performance, the Display page's GPU feature status) has to be
-judged on a real device anyway, which is the deployment target.
+> **With no emulated display, `virsh screenshot` stops working.** It is worth
+> knowing before reaching for it: nothing in the measurement workflow actually
+> needs it, because the guest is driven entirely over SSH and CEF's DevTools.
 
-Until that is settled the domain keeps `accel3d` off deliberately: enabling it
-without the host-side prerequisite does not degrade to software, it makes the
-domain fail to start altogether.
+#### Seeing the guest's screen
 
-Note also `virsh undefine --nvram` deletes the domain's `OVMF_VARS.fd`, so an
-undefine/define cycle loses the UEFI variables; recreate it from
-`/usr/share/OVMF/OVMF_VARS_4M.fd` before starting, or use `--keep-nvram`.
+The card has a physical monitor on `DP-1`, so the guest simply displays on real
+hardware and nothing else is required. **Looking Glass was tried and is a dead
+end here** - see below - but it was also never necessary.
+
+#### nouveau
+
+Nothing to install: the stock bookworm kernel binds `nouveau` to the card on the
+first boot after the switch, and it is genuinely accelerated -
+`glxinfo -B` reports `Accelerated: yes`, NV136, OpenGL 4.3, and Chromium's
+`Settings/Display/getGPUFeatureStats` flips `gpu_compositing`, `rasterization`,
+`opengl`, `webgl` and `video_decode` from `unavailable_*`/`disabled_software` to
+`enabled`.
+
+Connector forcing works exactly as in §6, with real connector names
+(`DP-1`, `DVI-D-1`, `DVI-D-2`, `HDMI-A-1`) under
+`/sys/kernel/debug/dri/0/<connector>/force`.
+
+#### The proprietary NVIDIA driver
+
+```bash
+tools/vm-ssh 'mount -o remount,rw /
+  export TMPDIR=/mnt/data/tmp DEBIAN_FRONTEND=noninteractive
+  mkdir -p $TMPDIR
+  apt-get update -qq
+  apt-get install -y linux-headers-amd64 dkms
+  apt-get install -y nvidia-driver firmware-misc-nonfree
+  sync && mount -o remount,ro /'
+tools/vm-ssh reboot
+```
+
+Bookworm ships 535.261.03, which supports Pascal. DKMS builds it against the
+headers that `linux-headers-amd64` pulls in, which is the *newest* kernel, not
+the running one - so the reboot is mandatory and lands on the new kernel.
+
+> **`TMPDIR` is not optional: the guest's `/var/tmp` is a 64 MiB tmpfs.**
+> `mkinitramfs` builds there and dies with `No space left on device` part-way
+> through, leaving `linux-image-*` unconfigured and `dpkg` wedged - and the
+> error names only the file it was copying, never the tmpfs. Point `TMPDIR` at
+> `/mnt/data/tmp` (the DATA partition) and re-run `dpkg --configure -a`. Note
+> this is the *guest's* `/var/tmp`; the host's `/var/tmp/unitotem-vm/` is where
+> the disk images live and must not be confused with it.
+>
+> The same tmpfs is why anything left in the guest's `/var/tmp` disappears on
+> reboot. Test helpers belong in `/var/opt/vmtest/`, which is on the persistent
+> overlay.
+
+> **The proprietary driver removes the DRM connector debugfs.** There is no
+> `/sys/kernel/debug/dri/0/<connector>/` at all and no `card0-*` entries under
+> `/sys/class/drm`, so the `force` trick from §6 is simply unavailable. The
+> usable hot-plug proxy is turning the CRTC off and on:
+> ```bash
+> xrandr --output DP-1 --off
+> xrandr --output DP-1 --mode 3840x2160 --primary
+> ```
+> which is enough to make Qt drop and recreate the `QScreen` and the window.
+
+> **The proprietary driver refuses arbitrary modelines.** `xrandr --addmode`
+> fails with `BadMatch (RRAddOutputMode)` for a mode the display's EDID does not
+> advertise, so a measurement cannot be forced to a chosen resolution the way it
+> can under virtio or nouveau. Match resolutions across configurations by
+> planning around the EDID, not by adding modes.
+
+#### Looking Glass: a dead end for this guest
+
+The Linux host application *builds* and gets impressively far, then aborts
+before publishing a single frame. Recorded here so nobody repeats it:
+
+- It needs `binutils-dev` (for `bfd.h`, otherwise `crash.c` fails to compile) and
+  `-DUSE_PIPEWIRE=OFF`, plus `cmake build-essential pkg-config libegl-dev
+  libgl-dev libgles-dev libfontconfig-dev libgmp-dev libspice-protocol-dev
+  nettle-dev libxcb1-dev libxcb-shm0-dev libxcb-xfixes0-dev`.
+- Inside the guest the ivshmem region is a PCI BAR, not a file, but the
+  `-f`/`app:shmFile` option accepts any path, so
+  `/sys/bus/pci/devices/0000:02:01.0/resource2_wc` works: the host app reports
+  `IVSHMEM Size: 256 MiB`, `KVMFR Version: 20`, and the XCB backend initialises
+  at the correct `Frame Size: 3840 x 2160`.
+- It then dies on
+  `lgmpHostMemPtr: Assertion 'mem' failed` (`repos/LGMP/lgmp/src/host.c:335`),
+  never reaching its own `Max Frame Size` log line.
+- **This is the host application, not the ivshmem plumbing**: pointing it at a
+  plain 256 MiB file with `truncate -s 256M` instead of the BAR fails at exactly
+  the same assertion.
+
+Upstream says as much in `doc/install_host.rst`: the Linux host is "considered
+incomplete and not ready for usage... use at your own risk and do not ask for
+support". With a physical monitor on the card there is nothing to gain from
+pursuing it.
