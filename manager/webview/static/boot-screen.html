@@ -118,8 +118,13 @@
       text-shadow: 0 0 0.625rem #ffffff;
       animation: glow 1.5s steps(15) infinite alternate;
     }
-    /* the ring is part of the real wordmark only, never of its glow copy */
-    .halo::before { content: none; }
+    /* The ring is part of the real wordmark only, never of its glow copy.
+       Two class selectors deliberately: .halo::before alone has exactly the
+       same specificity as the .loader::before below that generates the ring,
+       and being written earlier in the sheet it lost on source order - the
+       copy kept its own ring and its own rotation, a third animation nobody
+       could see and everybody paid for. */
+    .loader.halo::before { content: none; }
     @keyframes glow {
       from { opacity: 0; }
       to   { opacity: 1; }
