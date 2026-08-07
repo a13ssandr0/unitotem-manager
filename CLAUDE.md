@@ -272,16 +272,34 @@ the VM-specific ones.
   compositing every pixel on the CPU. Do not go looking for a busy loop; the number is expected
   wherever there is no working GPU, and only means something when compared before and after a
   change on the same machine.
-- **What actually triggers that near-full-core state is re-plugging a screen, and it is a bug.**
-  An idle manager costs ~1% of a core and stays there across restarts and reboots. The load
-  appears only when a screen is hot-plugged onto an instance that has *already had one unplugged*:
-  the first plug is quiet, every plug after an unplug is not. Measured on the test VM at
-  5120x2160: 161% of a core (a fresh renderer at 110% plus the GPU process at 50%), and 28% at
-  1024x768 — it scales with the surface area, and it stops the instant the screen goes away. The
-  hot threads are `ThreadPoolForeground` ×2 and `VizCompositorThread`, i.e. the llvmpipe raster
-  path, while the Python main thread stays at 1%. Alongside it, **renderer subprocesses leak on
-  screen removal** (2 → 4 → 5 → 6 across plug/unplug cycles, never reclaimed), which is where
-  "6 renderers for 2 windows" came from. Both are open findings, not fixed.
+- **The "re-plugging a screen makes the viewer burn a core" story was the wrong model. It is the
+  boot screen animating, and hot-plug only had anything to do with it because a new screen gets a
+  new window with no playlist assigned, which therefore stays on the logo.** `window_id` increments
+  and is never reused, so after a couple of plug cycles no new window matches anything in
+  `viewer_assignments.json` and every one of them lands on `boot-screen.html` — which is why the
+  first plug of a session could look quiet and later ones did not. Settled by three measurements,
+  each on the software-rendered test VM at 5120x2160, whole process tree:
+  - **Control, standalone CEF** (raw Xlib window, no Qt, none of the manager's code —
+    `/var/tmp/cefctl.py` on the guest): a genuinely static page costs **0.0%**, the shipped
+    `boot-screen.html` costs **178.6%**, and the same page with `document.getAnimations()
+    .forEach(a => a.pause())` costs **0.5%**. CEF is not the problem; the page is.
+  - **In the manager, same window**: 31.9% while showing the logo, 1.4% the moment `show()` puts
+    content in the iframe, 32.2% back on the logo again — same screen, same re-plug history.
+  - **Which animation**: pausing both took the tree from 207% to 1.6%; the `text-shadow` `glow`
+    alone accounted for 203.8% and the ring's `rotation` for 58.7%.
+  Fixed in `9977db2` by animating `opacity`/`transform` instead of paint properties and stepping
+  the frame rate: 178.6% → 27.5% at 5120x2160 and 38.5% → 6.9% at 1280x800 for the page, 187% →
+  31% for a hot-plugged screen in the manager. The renderer leak behind "6 renderers for 2
+  windows" was a separate defect, fixed in `4c96a0f`.
+- **What is left after that fix really is software compositing, and no CSS can remove it.**
+  With no GPU, *every* animated frame re-composites the whole window surface, so the residual cost
+  is (animated layers) × (surface area) × (frame rate) and lives in the GPU process'
+  `VizCompositorThread`, not in the renderer. Measured floors at 5120x2160: one small
+  compositor-animated ring and nothing else still costs 51.9% at 60fps and 18.1% at 20fps. Do not
+  go hunting for a repaint loop in that number — cut frames or surface, or get a GPU.
+  Earlier measurements with a GTX 1060 passed through (115% at 3840x2160 on nouveau, ~60% on the
+  proprietary driver, against 161% at 5120x2160 on llvmpipe) are consistent with this: hardware
+  only made the same wasted animation cheaper.
 - **Measure this kind of thing with `/proc/<pid>/stat` deltas over the whole process tree.**
   `ps pcpu` is a lifetime average and will report a quiet number for a process that started
   burning a core a minute ago. The load also sits in CEF *subprocesses*, not in the Python
@@ -291,6 +309,11 @@ the VM-specific ones.
   `DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no supported streams`. VP8, VP9, AV1,
   Opus, Vorbis and MP3 all work. Any video test asset has to be WebM/VP9 or AV1 — and a kiosk
   that cannot play the single most common video format on the web is a finding in its own right.
+- **GPU acceleration in the test VM is PCI passthrough, not virgl.** `accel3d`/`egl-headless` is
+  a dead end on this host and must not be retried; `tools/unitotem-test-gpu.xml` passes a real
+  GTX 1060 instead and the guest then reports `gpu_compositing: enabled` and
+  `rasterization: enabled`. Full procedure, including the proprietary-driver install and the
+  traps it brings, is in `VM-TESTING.md`, "GPU acceleration".
 - **`sudo` strips `DEBIAN_FRONTEND` and closes every file descriptor ≥ 3.** Anything relying on an
   inherited environment variable or on `APT::Status-Fd` therefore silently does nothing when run
   through sudo. The manager runs as root; it does not need sudo in the first place. 
