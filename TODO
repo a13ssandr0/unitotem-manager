@@ -21,11 +21,14 @@ second virtio output:
 Two separate defects, both to be fixed as their own task (deliberately NOT
 fixed during the measurement session):
 
- 1. Renderer processes leak on screen removal - 2 -> 4 -> 5 -> 6 across
-    plug/unplug cycles, never reclaimed. This is exactly the "6 renderers for
-    2 windows" clue from the previous session: that instance had simply been
-    hot-plug-tested. Closing a window must tear its renderer down.
- 2. A re-plugged screen sends CEF into a continuous full-surface repaint. The
+ 1. FIXED in 4c96a0f. Renderer processes leak on screen removal - 2 -> 4 -> 5
+    -> 6 across plug/unplug cycles, never reclaimed. This is exactly the
+    "6 renderers for 2 windows" clue from the previous session: that instance
+    had simply been hot-plug-tested. Re-verified on the GPU configuration after
+    the fix: the count now stays at 2 renderers / 8 processes across four
+    off/on cycles instead of climbing to 7 / 14.
+ 2. STILL OPEN. A re-plugged screen sends CEF into a continuous full-surface
+    repaint. The
     burn is in a freshly created renderer (ThreadPoolForeground x2, ~44% each)
     plus VizCompositorThread in the GPU process (~50%), i.e. the llvmpipe
     raster/composite path; the Python main thread stays at 1% throughout,
@@ -36,6 +39,44 @@ fixed during the measurement session):
     that should be animating at all.
 
 The old QXcbEventQueue at 8.3% is a symptom of the same X traffic, not a cause.
+
+GPU ACCELERATION - now available in the test VM, by passing a real GTX 1060
+through instead of chasing virgl (tools/unitotem-test-gpu.xml; full procedure
+and every trap in VM-TESTING.md, "GPU acceleration"). Chromium goes from
+gpu_compositing: disabled_software / rasterization: unavailable_off to both
+"enabled". What that does and does not buy, all measured on the same VM:
+
+  configuration              idle    BBB 1080p VP9 playback   replug storm
+  virtio-vga (llvmpipe)      1.0%    46.9%  @1280x800         161% @5120x2160
+  1060 + nouveau             1.1%    46.4%  @1280x800         115% @3840x2160
+                                     86.1%  @3840x2160
+  1060 + NVIDIA 535          1.4%    ~44%   @3840x2160        ~60% @3840x2160
+
+  - Idle is ~1% everywhere; the GPU changes nothing there because there was
+    never anything to accelerate.
+  - Video playback is NOT helped at matched resolution (46.9% vs 46.4% at
+    1280x800): VP9 is decoded in software in every configuration (three
+    CodecWorker threads), because Chromium wants VA-API and neither driver
+    offers usable VP9 decode here. video_decode: "enabled" in the feature
+    stats only means "not blocklisted", not that anything is offloaded.
+    Zero dropped frames in every configuration.
+  - What the GPU does buy is compositing at high resolution: at 3840x2160
+    nouveau spends 51% of a core in VizCompositorThread and the proprietary
+    driver 1.4%, which halves total playback cost (86% -> ~44%).
+  - The repaint storm survives real hardware acceleration, so it is a genuine
+    bug and not a symptom of llvmpipe.
+
+The proprietary driver is the better of the two by a wide margin; nouveau is
+accelerated but its compositing path is expensive.
+
+DEAD END - Looking Glass as a way to see the guest once the emulated display is
+gone. The Linux host application builds and gets as far as opening the guest's
+ivshmem BAR and initialising XCB capture at the right resolution, then aborts on
+lgmpHostMemPtr: Assertion 'mem' failed before publishing a frame - identically
+when pointed at a plain file instead of the BAR, so the fault is in the host
+application, which upstream itself calls "incomplete and not ready for usage".
+It was never needed anyway: the passed-through card has a physical monitor on
+DP-1, and every measurement here was taken over SSH and CEF's DevTools.
 
 ALSO FOUND - this cefpython3 build ships without proprietary codecs: no H.264,
 no AAC, no Theora (VP8/VP9/AV1/Opus/Vorbis/MP3 are fine). An H.264 MP4 asset
