@@ -289,8 +289,17 @@ the VM-specific ones.
     alone accounted for 203.8% and the ring's `rotation` for 58.7%.
   Fixed in `9977db2` by animating `opacity`/`transform` instead of paint properties and stepping
   the frame rate: 178.6% → 27.5% at 5120x2160 and 38.5% → 6.9% at 1280x800 for the page, 187% →
-  31% for a hot-plugged screen in the manager. The renderer leak behind "6 renderers for 2
-  windows" was a separate defect, fixed in `4c96a0f`.
+  31% for a hot-plugged screen in the manager. Then in `486e67f` by not showing that page at all
+  on a window with no playlist — it is idle, not booting — which takes an unassigned screen to
+  1.2–1.3% at any size. The renderer leak behind "6 renderers for 2 windows" was a separate
+  defect, fixed in `4c96a0f`.
+- **When a CSS rule appears not to apply, ask `document.getAnimations()` / the computed style
+  rather than re-reading the sheet.** `9977db2` added `.halo::before { content: none; }` to stop a
+  duplicated element from generating a spinner ring; it has exactly the same specificity as the
+  `.loader::before` that creates the ring and, being written earlier, silently lost on source
+  order. The duplicate ring sat pixel-exact on top of the real one, so nothing looked wrong — only
+  `getAnimations()` returning three entries where two were expected showed it (fixed in `1f3a485`
+  with `.loader.halo::before`).
 - **What is left after that fix really is software compositing, and no CSS can remove it.**
   With no GPU, *every* animated frame re-composites the whole window surface, so the residual cost
   is (animated layers) × (surface area) × (frame rate) and lives in the GPU process'

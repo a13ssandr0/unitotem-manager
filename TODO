@@ -33,26 +33,71 @@ rate. Manager, whole process tree, before -> after:
 An ordinary single-screen 1280x800 node idling on the logo: 38.5 % -> 6.9 %.
 Rendering unchanged (RMSE 0.8 %, 0.13 % of pixels differing by >3 %).
 
-STILL OPEN, and a product decision rather than a bug:
-  - The residual (~30 % at 5120x2160, ~7 % at 1280x800) is software compositing
-    and cannot be removed in CSS: with no GPU every animated frame re-composites
-    the whole surface. A single compositor-animated ring and nothing else still
-    costs 51.9 % at 60fps / 18.1 % at 20fps at 5120x2160. The only remaining
-    levers are stopping the animation or getting a GPU.
-  - Should an idle, unassigned screen show a *spinner* at all? It means
-    "loading" and it will spin forever. Stopping it once the viewer has
-    connected would take the idle cost to ~0 on any backend, but that is a
-    visible design change and was deliberately not made here.
-  - Not investigated: whether the assignment model should reuse window_id for a
-    screen that comes back, so a re-plugged monitor resumes its playlist instead
-    of landing on the logo. Today it never does.
+THEN FIXED on top of it, 486e67f: an unassigned window now shows the idle page
+(unitotem-no-assets) instead of the boot screen, because such a window is idle,
+not booting - a spinner meaning "loading" while nothing loads is the wrong
+screen, and it was the only thing that made an idle node cost anything.
+Idle cost of unassigned windows, whole process tree:
 
-Measurement helpers left on the CPU test VM (192.168.122.51, domain
-'unitotem-cpu', virtio-vga heads=2): /var/tmp/cpumeas.py (tree + per-thread
-deltas), /var/tmp/cefctl.py (standalone CEF host, CDP on 9333),
+                                        before   after
+  one unassigned window @1280x800        8.4 %   1.3 %
+  plus one @5120x2160                   29.5 %   1.2 %
+
+The choice between that page and the first-boot welcome screen is now
+idle_asset() in utils/models/assets.py, shared with AssetsManager.current so
+161e79a's precedence cannot drift. The push lives in
+WebviewManager._restore_assignments, the only place that sees per window
+whether a playlist is attached. boot-screen.html is untouched and is still what
+a window loads at startup - verified off the framebuffer that the logo still
+appears while the manager comes up.
+
+Also fixed along the way (1f3a485): the glow copy added by 9977db2 was still
+generating its own spinner ring, because `.halo::before` ties on specificity
+with `.loader::before` and lost on source order - a third animation nobody
+could see. Ask document.getAnimations() rather than reading the CSS.
+
+STILL OPEN:
+  - The boot screen itself, while it is legitimately up during startup, still
+    costs ~27 % of a core at 5120x2160 and ~7 % at 1280x800. That residual is
+    software compositing and cannot be removed in CSS: with no GPU every
+    animated frame re-composites the whole surface. A single
+    compositor-animated ring and nothing else still costs 51.9 % at 60fps and
+    18.1 % at 20fps at 5120x2160. Levers left: fewer frames, or a GPU.
+  - PRE-EXISTING BUG, found while testing 486e67f, not fixed here because it is
+    not in manager/webview/: on a genuine first boot the welcome screen never
+    gets shown. PlaylistsManager.load() takes its "no playlists.json" branch,
+    creates an empty default playlist and calls _save_index(), which sets
+    environ._unitotem_first_boot = False - at startup, before any viewer has
+    connected. So the flag 161e79a wired up is already clear by the time
+    anything asks idle_asset()/AssetsManager.current, and a fresh node shows
+    the plain no-assets page instead of the hotspot credentials that are the
+    only way into it. Reproduced on the VM: delete playlists.json, restart, the
+    screen shows unitotem-no-assets. The flag itself works
+    (idle_asset() returns unitotem-first-boot when it is set) - it is
+    _save_index() clearing it during bootstrap that is wrong.
+  - Not investigated here, and owned by SCREEN-CONTROL-PLAN.md step 1: keying
+    assignments on the RandR output name instead of the incrementing window_id,
+    so a re-plugged monitor resumes its playlist instead of coming back
+    unassigned. 486e67f deliberately does not touch the keying question.
+
+TEST VMS - there are TWO, do not confuse them:
+  - 'unitotem-test'  192.168.122.50 - the main one, described in VM-TESTING.md,
+    currently carrying the GTX 1060 passthrough work.
+  - 'unitotem-cpu'   192.168.122.51 - a SECOND, separate domain created for the
+    idle-CPU investigation: its own MAC (52:54:00:11:70:02), its own DHCP
+    reservation on libvirt's 'default' network, its own overlay
+    (/var/tmp/unitotem-cpuvm/overlay-cpu.qcow2) over the same base image, and
+    deliberately still on plain virtio-vga with heads=2 so software rendering
+    and connector hot-plug stay reproducible. Kept running on purpose. Note it
+    has rsync at /usr/bin/rsync, not at $VM_RSYNC_PATH, so deploying to it
+    needs VM_HOST=192.168.122.51 VM_RSYNC_PATH=/usr/bin/rsync.
+
+Measurement helpers left on unitotem-cpu: /var/tmp/cpumeas.py (tree +
+per-thread deltas), /var/tmp/cefctl.py (standalone CEF host, CDP on 9333),
 /var/tmp/ctl2.sh (run a URL in it at a geometry and measure), /var/tmp/plug.sh
 (force Virtual-2 on/off), /var/tmp/seq.sh (the whole A-G sequence),
-/var/tmp/cdp.py, /var/tmp/anim.py, /var/tmp/shot.py.
+/var/tmp/idleseq.sh (idle cost with no assignments at all), /var/tmp/cdp.py,
+/var/tmp/anim.py, /var/tmp/shot.py.
 
 (2026-08-06) Idle-CPU investigation and GPU acceleration in the test VM.
 
