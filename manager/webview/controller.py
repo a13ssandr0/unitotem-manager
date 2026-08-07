@@ -112,14 +112,27 @@ class WebviewManager:
         self.remote_ws = remote_ws
         self._loops: dict[str, PlaylistLoop] = {}       # playlist_id → loop
         self._webviews: dict[str, dict] = {}             # instance_id → info dict
-        # (instance_id, window_id) → playlist_id. Keyed on the window, not on
+        # (instance_id, screen_name) → playlist_id. Keyed on the screen, not on
         # the viewer: one screen is one window, and a node driving two screens
         # must be able to show a different playlist on each.
-        self._assignments: dict[tuple[str, int], str] = {}
+        #
+        # The key is the RandR output name ('HDMI-1', 'DP-1') rather than the
+        # window_id it used to be, because window_id is minted by app.py's
+        # _next_id and never reused: an output that goes away and comes back -
+        # which is exactly what screen power control does with
+        # `xrandr --output X --off/--auto` - returns under a NEW window_id and
+        # orphaned its assignment. The spec requires the opposite ("the
+        # playlist outputting to that window must be unaware of the change").
+        # The output name survives that cycle; the window_id does not.
+        self._assignments: dict[tuple[str, str], str] = {}
         self._pending_save: Optional[asyncio.Task] = None
         # Viewer → playlist entries read from the pre-per-window file format,
         # waiting for the viewer to connect so its windows can be resolved.
         self._legacy_assignments: dict[str, str] = {}
+        # instance_id → {window_id: playlist_id}, read from the window_id-keyed
+        # file format. Resolved to screen names the first time the viewer
+        # reports its windows, since only then is the mapping knowable.
+        self._pending_window_assignments: dict[str, dict[int, str]] = {}
         # Windows already parked on the idle page, so _restore_assignments -
         # which runs on every info update - does not reload it under them each
         # time a screen is plugged or unplugged elsewhere on the same node.
@@ -148,14 +161,18 @@ class WebviewManager:
         if loop:
             loop.stop()
             # Unassign all webviews assigned to this playlist
-            for key in [k for k, pid in self._assignments.items() if pid == playlist_id]:
-                del self._assignments[key]
+            for vid, screen_name in [k for k, pid in self._assignments.items() if pid == playlist_id]:
+                del self._assignments[(vid, screen_name)]
                 # Deleting a playlist leaves its windows with nothing to show;
                 # they must fall back to the idle page like any other
                 # unassigned window rather than freeze on the last asset.
-                if key not in self._idle_windows:
-                    self._idle_windows.add(key)
-                    asyncio.create_task(self._send_idle(*key))
+                # Only a screen that currently has a window can be told; one
+                # that is off or unplugged gets the idle page from
+                # _restore_assignments when it comes back.
+                window_id = self._window_of(vid, screen_name)
+                if window_id is not None and (vid, window_id) not in self._idle_windows:
+                    self._idle_windows.add((vid, window_id))
+                    asyncio.create_task(self._send_idle(vid, window_id))
             self._save_assignments()
 
     # ── Webview registration ───────────────────────────────────────────────
@@ -185,6 +202,31 @@ class WebviewManager:
         await self.remote_ws.multicast(
             instance_id, 'Show', **show_payload(idle_asset(), window_id))
 
+    def _windows_of(self, instance_id: str) -> list[tuple[int, Optional[str]]]:
+        """(window_id, screen_name) for every window a viewer has reported.
+
+        Both halves are needed everywhere: assignments are keyed on the screen
+        name, while the command channel and the playlist loops still address a
+        window by its window_id (see _assignments). This is the single place
+        that reads the pairing out of the WebviewInfo payload.
+        """
+        return [(w['window_id'], w.get('screen_name'))
+                for w in self._webviews.get(instance_id, {}).get('windows', [])]
+
+    def _screen_of(self, instance_id: str, window_id: int) -> Optional[str]:
+        """The output a window sits on, or None if the viewer never said."""
+        for wid, screen_name in self._windows_of(instance_id):
+            if wid == window_id:
+                return screen_name
+        return None
+
+    def _window_of(self, instance_id: str, screen_name: str) -> Optional[int]:
+        """The window currently on an output, or None if there is none."""
+        for wid, name in self._windows_of(instance_id):
+            if name == screen_name:
+                return wid
+        return None
+
     def _restore_assignments(self, instance_id: str):
         """Attach a viewer's windows to the playlists they were assigned, and
         park the rest on the idle page.
@@ -197,34 +239,96 @@ class WebviewManager:
         playlist, what gets it off the boot screen. This is the only place that
         sees the whole per-window assignment picture, which is why the idle
         push belongs here rather than in the viewer or in the page.
+
+        It is also where the two older on-disk formats are migrated, for the
+        same reason: a window_id or a whole viewer can only be resolved to an
+        output name once the viewer has said which windows are on which screen.
         """
-        info = self._webviews.get(instance_id, {})
-        window_ids = [w['window_id'] for w in info.get('windows', [])]
-        if not window_ids:
+        windows = self._windows_of(instance_id)
+        if not windows:
             return
+
+        # Forget windows this viewer no longer has. Closing a window never
+        # detached it from its playlist loop, so the loop went on multicasting
+        # Show to a window_id nothing answers to; harmless (the viewer drops a
+        # command for an unknown window) but unbounded, and screen power
+        # control turns an off/on cycle into an everyday operation rather than
+        # a rare one. window_ids are never reused, so a stale entry can never
+        # be mistaken for a live one.
+        live_ids = {window_id for window_id, _ in windows}
+        for loop in self._loops.values():
+            for vid, window_id in [k for k in loop.assigned_webviews
+                                   if k[0] == instance_id and k[1] not in live_ids]:
+                logger.info('Detaching gone window {} of {} from playlist {}',
+                            window_id, vid, loop.playlist.playlist_id)
+                loop.unassign(vid, window_id)
+        self._idle_windows -= {(vid, window_id) for vid, window_id in self._idle_windows
+                               if vid == instance_id and window_id not in live_ids}
 
         legacy = self._legacy_assignments.pop(instance_id, None)
         if legacy is not None:
             # Only now are the windows known, so an entry saved before
             # assignments were per-window can be spread over all of them,
             # which is what it meant.
-            for window_id in window_ids:
-                self._assignments.setdefault((instance_id, window_id), legacy)
+            for _window_id, screen_name in windows:
+                if screen_name is not None:
+                    self._assignments.setdefault((instance_id, screen_name), legacy)
             self._save_assignments()
 
-        for window_id in window_ids:
-            playlist_id = self._assignments.get((instance_id, window_id))
+        pending = self._pending_window_assignments.get(instance_id)
+        if pending:
+            # Records saved when assignments were keyed on window_id. The
+            # mapping is unknowable at load time (no viewer is connected yet),
+            # so it is resolved here, against the windows the viewer reports.
+            #
+            # A record whose window does not exist right now is KEPT pending
+            # rather than dropped: window numbering restarts from 0 with the
+            # viewer, so a screen that is merely unplugged at this moment will
+            # very likely take that same number when it is plugged back in, and
+            # dropping it would silently unassign a monitor that was only
+            # temporarily absent. The file is left in its old format until
+            # every record has found an output, so a restart in the meantime
+            # re-reads them intact instead of finding them rewritten away.
+            for window_id, playlist_id in list(pending.items()):
+                screen_name = self._screen_of(instance_id, window_id)
+                if screen_name is None:
+                    logger.info('Assignment of window {} of {} to {} stays pending: '
+                                'no window with that number is on any named output yet',
+                                window_id, instance_id, playlist_id)
+                    continue
+                current = self._assignments.get((instance_id, screen_name))
+                if current is None:
+                    self._assignments[(instance_id, screen_name)] = playlist_id
+                elif current != playlist_id:
+                    # Two records resolved onto the same output: window
+                    # numbering is reused across viewer restarts, so an old
+                    # record can land on a screen that has already been given a
+                    # playlist by name. The named one wins, being the newer and
+                    # unambiguous of the two - but say so, because from the
+                    # outside it looks exactly like an assignment going missing.
+                    logger.warning('Assignment of window {} of {} to {} discarded: '
+                                   'that window turned out to be on {}, which is '
+                                   'already assigned to {}',
+                                   window_id, instance_id, playlist_id,
+                                   screen_name, current)
+                del pending[window_id]
+            if not pending:
+                del self._pending_window_assignments[instance_id]
+            self._save_assignments()
+
+        for window_id, screen_name in windows:
+            playlist_id = self._assignments.get((instance_id, screen_name)) if screen_name else None
             loop = self._loops.get(playlist_id) if playlist_id else None
             if loop:
                 self._idle_windows.discard((instance_id, window_id))
                 if (instance_id, window_id) not in loop.assigned_webviews:
-                    logger.info('Restoring window {} of {} to playlist {}',
-                                window_id, instance_id, playlist_id)
+                    logger.info('Restoring window {} ({}) of {} to playlist {}',
+                                window_id, screen_name, instance_id, playlist_id)
                     loop.assign(instance_id, window_id)
                     asyncio.create_task(loop.send_current(instance_id, window_id))
             elif (instance_id, window_id) not in self._idle_windows:
-                logger.info('Window {} of {} has no playlist: showing the idle page',
-                            window_id, instance_id)
+                logger.info('Window {} ({}) of {} has no playlist: showing the idle page',
+                            window_id, screen_name, instance_id)
                 self._idle_windows.add((instance_id, window_id))
                 asyncio.create_task(self._send_idle(instance_id, window_id))
 
@@ -247,9 +351,13 @@ class WebviewManager:
         # no longer there, but KEEP the assignment: a viewer that disconnects
         # has not been unassigned, it is merely absent (restarted, rebooted,
         # network blip), and it must resume its playlist when it comes back.
-        for (vid, window_id), playlist_id in self._assignments.items():
-            if vid == instance_id and playlist_id in self._loops:
-                self._loops[playlist_id].unassign(vid, window_id)
+        # Driven off the loops rather than off _assignments because the window
+        # list is gone by now (popped above), so there is nothing left to
+        # resolve an output name against - and because it also clears windows
+        # the assignments no longer mention.
+        for loop in self._loops.values():
+            for vid, window_id in [k for k in loop.assigned_webviews if k[0] == instance_id]:
+                loop.unassign(vid, window_id)
 
     # ── Assignment persistence ────────────────────────────────────────────
 
@@ -273,8 +381,21 @@ class WebviewManager:
             with open(tmp, 'w') as f:
                 # A list of records rather than a mapping: the key is a pair,
                 # which JSON cannot express as an object key.
-                json.dump([{'webview_id': vid, 'window_id': wid, 'playlist_id': pid}
-                           for (vid, wid), pid in self._assignments.items()], f, indent=4)
+                #
+                # Assignments still waiting to be migrated are written back in
+                # the format they came in, unresolved. They belong to a viewer
+                # or a screen that has not shown up yet, and any save triggered
+                # in the meantime - somebody assigning an unrelated screen from
+                # the web UI - would otherwise erase them. Each record carries
+                # its own format, and load_assignments() reads them per record.
+                records = [{'webview_id': vid, 'screen_name': name, 'playlist_id': pid}
+                           for (vid, name), pid in self._assignments.items()]
+                records += [{'webview_id': vid, 'window_id': wid, 'playlist_id': pid}
+                            for vid, windows in self._pending_window_assignments.items()
+                            for wid, pid in windows.items()]
+                records += [{'webview_id': vid, 'playlist_id': pid}
+                            for vid, pid in self._legacy_assignments.items()]
+                json.dump(records, f, indent=4)
             tmp.replace(path)   # atomic: a power cut cannot leave a half file
         except OSError as exc:
             logger.error('Cannot save viewer assignments to {}: {}', path, exc)
@@ -286,6 +407,17 @@ class WebviewManager:
         sit here until the matching viewer registers, at which point
         register_webview() attaches it to its loop. Assignments pointing at a
         playlist that no longer exists are dropped.
+
+        Three on-disk formats are accepted, because a node being updated must
+        keep playing rather than come back with every screen unassigned:
+          1. a mapping viewer -> playlist, from before assignments were
+             per-window;
+          2. a list of {webview_id, window_id, playlist_id}, from when the key
+             was the window;
+          3. a list of {webview_id, screen_name, playlist_id}, the current one.
+        Only the third can be applied here. The other two need the viewer to
+        report which windows are on which output, so they are parked and
+        resolved in _restore_assignments(), which then rewrites the file.
         """
         path = self._assignments_path()
         if not path.exists():
@@ -305,10 +437,12 @@ class WebviewManager:
         if not isinstance(stored, list):
             logger.error('Ignoring malformed viewer assignments in {}', path)
             return
+        pending = 0
         for record in stored:
             try:
                 webview_id  = record['webview_id']
                 playlist_id = record['playlist_id']
+                screen_name = record.get('screen_name')
                 window_id   = record.get('window_id')
             except (TypeError, KeyError):
                 logger.warning('Ignoring malformed assignment record: {}', record)
@@ -317,25 +451,41 @@ class WebviewManager:
                 logger.warning('Dropping assignment of {} to unknown playlist {}',
                                webview_id, playlist_id)
                 continue
-            if window_id is None:
-                # Legacy record: remembered separately and applied to whatever
-                # windows the viewer turns out to have when it registers.
-                self._legacy_assignments[webview_id] = playlist_id
+            if screen_name is not None:
+                self._assignments[(webview_id, screen_name)] = playlist_id
+            elif window_id is not None:
+                # Keyed on the window: which output that was is unknowable
+                # until the viewer reports its windows.
+                self._pending_window_assignments.setdefault(webview_id, {})[window_id] = playlist_id
+                pending += 1
             else:
-                self._assignments[(webview_id, window_id)] = playlist_id
-        logger.info('Restored {} viewer assignment(s)', len(self._assignments))
+                # Oldest format: one playlist for the whole viewer, applied to
+                # whatever windows it turns out to have when it registers.
+                self._legacy_assignments[webview_id] = playlist_id
+                pending += 1
+        logger.info('Restored {} viewer assignment(s), {} awaiting migration',
+                    len(self._assignments), pending)
 
     # ── Assignment management ─────────────────────────────────────────────
 
     def assign(self, webview_id: str, window_id: int, playlist_id: str):
+        # Addressed by window from the outside (that is what the web UI has to
+        # hand) and stored by output name - see _assignments.
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            logger.warning('Refusing to assign window {} of {}: it is not on any '
+                           'named output, so the assignment could not be restored',
+                           window_id, webview_id)
+            return
+
         # A window shows one playlist at a time, so detach it from the previous
         # one first. The reverse is not true: a playlist may drive any number
         # of windows.
-        old_pid = self._assignments.get((webview_id, window_id))
+        old_pid = self._assignments.get((webview_id, screen_name))
         if old_pid and old_pid in self._loops:
             self._loops[old_pid].unassign(webview_id, window_id)
 
-        self._assignments[(webview_id, window_id)] = playlist_id
+        self._assignments[(webview_id, screen_name)] = playlist_id
         self._save_assignments()
         if playlist_id in self._loops:
             self._idle_windows.discard((webview_id, window_id))
@@ -345,7 +495,8 @@ class WebviewManager:
             asyncio.create_task(self._loops[playlist_id].send_current(webview_id, window_id))
 
     def unassign(self, webview_id: str, window_id: int):
-        playlist_id = self._assignments.pop((webview_id, window_id), None)
+        screen_name = self._screen_of(webview_id, window_id)
+        playlist_id = self._assignments.pop((webview_id, screen_name), None) if screen_name else None
         self._save_assignments()
         if playlist_id and playlist_id in self._loops:
             self._loops[playlist_id].unassign(webview_id, window_id)
@@ -356,7 +507,8 @@ class WebviewManager:
             asyncio.create_task(self._send_idle(webview_id, window_id))
 
     def get_assignment(self, webview_id: str, window_id: int) -> Optional[str]:
-        return self._assignments.get((webview_id, window_id))
+        screen_name = self._screen_of(webview_id, window_id)
+        return self._assignments.get((webview_id, screen_name)) if screen_name else None
 
     # ── Display / window control ──────────────────────────────────────────
 
@@ -404,7 +556,7 @@ class WebviewManager:
             vid: {
                 **info,
                 'windows': [
-                    {**w, 'assigned_playlist': self._assignments.get((vid, w['window_id']))}
+                    {**w, 'assigned_playlist': self._assignments.get((vid, w.get('screen_name')))}
                     for w in info.get('windows', [])
                 ],
             }
@@ -418,12 +570,18 @@ class WebviewManager:
         return self._webviews.get(webview_id, {}).get('windows', [])
 
     def get_assignments(self) -> list[dict]:
-        """Flat list, since the key is a (viewer, window) pair and JSON has no
+        """Flat list, since the key is a (viewer, screen) pair and JSON has no
         way to express that as an object key."""
         return self.serialize_assignments()
 
     def serialize_assignments(self) -> list[dict]:
+        # window_id is carried alongside screen_name, even though the
+        # assignment is no longer keyed on it, because it is what the web UI
+        # addresses a window by. It is None for an output with no window right
+        # now - unplugged, or switched off by screen power control - which is
+        # precisely the state the assignment is being kept for.
         return [
-            {'webview_id': vid, 'window_id': wid, 'playlist_id': pid}
-            for (vid, wid), pid in self._assignments.items()
+            {'webview_id': vid, 'screen_name': name,
+             'window_id': self._window_of(vid, name), 'playlist_id': pid}
+            for (vid, name), pid in self._assignments.items()
         ]

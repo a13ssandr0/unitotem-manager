@@ -1,4 +1,61 @@
 === CURRENT WORK ===
+(2026-08-07) Screen control (SCREEN-CONTROL-PLAN.md): step 1 of 7 DONE.
+
+Assignments are now keyed on (viewer, RandR output name) instead of
+(viewer, window_id), in manager/webview/controller.py. window_id is minted by
+app.py's _next_id and never reused, so an output that goes away and comes back
+returned under a new number and orphaned its assignment - which is exactly what
+`xrandr --output X --off/--auto` will do once step 4 lands, and which already
+contradicted "the playlist outputting to that window must be unaware of the
+change". The output name survives the cycle.
+
+Deliberately minimal: the playlist loops and the command channel still address
+a window by window_id. Only the assignment map is re-keyed, and
+_restore_assignments - which already ran on every WebviewInfo update and was
+already idempotent - resolves output name -> current window_id. 486e67f's idle
+push is untouched: the re-keying changes which windows land in that branch,
+not the branch.
+
+viewer_assignments.json now accepts three formats per record: the viewer-wide
+dict, the window_id-keyed list, and the screen_name-keyed list it now writes.
+The older two need the viewer to say which window is on which output, so they
+are parked and resolved on the first WebviewInfo. A record whose window is not
+present right now is KEPT pending rather than dropped (window numbering
+restarts with the viewer, so an unplugged screen usually takes its number back)
+and _save_assignments writes pending records back in their original format, so
+an unrelated assign() from the web UI cannot erase them.
+
+Also fixed here, because the off/on cycle turns it from rare into routine:
+closing a window never detached it from its playlist loop, so the loop went on
+multicasting Show to a window_id nothing answered to. _restore_assignments now
+prunes windows the viewer no longer has.
+
+Verified on unitotem-test (GTX 1060 passthrough, real 4K monitor on DP-1):
+  - the VM's own real format-2 file migrated live - window 0 -> DP-1 resolved
+    and rewritten, window 1 kept pending because that screen is not connected
+  - manager restarted with DP-1 off reports screens=[] windows=[] and stays
+    reachable; DP-1 --auto then creates the window and it comes back with its
+    playlist attached, resolved from the file by output name
+  - 4 consecutive off/restart/on cycles, pending record preserved every time
+  - 24/24 checks in a logic harness covering all three formats, the collision
+    case, and the off/on cycle under a NEW window_id
+
+One thing chased and explained rather than left as a ghost: a pending record
+appeared to vanish once. It was the collision case - the returning window took
+number 1, which resolved onto DP-1, which the named record had already claimed.
+The named record wins (newer, unambiguous), which is right, but it was silent
+and looked exactly like an assignment going missing. It now logs a warning.
+
+NOT verified, and it cannot be on this VM: the mid-run off/on cycle with the
+window actually being destroyed and recreated. That needs two outputs, and the
+last-screen blindness recorded below means a single-output node never notices
+its only screen going away at all - so the window is never destroyed and the
+bug cannot bite there. Covered by the logic harness only until there is a
+second monitor on the passthrough GPU, or the virtio config.
+
+NEXT: step 2 (timers - the serialize() ValueError on '*', the deleteItem() that
+never calls deleteJob, and the named-action registry with uuid indirection).
+
 (2026-08-07) Viewer idle CPU: root cause found and fixed (9977db2).
 
 The question was whether the post-replug CPU storm is a Chromium/software-
@@ -79,6 +136,7 @@ STILL OPEN:
     assignments on the RandR output name instead of the incrementing window_id,
     so a re-plugged monitor resumes its playlist instead of coming back
     unassigned. 486e67f deliberately does not touch the keying question.
+    DONE - see the step 1 entry at the top of this file.
 
 TEST VMS - there are TWO, do not confuse them:
   - 'unitotem-test'  192.168.122.50 - the main one, described in VM-TESTING.md,
