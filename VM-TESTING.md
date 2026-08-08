@@ -459,6 +459,50 @@ holds the locally built amd64 wheel, since the fork's CI only publishes arm64.
 
 ---
 
+## 8b. Rebuilding CEF itself, for proprietary codecs (very rare)
+
+Spotify's prebuilt CEF has no H.264/AAC (`ffmpeg_branding=Chromium`), and
+ffmpeg is statically linked into `libcef.so`, so the only way to get them is a
+full Chromium build. Budget hours, ~150 GB of disk, and read the two traps in
+`CLAUDE.md` first.
+
+```bash
+mkdir -p /var/tmp/cef-build && cd /var/tmp/cef-build
+git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
+(cd depot_tools && ./ensure_bootstrap)      # or gn gen fails on python3_bin_reldir.txt
+curl -sLO "https://bitbucket.org/chromiumembedded/cef/raw/<CEF_COMMIT_HASH>/tools/automate/automate-git.py"
+
+export GN_DEFINES="use_sysroot=true symbol_level=1 is_official_build=true \
+                   proprietary_codecs=true ffmpeg_branding=Chrome"
+python3 automate-git.py --download-dir=$PWD --depot-tools-dir=$PWD/depot_tools \
+  --no-depot-tools-update --branch=<CHROME_VERSION_BUILD> --checkout=<CEF_COMMIT_HASH> \
+  --no-chromium-history --with-pgo-profiles --x64-build --no-debug-build \
+  --build-target=cefsimple --force-build
+```
+
+`<CEF_COMMIT_HASH>` and `<CHROME_VERSION_BUILD>` come from
+`vendor/cefpython/src/version/cef_version_linux.h`.
+
+> **`--with-pgo-profiles` is not enough on a checkout that already exists.**
+> It only takes effect when the `.gclient` file is written, so on a re-run GN
+> dies with *requested profile "...profdata" doesn't exist*. Set
+> `'checkout_pgo_profiles': True` in `chromium/.gclient` by hand and run
+> `gclient runhooks`.
+
+Then swap the result in and build the wheel against the guest's Python (3.11 —
+**match it, a wheel with the wrong `cp` tag is wasted work**):
+
+```bash
+cd vendor/cefpython/build
+mv cef_binary_<ver>_linux64 cef_binary_<ver>-spotify-nocodecs.bak
+rm -rf cef<major>_<ver>_linux64 _cmake_build artifacts dist
+cp -a /var/tmp/cef-build/chromium/src/cef/binary_distrib/cef_binary_<ver>_linux64 .
+```
+
+and run the §8 wheel recipe in a container whose `python3` is 3.11 with
+`Cython==3.2.9` (the version `pyproject.toml` pins — a newer Cython fails to
+compile the `.pyx` with *Cannot assign type 'str object' to 'py_string'*).
+
 ## 9. Known limits of this VM
 
 - The kiosk image's root filesystem is read-only by design. `apt-get dist-upgrade`
