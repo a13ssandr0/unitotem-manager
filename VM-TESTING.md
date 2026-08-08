@@ -514,8 +514,16 @@ copy nearly free on this filesystem and restores a broken guest in seconds.
 #### Seeing the guest's screen
 
 The card has a physical monitor on `DP-1`, so the guest simply displays on real
-hardware and nothing else is required. **Looking Glass was tried and is a dead
-end here** - see below - but it was also never necessary.
+hardware and nothing else is required.
+
+> **Looking Glass was tried and must not be retried.** Its Linux host
+> application builds and gets as far as opening the shared-memory region and
+> initialising XCB capture at the right resolution, then aborts on
+> `lgmpHostMemPtr: Assertion 'mem' failed` before publishing a frame — identically
+> when pointed at a plain file instead of the guest's ivshmem BAR, so the fault is
+> in the host application, which upstream itself calls "incomplete and not ready
+> for usage". It was never needed either: the card drives a physical monitor and
+> everything here is measured over SSH and CEF's DevTools.
 
 #### nouveau
 
@@ -575,28 +583,3 @@ the running one - so the reboot is mandatory and lands on the new kernel.
 > can under virtio or nouveau. Match resolutions across configurations by
 > planning around the EDID, not by adding modes.
 
-#### Looking Glass: a dead end for this guest
-
-The Linux host application *builds* and gets impressively far, then aborts
-before publishing a single frame. Recorded here so nobody repeats it:
-
-- It needs `binutils-dev` (for `bfd.h`, otherwise `crash.c` fails to compile) and
-  `-DUSE_PIPEWIRE=OFF`, plus `cmake build-essential pkg-config libegl-dev
-  libgl-dev libgles-dev libfontconfig-dev libgmp-dev libspice-protocol-dev
-  nettle-dev libxcb1-dev libxcb-shm0-dev libxcb-xfixes0-dev`.
-- Inside the guest the ivshmem region is a PCI BAR, not a file, but the
-  `-f`/`app:shmFile` option accepts any path, so
-  `/sys/bus/pci/devices/0000:02:01.0/resource2_wc` works: the host app reports
-  `IVSHMEM Size: 256 MiB`, `KVMFR Version: 20`, and the XCB backend initialises
-  at the correct `Frame Size: 3840 x 2160`.
-- It then dies on
-  `lgmpHostMemPtr: Assertion 'mem' failed` (`repos/LGMP/lgmp/src/host.c:335`),
-  never reaching its own `Max Frame Size` log line.
-- **This is the host application, not the ivshmem plumbing**: pointing it at a
-  plain 256 MiB file with `truncate -s 256M` instead of the BAR fails at exactly
-  the same assertion.
-
-Upstream says as much in `doc/install_host.rst`: the Linux host is "considered
-incomplete and not ready for usage... use at your own risk and do not ask for
-support". With a physical monitor on the card there is nothing to gain from
-pursuing it.

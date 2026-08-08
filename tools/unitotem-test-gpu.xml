@@ -25,10 +25,10 @@
     makes libvirt refuse to start the domain. Both sit alone in IOMMU group 7 on
     this host, so the group can be handed over whole.
 
-  - An <shmem> region for Looking Glass, which is how the guest's framebuffer
-    reaches the host now that there is no emulated display. 256 MiB is more than
-    the formula needs even at 5120x2160 (width * height * 4 * 2, rounded up to a
-    power of two) and matches the /dev/shm/looking-glass that already exists.
+  Nothing is provided here to mirror the guest's framebuffer back to the host:
+  the card drives a physical monitor on DP-1 and every measurement is taken over
+  SSH and CEF's DevTools. Looking Glass was tried for this and must not be
+  retried; see VM-TESTING.md for why.
 -->
 <domain type='kvm'>
   <name>unitotem-test</name>
@@ -74,10 +74,6 @@
         <address domain='0x0000' bus='0x17' slot='0x00' function='0x1'/>
       </source>
     </hostdev>
-    <shmem name='looking-glass'>
-      <model type='ivshmem-plain'/>
-      <size unit='M'>256</size>
-    </shmem>
     <!-- Boot/early-crash diagnostics: everything the kernel and systemd print
          before sshd exists ends up in this file. With no VNC console this is
          the only way to see anything that happens below the SSH layer. -->
