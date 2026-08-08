@@ -179,11 +179,26 @@ PROFILES: Dict[str, Dict[str, str]] = {
 # from the Chromium source only. Keep this honest: it is the difference
 # between a result and a hope.
 VERIFIED: Dict[str, bool] = {
-    "unknown": True,    # trivially - it changes nothing
-    "software": True,   # measured on virtio-gpu/llvmpipe in the test VM
-    "nvidia": True,     # measured on a passed-through GTX 1060, driver 535
-    "vaapi": False,     # no Intel/AMD machine available to test on
-    "v4l2": False,      # no Raspberry Pi available to test on
+    # Trivially true: the profile is empty, so it cannot change anything.
+    "unknown": True,
+    # Measured on virtio-gpu/llvmpipe in the test VM: selected correctly,
+    # adds nothing, and 1080p VP9 costs the same as before it existed.
+    "software": True,
+    # Measured on a GTX 1060 passed through to the test VM, proprietary
+    # driver 535.261.03: selected correctly, and the absence of video-decode
+    # switches is the *finding*, not an omission - see _NVIDIA_DRM_NAMES.
+    "nvidia": True,
+    # NOT TESTED. No Intel or AMD machine was available. The switches are
+    # read out of libcef.so and the reasoning follows Chromium's source, but
+    # nobody has watched an Intel or AMD box actually pick a hardware decoder
+    # with them. Until someone does, treat this profile as a hypothesis:
+    # the thing to check is that SystemInfo.getInfo's videoDecoding array
+    # stops being empty and the CDP Media domain reports
+    # kIsPlatformVideoDecoder=true.
+    "vaapi": False,
+    # NOT TESTED. No Raspberry Pi was available. Same standard of proof
+    # applies before this may be promoted.
+    "v4l2": False,
 }
 
 

@@ -499,9 +499,45 @@ rm -rf cef<major>_<ver>_linux64 _cmake_build artifacts dist
 cp -a /var/tmp/cef-build/chromium/src/cef/binary_distrib/cef_binary_<ver>_linux64 .
 ```
 
-and run the §8 wheel recipe in a container whose `python3` is 3.11 with
-`Cython==3.2.9` (the version `pyproject.toml` pins — a newer Cython fails to
-compile the `.pyx` with *Cannot assign type 'str object' to 'py_string'*).
+and run the §8 wheel recipe in a container whose `python3` **matches the
+interpreter in the target kiosk image** — check it with
+`tools/vm-ssh 'python3 -V'` rather than assuming, because the image's Debian
+release decides it (bookworm 3.11, trixie 3.13) and a wheel with the wrong `cp`
+tag simply will not install. Pin `Cython==3.2.9`, the version
+`pyproject.toml` requires — a newer Cython fails to compile the `.pyx` with
+*Cannot assign type 'str object' to 'py_string'*.
+
+Only this last step is interpreter-specific: the Chromium compile above
+produces a `cp`-tag-independent CEF binary distribution, so retagging for a
+different Python is minutes of work, not another full build.
+
+### What enabling the proprietary codecs commits you to
+
+`ffmpeg_branding=Chrome` turns on decoders covered by patent pools — H.264/AVC
+and AAC in particular (Via LA administers both). Chromium ships them under
+Google's own licensing arrangements, and **that arrangement does not travel with
+a binary you build and distribute yourself**: once a UniTotem image carries this
+wheel, UniTotem is the distributor and any licensing obligation is UniTotem's,
+not Google's and not the CEF project's. Whether that obligation is worth taking
+on is a business decision, not a technical one. It is recorded here so it is
+made deliberately rather than discovered later. Nothing about the *build* is
+affected either way — the flags work regardless.
+
+### What arm64 still needs
+
+Everything. This recipe builds x86-64 only, and the arm64 side is untouched:
+
+- **No arm64 wheel with codecs exists.** The fork's CI publishes arm64 wheels,
+  but they are built on Spotify's prebuilt CEF exactly like the amd64 one, so
+  they carry the *same* codec gap — a Raspberry Pi target ships today unable to
+  play H.264. Closing it means a second full CEF source build for aarch64
+  (`--arm64-build`), which needs either an arm64 machine or a sysroot-based
+  cross build, plus the wheel step run against the Pi image's interpreter.
+- **The `v4l2` profile is untested.** A Pi 4 exposes a hardware decoder, but
+  nobody has confirmed that Chromium actually selects it with the switches
+  `utils/system/gpu.py` requests. Verify the same way as everywhere else:
+  `SystemInfo.getInfo`'s `videoDecoding` array must stop being empty and the
+  CDP `Media` domain must report `kIsPlatformVideoDecoder=true`.
 
 ## 9. Known limits of this VM
 
