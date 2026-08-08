@@ -327,14 +327,19 @@ the VM-specific ones.
   be set at Chromium build time: `proprietary_codecs=true ffmpeg_branding=Chrome`. Until such a
   wheel is in place, any video test asset has to be WebM/VP9 or AV1.
 - **Build CEF from source with `is_official_build=true`, never `false`.** A non-official build
-  completes and produces a working-looking `libcef.so` that segfaults at runtime inside Skia —
-  `sk_malloc_size` → `malloc_usable_size` on a PartitionAlloc pointer (`SIGSEGV SI_KERNEL`, and
-  the registers full of the `0xcd` poison pattern). It kills the manager during font setup
-  (`SkFontMgr_FCI::onMatchFamilyStyle`) and a standalone CEF when a window is created
-  (`ContentsContainerOutline::SetClipPath`), so it looks like two unrelated bugs. Official is
-  also what Spotify's published builds use, i.e. the configuration the rest of the stack has
-  been tested against. Official builds need PGO profiles: set `'checkout_pgo_profiles': True`
-  in `chromium/.gclient` and run `gclient runhooks`, or GN fails with a `.profdata` not found.
+  completes and produces a working-looking `libcef.so` that segfaults at runtime inside Skia,
+  at `sk_malloc_size` → `malloc_usable_size` (`SIGSEGV SI_KERNEL`, registers full of the `0xcd`
+  poison pattern). It kills the manager during font setup (`SkFontMgr_FCI::onMatchFamilyStyle`)
+  and a standalone CEF when a window is created (`ContentsContainerOutline::SetClipPath`), so it
+  looks like two unrelated bugs. The difference between the two builds is a single GN arg: CEF's
+  own `gn_args.py` emits `use_partition_alloc_as_malloc=false` **only** for official builds, so a
+  non-official one gets the default `true` and `malloc_usable_size` and the allocator that owns
+  the pointer no longer agree. That correlation is established from the two builds' resolved
+  args; it was not isolated by flipping that one arg on its own, so treat "build official" as
+  the rule rather than "set that arg". Official is also what Spotify's published builds use,
+  i.e. the configuration the rest of the stack has been tested against. Official builds need PGO
+  profiles: set `'checkout_pgo_profiles': True` in `chromium/.gclient` and run `gclient
+  runhooks`, or GN fails with a `.profdata` not found.
 - **Chromium will not use VA-API on NVIDIA, by explicit upstream decision.**
   `media/gpu/vaapi/vaapi_wrapper.cc` skips any DRM device whose driver reports `nvidia-drm`
   ("their VA-API drivers do not support Chromium and can sometimes cause crashes",
