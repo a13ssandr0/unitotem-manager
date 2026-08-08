@@ -453,6 +453,15 @@ class WebviewManager:
                 continue
             if screen_name is not None:
                 self._assignments[(webview_id, screen_name)] = playlist_id
+            elif 'screen_name' in record:
+                # Written for a window the viewer never named - _windows_of()
+                # yields None for a window whose screen_name the WebviewInfo
+                # payload omitted. Keying on None would make one bucket that
+                # every unnamed window of that viewer shares; treating it as
+                # the oldest format instead would spread it over every screen.
+                # Neither is what it meant, so drop it, loudly.
+                logger.warning('Dropping assignment of {} to {}: the record names '
+                               'no output', webview_id, playlist_id)
             elif window_id is not None:
                 # Keyed on the window: which output that was is unknowable
                 # until the viewer reports its windows.
