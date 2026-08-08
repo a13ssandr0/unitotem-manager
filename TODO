@@ -1,4 +1,66 @@
 === CURRENT WORK ===
+(2026-08-08) Video codecs and hardware decode. IN PROGRESS - a CEF source build
+is running and is the blocker for the H.264 half.
+
+WHAT THE BROWSER ACTUALLY IS: CEF 147.0.10, Chromium 147.0.7727.118, V8 14.7.
+Not behind at all - every piece of Chromium's Linux hardware-decode machinery
+is present in the binary (AcceleratedVideoDecodeLinuxGL, its ZeroCopy variant,
+VaapiVideoDecoder, VaapiIgnoreDriverChecks, VaapiOnNvidiaGPUs). So "the fork is
+too old" is NOT the explanation for anything here.
+
+WHY THERE ARE NO PROPRIETARY CODECS: the wheel is built on Spotify's prebuilt
+CEF distribution, which uses Chromium's default ffmpeg_branding=Chromium.
+ffmpeg is statically linked into libcef.so (no libffmpeg.so to swap), so the
+only fix is building CEF from source with proprietary_codecs=true and
+ffmpeg_branding=Chrome. That build is running now; see CLAUDE.md for the
+is_official_build trap that cost one full build cycle.
+
+WHY DECODE IS IN SOFTWARE: Chromium refuses VA-API on NVIDIA on purpose
+(vaapi_wrapper.cc skips nvidia-drm devices; VaapiOnNvidiaGPUs is off by
+default, and forcing it on makes nvidia_drv_video.so fail to initialise inside
+the GPU process anyway). Nothing to enable there. Evidence is the CDP Media
+domain, not CPU: kVideoDecoderName=VpxVideoDecoder, kIsPlatformVideoDecoder=
+false, and SystemInfo.getInfo's videoDecoding array empty in every
+configuration tried.
+
+MEASURED, 1080p, whole CEF process tree, CDP Media domain for the decoder:
+
+  configuration                     VP9            H.264
+  GTX 1060, proprietary 535       76.5 %         will not play
+  virtio-gpu / llvmpipe           77.0 %         will not play
+
+  H.264 fails as DEMUXER_ERROR_NO_SUPPORTED_STREAMS in both. VP9 is
+  VpxVideoDecoder (software) in both, 0 dropped frames in both. The GPU buys
+  nothing for video decode - two points of difference is noise.
+
+DONE (8438cc9): acceleration switches are now chosen from what the machine is.
+utils/system/gpu.py detects the stack from the filesystem only and maps it to a
+profile table that is data, not branches. Unknown hardware gets the empty
+profile, so it keeps today's behaviour exactly - verified by the virtio guest
+landing on it before the software profile was taught about virtio-pci. Profiles
+measured: nvidia, software. Profiles reasoned from Chromium source but NOT
+measured: vaapi (no Intel/AMD machine here), v4l2 (no Pi here).
+
+STILL OPEN:
+  - The official CEF build with proprietary codecs: running, hours to go. Then
+    rebuild the cp311 wheel (recipe works, ~10 min in the cefpy-wheel-cp311
+    container) and re-run the capability matrix.
+  - arm64/Raspberry Pi is entirely unverified: no wheel built, no V4L2 profile
+    tested. The fork's CI publishes arm64 wheels but they are Spotify-based too,
+    so they have the same codec gap.
+  - HEVC: enable_platform_hevc=true in the new build, but that is hardware-only
+    decode on Linux - expect it to stay unplayable wherever VA-API/V4L2 is not
+    engaged. AC3/EAC3/DTS stay off.
+
+NOTE, and it needs a decision: unitotem-system commit 76f3511 configures
+hardware decode via /etc/chromium.d/50-unitotem-accel, on the premise that "the
+manager drives Chromium over the DevTools protocol rather than embedding a
+renderer". That is not this codebase - the manager embeds CEF in-process via
+cefpython, and the kiosk image installs no chromium package at all (checked:
+`which chromium` empty, dpkg count 0, no /etc/chromium.d). That file configures
+a browser that is not there and has no effect on the viewer. The switches it
+wants are the ones 8438cc9 now sets in the right place.
+
 (2026-08-08) Screen control (SCREEN-CONTROL-PLAN.md): step 2 of 7 DONE.
 
 Timers. Both bugs the plan identified are fixed, and the command a cron job
@@ -287,14 +349,11 @@ gpu_compositing: disabled_software / rasterization: unavailable_off to both
 The proprietary driver is the better of the two by a wide margin; nouveau is
 accelerated but its compositing path is expensive.
 
-DEAD END - Looking Glass as a way to see the guest once the emulated display is
-gone. The Linux host application builds and gets as far as opening the guest's
-ivshmem BAR and initialising XCB capture at the right resolution, then aborts on
-lgmpHostMemPtr: Assertion 'mem' failed before publishing a frame - identically
-when pointed at a plain file instead of the BAR, so the fault is in the host
-application, which upstream itself calls "incomplete and not ready for usage".
-It was never needed anyway: the passed-through card has a physical monitor on
-DP-1, and every measurement here was taken over SSH and CEF's DevTools.
+DEAD END - Looking Glass. Its Linux host app aborts on lgmpHostMemPtr before
+publishing a frame, identically against a plain file, and upstream calls it
+"incomplete and not ready for usage". Removed from the repo in cf44854; do not
+retry it - the card drives a physical monitor and everything is measured over
+SSH and CEF DevTools.
 
 ALSO FOUND - this cefpython3 build ships without proprietary codecs: no H.264,
 no AAC, no Theora (VP8/VP9/AV1/Opus/Vorbis/MP3 are fine). An H.264 MP4 asset
