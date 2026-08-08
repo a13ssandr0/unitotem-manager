@@ -11,10 +11,18 @@ implemented yet.** This covers the `TODO` backlog entry "Add display power contr
 **Start condition:** step 1 touches `manager/webview/controller.py` and must wait until
 that directory is free. Steps 2-7 do not touch `manager/webview/` at all.
 
-**External prerequisite (separate task): the kiosk image migrates from Debian 12
-bookworm to Debian 13 trixie.** It is a whole-image job in the sibling repo
-`unitotem-system/` and is out of scope here. It is required only for the **DDC/CI**
-mechanism, because of the ddcutil version available per suite:
+**External prerequisite — DONE.** The kiosk image has been migrated from Debian 12
+bookworm to Debian 13 trixie. `ddcutil 2.2.0` and a newer `v4l-utils` now come from the
+archive, so the **DDC/CI** mechanism is unblocked and no backport is needed.
+
+Two consequences to check rather than assume when implementing: the test VMs may still
+be running the **old bookworm guest**, in which case they no longer represent the product
+and must be rebuilt from the new image before any result counts; and trixie changes the
+system Python, which `debian/rules` uses to derive `CEF_PYTAG`, so the cefpython wheel
+must match the new interpreter.
+
+The version table is kept because it is why the migration was chosen, and because the
+runtime version gate still matters for any node not yet on trixie:
 
 | Suite | ddcutil |
 |---|---|
