@@ -6,6 +6,7 @@ import aiohttp
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
 from utils.models.viewer import viewer_settings
+from utils.system.gpu import detect_gpu
 from webview.controller import WebviewManager
 
 # Must match webview.app.CDP_PORT. Duplicated as a plain literal (rather than
@@ -54,12 +55,24 @@ class Display(WSAPIBase):
                     async for msg in ws:
                         data = msg.json()
                         if data.get('id') == 1:
+                            gpu = data.get('result', {}).get('gpu', {})
                             return WSBroadcast(
-                                features=data.get('result', {}).get('gpu', {}).get('featureStatus', {})
+                                features=gpu.get('featureStatus', {}),
+                                # What Chromium reports as feature status only
+                                # says whether a feature is blocklisted, not
+                                # whether anything is actually offloaded -
+                                # video_decode reads "enabled" on a machine
+                                # with no accelerated decode profiles at all.
+                                # These two go with it: the decode profiles the
+                                # GPU process really advertises, and which
+                                # switch profile this node was started with.
+                                video_decoding=gpu.get('videoDecoding', []),
+                                gpu_profile=detect_gpu().as_dict(),
                             )
         except (aiohttp.ClientError, OSError, KeyError, asyncio.TimeoutError):
             pass
-        return WSBroadcast(features={})
+        return WSBroadcast(features={}, video_decoding=[],
+                           gpu_profile=detect_gpu().as_dict())
 
     def getBounds(self, viewer_id: str, window_id: int = 0):
         windows = _vm().get_webview_windows(viewer_id)
