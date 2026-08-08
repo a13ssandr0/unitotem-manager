@@ -317,11 +317,39 @@ the VM-specific ones.
   `ps pcpu` is a lifetime average and will report a quiet number for a process that started
   burning a core a minute ago. The load also sits in CEF *subprocesses*, not in the Python
   process, so measuring the main pid alone reports ~1% while the tree is at 160%.
-- **This cefpython3 build has no proprietary codecs.** `canPlayType` says no to
-  `avc1` (H.264), `mp4a.40.2` (AAC) and Theora, and an H.264 MP4 fails with
-  `DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no supported streams`. VP8, VP9, AV1,
-  Opus, Vorbis and MP3 all work. Any video test asset has to be WebM/VP9 or AV1 — and a kiosk
-  that cannot play the single most common video format on the web is a finding in its own right.
+- **The shipped cefpython3 wheel has no proprietary codecs, and the only fix is rebuilding CEF
+  from source.** `canPlayType` says no to `avc1` (H.264), `mp4a.40.2` (AAC), HEVC, AC3/EAC3 and
+  Theora, and an H.264 MP4 fails with `DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no
+  supported streams`. VP8, VP9, AV1, Opus, Vorbis, MP3, FLAC and WAV all work. The cause is that
+  the wheel is built on the **Spotify prebuilt CEF binary distribution** (`tools/download_cef.py`),
+  which is built with Chromium's default `ffmpeg_branding=Chromium`. There is no `libffmpeg.so`
+  in the distribution to swap — ffmpeg is statically linked into `libcef.so` — so the flags must
+  be set at Chromium build time: `proprietary_codecs=true ffmpeg_branding=Chrome`. Until such a
+  wheel is in place, any video test asset has to be WebM/VP9 or AV1.
+- **Build CEF from source with `is_official_build=true`, never `false`.** A non-official build
+  completes and produces a working-looking `libcef.so` that segfaults at runtime inside Skia —
+  `sk_malloc_size` → `malloc_usable_size` on a PartitionAlloc pointer (`SIGSEGV SI_KERNEL`, and
+  the registers full of the `0xcd` poison pattern). It kills the manager during font setup
+  (`SkFontMgr_FCI::onMatchFamilyStyle`) and a standalone CEF when a window is created
+  (`ContentsContainerOutline::SetClipPath`), so it looks like two unrelated bugs. Official is
+  also what Spotify's published builds use, i.e. the configuration the rest of the stack has
+  been tested against. Official builds need PGO profiles: set `'checkout_pgo_profiles': True`
+  in `chromium/.gclient` and run `gclient runhooks`, or GN fails with a `.profdata` not found.
+- **Chromium will not use VA-API on NVIDIA, by explicit upstream decision.**
+  `media/gpu/vaapi/vaapi_wrapper.cc` skips any DRM device whose driver reports `nvidia-drm`
+  ("their VA-API drivers do not support Chromium and can sometimes cause crashes",
+  crbug.com/1492880), gated on the `VaapiOnNvidiaGPUs` feature which is disabled by default.
+  `VaapiIgnoreDriverChecks` does *not* bypass it. Forcing `--enable-features=VaapiOnNvidiaGPUs`
+  does get past the skip, and then `nvidia_drv_video.so` fails to initialise inside the GPU
+  process anyway (`init CUDA ERROR 'unknown error' (999)`, `CUDA ERROR 'initialization error'`)
+  even though `vainfo` outside Chromium lists the full H.264/HEVC/VP9 NVDEC profile set. So on
+  NVIDIA there is nothing to enable — do not go looking for a switch that turns it on.
+- **`video_decode: enabled` in the GPU feature stats does not mean anything is offloaded.** It
+  means "not blocklisted". The honest signal is `SystemInfo.getInfo`'s `videoDecoding` array
+  (the "Video Acceleration Information" table in `chrome://gpu`): an empty array means the GPU
+  process advertises no accelerated decode profiles at all. Confirm which decoder was actually
+  used with the CDP `Media` domain — `kVideoDecoderName` and `kIsPlatformVideoDecoder` — never
+  by inferring it from CPU cost.
 - **GPU acceleration in the test VM is PCI passthrough, not virgl.** `accel3d`/`egl-headless` is
   a dead end on this host and must not be retried; `tools/unitotem-test-gpu.xml` passes a real
   GTX 1060 instead and the guest then reports `gpu_compositing: enabled` and
