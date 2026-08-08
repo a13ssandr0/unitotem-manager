@@ -34,6 +34,7 @@ from PySide6.QtWidgets import QApplication
 from utils import constants as const
 from utils.browser import user_agent
 from utils.models.viewer import viewer_settings
+from utils.system.gpu import detect_gpu
 
 from .window import WebviewWindow
 
@@ -206,6 +207,28 @@ class WebviewApp:
                            'anything able to intercept the connection can choose '
                            'what this node displays')
             switches['ignore-certificate-errors'] = ''
+
+        # Hardware acceleration switches, chosen from what this machine
+        # actually is. They cannot be set unconditionally: asking Chromium for
+        # a decoder that then fails to initialise is worse than not asking,
+        # because it can abandon acceleration instead of falling back. See
+        # utils/system/gpu.py for the profile table and for which profiles have
+        # been measured rather than reasoned. An unrecognised machine gets an
+        # empty dict, i.e. exactly the behaviour it had before this existed.
+        # cefpython builds CEF's whole command line from this dict (sys.argv is
+        # ignored), so this is the only place these can be set.
+        self.gpu_profile = detect_gpu()
+        logger.info(f'GPU profile: {self.gpu_profile.name} '
+                    f'({self.gpu_profile.reason})'
+                    + ('' if self.gpu_profile.verified
+                       else ' [profile not verified on real hardware]'))
+        for key, value in self.gpu_profile.switches.items():
+            # Never override something set above: an explicit switch here is a
+            # deliberate decision about this node, the profile is a default.
+            if key not in switches:
+                switches[key] = value
+            elif value and value not in switches[key]:
+                switches[key] = f'{switches[key]},{value}'
 
         cef.Initialize(
             settings={
