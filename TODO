@@ -61,12 +61,62 @@ NEXT: step 3 (manager/tests/ + pytest infrastructure), using both the 2.2.5
 and the new real-2.2.0 fixtures.
 
 (2026-08-09) Video codecs and hardware decode. CEF source build DONE, official,
-codecs verified in the binary; blocked only on which Python interpreter the
-wheel must be tagged for, because the kiosk image build now supports a
-`RELEASE=trixie` override (`unitotem-system/kiosk/common.sh`) that leaves no
-trace in tracked files, and the test VM was mid re-provision onto a fresh
-trixie image when this was picked up. Do not touch `unitotem-test` until that
-is confirmed settled - another agent/the coordinator owns it right now.
+codecs built AND now confirmed playing a real H.264 file end to end on the
+re-provisioned trixie guest. Restart of the real manager (to test through the
+embedded viewer rather than a standalone probe) is on hold: `unitotem-test`'s
+i2c buses are in active use by the DDC/CI agent's hardware verification right
+now, coordinating through the session that owns both of us.
+
+cp313 wheel built (cefpy-wheel-trixie container, Python 3.13.5 matching the
+guest exactly - the earlier cp311 wheel built for the pre-reprovision guess
+was NOT installed anywhere, no wasted VM state) and installed into
+/var/unitotem-venv on `unitotem-test`: `pip install --no-deps
+cefpython3-147.0.dev0-cp313-cp313-linux_x86_64.whl` ->
+"Successfully installed cefpython3-147.0.dev0". Import sanity-checked
+(`cef.GetVersion()` reports cef_version 147.0.10+gd58e84d+chromium-147.0.7727.118,
+matching the source build exactly) and exercised through a STANDALONE CEF
+instance (separate process, separate DevTools port 9333, separate cache dir -
+did not touch the running manager's port 9223 or its ProcessSingleton lock,
+so nothing here interfered with the DDC/CI agent's use of the same guest):
+
+  canPlayType (new wheel): H.264 baseline/high -> probably, AAC-LC/HE ->
+  probably (both were "" on the old wheel). HEVC/AC3/EAC3/Theora/MPEG-TS
+  still "no", as expected (ffmpeg_branding=Chrome does not bring AC3/EAC3, and
+  HEVC needs hardware decode which this box does not have - see below).
+
+  A REAL H.264 FILE PLAYS: bbb60_1080p_h264.mp4 (the same clip that failed as
+  DEMUXER_ERROR_NO_SUPPORTED_STREAMS on the old wheel) now reports, via the
+  CDP Media domain: codec=h264, profile="h264 high", coded/natural size
+  1920x1080 matching the source, 0 dropped frames out of 505 over 15s. No
+  Skia segfault - the is_official_build=true + PGO combination that CLAUDE.md
+  records is confirmed sound under real playback, not just at process start.
+
+  CPU, whole standalone-CEF process tree, 1080p, GTX 1060/nvidia 535 (this
+  guest's only configuration right now - see below for why no-GPU numbers
+  are not here yet):
+
+    video          decoder              platform  CPU
+    H.264          FFmpegVideoDecoder   false     26.3 %
+    VP9            VpxVideoDecoder      false     39.5 %
+
+  Both software, as expected (NVIDIA VA-API is refused by Chromium - see the
+  finding below), zero dropped frames both. H.264 is CHEAPER than VP9 in
+  software here - libavcodec's H.264 decoder is more optimised than libvpx's
+  VP9 one; do not read this as H.264 "winning" on hardware-accelerated
+  grounds, neither codec is hardware-accelerated in this measurement.
+
+STILL NEEDED before this is closed out: the same matrix through the REAL
+embedded viewer (not the standalone probe) once the manager restart is
+cleared, and the no-GPU/virtio comparison, which per the coordinator must NOT
+be done via a domain swap on `unitotem-test` (would pull the i2c buses out
+from under the DDC/CI agent's in-progress work) - either wait for
+`unitotem-test` to free up, or use `unitotem-cpu` (192.168.122.51, currently
+plain virtio-vga) instead. Confirmation that using `unitotem-cpu` for this is
+actually cleared is pending: the original task brief explicitly said not to
+touch that domain ("belongs to another investigation... user has asked for it
+to be kept"), the coordinator then suggested using it anyway as idle, and
+that conflict was flagged back rather than silently resolved either way -
+holding until an explicit answer comes back.
 
 WHAT THE BROWSER ACTUALLY IS: CEF 147.0.10, Chromium 147.0.7727.118, V8 14.7.
 Not behind at all - every piece of Chromium's Linux hardware-decode machinery
