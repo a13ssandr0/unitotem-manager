@@ -106,15 +106,24 @@ worse than a subprocess we can time out and kill.
   Set Stream Path 0x86). "Switch to HDMI 3" is DDC/CI-only. Do not fake this in the UI.
 - **CEC volume is relative** (repeated pressed/released). Absolute (0x73) is CEC 2.0 and
   rarely implemented. Mute is a toggle.
-- **`cec-ctl` lies about its exit code.** `cec-ctl -d /dev/cec0 --playback` printed
-  `Failed to open /dev/cec0: No such file or directory` and returned **0**.
-  `--list-devices` also returns 0 with empty output when no adapter exists. Parse
-  stdout/stderr; never trust the exit code.
+- **`cec-ctl` lies about its exit code** — on the build tested on the dev host.
+  `cec-ctl -d /dev/cec0 --playback` printed `Failed to open /dev/cec0: No such file or
+  directory` and returned **0**. `--list-devices` also returns 0 with empty output when
+  no adapter exists. **CORRECTED after testing the actual Debian package**
+  (`v4l-utils` 1.30.1, trixie, on `unitotem-test`): `cec-ctl -d <nonexistent>
+  --playback`/`--standby` correctly returns **1** with the same "Failed to open..."
+  message. The dev host's `cec-ctl 1.32.0` was not the Debian package (origin
+  unconfirmed) and its exit-code behaviour does not reproduce on the shipped tool. Only
+  `--list-devices` legitimately returns 0 with an empty list when no adapter exists — a
+  correct empty result, not a lie. Parse output either way (an empty `--list-devices` is
+  still "nothing found" regardless of exit code), but trust the exit code for open/command
+  failures on the packaged tool.
 - **Which GPUs have CEC:** Raspberry Pi `vc4_hdmi` (the arm64 kiosk already force-loads
   `vc4`/`v3d` via `/etc/modules-load.d/rpi-gpu.conf`, `kiosk/stage2-configure.sh:97`),
   some SoCs, USB adapters, DisplayPort-to-HDMI via `drm_dp_cec`. Desktop Intel/AMD/NVIDIA
-  generally do **not**. The dev host has no `/dev/cec*` — no CEC path was tested end to
-  end.
+  generally do **not**. Confirmed on both the dev host and the rebuilt `unitotem-test`
+  (GTX 1060 passthrough, `nvidia` driver): no `/dev/cec*` on either. No CEC path has been
+  tested end to end anywhere yet — no CEC-capable hardware has been available.
 
 ### 1.3 Mapping a RandR output name to an I2C bus / CEC device
 
@@ -129,11 +138,32 @@ RandR name (QScreen.name())
   -> ddcutil bus                    matched against `detect` output
 ```
 
-- `/sys/class/drm/<conn>/ddc` symlink: **absent on NVIDIA** (verified). Exists on
-  i915/amdgpu/nouveau. Fast path only.
+- `/sys/class/drm/<conn>/ddc` symlink: **absent on NVIDIA** (verified on the dev host).
+  Exists on i915/amdgpu/nouveau. Fast path only.
 - Name mismatch is real: RandR `HDMI-1` vs DRM `card0-HDMI-A-1` on i915; RandR
   `HDMI-A-1` vs DRM `card1-HDMI-A-1` on the dev host. The normaliser handles
   `HDMI-A-n <-> HDMI-n`, `DP-n`, `DVI-D-n`, `eDP-n`, `Virtual-n`, stripping `cardN-`.
+- **CORRECTED, verified on `unitotem-test` (GTX 1060 passthrough, proprietary `nvidia`
+  driver, trixie): `/sys/class/drm` can have NO per-connector subdirectories at all**, not
+  merely a missing `ddc` symlink under one. `ls /sys/class/drm/` there shows only `card0`,
+  `renderD128`, `version` — there is no `/sys/class/drm/<conn>/edid` to fall back to,
+  full stop, for this driver. The chain above therefore has no second step to fall
+  through to on this hardware. What *does* work, confirmed end to end: `xrandr --props`
+  exposes a raw `EDID:` hex property on every output regardless of driver; decoding it
+  (the standard 128-byte EDID header, descriptor blocks 54/72/90/108 for the display name
+  and serial tags) produced `GSM:LG ULTRAFINE:401NTMX52747` — byte-identical to the
+  `Monitor:` line `ddcutil detect` printed for the same physical monitor on its I2C bus.
+  **Promote `xrandr --props`'s EDID property to the primary route**, with
+  `/sys/class/drm/<conn>/edid` kept only as an opportunistic fast path for drivers that do
+  populate it (i915/amdgpu/nouveau, per the dev host). The revised chain:
+  ```
+  RandR name
+    -> xrandr --props, EDID: property        primary; works on every driver tested so far
+    -> mfg:model:serial                       decoded from the EDID bytes
+    -> ddcutil bus                            matched against `detect` output
+  (/sys/class/drm/<conn>/edid, if the node exists, as a cheaper alternative source
+   of the same bytes — same decode step, same join)
+  ```
 - **CEC device mapping:** enumerate `/dev/cec*`, read kernel connector info
   (`CEC_ADAP_G_CONNECTOR_INFO`, surfaced in `cec-ctl`'s driver-info block) for the DRM
   card and connector id; fall back to `cec-ctl -d N --phys-addr-from-edid
@@ -315,7 +345,9 @@ manager/tests/
     ddcutil_detect_brief.txt
     ddcutil_capabilities_lg.txt
     ddcutil_getvcp_terse.txt
+    ddcutil_220_stdout_noise.txt   # real 2.2.0 capture, connector-resolution diagnostics
     edid_lg_hdmi.bin
+    edid_dp1_xrandr.bin            # real EDID from `xrandr --props`, unitotem-test
   test_ddc_parsers.py
   test_identity.py
   test_mechanism_resolution.py
@@ -414,6 +446,62 @@ parse to `GSM:LG ULTRAFINE:406NTJJ6D028`:
 Capture the full 128/256-byte EDID at implementation time; the serial lives in a
 descriptor block beyond byte 32.
 
+`ddcutil_220_stdout_noise.txt` — real capture from `ddcutil --bus 4 getvcp --terse D6`
+on the actual packaged **ddcutil 2.2.0** (trixie, `unitotem-test`, GTX 1060 passthrough,
+`nvidia` driver), verbatim, **all on stdout**:
+
+```
+(set_connector_for_businfo_using_edid)           Failed to find connector name for /dev/i2c-4 using EDID 0x556423d625e4
+Failed to find connector name for /dev/i2c-4, set_connector_for_businfo_using_edid at line 1236 in file i2c_bus_core.c. 
+   I2C_Bus_Info at: 0x556423d57f80
+   Flags:                   I2C_BUS_EXISTS | I2C_BUS_ACCESSIBLE | I2C_BUS_PROBED | I2C_BUS_X50_EDID
+   Bus /dev/i2c-4 found:   true
+   Bus /dev/i2c-4 probed:  true
+   errno for open:          OK(0): success
+   drm_connector_found_by:  DRM_CONNECTOR_NOT_CHECKED (0)
+   last_checked_asleep:       false
+   Display connectors reported by /sys:
+VCP D6 SNC x01
+```
+
+This is what any bus where ddcutil cannot resolve a DRM connector produces on **every**
+command, not just `detect` — confirmed on `getvcp`, `capabilities`, and `detect --brief`
+alike. Redirecting stderr does nothing; it is all stdout. The parser must scan every line
+for the `VCP `/`Display `/`Invalid display` prefix rather than assume the result is on a
+fixed line (first, last, or any other position) — verified against exactly this capture,
+which is also the reason the `detect --brief` result for this bus has no `DRM connector:`
+line at all (see the 2.2.0 fixture below) and the identity join cannot use it here.
+
+`ddcutil_detect_brief_220.txt` — same session, `ddcutil detect --brief` (stdout only):
+
+```
+(set_connector_for_businfo_using_edid)           Failed to find connector name for /dev/i2c-4 using EDID 0x55e3600e2b04
+Failed to find connector name for /dev/i2c-4, set_connector_for_businfo_using_edid at line 1236 in file i2c_bus_core.c. 
+   I2C_Bus_Info at: 0x55e3600ce6b0
+   Flags:                   I2C_BUS_EXISTS | I2C_BUS_ACCESSIBLE | I2C_BUS_PROBED | I2C_BUS_X50_EDID
+   Bus /dev/i2c-4 found:   true
+   Bus /dev/i2c-4 probed:  true
+   errno for open:          OK(0): success
+   drm_connector_found_by:  DRM_CONNECTOR_NOT_CHECKED (0)
+   last_checked_asleep:       false
+   Display connectors reported by /sys:
+Display 1
+   I2C bus:          /dev/i2c-4
+   drm_connector_id: 0
+   Monitor:          GSM:LG ULTRAFINE:401NTMX52747
+```
+
+No `DRM connector:` line — confirming the design decision in §1.3 is not optional
+hardening but the only thing that works on this real machine: the EDID join is load-
+bearing here, not a fallback.
+
+`edid_dp1_xrandr.bin` — the real EDID `xrandr --props` reported for `DP-1` on
+`unitotem-test` (256 bytes, hex-decoded from the property block), which decodes to
+`GSM:LG ULTRAFINE:401NTMX52747` — matching the `Monitor:` line above exactly, proving the
+join end to end on real hardware. Capture the full property at implementation time; do
+not hand-transcribe it into the plan (it is opaque binary, unlike the EDID header excerpt
+above which was kept short for readability).
+
 ### 6.2 Coverage
 
 1. **`detect --brief` parser** — buses 7/8/9, the three DRM connectors, the three
@@ -422,24 +510,40 @@ descriptor block beyond byte 32.
    `DRM connector:` and `DRM_connector:` spellings.
 2. **`getvcp --terse` parser** — every row above; `VCP AA ERR` -> unsupported; the
    `0x0B` row pinning `CNC` field order; `DDC communication failed...` and
-   `Bus ... does not exist.` -> typed errors.
+   `Bus ... does not exist.` -> typed errors; **`ddcutil_220_stdout_noise.txt`** — the
+   `VCP D6 SNC x01` result is still found correctly with ~10 lines of real
+   connector-resolution diagnostics ahead of it on stdout (this is not synthetic: it is
+   what ddcutil 2.2.0 actually printed on `unitotem-test` for a bus it could not resolve
+   a connector for).
 3. **`capabilities` parser** — `0x60` -> `{11: HDMI-1, 12: HDMI-2, 0f: DisplayPort-1}`;
    `0xD6` -> `{01, 04}` **only**, asserting we never offer the MCCS `02`/`03` that this
    monitor did not advertise; `0x62`/`0x8D` present with empty value maps.
 4. **RandR/DRM normaliser** — `HDMI-1 <-> card0-HDMI-A-1`,
    `HDMI-A-1 <-> card1-HDMI-A-1`, `DP-1`, `DVI-D-1`, `eDP-1`, `Virtual-2`; a genuine
-   mismatch returns *no* match rather than a wrong one.
+   mismatch returns *no* match rather than a wrong one; and the **no-match** case for a
+   driver that exposes no `/sys/class/drm/<conn>` subdirectory at all (confirmed real on
+   `unitotem-test`'s NVIDIA driver) falls through cleanly to the `xrandr --props` route
+   rather than raising.
 5. **EDID -> `mfg:model:serial`** — the real LG bytes -> `GSM:LG
    ULTRAFINE:406NTJJ6D028`, matching what ddcutil prints; truncated/garbage EDID ->
-   `None`.
-6. **Mechanism resolution** — `auto` picks CEC->DDC->X for on, DDC->CEC->X for off; an
+   `None`; **`edid_dp1_xrandr.bin`** decodes to `GSM:LG ULTRAFINE:401NTMX52747`,
+   matching ddcutil's own `Monitor:` line for the same bus on real hardware — this is
+   the primary route per §1.3's correction, not just an alternative source of the same
+   bytes.
+6. **`xrandr --props` EDID-property parser** — extracts the hex `EDID:` block for a
+   named output from real `xrandr --props` output and hands it to the same decoder as
+   item 5; a disconnected output or one with no EDID property returns `None` rather than
+   raising.
+7. **Mechanism resolution** — `auto` picks CEC->DDC->X for on, DDC->CEC->X for off; an
    X-only output resolves to X for both; nothing available raises a typed "no mechanism"
-   error; ddcutil `1.4.1` marks DDC unavailable with a reason string.
-7. **Cron action encode/decode round-trip** — every registry action survives `new()` ->
+   error; ddcutil `1.4.1` (bookworm, still the version some fielded nodes will run) marks
+   DDC unavailable with a reason string, distinctly from "ddcutil not installed at all".
+8. **Cron action encode/decode round-trip** — every registry action survives `new()` ->
    `serialize()`; **`serialize()` returns `'*'` and `'*/15'` unchanged instead of
-   raising** (the regression test for §7 bug 1); a crontab line whose command is not in
-   the registry is reported read-only, never rewritten; a screen-timer uuid resolves
-   against the JSON table, and a missing entry degrades cleanly.
+   raising** (the regression test for §7 bug 1, and already independently verified
+   end-to-end against a real crontab in the step-2 commit); a crontab line whose command
+   is not in the registry is reported read-only, never rewritten; a screen-timer uuid
+   resolves against the JSON table, and a missing entry degrades cleanly.
 
 ---
 
@@ -521,37 +625,87 @@ old hashed bundle is served silently.
 
 **Done, read-only, on the dev host** — the three parsers against real 2.2.5 output;
 per-code capability asymmetry; `--bus` 5/5 vs `-d` failing; timings 31 s / 5.6 s /
-0.40 s; `VCP AA ERR` + exit 1; `cec-ctl` returning 0 while failing to open the device;
+0.40 s; `VCP AA ERR` + exit 1; `cec-ctl` returning 0 while failing to open the device
+(later found to be specific to that non-packaged build — see the correction in §1.2);
 no `--json` in 2.2.5; no `ddc` sysfs symlink on NVIDIA; no per-output DPMS property; the
 `int(str(job.dom))` crash and the missing `CronTab._cron_re`, both against the installed
 library.
 
+**Done, read-only, on `unitotem-test` after the trixie rebuild** (Debian 13 trixie,
+`ddcutil 2.2.0-2`, `v4l-utils 1.30.1-1` / `cec-ctl`, `i2c-tools 4.4-2`, `i2c_dev` loaded,
+`/dev/i2c-0..5` from the passed-through GTX 1060, real 4K LG Ultrafine on `DP-1`, same
+physical monitor as the dev host's `401NTMX52747`):
+
+- All three parsers (`detect --brief`, `getvcp --terse`, `capabilities`) verified against
+  the *actual packaged* ddcutil 2.2.0 output, not just the 2.2.5 they were written
+  against — byte-identical results, including the `capabilities` block for `0x60`/`0xD6`
+  matching the 2.2.5 fixture exactly.
+- **New finding, not present on the dev host's ddcutil**: on this driver ddcutil cannot
+  resolve a DRM connector for the bus, so every command prints ~10 lines of
+  connector-resolution diagnostics **to stdout** first (`(set_connector_for_businfo_using_edid)
+  Failed to find connector name...` through `Display connectors reported by /sys:`) before
+  the actual `VCP .../Display N` line. Confirmed this does not break the parsers, since they
+  scan every line for the prefix rather than assuming position — see the `CLAUDE.md` gotcha.
+- `--bus` reliability reconfirmed, 5/5 identical reads on the real bus. `-d` was also fast
+  here (0.49 s) — unlike the dev host, where multiple physical monitors made `-d` trigger a
+  costly re-detection; with a single monitor there is nothing to re-detect. The `--bus`
+  recommendation stands regardless, since it is never slower and is the only reliable choice
+  once more than one display is present.
+- `cec-ctl`'s exit-code behaviour corrected — see §1.2.
+- The RandR→I2C mapping design changed based on what was actually found here — see §1.3's
+  correction: `/sys/class/drm` has no connector subdirectories under this driver at all, and
+  `xrandr --props`'s `EDID:` property, decoded, produced the exact `mfg:model:serial` triple
+  ddcutil reported for the same bus. The mapping chain in §1.3 now reflects this as the
+  primary route, not a host-specific curiosity.
+- Exit codes: bad bus → 1 (`Bus /dev/i2c-30 does not exist.`); unsupported VCP code → `ERR` +
+  exit 1. Both match the dev host's findings.
+
+**Deliberately not done, even with the tool and a real bus present: any `setvcp`
+(write) command.** This is the same physical monitor (matching serial) already probed
+read-only on the dev host at the start of this work, under the hard constraint to probe
+read-only and never power off or change the user's own monitor. Detection, `getvcp` and
+`capabilities` are read-only; a power-off, input switch or volume/mute change is not, and
+none was sent. This is the one piece of §2's capability model that remains
+functionally unverified despite hardware being available — an explicit choice, not an
+oversight, pending the user's go-ahead to run a controlled write test.
+
 **Unit tests, no hardware** — §6.
 
-**VM** — the §4 acceptance test; `--auto` restoring the mode; the zero-screens path;
-cron firing `screenctl.py` under cron's minimal environment; graceful degradation with
-no I2C and no EDID.
+**VM** — the §4 acceptance test (DONE, see the step 1 commits); `--auto` restoring the
+mode (DONE); the zero-screens path (DONE — confirmed reachable and stable with the
+manager restarted while `DP-1` was off); cron firing `screenctl.py` under cron's minimal
+environment (pending step 4); graceful degradation with no I2C and no EDID (pending step 4
+on a virtio configuration).
 
 On **virtio-vga** there is no EDID and no I2C, so DDC/CI cannot be exercised at all —
-that configuration can only prove that absence is handled. But the test VM can now also
-run with a **real GTX 1060 passed through** (`tools/unitotem-test-gpu.xml`, procedure in
-`VM-TESTING.md`), and the card drives a **physical 4K monitor on DP-1**. That gives the
-guest a real EDID on a real I2C bus, so **the DDC/CI path is testable in the VM after
-all** — detection, the EDID join, `getvcp`, and input/volume/mute against actual
-hardware. Switching between the two domains is one `undefine --keep-nvram` plus
-`define`, so the sensible plan is: functional and degradation work on virtio, DDC/CI
-verification on the GPU configuration.
+that configuration can only prove that absence is handled. The test VM was rebuilt on a
+fresh trixie base and now runs with a **real GTX 1060 passed through**
+(`tools/unitotem-test-gpu.xml`, procedure in `VM-TESTING.md`), driving a **physical 4K
+monitor on DP-1** — confirmed above, this makes DDC/CI *detection and reads* genuinely
+testable, which they now have been. Switching between the two domains is one
+`undefine --keep-nvram` plus `define`.
 
 Two constraints that come with the GPU configuration: the proprietary NVIDIA driver
 **removes the DRM connector debugfs**, so the `force` hot-plug trick is unavailable
 (CRTC off/on is the working proxy), and it **refuses arbitrary modelines** (`BadMatch`).
 Neither blocks the §4 acceptance test, which uses `xrandr --output X --off`/`--auto` on
-a connected output.
+a connected output. A third, found while rebuilding: the passed-through card exposes
+**one connected output** (`DP-1`), so the step-1 mid-run window destroy/recreate path
+(the case the whole re-keying exists for) still has no second output to test against on
+this configuration — closing that gap needs either a second physical monitor on the same
+card or a virtio configuration with `xrandr --output X --off` exercised across two heads.
 
-**Real hardware, only the user can do it** — any DDC/CI power, input or volume change on
-a real monitor; whether `0xD6 <- 01` wakes it; the entire CEC path (a Raspberry Pi
-`vc4` HDMI or a Pulse-Eight USB adapter); DPMS force (the dev host's X reports
-`Server does not have the DPMS Extension`). These ship marked unverified.
+**Real hardware, only the user can do it, or awaiting explicit go-ahead** — any DDC/CI
+power, input or volume **change** (write path — see above, deliberately not attempted
+without authorization even though read access is now proven); whether `0xD6 <- 01` wakes
+the monitor; the entire CEC path (no CEC-capable hardware has been available anywhere —
+neither the dev host nor either passthrough GPU exposes `/dev/cec*`); DPMS **force**
+specifically (the dev host's X reports `Server does not have the DPMS Extension` at all,
+so it could never be tried there; `unitotem-test`'s Xorg, confirmed by `xset q`, DOES have
+the extension — `Standby: 600 Suspend: 600 Off: 600`, currently `DPMS is Disabled` by
+`xinitrc`'s `xset -dpms` — so the extension itself is present here and the `+dpms` / zero
+-timeout / `force` sequence from §3 can be tried on this VM once step 4 lands; only the
+query was read-only-checked so far, no force was sent).
 
 ---
 
