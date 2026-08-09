@@ -234,6 +234,24 @@ it before doing anything with the VM instead of rediscovering it. The essentials
 Each of these cost real debugging time at least once. `VM-TESTING.md` has the fuller version of
 the VM-specific ones.
 
+- **A `python3 -m venv --copies` venv is NOT self-contained across a Python-version image
+  upgrade.** `--copies` only copies the interpreter *binary*; the standard library it loads is
+  still resolved against `sys.base_prefix` (`/usr`), i.e. the venv still depends on the *system*
+  having that same Python version installed. Deploying a bookworm-built cp311 venv onto a trixie
+  guest (system Python 3.13, no `python3.11` package at all) fails at the very first import —
+  `Fatal Python error: init_fs_encoding ... ModuleNotFoundError: No module named 'encodings'` —
+  which reads like a corrupt venv rather than a version mismatch. The fix is not copying more
+  files; it is rebuilding the venv fresh with the target's own `python3 -m venv`, which is exactly
+  what `debian/rules` already does when it derives `CEF_PYTAG` from `$(VENV)/bin/python3` — the
+  trap is only in reusing an *already-built* venv across a base-image version bump.
+- **The trixie kiosk image pins `/var/lib/dpkg` read-only through its own bind mount
+  (`var-lib-dpkg.mount`), separate from the root filesystem's own rw/ro state.** `mount -o
+  remount,rw /` is not enough to `apt-get install` anything on this image — `/` can already read
+  `rw` while dpkg's database still reports `Read-only file system`. Remount that one mount point
+  specifically (`mount -o remount,rw /var/lib/dpkg`, install, `mount -o remount,ro /var/lib/dpkg`)
+  rather than fighting the root filesystem. This is new in the trixie image; the old bookworm one
+  did not separate the two.
+
 - **ssh must never be able to prompt graphically.** On KDE, a missing key or an unknown host key
   makes ssh spawn `ksshaskpass`, which steals focus and blocks automation until a human clicks it.
   Always run with `SSH_ASKPASS_REQUIRE=never` and `-o BatchMode=yes` — `tools/vm-env.sh` does both,
