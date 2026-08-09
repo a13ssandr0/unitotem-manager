@@ -315,9 +315,14 @@ top mean software rasterisation, not a busy loop. See the `## Gotchas` entry in
 
 ### Video test assets
 
-The `cefpython3` build in the venv has **no proprietary codecs**: H.264, AAC and
+**This depends on which `cefpython3` wheel is in the venv.** The wheel from a plain
+`.deb`/`tools/download_cef.py` build has no proprietary codecs: H.264, AAC and
 Theora are all refused (`canPlayType` returns `""`, and an H.264 file fails with
-`DEMUXER_ERROR_NO_SUPPORTED_STREAMS`). Use WebM/VP9, AV1, Opus, Vorbis or MP3.
+`DEMUXER_ERROR_NO_SUPPORTED_STREAMS`) — use WebM/VP9, AV1, Opus, Vorbis or MP3
+in that case. A wheel built from the source recipe in sec. 8b (`proprietary_codecs=
+true ffmpeg_branding=Chrome`) plays H.264/AAC as well; HEVC, AC3/EAC3 and Theora
+still don't work regardless of which wheel is installed. Check with `canPlayType`
+rather than assuming — see CLAUDE.md's codec gotcha for what was verified where.
 
 blender.org no longer serves Big Buck Bunny as playable files — everything under
 `peach/bigbuckbunny_movies/` is a `.zip` — so the test asset is produced on the
