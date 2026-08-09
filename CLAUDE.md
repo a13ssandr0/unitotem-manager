@@ -409,4 +409,34 @@ the VM-specific ones.
   traps it brings, is in `VM-TESTING.md`, "GPU acceleration".
 - **`sudo` strips `DEBIAN_FRONTEND` and closes every file descriptor ≥ 3.** Anything relying on an
   inherited environment variable or on `APT::Status-Fd` therefore silently does nothing when run
-  through sudo. The manager runs as root; it does not need sudo in the first place. 
+  through sudo. The manager runs as root; it does not need sudo in the first place.
+- **`ddcutil` (2.2.0, trixie's packaged version) prints roughly ten lines of connector-resolution
+  diagnostics to *stdout*, not stderr, before the actual result, whenever it cannot resolve a DRM
+  connector name for the bus** — which it never could on the passthrough NVIDIA driver used in the
+  test VM (`(set_connector_for_businfo_using_edid) Failed to find connector name for /dev/i2c-4
+  using EDID ...` down through `Display connectors reported by /sys:`, then the real `VCP ...` or
+  `Display N` block). Redirecting stderr away does not remove it. Confirmed on real hardware
+  (`unitotem-test`'s passed-through GTX 1060 + LG Ultrafine on DP-1): a parser that assumes the
+  result is on a fixed line, or that scans stderr for noise, breaks. Scan every line for the
+  `VCP `/`Display `/`Invalid display` prefix instead of trusting position — which is what this
+  project's parsers already do, verified byte-identical against this real 2.2.0 output as against
+  the 2.2.5 fixtures they were first written against.
+- **`cec-ctl`'s exit code is reliable on the actual Debian package (`v4l-utils` 1.30.1, trixie) —
+  an earlier note here was wrong.** `cec-ctl -d <nonexistent> --playback/--standby` correctly
+  returns **1** and prints `Failed to open ... : No such file or directory`; this was tested
+  against a differently-built `cec-ctl 1.32.0` (not the Debian package, origin unconfirmed) that
+  returned 0 on the same failure, and that behaviour does not reproduce on the shipped tool.
+  `--list-devices` legitimately returns 0 with empty output when no adapter exists — that is a
+  correct empty result, not a lie. Trust the exit code for open/command failures on the packaged
+  tool; treat an empty `--list-devices` as "no adapter found", not as an error.
+- **On a GPU whose driver is not i915/amdgpu/nouveau, `/sys/class/drm` can have *no
+  per-connector subdirectories at all*.** Confirmed on `unitotem-test` with the passed-through GTX
+  1060 under the proprietary NVIDIA driver on trixie: `ls /sys/class/drm/` shows only `card0`,
+  `renderD128`, `version` — no `card0-DP-1` or equivalent, so there is no `/sys/class/drm/<conn>/edid`
+  to read at all, not merely a missing `ddc` symlink (that was the dev host's, different, milder
+  finding). The only route to a monitor's EDID that worked here was `xrandr --props`, which
+  exposes a raw `EDID:` hex property per output regardless of driver; decoded, it produced the
+  exact `mfg:model:serial` triple (`GSM:LG ULTRAFINE:401NTMX52747`) that `ddcutil detect` printed
+  for the same physical monitor on its I2C bus. Treat `xrandr --props`'s EDID property as the
+  primary route for the RandR-name-to-monitor-identity join, with `/sys/class/drm/<conn>/edid` as
+  a fallback for drivers that do populate it, not the other way around.
