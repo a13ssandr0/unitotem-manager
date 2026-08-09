@@ -148,21 +148,39 @@ RandR name (QScreen.name())
   merely a missing `ddc` symlink under one. `ls /sys/class/drm/` there shows only `card0`,
   `renderD128`, `version` — there is no `/sys/class/drm/<conn>/edid` to fall back to,
   full stop, for this driver. The chain above therefore has no second step to fall
-  through to on this hardware. What *does* work, confirmed end to end: `xrandr --props`
-  exposes a raw `EDID:` hex property on every output regardless of driver; decoding it
-  (the standard 128-byte EDID header, descriptor blocks 54/72/90/108 for the display name
-  and serial tags) produced `GSM:LG ULTRAFINE:401NTMX52747` — byte-identical to the
-  `Monitor:` line `ddcutil detect` printed for the same physical monitor on its I2C bus.
-  **Promote `xrandr --props`'s EDID property to the primary route**, with
-  `/sys/class/drm/<conn>/edid` kept only as an opportunistic fast path for drivers that do
-  populate it (i915/amdgpu/nouveau, per the dev host). The revised chain:
+  through to on this hardware. What *does* work, confirmed end to end **on the kiosk's
+  own X topology**: `xrandr --props` exposes a raw `EDID:` hex property on a connected
+  output under a real Xorg session running directly on KMS with no compositor — exactly
+  what `unitotem-test`'s kiosk image runs (no window manager, no Wayland — see
+  `CLAUDE.md`'s X11-no-WM migration entry). Decoding it (the standard 128-byte EDID
+  header, descriptor blocks 54/72/90/108 for the display name and serial tags) produced
+  `GSM:LG ULTRAFINE:401NTMX52747` — byte-identical to the `Monitor:` line
+  `ddcutil detect` printed for the same physical monitor on its I2C bus.
+  **NOT universal, and now understood rather than a loose end**: tried against the dev
+  host's own `xrandr --props` too, expecting the same success — zero `EDID:` properties
+  on any of its three connected outputs. The dev host's `:0` turned out to be **XWayland**
+  (`ps` shows `/usr/bin/Xwayland :0 ...`), whose RandR is itself an emulation layer over
+  Wayland's own output protocol — the tell is the `RANDR Emulation: 1` property `xrandr
+  --props` reports there on every output, which does not appear in the VM's capture. This
+  is irrelevant to the kiosk, which never runs Wayland or XWayland, so it does not weaken
+  the design decision — but it means the code must treat "no EDID property returned" as
+  "identity for this output could not be established" (try `/sys/class/drm/<conn>/edid` if
+  present, else report the mechanism unavailable for that output) rather than as a bug,
+  because a developer iterating against this code on their own desktop will hit exactly
+  this path routinely, not just in some rare edge case.
+  **Promote `xrandr --props`'s EDID property to the primary route on the kiosk's own X
+  session**, with `/sys/class/drm/<conn>/edid` kept as an opportunistic fast path for
+  drivers that do populate it (i915/amdgpu/nouveau, per the dev host), and "neither
+  available" as a legitimate, handled outcome rather than an error. The revised chain:
   ```
   RandR name
-    -> xrandr --props, EDID: property        primary; works on every driver tested so far
+    -> xrandr --props, EDID: property        primary; verified on the kiosk's own Xorg
     -> mfg:model:serial                       decoded from the EDID bytes
     -> ddcutil bus                            matched against `detect` output
   (/sys/class/drm/<conn>/edid, if the node exists, as a cheaper alternative source
    of the same bytes — same decode step, same join)
+  (neither present -> identity for this output unknown; DDC/CI reported unavailable
+   for it rather than guessed at — confirmed necessary on XWayland, not just theoretical)
   ```
 - **CEC device mapping:** enumerate `/dev/cec*`, read kernel connector info
   (`CEC_ADAP_G_CONNECTOR_INFO`, surfaced in `cec-ctl`'s driver-info block) for the DRM
@@ -656,7 +674,12 @@ physical monitor as the dev host's `401NTMX52747`):
   correction: `/sys/class/drm` has no connector subdirectories under this driver at all, and
   `xrandr --props`'s `EDID:` property, decoded, produced the exact `mfg:model:serial` triple
   ddcutil reported for the same bus. The mapping chain in §1.3 now reflects this as the
-  primary route, not a host-specific curiosity.
+  primary route on a real Xorg session — confirmed NOT universal when the same check was
+  tried against the dev host's own `xrandr --props` (zero `EDID:` properties on three
+  connected outputs): its `:0` is XWayland, whose RandR is an emulation layer that does not
+  forward EDID at all, unrelated to the kiosk's own plain-Xorg, no-WM session. §1.3 has the
+  full explanation; the practical consequence is that "no EDID property returned" has to be
+  a handled, non-error outcome in the code, not just a theoretical one.
 - Exit codes: bad bus → 1 (`Bus /dev/i2c-30 does not exist.`); unsupported VCP code → `ERR` +
   exit 1. Both match the dev host's findings.
 
@@ -711,13 +734,24 @@ query was read-only-checked so far, no force was sent).
 
 ## 11. Sequencing — one commit per step
 
-1. **[blocked: `manager/webview/` must be free]** Re-key assignments on `screen_name`
-   and migrate `viewer_assignments.json` (§4).
-2. Timers: bug fixes, action registry, `screenctl.py` (§7). Independent of 1 — can go
-   first.
-3. `manager/tests/` + pytest infrastructure + all coverage (§6).
-4. Hardware layer `utils/system/screens/` + persistence model (§5). DDC is not
-   exercisable on-image until trixie.
+1. **DONE** (`5bcca82`, `786c8d4`) — Re-key assignments on `screen_name` and migrate
+   `viewer_assignments.json` (§4). Verified on `unitotem-test`'s GTX 1060-passthrough DP-1:
+   the assignment survives an `xrandr --output DP-1 --off`/`--auto` cycle and a manager
+   restart with the screen off; a real format-2 file migrated live; a collision case
+   (pending record resolving onto an output a named record already claims) is logged, not
+   silent. Unverified: the mid-run window destroy/recreate path specifically, since this
+   VM configuration exposes only one output — still open, see §10.
+2. **DONE** (`f3a4415`) — Timers: bug fixes, action registry, `screenctl.py` deferred to
+   step 4 deliberately (§7). Verified against a real root crontab on `unitotem-test` over
+   the WebSocket API.
+3. **DONE** — `manager/tests/` + pytest infrastructure + all coverage (§6), including the
+   pure logic itself (`utils/system/screens/{ddc,identity,mechanism}.py`) implemented for
+   real rather than left as skeletons — see §10 for what that unblocks for step 4. 64
+   tests, all passing.
+4. Hardware layer: the subprocess-calling additions to `ddc.py`/`identity.py`, plus
+   `cec.py`, `xorg.py`, the async facade in `__init__.py`, and the persistence model (§5).
+   DDC is exercisable on-image now (trixie landed), but writes (`setvcp`) remain
+   deliberately unverified pending explicit go-ahead — see §10.
 5. API `Settings/Display/Screens/*` (§5).
 6. Web UI (§8).
 7. Packaging + `unitotem-system` section 29 + doc updates (§9).

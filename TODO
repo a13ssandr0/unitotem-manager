@@ -1,4 +1,72 @@
 === CURRENT WORK ===
+(2026-08-09) Screen control (SCREEN-CONTROL-PLAN.md): step 3 of 7 DONE -
+manager/tests/ + pytest, and the pure logic it tests now exists as real code.
+
+New: pyproject.toml ([tool.pytest.ini_options], pythonpath = ["manager"]),
+manager/requirements-dev.txt (pytest only, dev-only - debian/rules' whitelist
+copy in override_dh_auto_install does not include manager/tests/ or this file,
+confirmed by reading the actual cp -r line, so nothing needed excluding, it is
+excluded by omission), and manager/utils/system/screens/{__init__,ddc,identity,
+mechanism}.py.
+
+DESIGN CALL: step 3 does not just scaffold tests against not-yet-written code.
+The three parsers (ddc.py), the EDID decoder + xrandr-EDID-property extractor
++ RandR/DRM name normaliser (identity.py) and the auto/explicit mechanism
+priority resolution (mechanism.py) are ALL pure - no subprocess, no sysfs
+reads, no PySide6/cefpython - so they were implemented for real now, with real
+pytest coverage, rather than left as skeletons. Step 4 (hardware layer) adds
+the impure counterparts on TOP of these already-tested functions: subprocess
+wrapping with timeouts, asyncio.to_thread, per-bus/per-device locks, sysfs/
+xrandr output enumeration, the capability-cache persistence model, and the
+async facade (probe(), apply_power/input/volume/mute()) - it should not need
+to touch ddc.py/identity.py/mechanism.py's existing functions, only add to the
+package around them. Confirmed importable with zero PySide6/cefpython pulled
+in (36 new modules on import, none of them Qt/CEF).
+
+REAL GOTCHA FOUND WRITING THIS: manager/utils/models/command_line.py's
+CommandLineArgs is a pydantic_settings BaseSettings with cli_parse_args=True,
+so merely IMPORTING it parses sys.argv - and under pytest that argv is
+pytest's own (test paths, -v, ...), which argparse rejects, INTERNALERROR-ing
+the whole run before a single test executes. Every chain through manager/api
+or manager/utils/models eventually imports it (cron.py -> wsmanager.py ->
+models.remote -> models.command_line is the one hit here). Fixed in
+manager/tests/conftest.py by sanitising sys.argv to argv[:1] before any test
+module's own imports run - must be conftest.py specifically, since it loads
+first. Recorded in CLAUDE.md.
+
+SECOND FINDING, corrects something written in the previous session's entry
+below and in SCREEN-CONTROL-PLAN.md/CLAUDE.md (both already amended): `xrandr
+--props`'s EDID property, promoted to the primary RandR->monitor-identity
+route after it worked on unitotem-test, does NOT work on this project's own
+dev host - zero EDID properties on three connected outputs. Root cause found,
+not left as a mystery: the dev host's `:0` is XWayland (`ps` confirms
+`/usr/bin/Xwayland :0 ...`), whose RandR is an emulation layer over Wayland's
+own output protocol (`xrandr --props` shows `RANDR Emulation: 1` there, absent
+from the VM's capture) and never forwards EDID. Irrelevant to the kiosk, which
+never runs Wayland/XWayland - but the code has to treat "no EDID property
+returned" as a legitimate, handled outcome (fall back to
+/sys/class/drm/<conn>/edid if present, else report the mechanism unavailable),
+not as a bug, since testing this against a developer's own desktop hits this
+path routinely. Both real captures (the working VM one and the empty XWayland
+one) are test fixtures now.
+
+Coverage: 64 tests, all passing (`.venv/bin/pytest manager/tests/`) - 3
+genuine test-writing bugs of my own caught and fixed by actually running the
+suite rather than hand-deriving expected values (a getvcp fixture whose real
+D6 value had drifted between two captures in the same session - x01 to x04,
+a real monitor power-state change while the node ran the codec agent's
+headless stopgap, not a capture error; and a parse_version test table that
+had (major, patch) where the implementation - correctly - returns
+(major, minor)).
+
+Two things step 3 explicitly did NOT do, staying inside its own scope: no
+setvcp/write path (still pending explicit go-ahead, per the step-1/hardware
+session below), and no CEC subprocess wrapping (still no CEC-capable hardware
+anywhere this has been tested).
+
+NEXT: step 4 (hardware layer: subprocess-calling ddc.py/identity.py additions,
+cec.py, xorg.py, the async facade in __init__.py, and the persistence model).
+
 (2026-08-09) Screen control (SCREEN-CONTROL-PLAN.md): steps 1-2 of 7 DONE, VM
 re-provisioned onto trixie, fixtures verified against real hardware.
 

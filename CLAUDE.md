@@ -435,8 +435,26 @@ the VM-specific ones.
   `renderD128`, `version` — no `card0-DP-1` or equivalent, so there is no `/sys/class/drm/<conn>/edid`
   to read at all, not merely a missing `ddc` symlink (that was the dev host's, different, milder
   finding). The only route to a monitor's EDID that worked here was `xrandr --props`, which
-  exposes a raw `EDID:` hex property per output regardless of driver; decoded, it produced the
-  exact `mfg:model:serial` triple (`GSM:LG ULTRAFINE:401NTMX52747`) that `ddcutil detect` printed
-  for the same physical monitor on its I2C bus. Treat `xrandr --props`'s EDID property as the
-  primary route for the RandR-name-to-monitor-identity join, with `/sys/class/drm/<conn>/edid` as
-  a fallback for drivers that do populate it, not the other way around.
+  exposes a raw `EDID:` hex property per output on a **real Xorg session running directly on
+  KMS with no compositor** — confirmed decoding it produced the exact `mfg:model:serial` triple
+  (`GSM:LG ULTRAFINE:401NTMX52747`) that `ddcutil detect` printed for the same physical monitor
+  on its I2C bus. **Not universal** — the same check against this project's own dev host found
+  *zero* `EDID:` properties on three connected outputs, because that host's `:0` is **XWayland**
+  (`ps` shows `/usr/bin/Xwayland :0 ...`), whose RandR is an emulation layer over Wayland's own
+  output protocol and does not forward EDID at all (the tell: `xrandr --props` reports
+  `RANDR Emulation: 1` on every output there, absent from the VM's capture). Irrelevant to the
+  kiosk, which never runs Wayland/XWayland, but the code must still treat "no EDID property
+  returned" as a legitimate outcome (fall back to `/sys/class/drm/<conn>/edid` if present, else
+  report the mechanism unavailable for that output) — not as a bug — since any developer testing
+  this against their own desktop will hit exactly that path routinely. Treat `xrandr --props`'s
+  EDID property as the primary route for the RandR-name-to-monitor-identity join on the kiosk's
+  own X session, with `/sys/class/drm/<conn>/edid` as a fallback for drivers that do populate it.
+- **Importing `utils.models.command_line` under pytest crashes the whole run with an
+  `INTERNALERROR`, before a single test executes.** `CommandLineArgs` is a `pydantic_settings
+  BaseSettings` with `cli_parse_args=True`, so merely *importing* the module parses `sys.argv` -
+  and under pytest that argv is pytest's own (test paths, `-v`, ...), which argparse rejects
+  outright. Most of `manager/api` and `manager/utils/models` transitively import it (e.g.
+  `api/system/cron.py` → `api/ws/wsmanager.py` → `utils/models/remote.py` →
+  `utils/models/command_line.py`), so almost any real test hits this. Fixed by sanitising
+  `sys.argv = sys.argv[:1]` at the top of `manager/tests/conftest.py`, before any test module's
+  own imports run - it has to be conftest.py specifically, since pytest loads it first.

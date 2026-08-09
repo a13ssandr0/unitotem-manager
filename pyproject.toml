@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+# The codebase uses absolute imports rooted at manager/ itself (e.g.
+# `from api.ws.endpoints import ...`), not at the repo root - so manager/ has
+# to be on sys.path for anything under manager/ to import at all, tests
+# included. There is no setup.py/src layout; this is the only wiring needed.
+pythonpath = ["manager"]
+testpaths = ["manager/tests"]
