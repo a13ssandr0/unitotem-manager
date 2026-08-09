@@ -1,0 +1,7 @@
+# Development-only dependencies: NOT part of manager/requirements.txt and
+# never installed into the shipped venv. debian/rules' override_dh_auto_install
+# copies an explicit whitelist of manager/ subdirectories (api, routers,
+# templates, utils, webview, resources, static) plus init.py, main.py and
+# requirements.txt - manager/tests/ and this file are simply not in that list,
+# so nothing here needs excluding, it is excluded by omission.
+pytest
