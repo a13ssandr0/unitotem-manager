@@ -324,6 +324,17 @@ per-thread deltas), /var/tmp/cefctl.py (standalone CEF host, CDP on 9333),
 /var/tmp/idleseq.sh (idle cost with no assignments at all), /var/tmp/cdp.py,
 /var/tmp/anim.py, /var/tmp/shot.py.
 
+UPDATE (2026-08-09): none of the above survived. The host rebooted at some
+point, which stops every libvirt domain (no autostart configured), and
+/var/tmp on this kiosk image is a 64 MiB tmpfs (CLAUDE.md gotcha) - so a
+guest restart wipes it regardless of "kept running on purpose". Confirmed:
+unitotem-cpu came back up fine (manager active, answering on 80/443,
+uptime ~17 min after a manual `virsh start`), but `ls /var/tmp/*.py
+/var/tmp/*.sh` is empty. The investigation itself is unaffected (the fix is
+merged, see the top of this file), but reproducing these exact numbers
+again means regenerating the rig from scratch per the recipe above - it is
+not there to just re-run.
+
 (2026-08-06) Idle-CPU investigation and GPU acceleration in the test VM.
 
 OPEN, and the real answer to the "70-85% of a core while idle" mystery: the
