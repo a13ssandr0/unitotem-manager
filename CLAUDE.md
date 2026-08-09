@@ -349,6 +349,35 @@ the VM-specific ones.
   process anyway (`init CUDA ERROR 'unknown error' (999)`, `CUDA ERROR 'initialization error'`)
   even though `vainfo` outside Chromium lists the full H.264/HEVC/VP9 NVDEC profile set. So on
   NVIDIA there is nothing to enable — do not go looking for a switch that turns it on.
+- **`VaapiVideoDecoder` is not a feature — passing it in `--enable-features=` is a silent no-op.**
+  It only appears in Chromium's source as a decoder *name* string
+  (`media/base/decoder.cc`), never as a `BASE_FEATURE`. The real gates for the VA-API/V4L2 Linux
+  decode path are `kAcceleratedVideoDecodeLinux` (on by default when `USE_VAAPI` is compiled in)
+  and `kAcceleratedVideoDecodeLinuxZeroCopyGL` (on by default) — both already enabled without
+  asking, so `--enable-features=VaapiVideoDecoder` in `unitotem-system`'s `chromium-accel` file
+  changes nothing. What actually decides whether the real decode path exists in the binary at
+  all is a **build-time** GN arg, not a runtime switch — see the next entry.
+- **On a stock Linux build, whether hardware decode exists in the binary at all is decided by
+  `use_vaapi`/`use_v4l2_codec` at GN time, and their defaults differ sharply by architecture.**
+  `media/gpu/args.gni`: `use_vaapi` defaults to `is_linux && (x11 || wayland) && (target_cpu ==
+  "x86" || target_cpu == "x64")` — **false on arm64, unconditionally, regardless of what hardware
+  is present**. `use_v4l2_codec` defaults to `false` on every architecture, including arm64; it
+  is not something a Raspberry Pi build gets "for free" for being non-x86, it has to be turned on
+  explicitly. `media/mojo/services/BUILD.gn` compiles the real decoder client
+  (`gpu_mojo_media_client_linux.cc`) only when `use_linux_video_acceleration = use_vaapi ||
+  use_v4l2_codec` is true; otherwise it silently links `gpu_mojo_media_client_stubs.cc`, a no-op.
+  So a default arm64 CEF build has **no hardware video decode client compiled in at all** — not
+  "decode fails to accelerate", but the code path to try does not exist in the binary, and no
+  runtime switch can bring it back. Reaching V4L2 on arm64 requires `use_v4l2_codec=true` in
+  `GN_DEFINES` for that build specifically (confirmed buildable outside ChromeOS:
+  `media/gpu/chromeos/BUILD.gn` asserts only `is_linux || is_chromeos`), and the result is
+  untested — see `manager/utils/system/gpu.py`'s `VERIFIED['v4l2'] = False`.
+- **The VA-API decode blocklist (`IsBlockedDriver` in `vaapi_wrapper.cc`) only blocks
+  *encoding*, never decoding**, and only for one specific case (AMD Stoney Ridge VBR). There is
+  no general non-Intel decode blocklist at that layer — the NVIDIA exclusion (previous entries)
+  is its own separate, earlier check in the same file, not part of this one. Do not conflate the
+  two or assume AMD/other-vendor decode is blocklisted the way NVIDIA is; it has simply never
+  been measured here (no AMD/Intel machine available).
 - **`video_decode: enabled` in the GPU feature stats does not mean anything is offloaded.** It
   means "not blocklisted". The honest signal is `SystemInfo.getInfo`'s `videoDecoding` array
   (the "Video Acceleration Information" table in `chrome://gpu`): an empty array means the GPU
