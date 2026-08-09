@@ -1,37 +1,75 @@
 === CURRENT WORK ===
-(2026-08-08) Video codecs and hardware decode. IN PROGRESS - a CEF source build
-is running and is the blocker for the H.264 half.
+(2026-08-09) Video codecs and hardware decode. CEF source build DONE, official,
+codecs verified in the binary; blocked only on which Python interpreter the
+wheel must be tagged for, because the kiosk image build now supports a
+`RELEASE=trixie` override (`unitotem-system/kiosk/common.sh`) that leaves no
+trace in tracked files, and the test VM was mid re-provision onto a fresh
+trixie image when this was picked up. Do not touch `unitotem-test` until that
+is confirmed settled - another agent/the coordinator owns it right now.
 
 WHAT THE BROWSER ACTUALLY IS: CEF 147.0.10, Chromium 147.0.7727.118, V8 14.7.
 Not behind at all - every piece of Chromium's Linux hardware-decode machinery
-is present in the binary (AcceleratedVideoDecodeLinuxGL, its ZeroCopy variant,
-VaapiVideoDecoder, VaapiIgnoreDriverChecks, VaapiOnNvidiaGPUs). So "the fork is
-too old" is NOT the explanation for anything here.
+is present in the binary. So "the fork is too old" is NOT the explanation for
+anything here.
 
-WHY THERE ARE NO PROPRIETARY CODECS: the wheel is built on Spotify's prebuilt
+WHY THERE WERE NO PROPRIETARY CODECS: the wheel is built on Spotify's prebuilt
 CEF distribution, which uses Chromium's default ffmpeg_branding=Chromium.
 ffmpeg is statically linked into libcef.so (no libffmpeg.so to swap), so the
 only fix is building CEF from source with proprietary_codecs=true and
-ffmpeg_branding=Chrome. That build is running now; see CLAUDE.md for the
-is_official_build trap that cost one full build cycle.
+ffmpeg_branding=Chrome. DONE: an official (is_official_build=true, with PGO)
+CEF 147 binary distribution was built from source with those flags and
+verified clean (no errors in the build log, libcef.so present, resolved
+args confirmed proprietary_codecs=true / ffmpeg_branding="Chrome" /
+enable_platform_hevc=true / use_vaapi=true). See CLAUDE.md for the
+is_official_build trap that cost one full build cycle before this one.
 
-WHY DECODE IS IN SOFTWARE: Chromium refuses VA-API on NVIDIA on purpose
-(vaapi_wrapper.cc skips nvidia-drm devices; VaapiOnNvidiaGPUs is off by
-default, and forcing it on makes nvidia_drv_video.so fail to initialise inside
-the GPU process anyway). Nothing to enable there. Evidence is the CDP Media
-domain, not CPU: kVideoDecoderName=VpxVideoDecoder, kIsPlatformVideoDecoder=
-false, and SystemInfo.getInfo's videoDecoding array empty in every
-configuration tried.
+A cp311 wheel was built from it in the cefpy-wheel-cp311 container (recipe:
+VM-TESTING.md sec. 8b) and is staged at
+vendor/cefpython-wheels/cefpython3-147.0.dev0-cp311-cp311-linux_x86_64.whl
+(gitignored, local only). A cp313 builder container (cefpy-wheel-trixie) is
+also built and standing by, in case the re-provisioned VM turns out to run
+Python 3.13. NEITHER WHEEL HAS BEEN INSTALLED OR TESTED ON A GUEST YET -
+codecs are confirmed present in libcef.so by inspection, not yet confirmed
+playing a real H.264 file end to end. That is the next step once the guest's
+Python version is confirmed and the VM is free to touch again.
 
-MEASURED, 1080p, whole CEF process tree, CDP Media domain for the decoder:
+The one measurement taken with an *unofficial* build of this same source
+config (before the official rebuild) showed the codec strings resolve and
+the crash is unrelated to codecs - it's the allocator mismatch, see CLAUDE.md.
+
+WHY DECODE IS IN SOFTWARE ON NVIDIA: Chromium refuses VA-API on NVIDIA on
+purpose (vaapi_wrapper.cc skips nvidia-drm devices; VaapiOnNvidiaGPUs is off
+by default, and forcing it on makes nvidia_drv_video.so fail to initialise
+inside the GPU process anyway). Nothing to enable there. Evidence is the CDP
+Media domain, not CPU: kVideoDecoderName=VpxVideoDecoder,
+kIsPlatformVideoDecoder=false, and SystemInfo.getInfo's videoDecoding array
+empty in every configuration tried.
+
+CORRECTION to an earlier note in this file: `VaapiVideoDecoder` is NOT a
+Chromium feature - it is only a decoder *name* string (media/base/decoder.cc).
+Passing it in --enable-features= is a silent no-op. The real gates
+(kAcceleratedVideoDecodeLinux, kAcceleratedVideoDecodeLinuxZeroCopyGL) are
+already on by default when VA-API is compiled in. See CLAUDE.md for the full
+finding, including the much bigger one: on a stock arm64 build,
+use_vaapi/use_v4l2_codec both default false regardless of hardware, so the
+*entire* hardware-decode client is compiled out (gpu_mojo_media_client_stubs.cc
+instead of _linux.cc) - not "fails to accelerate", the code path does not
+exist in the binary, and no runtime switch brings it back. Reaching V4L2 on a
+Pi needs use_v4l2_codec=true in GN_DEFINES for that arm64 build specifically.
+
+MEASURED, 1080p, whole CEF process tree, CDP Media domain for the decoder,
+old codec-less wheel, both configurations:
 
   configuration                     VP9            H.264
   GTX 1060, proprietary 535       76.5 %         will not play
   virtio-gpu / llvmpipe           77.0 %         will not play
 
-  H.264 fails as DEMUXER_ERROR_NO_SUPPORTED_STREAMS in both. VP9 is
-  VpxVideoDecoder (software) in both, 0 dropped frames in both. The GPU buys
-  nothing for video decode - two points of difference is noise.
+  H.264 fails as DEMUXER_ERROR_NO_SUPPORTED_STREAMS in both (expected - this
+  is the OLD wheel). VP9 is VpxVideoDecoder (software) in both, 0 dropped
+  frames in both. The GPU buys nothing for video decode - two points of
+  difference is noise. NEEDS RE-MEASURING with the new wheel once installed:
+  H.264 CPU cost next to VP9, on both configurations, plus confirmation the
+  software path did not regress.
 
 DONE (8438cc9): acceleration switches are now chosen from what the machine is.
 utils/system/gpu.py detects the stack from the filesystem only and maps it to a
@@ -39,27 +77,37 @@ profile table that is data, not branches. Unknown hardware gets the empty
 profile, so it keeps today's behaviour exactly - verified by the virtio guest
 landing on it before the software profile was taught about virtio-pci. Profiles
 measured: nvidia, software. Profiles reasoned from Chromium source but NOT
-measured: vaapi (no Intel/AMD machine here), v4l2 (no Pi here).
+measured: vaapi (no Intel/AMD machine here), v4l2 (no Pi here) - VERIFIED in
+gpu.py says why for each, and what evidence would promote them.
 
 STILL OPEN:
-  - The official CEF build with proprietary codecs: running, hours to go. Then
-    rebuild the cp311 wheel (recipe works, ~10 min in the cefpy-wheel-cp311
-    container) and re-run the capability matrix.
-  - arm64/Raspberry Pi is entirely unverified: no wheel built, no V4L2 profile
-    tested. The fork's CI publishes arm64 wheels but they are Spotify-based too,
-    so they have the same codec gap.
+  - Confirm the guest's Python version, install the matching wheel (cp311
+    already built; cp313 container ready if needed), restart the manager, and
+    verify: codec matrix via CDP again, a real H.264 file actually playing (not
+    just canPlayType), no Skia segfault, CPU cost of H.264 next to VP9 on both
+    virtio and the GTX 1060, and that the software path did not regress.
+  - arm64/Raspberry Pi remains entirely unverified in practice, and now has a
+    much sharper reason why: see the use_vaapi/use_v4l2_codec finding above.
+    No arm64 wheel with codecs exists; the fork's CI-published arm64 wheels are
+    Spotify-based too, so they have the same codec gap AND the same missing
+    hardware-decode client unless built with explicit GN flags for arm64.
   - HEVC: enable_platform_hevc=true in the new build, but that is hardware-only
     decode on Linux - expect it to stay unplayable wherever VA-API/V4L2 is not
     engaged. AC3/EAC3/DTS stay off.
+  - Licensing: enabling ffmpeg_branding=Chrome moves the H.264/AAC patent
+    question onto whoever distributes the image (VM-TESTING.md sec. 8b). Needs
+    a business decision, not a technical one; recorded, not resolved.
 
-NOTE, and it needs a decision: unitotem-system commit 76f3511 configures
+NOTE, still open, needs a decision: unitotem-system commit 76f3511 configures
 hardware decode via /etc/chromium.d/50-unitotem-accel, on the premise that "the
 manager drives Chromium over the DevTools protocol rather than embedding a
 renderer". That is not this codebase - the manager embeds CEF in-process via
 cefpython, and the kiosk image installs no chromium package at all (checked:
 `which chromium` empty, dpkg count 0, no /etc/chromium.d). That file configures
-a browser that is not there and has no effect on the viewer. The switches it
-wants are the ones 8438cc9 now sets in the right place.
+a browser that is not there and has no effect on the viewer. It also asks for
+--enable-features=...,VaapiVideoDecoder, which per the correction above does
+nothing even where the file WOULD apply. The switches that actually matter are
+the ones 8438cc9 now sets in the right place, inside the manager itself.
 
 (2026-08-08) Screen control (SCREEN-CONTROL-PLAN.md): step 2 of 7 DONE.
 
