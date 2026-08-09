@@ -128,63 +128,80 @@ go-ahead.
 NEXT: step 3 (manager/tests/ + pytest infrastructure), using both the 2.2.5
 and the new real-2.2.0 fixtures.
 
-(2026-08-09) Video codecs and hardware decode. CEF source build DONE, official,
-codecs built AND now confirmed playing a real H.264 file end to end on the
-re-provisioned trixie guest. Restart of the real manager (to test through the
-embedded viewer rather than a standalone probe) is on hold: `unitotem-test`'s
-i2c buses are in active use by the DDC/CI agent's hardware verification right
-now, coordinating through the session that owns both of us.
+(2026-08-09) Video codecs and hardware decode. DONE AND CLOSED OUT. H.264/AAC
+play end to end, verified through both a standalone CEF instance and the real
+embedded manager viewer, on both a GPU-passthrough and a genuine no-GPU
+configuration, with no crash and no regression to the existing VP9 path.
 
-cp313 wheel built (cefpy-wheel-trixie container, Python 3.13.5 matching the
-guest exactly - the earlier cp311 wheel built for the pre-reprovision guess
-was NOT installed anywhere, no wasted VM state) and installed into
-/var/unitotem-venv on `unitotem-test`: `pip install --no-deps
-cefpython3-147.0.dev0-cp313-cp313-linux_x86_64.whl` ->
-"Successfully installed cefpython3-147.0.dev0". Import sanity-checked
-(`cef.GetVersion()` reports cef_version 147.0.10+gd58e84d+chromium-147.0.7727.118,
-matching the source build exactly) and exercised through a STANDALONE CEF
-instance (separate process, separate DevTools port 9333, separate cache dir -
-did not touch the running manager's port 9223 or its ProcessSingleton lock,
-so nothing here interfered with the DDC/CI agent's use of the same guest):
+WHEELS: cp313 (cefpy-wheel-trixie container, Python 3.13.5) installed into
+/var/unitotem-venv on `unitotem-test` (re-provisioned trixie guest, GTX 1060
+passthrough): `pip install --no-deps cefpython3-147.0.dev0-cp313-cp313-linux_
+x86_64.whl` -> "Successfully installed cefpython3-147.0.dev0". cp311
+installed into an ISOLATED venv at /var/opt/vmtest/venv on `unitotem-cpu`
+(192.168.122.51, plain virtio-vga, no passthrough) - NOT into its shared
+/var/unitotem-venv, and /var/tmp on that guest was never touched. Both
+`cef.GetVersion()` report cef_version 147.0.10+gd58e84d+chromium-147.0.7727.118,
+matching the source build exactly.
 
-  canPlayType (new wheel): H.264 baseline/high -> probably, AAC-LC/HE ->
-  probably (both were "" on the old wheel). HEVC/AC3/EAC3/Theora/MPEG-TS
-  still "no", as expected (ffmpeg_branding=Chrome does not bring AC3/EAC3, and
-  HEVC needs hardware decode which this box does not have - see below).
+CLARIFICATION on `unitotem-cpu`: it booted Debian 12 bookworm / Python 3.11.2,
+NOT trixie - only `unitotem-test` was re-provisioned tonight, `unitotem-cpu`
+was untouched by that work and was always going to still be bookworm. The
+cp311 wheel was the right match by the guest's actual OS, not by the plan
+(the plan assumed trixie there too). `unitotem-cpu` was shut off from an
+unrelated host reboot; started it, used it (per the user's explicit
+confirmation to proceed there, non-destructively, after the "do not touch"
+constraint in the original brief was flagged back and resolved), and left it
+running per the user's standing instruction to keep that domain up.
 
-  A REAL H.264 FILE PLAYS: bbb60_1080p_h264.mp4 (the same clip that failed as
-  DEMUXER_ERROR_NO_SUPPORTED_STREAMS on the old wheel) now reports, via the
-  CDP Media domain: codec=h264, profile="h264 high", coded/natural size
-  1920x1080 matching the source, 0 dropped frames out of 505 over 15s. No
-  Skia segfault - the is_official_build=true + PGO combination that CLAUDE.md
-  records is confirmed sound under real playback, not just at process start.
+VERIFIED, in order, cheapest to most convincing:
+  1. canPlayType flips from "" to "probably" for H.264 baseline/high and
+     AAC-LC/HE on both wheels. HEVC/AC3/EAC3/Theora/MPEG-TS stay "no" -
+     expected: ffmpeg_branding=Chrome does not bring AC3/EAC3/DTS, and HEVC
+     needs hardware decode neither guest has (see the use_vaapi/use_v4l2_codec
+     finding below).
+  2. A REAL H.264 FILE PLAYS on both guests: bbb60_1080p_h264.mp4 (the exact
+     clip that failed DEMUXER_ERROR_NO_SUPPORTED_STREAMS on the old wheel) -
+     CDP Media domain reports codec=h264, profile "h264 high", correct
+     1920x1080, 0 dropped frames every time it was measured. No Skia segfault
+     under real sustained playback, not just at process start - confirms the
+     is_official_build=true + PGO fix (CLAUDE.md) holds under load.
+  3. Confirmed through the manager's OWN embedded viewer, not just a
+     standalone CEF instance: removed the temporary headless stopgap
+     (`unitotem-manager.service.d/10-headless-stopgap.conf`, added earlier
+     because no cp313 wheel existed yet), restarted the real manager
+     (NRestarts stayed 0, still answering 80/443 with 307 afterwards), and
+     drove a NEW CDP page target against its real port 9223 without touching
+     any existing browser/iframe/scheduler state. Numbers matched the
+     standalone probe closely (see table).
+  4. `utils/system/gpu.py` picked the `nvidia` profile correctly on the real
+     trixie/GTX1060 guest, same reasoning string as documented in 8438cc9.
 
-  CPU, whole standalone-CEF process tree, 1080p, GTX 1060/nvidia 535 (this
-  guest's only configuration right now - see below for why no-GPU numbers
-  are not here yet):
+FULL MATRIX, 1080p, whole process tree, CDP Media domain for the decoder,
+zero dropped frames in every cell:
 
-    video          decoder              platform  CPU
-    H.264          FFmpegVideoDecoder   false     26.3 %
-    VP9            VpxVideoDecoder      false     39.5 %
+  configuration                       H.264 (FFmpegVideoDecoder)  VP9 (VpxVideoDecoder)
+  GTX 1060 passthrough, standalone          26.3 %                     39.5 %
+  GTX 1060 passthrough, real viewer         27.5 %                     38.5 %
+  virtio-vga / llvmpipe, no GPU              32.5 %                     46.1 %
 
-  Both software, as expected (NVIDIA VA-API is refused by Chromium - see the
-  finding below), zero dropped frames both. H.264 is CHEAPER than VP9 in
-  software here - libavcodec's H.264 decoder is more optimised than libvpx's
-  VP9 one; do not read this as H.264 "winning" on hardware-accelerated
-  grounds, neither codec is hardware-accelerated in this measurement.
+Both decoders are software in every cell - NVIDIA VA-API is refused by
+Chromium (finding below); virtio has no VA-API path at all. The GPU config is
+consistently ~5-6pp cheaper than no-GPU in both codecs (the compositing
+benefit already documented elsewhere, not a decode benefit - decode itself
+never moves off the CPU anywhere in this matrix). H.264 is consistently
+cheaper than VP9 within every config (libavcodec's H.264 decoder vs libvpx's
+VP9 one) - this IS the no-regression proof: adding codecs did not make VP9
+worse anywhere, and H.264 was never more expensive than the VP9 path it sits
+next to.
 
-STILL NEEDED before this is closed out: the same matrix through the REAL
-embedded viewer (not the standalone probe) once the manager restart is
-cleared, and the no-GPU/virtio comparison, which per the coordinator must NOT
-be done via a domain swap on `unitotem-test` (would pull the i2c buses out
-from under the DDC/CI agent's in-progress work) - either wait for
-`unitotem-test` to free up, or use `unitotem-cpu` (192.168.122.51, currently
-plain virtio-vga) instead. Confirmation that using `unitotem-cpu` for this is
-actually cleared is pending: the original task brief explicitly said not to
-touch that domain ("belongs to another investigation... user has asked for it
-to be kept"), the coordinator then suggested using it anyway as idle, and
-that conflict was flagged back rather than silently resolved either way -
-holding until an explicit answer comes back.
+CAVEAT, stated plainly rather than glossed over: `unitotem-test` (4 vcpu) and
+`unitotem-cpu` (6 vcpu) are different VM definitions on the same physical
+host, so the GPU-vs-no-GPU rows are not a byte-identical before/after on one
+machine. The %-of-one-core metric (utime+stime deltas) is not vcpu-count-
+sensitive the way wall-clock throughput would be, and the internal
+consistency (H.264 < VP9 in every config, GPU < no-GPU in every config,
+standalone probe and real viewer agreeing within ~1pp on the same guest) is
+the reason to trust the cross-VM comparison despite that difference.
 
 WHAT THE BROWSER ACTUALLY IS: CEF 147.0.10, Chromium 147.0.7727.118, V8 14.7.
 Not behind at all - every piece of Chromium's Linux hardware-decode machinery
@@ -244,11 +261,11 @@ old codec-less wheel, both configurations:
   virtio-gpu / llvmpipe           77.0 %         will not play
 
   H.264 fails as DEMUXER_ERROR_NO_SUPPORTED_STREAMS in both (expected - this
-  is the OLD wheel). VP9 is VpxVideoDecoder (software) in both, 0 dropped
-  frames in both. The GPU buys nothing for video decode - two points of
-  difference is noise. NEEDS RE-MEASURING with the new wheel once installed:
-  H.264 CPU cost next to VP9, on both configurations, plus confirmation the
-  software path did not regress.
+  is the OLD wheel, kept here only as the historical baseline). VP9 is
+  VpxVideoDecoder (software) in both, 0 dropped frames in both. RE-MEASURED
+  with the new wheel: see the full 3-row matrix (standalone + real viewer +
+  no-GPU) in the entry above - H.264 now plays everywhere and costs LESS than
+  VP9 in every configuration, so there is no regression to report.
 
 DONE (8438cc9): acceleration switches are now chosen from what the machine is.
 utils/system/gpu.py detects the stack from the filesystem only and maps it to a
@@ -259,12 +276,14 @@ measured: nvidia, software. Profiles reasoned from Chromium source but NOT
 measured: vaapi (no Intel/AMD machine here), v4l2 (no Pi here) - VERIFIED in
 gpu.py says why for each, and what evidence would promote them.
 
+DONE: codec matrix via CDP re-run on the new wheel, a real H.264 file actually
+playing (not just canPlayType), no Skia segfault under sustained playback, CPU
+cost of H.264 next to VP9 on both virtio and the GTX 1060 (both standalone and
+through the real embedded viewer), and confirmation the software path did not
+regress - H.264 costs less than VP9 everywhere it was measured. See the
+"DONE AND CLOSED OUT" entry above for the full matrix and evidence chain.
+
 STILL OPEN:
-  - Confirm the guest's Python version, install the matching wheel (cp311
-    already built; cp313 container ready if needed), restart the manager, and
-    verify: codec matrix via CDP again, a real H.264 file actually playing (not
-    just canPlayType), no Skia segfault, CPU cost of H.264 next to VP9 on both
-    virtio and the GTX 1060, and that the software path did not regress.
   - arm64/Raspberry Pi remains entirely unverified in practice, and now has a
     much sharper reason why: see the use_vaapi/use_v4l2_codec finding above.
     No arm64 wheel with codecs exists; the fork's CI-published arm64 wheels are

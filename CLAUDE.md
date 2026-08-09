@@ -335,15 +335,26 @@ the VM-specific ones.
   `ps pcpu` is a lifetime average and will report a quiet number for a process that started
   burning a core a minute ago. The load also sits in CEF *subprocesses*, not in the Python
   process, so measuring the main pid alone reports ~1% while the tree is at 160%.
-- **The shipped cefpython3 wheel has no proprietary codecs, and the only fix is rebuilding CEF
-  from source.** `canPlayType` says no to `avc1` (H.264), `mp4a.40.2` (AAC), HEVC, AC3/EAC3 and
-  Theora, and an H.264 MP4 fails with `DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no
-  supported streams`. VP8, VP9, AV1, Opus, Vorbis, MP3, FLAC and WAV all work. The cause is that
-  the wheel is built on the **Spotify prebuilt CEF binary distribution** (`tools/download_cef.py`),
-  which is built with Chromium's default `ffmpeg_branding=Chromium`. There is no `libffmpeg.so`
-  in the distribution to swap — ffmpeg is statically linked into `libcef.so` — so the flags must
-  be set at Chromium build time: `proprietary_codecs=true ffmpeg_branding=Chrome`. Until such a
-  wheel is in place, any video test asset has to be WebM/VP9 or AV1.
+- **RESOLVED (2026-08-09): the shipped cefpython3 wheel used to have no proprietary codecs;
+  rebuilding CEF from source fixes it, and that build is now done and verified.** The cause was
+  that the wheel is built on the **Spotify prebuilt CEF binary distribution**
+  (`tools/download_cef.py`), which is built with Chromium's default `ffmpeg_branding=Chromium`.
+  There is no `libffmpeg.so` in the distribution to swap — ffmpeg is statically linked into
+  `libcef.so` — so the flags have to be set at Chromium build time:
+  `proprietary_codecs=true ffmpeg_branding=Chrome` (see the source-build recipe in
+  `VM-TESTING.md`, sec. 8b). A CEF 147 distribution was built from source with those flags plus
+  `is_official_build=true` and PGO (see the next entry for why official matters), and cp311/cp313
+  wheels built from it are staged locally at `vendor/cefpython-wheels/` (gitignored — not yet
+  published anywhere, so a fresh clone or CI does not get them automatically; `debian/rules`
+  picks up whichever wheel matches the target interpreter's tag from that directory if present).
+  Verified end to end on real guests, GPU-passthrough and no-GPU alike: `canPlayType` now answers
+  `probably` for `avc1` (H.264) and `mp4a.40.2` (AAC), and a real H.264 MP4 plays with zero
+  dropped frames (`kVideoDecoderName=FFmpegVideoDecoder`) instead of failing with
+  `DEMUXER_ERROR_NO_SUPPORTED_STREAMS`. HEVC, AC3/EAC3 and Theora still answer `no` — expected,
+  `ffmpeg_branding=Chrome` does not bring AC3/EAC3/DTS, and HEVC needs hardware decode neither
+  test guest has (see the `use_vaapi`/`use_v4l2_codec` entry further down). Until this wheel is
+  actually shipped in a built package, any video test asset on an unpatched install still has to
+  be WebM/VP9 or AV1.
 - **Build CEF from source with `is_official_build=true`, never `false`.** A non-official build
   completes and produces a working-looking `libcef.so` that segfaults at runtime inside Skia,
   at `sk_malloc_size` → `malloc_usable_size` (`SIGSEGV SI_KERNEL`, registers full of the `0xcd`
