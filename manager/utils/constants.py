@@ -12,7 +12,13 @@ envfile = Path('/etc/unitotem/unitotem.env')
 certfile = '/etc/ssl/unitotem.pem'
 keyfile = '/etc/ssl/unitotem.pem'
 
-uploads_folder = Path(__file__).joinpath('../../uploaded').resolve()
+# Uploads are runtime data: they must live on a writable, persistent path, never next to the code
+# (/usr is read-only on the kiosk image). A pre-existing in-tree folder with content is still honoured
+# so that packaged installs from before this change keep seeing their files.
+_legacy_uploads = Path(__file__).joinpath('../../uploaded').resolve()
+uploads_folder = Path('/var/lib/unitotem/uploaded')
+if not uploads_folder.exists() and _legacy_uploads.is_dir() and any(_legacy_uploads.iterdir()):
+    uploads_folder = _legacy_uploads
 static_folder = Path(__file__).joinpath('../../static').resolve()
 
 def_duration = 30
