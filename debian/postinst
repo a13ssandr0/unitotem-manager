@@ -22,6 +22,12 @@ if [ "$1" == "configure" ]; then
 	setcap CAP_NET_BIND_SERVICE=+eip /var/unitotem-venv/bin/python
 	setcap CAP_NET_BIND_SERVICE=+eip /var/unitotem-venv/bin/python3
 
+	# The manager binds 80/443 itself. A haproxy left over from the 2.x package (it forwarded to
+	# 127.0.0.1:5000) would hold those ports and the manager could never answer.
+	if systemctl list-unit-files haproxy.service >/dev/null 2>&1; then
+		systemctl disable --now haproxy >/dev/null 2>&1 || systemctl disable haproxy >/dev/null 2>&1 || true
+	fi
+
 	getent group unitotem >/dev/null || addgroup --system unitotem
 	# reading raw block devices (to compute free space on unmounted filesystems)
 	# requires membership in the "disk" group; also reapplied on upgrade in

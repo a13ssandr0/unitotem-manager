@@ -1,9 +1,11 @@
-unitotem-manager (3.0.0~dev1) stable; urgency=medium
+unitotem-manager (3.0.0~dev2) stable; urgency=medium
 
   * Qt6 + CEF viewer, multi-playlist scheduler, remote control and screen control
   * Updates page driven by unitotem-update (whole-image A/B updates), no apt
   * Loopback-only /health endpoint used to confirm a trial boot
   * Uploads moved to /var/lib/unitotem/uploaded (read-only root)
+  * Depend on libxcb-icccm4 and libxcb-shape0 (Qt aborted the whole manager without them)
+  * Disable a leftover haproxy, the manager binds 80/443 itself
 
  -- Alessandro Campolo <campolo.alex@gmail.com>  Sat, 10 Oct 2026 17:44:57 +0200
 
