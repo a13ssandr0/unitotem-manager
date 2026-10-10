@@ -112,10 +112,20 @@ content flip (ex: for backwards projection).
 Based on user crontab allows setting reboot/poweroff timers.
 
 ### Updates
-A simple frontend for apt-get update and apt-get dist-upgrade -y.
-A periodic task should run in background every day to check for updates and display an hint in the navbar in the webui.
-The webui must provide a xterm.js console to show update/upgrade logs. Logs of the last run must be cached for the entire
-lifecycle of the program, its ok to discard them as soon as another update/upgrade task is run or if the program exits
+The system is updated by replacing the whole root image, never by upgrading packages: apt is not
+available at runtime (dpkg stays). The device downloads a signed release image from the project's
+repository (GitHub Releases) into the inactive slot, boots it on trial and confirms it only once the
+manager answers `GET /health`; otherwise it rolls back to the previous slot. User data (`DATA`:
+`/etc/unitotem`, certificates, uploads, crontab) is never part of the image and survives updates.
+
+The device side is `/usr/sbin/unitotem-update --json` (subcommands `status`, `check`, `fetch`, `apply`,
+`confirm`, `rollback`, `cancel`; progress as one JSON line in `/run/unitotem-update.progress`),
+owned by the unitotem-system project (contract in its `AB-DESIGN.md`). The manager never downloads or
+writes images itself: it starts the commands, polls them and shows the result in the web UI.
+The Updates page shows the installed version, whether the image supports A/B, the result of a check
+and, during a fetch, its progress, and offers check/apply/confirm/rollback. A periodic task checks
+daily in the background and shows a hint in the navbar. Because data migrations must stay readable by
+the previous version (rollback), shared configuration is kept backward compatible by one version.
 
 ### Backup/Restore
 Must provide and easy way to backup, restore and reset unitotem configuration.
