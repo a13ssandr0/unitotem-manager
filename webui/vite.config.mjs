@@ -74,5 +74,22 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // Development: open http://localhost:3000 and everything that is not a Vite module is proxied to
+    // a running backend (default: local; set UNITOTEM_BACKEND=https://<vm-ip> to target the test VM).
+    // The marker header makes the backend render pages that load the sources from this server.
+    // HTML pages and the websocket must go through the backend (the page state is rendered by Jinja).
+    proxy: {
+      '/': {
+        target: process.env.UNITOTEM_BACKEND || 'https://localhost',
+        secure: false,
+        ws: true,
+        changeOrigin: true,
+        headers: { 'X-Unitotem-Vite-Dev': '1' },
+        bypass: (req) => {
+          const url = req.url || ''
+          if (/^\/(src|node_modules|@|__vite|\.vite)/.test(url) || /[?&]import(&|$)/.test(url)) return url
+        },
+      },
+    },
   },
 })

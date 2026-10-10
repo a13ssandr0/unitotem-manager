@@ -23,7 +23,7 @@ VM_VENV="${VM_VENV:-/var/unitotem-venv}"
 
 # rsync is not part of the kiosk image and cannot be apt-installed onto a
 # read-only root; it is unpacked into /var instead (see VM-TESTING.md).
-VM_RSYNC_PATH="${VM_RSYNC_PATH:-/var/opt/rsync/usr/bin/rsync}"
+VM_RSYNC_PATH="${VM_RSYNC_PATH:-/usr/bin/rsync}"
 
 # ssh must NEVER pop up a graphical password prompt: on a KDE desktop a missing
 # key or an unknown host makes ssh spawn ksshaskpass, which steals focus and

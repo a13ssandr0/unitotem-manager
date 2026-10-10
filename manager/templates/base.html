@@ -20,6 +20,7 @@
     <script>
         window.__INITIAL_STATE__ = {{ (state or {})|tojson }};
     </script>
+    {% if assets.dev %}<script type="module" src="/@vite/client"></script>{% endif %}
     <script type="module" src="{{ assets.js }}"></script>
   </body>
 </html>
