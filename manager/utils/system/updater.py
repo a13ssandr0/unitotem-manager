@@ -14,6 +14,8 @@ UPDATER = '/usr/sbin/unitotem-update'
 # Documented exit codes; every one has a meaning, none is a generic error.
 EXIT_OK = 0
 EXIT_NOTHING_TO_DO = 10
+EXIT_BUSY = 12
+EXIT_NO_ROLLBACK = 13
 EXIT_FAILED = 2
 EXIT_ABSENT = 127
 
@@ -61,3 +63,24 @@ async def status() -> dict[str, Any]:
 
 async def check() -> dict[str, Any]:
     return await run('check')
+
+
+async def fetch(force: bool = False) -> dict[str, Any]:
+    """Starts the download detached and returns at once; progress is read from status()."""
+    return await run('fetch', *(['--force'] if force else []))
+
+
+async def apply(reboot: bool = True) -> dict[str, Any]:
+    return await run('apply', *(['--reboot'] if reboot else []))
+
+
+async def confirm() -> dict[str, Any]:
+    return await run('confirm')
+
+
+async def rollback(reboot: bool = True) -> dict[str, Any]:
+    return await run('rollback', *(['--reboot'] if reboot else []))
+
+
+async def cancel() -> dict[str, Any]:
+    return await run('cancel')
