@@ -3,8 +3,8 @@
 release 2026.10.7, fake-github on 192.168.122.1:8080 serving unitotem-system/work/powercut/releases), all driven
 through the manager websocket API: check (1.36 GB), fetch with live progress, apply+reboot, trial boot in
 slot b, /health 200 about 35 s after boot, automatic confirm, rollback_available=true, manual rollback back to
-slot a (2026.10.6). /health answers ~2 s after a manager start. Seen: after a manual rollback last_result stays
-{op: rollback, result: armed} forever (never becomes ok) - cosmetic, tell the system session. Still unverified:
+slot a (2026.10.6). /health answers ~2 s after a manager start. Re-run on the rebuilt image/release (journaled DATA): same cycle OK, and after a manual rollback last_result
+becomes {op: rollback, result: ok} (fixed by the system session). Still unverified:
 Updates page in a real browser against the real updater; daily background check + navbar hint; arm64 manager .deb
 (arm64 image stays on 2.x). Package bugs found on the way (fixed in 3.0.0~dev2): missing libxcb-icccm4 and
 libxcb-shape0 (Qt aborts the whole manager), leftover haproxy holding 80/443.
