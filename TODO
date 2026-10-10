@@ -1,4 +1,15 @@
 === CURRENT WORK ===
+(2026-10-10, later) Updates page implemented (status/check/fetch/apply/confirm/rollback/cancel with live
+progress) and exercised end to end through the websocket API on VM `unitotem-ab` (libvirt, 192.168.122.52,
+A/B v1 image from unitotem-system/work/ab-test, fake release server tools/release/fake-github.py on
+192.168.122.1:8080, definition in tools/unitotem-ab.xml, disk in /var/tmp/unitotem-ab). Verified: check,
+fetch+progress, apply, trial boot, health-timeout automatic rollback, confirm. Open: rollback after confirm
+returned no-rollback (reported to the system session), settings changed between fetch and apply are not
+carried over (/etc imported at fetch), the image's own manager is the old 2.3.0 so a health-gated success
+needs a release containing the current manager. Not done: daily background check + navbar hint; the
+page has never been opened in a browser against a real updater. unitotem-test (GPU, 192.168.122.50) and
+Vite on :3000 are left running.
+
 (2026-10-10) Coordination with the unitotem-system session (immutable Debian image, A/B, no apt at
 runtime; design in ~/Sviluppo/unitotem-system/AB-DESIGN.md, proposal only).
 
