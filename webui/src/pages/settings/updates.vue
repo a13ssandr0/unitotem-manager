@@ -6,116 +6,95 @@
       width="100%"
       :title="String($route.name)"
     >
-      <div class="d-flex align-center">
-        <v-card-subtitle>
-          <span>{{ updates }}</span>
-          <v-menu v-if="packages.length > 0" location="bottom">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" variant="text" icon="mdi-information-outline"></v-btn>
-            </template>
-            <v-card>
-              <v-table>
-                <thead>
-                  <tr>
-                    <th class="text-left">Package</th>
-                    <th class="text-left">Installed</th>
-                    <th class="text-left">Available</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in packages" :key="item.package">
-                    <td><strong>{{ item.package }}</strong></td>
-                    <td>{{ item.old_version }}</td>
-                    <td>{{ item.new_version }}</td>
-                  </tr>
-                </tbody>
-              </v-table>
-            </v-card>
-          </v-menu>
-        </v-card-subtitle>
-        <v-spacer></v-spacer>
-        <v-btn variant="text" color="primary" :prepend-icon="status === 'update' ? 'mdi-loading mdi-spin' : 'mdi-refresh'" @click="sendCommand('Settings/Update/update')"
-                :disabled="status !== null">Check updates</v-btn>
-        <v-btn variant="text" color="red" :prepend-icon="status === 'upgrade' ? 'mdi-loading mdi-spin' : 'mdi-progress-upload'" @click="sendCommand('Settings/Update/upgrade')"
-               :disabled="status !== null || packages.length === 0">Apply updates</v-btn>
-      </div>
-    </v-card>
-    <v-card
-      class="ma-4 mt-2"
-      max-width="1000"
-      width="100%"
-      title="Logs"
-    >
       <v-card-text>
-        <div class="bg-black pa-4 rounded log-container">
-          <div v-if="logs.length === 0">No logs available</div>
-          <div v-else>
-            <div v-for="(log, index) in logs" :key="index" :class="{ 'text-red': !log[0] }">{{ log[1] }}</div>
-            <div v-if="returncode===0" class="text-green">Process terminated with code {{ returncode }}</div>
-            <div v-else-if="returncode!==null" class="text-red">Process failed with code {{ returncode }}</div>
+        <v-alert v-if="status && !status.supported" type="warning" variant="tonal" class="mb-4">
+          This system image cannot be updated from here: the updater is not installed.
+        </v-alert>
+        <v-alert v-else-if="status && status.error" type="error" variant="tonal" class="mb-4">
+          {{ status.error }}
+        </v-alert>
+
+        <v-table v-if="status && status.supported && !status.error" density="compact">
+          <tbody>
+            <tr>
+              <td>Installed version</td>
+              <td>{{ status.current_version }}</td>
+            </tr>
+            <tr>
+              <td>Image layout</td>
+              <td>
+                {{ status.ab ? 'A/B (rollback available)' : 'Single root, no A/B yet' }}
+              </td>
+            </tr>
+            <tr v-if="status.op">
+              <td>Operation in progress</td>
+              <td>{{ status.op }}</td>
+            </tr>
+          </tbody>
+        </v-table>
+
+        <v-alert v-if="check && check.error" type="error" variant="tonal" class="mt-4">
+          Check failed: {{ check.error }}
+          <span v-if="check.error_code" class="text-caption">({{ check.error_code }})</span>
+        </v-alert>
+        <v-alert v-else-if="check && check.available" type="info" variant="tonal" class="mt-4">
+          Version {{ check.version }} ({{ check.channel }}) is available, {{ formatSize(check.size) }}.
+          <div v-if="check.needs_layout_migration">
+            This update changes the disk layout and needs a migration.
           </div>
-        </div>
+        </v-alert>
+        <v-alert v-else-if="check" type="success" variant="tonal" class="mt-4">
+          The system is up to date.
+        </v-alert>
       </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn
+          variant="text"
+          color="primary"
+          :prepend-icon="checking ? 'mdi-loading mdi-spin' : 'mdi-refresh'"
+          :disabled="checking || !status || !status.supported"
+          @click="runCheck"
+        >Check updates</v-btn>
+      </v-card-actions>
     </v-card>
   </div>
 </template>
 
 <script setup>
-import {computed, ref} from 'vue'
+import {ref} from 'vue'
 
-const status = ref(null);
-const returncode = ref(0);
+const status = ref(null)
+const check = ref(null)
+const checking = ref(false)
 
-const packages = ref([])
-
-const updates = computed(() => {
-  const count = packages.value.length
-  if (count === 0) {
-    return 'All packages are up to date'
+function formatSize(bytes) {
+  if (!bytes) return 'unknown size'
+  const units = ['B', 'KiB', 'MiB', 'GiB']
+  let i = 0
+  while (bytes >= 1024 && i < units.length - 1) {
+    bytes /= 1024
+    i++
   }
-  if (count === 1) {
-    return '1 update available'
-  }
-  return `${count} updates available`
-})
+  return `${bytes.toFixed(i ? 1 : 0)} ${units[i]}`
+}
 
-const logs = ref([])
+function runCheck() {
+  checking.value = true
+  window.sendCommand('Settings/Update/check')
+}
 
-
-const sendCommand = window.sendCommand;
-
-window.setInitCommands("Settings/Update/list", "Settings/Update/status")
+window.setInitCommands('Settings/Update/status')
 
 onWSMessage = (data) => {
   switch (data.target) {
-    case "Settings/Update/list":
-      packages.value = data.updates;
-      break;
-    case "Settings/Update/status":
-      status.value = data.status;
-      returncode.value = data.returncode;
-      logs.value = data.log;
-      break;
-    case 'Settings/Update/start':
-      logs.value = [];
-      break;
-    case 'Settings/Update/progress':
-      logs.value.push([data.is_stdout, data.data]);
-      break;
-    case 'Settings/Update/end':
-      status.value = null;
-      returncode.value = data.returncode;
-      break;
+    case 'Settings/Update/status':
+      status.value = data.status
+      break
+    case 'Settings/Update/check':
+      check.value = data.check
+      checking.value = false
+      break
   }
 }
-
 </script>
-
-<style scoped>
-.log-container {
-  font-family: monospace;
-}
-:deep(.v-btn--disabled) {
-  opacity: 0.6;
-}
-</style>
