@@ -70,3 +70,24 @@ def get_vite_assets(entry: str, dev: bool = False):
 
 def is_vite_dev(request) -> bool:
     return request.headers.get('x-unitotem-vite-dev') == '1'
+
+
+@cache
+def public_asset_files() -> frozenset[str]:
+    """
+    Built JS files the login page needs, i.e. the import closure of its entry (relative to the
+    static folder, e.g. 'assets/login-xxx.js'). Every other JS chunk is a page of the authenticated
+    app and is only served to a logged-in session.
+    """
+    manifest = load_vite_manifest()
+    seen: set[str] = set()
+
+    def walk(key: str):
+        if key in seen or key not in manifest:
+            return
+        seen.add(key)
+        for _import in manifest[key].get('imports', []):
+            walk(_import)
+
+    walk('src/pages/login.vue')
+    return frozenset(manifest[key]['file'] for key in seen)
