@@ -154,6 +154,17 @@ const errors = {
   12: 'Another update operation is already running.',
 }
 
+// Errors that are about the state of the download, not about the device: say what to do instead.
+const friendlyErrors = {
+  'slot-not-verified': 'The downloaded image did not pass the verification before activation. Download it again.',
+  'nothing-fetched': 'Nothing has been downloaded yet. Download the update first.',
+  'no-rollback': 'There is no previous version to go back to.',
+}
+
+function describeError(result) {
+  return friendlyErrors[result.error_code] ?? result.error
+}
+
 function formatSize(bytes) {
   if (!bytes) return 'unknown size'
   const units = ['B', 'KiB', 'MiB', 'GiB']
@@ -188,7 +199,7 @@ onWSMessage = (data) => {
     case 'Settings/Update/confirm':
     case 'Settings/Update/rollback':
       message.value = data.result.error
-        ? {type: 'error', text: data.result.error}
+        ? {type: friendlyErrors[data.result.error_code] ? 'warning' : 'error', text: describeError(data.result)}
         : (data.result.returncode === 12 ? {type: 'warning', text: errors[12]} : null)
       break
     case 'Settings/Update/check':
