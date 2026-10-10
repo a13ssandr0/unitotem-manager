@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 import utils.constants as const
-from templates import get_vite_assets, load_vite_manifest, templates
+from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
 from utils.environment import environ
 from utils.models.remote import RemoteManager
 from utils.models.user import User, user_manager
@@ -110,7 +110,7 @@ async def login_page(request: Request, src: Optional[str] = '/'):
     load_vite_manifest.cache_clear()
     get_vite_assets.cache_clear()
     ##
-    assets = get_vite_assets("src/pages/login.vue")
+    assets = get_vite_assets("src/pages/login.vue", is_vite_dev(request))
     return templates.TemplateResponse(request, "base.html", {
         "request": request,
         "assets": assets,

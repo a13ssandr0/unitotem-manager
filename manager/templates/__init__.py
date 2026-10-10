@@ -47,9 +47,16 @@ def load_vite_manifest():
 
 
 @cache
-def get_vite_assets(entry: str):
+def get_vite_assets(entry: str, dev: bool = False):
+    assets = {"js": "", "css": [], "dev": False}
+
+    # Development: the request came through the Vite dev server (see webui/vite.config.mjs), which marks
+    # it with X-Unitotem-Vite-Dev and proxies everything else to this backend, so the entry is referenced by source path and HMR works.
+    if dev:
+        assets.update(js=f"/{entry}", dev=True)
+        return assets
+
     vite_manifest = load_vite_manifest()
-    assets = {"js": "", "css": []}
 
     if entry in vite_manifest:
         entry = vite_manifest[entry]
@@ -59,3 +66,7 @@ def get_vite_assets(entry: str):
         assets["css"].extend([f"/{css}" for css in entry.get('css', [])])
 
     return assets
+
+
+def is_vite_dev(request) -> bool:
+    return request.headers.get('x-unitotem-vite-dev') == '1'

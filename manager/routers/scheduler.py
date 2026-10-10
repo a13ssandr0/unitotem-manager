@@ -7,7 +7,7 @@ from starlette.responses import HTMLResponse
 
 import utils.constants as const
 from routers.login import LOGMAN
-from templates import get_vite_assets, load_vite_manifest, templates
+from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
 from utils.models.user import User
 from utils.storage.uploadmanager import upload_manager
 from utils.system.network.ip import do_ip_addr
@@ -44,7 +44,7 @@ async def home(request: Request, path: str, user: User = Depends(LOGMAN)):
     load_vite_manifest.cache_clear()
     get_vite_assets.cache_clear()
     ##
-    assets = get_vite_assets("src/main.js")
+    assets = get_vite_assets("src/main.js", is_vite_dev(request))
     return templates.TemplateResponse(request, "base.html", {
         "assets": assets,
         "state": {
