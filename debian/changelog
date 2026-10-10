@@ -1,3 +1,12 @@
+unitotem-manager (3.0.0~dev1) stable; urgency=medium
+
+  * Qt6 + CEF viewer, multi-playlist scheduler, remote control and screen control
+  * Updates page driven by unitotem-update (whole-image A/B updates), no apt
+  * Loopback-only /health endpoint used to confirm a trial boot
+  * Uploads moved to /var/lib/unitotem/uploaded (read-only root)
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sat, 10 Oct 2026 17:44:57 +0200
+
 unitotem-manager (2.3.0) stable; urgency=medium
 
   * Added a custom page that displays images and videos fullscreen, replacing browser's default one
