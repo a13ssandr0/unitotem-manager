@@ -1,4 +1,22 @@
 === CURRENT WORK ===
+(2026-10-10) Coordination with the unitotem-system session (immutable Debian image, A/B, no apt at
+runtime; design in ~/Sviluppo/unitotem-system/AB-DESIGN.md, proposal only).
+
+DONE this session (all on dev, deployed to the VM): uploads moved to /var/lib/unitotem/uploaded (read-only
+root crash-loop on the Pi); Vite dev loop (webui/vite.config.mjs proxies to a backend, backend renders
+pages loading sources from the dev server when X-Unitotem-Vite-Dev is set: `UNITOTEM_BACKEND=https://<vm>
+npx vite`, open http://localhost:3000); non-login JS chunks under /assets only served to authenticated
+sessions; loopback-only GET /health (use https://localhost/health, -k; http redirects to https).
+VM unitotem-test was re-provisioned (the host's tmpfiles.d wipes /var/tmp after 30 days).
+
+NEXT (blocked on system session): Updates page against `/usr/sbin/unitotem-update --json`
+(status/check/fetch/apply/confirm/rollback/cancel, progress in /run/unitotem-update.progress) replacing
+manager/utils/system/apt.py; daily background check; navbar hint. Fetching releases from the GitHub
+repository is done by unitotem-update on the device, not by the manager. Then the full update test
+(release -> check -> fetch -> apply -> boot-ok via /health -> confirm, and a forced rollback).
+Keep /etc/unitotem and persist data backward compatible by one version.
+Optional: hide menu entries the user has no permission for (server already enforces).
+
 (2026-08-09) Screen control (SCREEN-CONTROL-PLAN.md): step 3 of 7 DONE -
 manager/tests/ + pytest, and the pure logic it tests now exists as real code.
 
