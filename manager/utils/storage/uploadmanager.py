@@ -20,7 +20,7 @@ class UploadManager(FileSystemEventHandler):
 
     def __init__(self, folder: Path, scan_callback: Callable[[dict], Coroutine] | None = None):
         self._folder = folder
-        self._folder.mkdir(exist_ok=True)
+        self._folder.mkdir(parents=True, exist_ok=True)
 
         self._files: list[Path] = []
         self._files_info: dict[str, FileInfo] = {}

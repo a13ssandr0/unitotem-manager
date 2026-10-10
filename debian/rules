@@ -44,7 +44,7 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	dh_auto_install
-	install -d $(SHARE) $(SHARE)/uploaded
+	install -d $(SHARE)
 	cp -r manager/api manager/routers manager/templates manager/utils \
 	      manager/webview manager/resources manager/static $(SHARE)/
 	cp manager/init.py manager/main.py manager/requirements.txt $(SHARE)/
