@@ -29,8 +29,8 @@ from api.commons import SHUTDOWN_EVENT
 from api.ws.endpoints import REMOTE_WS, WS, api
 from api.ws.wsmanager import WSManager
 from routers.error import http_exception_handler
-from routers.login import NotAuthenticatedException, login_redirect
-from templates import templates
+from routers.login import LOGMAN, NotAuthenticatedException, login_redirect
+from templates import public_asset_files, templates
 from utils._logging import Logger
 from utils.models.command_line import cmdargs
 from utils.models.playlists import playlists_manager
@@ -45,6 +45,23 @@ from webview.controller import WebviewManager
 
 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
 
+class AssetFiles(StaticFiles):
+    """
+    The built web UI. CSS, fonts and images are public, and so is the JavaScript the login page
+    needs; the chunks that make up the pages of the app are only served to authenticated sessions,
+    so an anonymous visitor cannot even download the interface (the data is protected separately,
+    by the websocket).
+    """
+
+    async def get_response(self, path: str, scope):
+        if path.endswith('.js') and f'assets/{path}' not in public_asset_files():
+            try:
+                await LOGMAN(Request(scope))
+            except NotAuthenticatedException:
+                raise HTTPException(status_code=401)
+        return await super().get_response(path, scope)
+
+
 # noinspection PyTypeChecker
 WWW = FastAPI(
         title='UniTotem', version=const.__version__,
@@ -52,7 +69,7 @@ WWW = FastAPI(
             Middleware(HTTPSRedirectMiddleware),
         ],
         routes=[
-            Mount('/assets', StaticFiles(directory=const.static_folder.joinpath('assets').resolve()), name='assets'),
+            Mount('/assets', AssetFiles(directory=const.static_folder.joinpath('assets').resolve()), name='assets'),
             Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded'),
         ],
         exception_handlers={
@@ -86,6 +103,17 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
         raise HTTPException(status_code=404)
     return templates.TemplateResponse(request, f'{page}.html.j2',
                                       {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
+
+
+@WWW.api_route("/health", methods=['GET', 'HEAD'])
+async def health(request: Request):
+    """
+    Readiness probe for the local update machinery (boot confirmation). Loopback only, no
+    session: it answers 200 once the server is accepting requests.
+    """
+    if request.client is None or request.client.host not in ('127.0.0.1', '::1'):
+        raise HTTPException(status_code=404)
+    return {'status': 'ok', 'version': const.__version__}
 
 
 WWW.include_router(routers.login.router)
