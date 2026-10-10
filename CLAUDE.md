@@ -469,3 +469,8 @@ the VM-specific ones.
   `utils/models/command_line.py`), so almost any real test hits this. Fixed by sanitising
   `sys.argv = sys.argv[:1]` at the top of `manager/tests/conftest.py`, before any test module's
   own imports run - it has to be conftest.py specifically, since pytest loads it first.
+- **Runtime data must never be written under the code directory.** The kiosk image mounts `/usr`
+  read-only (no overlay), so `uploads_folder` defaulting to `<code>/uploaded` made the manager
+  crash-loop at import time with an `OSError` in `UploadManager.__init__`. Uploads now default to
+  `/var/lib/unitotem/uploaded` (`utils/constants.py`); everything else the manager writes lives in
+  `/etc/unitotem`, `/etc/ssl`, `/var/cache/unitotem-cef`, all on the DATA overlay.

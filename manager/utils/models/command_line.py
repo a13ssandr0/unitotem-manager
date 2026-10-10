@@ -5,6 +5,8 @@ from loguru import logger
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from utils.constants import uploads_folder
+
 
 # noinspection PyDataclass
 class CommandLineArgs(BaseSettings, cli_parse_args=True, frozen=True):
@@ -20,7 +22,7 @@ class CommandLineArgs(BaseSettings, cli_parse_args=True, frozen=True):
     certfile: Path = Path('/etc/ssl/unitotem.pem')
     keyfile: Path = Path('/etc/ssl/unitotem.pem')
 
-    uploads_folder: Path = Path(__file__).joinpath('../../../uploaded').resolve()
+    uploads_folder: Path = uploads_folder
     static_folder: Path = Path(__file__).joinpath('../../../static').resolve()
 
 logger.info("Parsing command line arguments")

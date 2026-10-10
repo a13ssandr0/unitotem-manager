@@ -20,5 +20,5 @@ if [ "$1" == "remove" ] && [ -z "$2" ]; then
     fi
 elif [ "$1" == "purge" ] && [ -z "$2" ]; then
     rm -r /etc/unitotem
-    rm -r /usr/share/unitotem-manager/static/uploaded
+    rm -rf /var/lib/unitotem /usr/share/unitotem-manager/uploaded
 fi
