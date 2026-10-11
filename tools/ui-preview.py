@@ -99,6 +99,25 @@ async def main(args):
               return {x: Math.round(b.left - o.left), w: Math.round(b.width), h: Math.round(b.height)} })()""", True)
             check('dragging moves the window', moved['x'] != 0)
             check('and keeps the size the user gave it', [moved['w'], moved['h']] == size)
+            sizes = await cdp.eval("""(() => { const w = document.querySelector('.floating-window');
+              const b = [...w.querySelectorAll('.fw-btn')]; const i = b[0].querySelector('.v-icon');
+              const bar = w.querySelector('.floating-title').getBoundingClientRect();
+              return {buttons: b.map(x => x.title), bw: Math.round(b[0].getBoundingClientRect().width),
+                      icon: Math.round(parseFloat(getComputedStyle(i).fontSize)), bar: Math.round(bar.height)} })()""")
+            check('title bar has minimise, maximise and close', sizes['buttons'] == ['Minimise', 'Maximise', 'Close'])
+            check('buttons are 24 px with 16 px icons, KDE-sized', sizes['bw'] == 24 and sizes['icon'] == 16)
+            before = await cdp.eval("(() => { const b = document.querySelector('.floating-window').getBoundingClientRect(); return [Math.round(b.width), Math.round(b.height)] })()")
+            await cdp.eval("document.querySelector('.floating-window button[title=Maximise]').click()")
+            await asyncio.sleep(0.4)
+            full = await cdp.eval("""(() => { const b = document.querySelector('.floating-window').getBoundingClientRect();
+              const bar = document.querySelector('.v-app-bar').getBoundingClientRect();
+              return {w: Math.round(b.width) == innerWidth, h: Math.round(b.height) == innerHeight - Math.round(bar.bottom),
+                      top: Math.round(b.top) == Math.round(bar.bottom)} })()""")
+            check('maximise fills the page below the app bar', full['w'] and full['h'] and full['top'])
+            await cdp.eval("document.querySelector('.floating-title').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))")
+            await asyncio.sleep(0.4)
+            after = await cdp.eval("(() => { const b = document.querySelector('.floating-window').getBoundingClientRect(); return [Math.round(b.width), Math.round(b.height)] })()")
+            check('double-clicking the title bar restores the previous size', after == before)
             await cdp.eval(click_preview)
             await asyncio.sleep(1)
             check('clicking Preview again keeps one window for the same asset', await cdp.eval("document.querySelectorAll('.floating-window').length") >= 1)

@@ -1,19 +1,24 @@
 <template>
   <Teleport to="body">
-    <div v-if="modelValue" ref="win" class="floating-window elevation-12" :style="style" @mousedown="raise">
-      <div class="floating-title d-flex align-center px-3" @pointerdown="startDrag">
-        <v-icon v-if="icon" :size="16" class="me-2">{{ icon }}</v-icon>
-        <span class="floating-title-text text-truncate">{{ title }}</span>
+    <div v-if="modelValue" ref="win" class="floating-window elevation-12" :class="{maximized}" :style="style" @mousedown="raise">
+      <div class="floating-title d-flex align-center" @pointerdown="startDrag" @dblclick="toggleMaximized">
+        <v-icon v-if="icon" class="floating-title-icon">{{ icon }}</v-icon>
+        <span class="floating-title-text text-subtitle-2 text-truncate">{{ title }}</span>
         <v-spacer></v-spacer>
-        <v-btn class="floating-btn" icon variant="text" density="compact" :size="24" title="Minimise"
-               @click.stop="collapsed = !collapsed"><v-icon :size="16">mdi-window-minimize</v-icon></v-btn>
-        <v-btn class="floating-btn" icon variant="text" density="compact" :size="24" title="Close"
-               @click.stop="$emit('update:modelValue', false)"><v-icon :size="16">mdi-close</v-icon></v-btn>
+        <button type="button" class="fw-btn" title="Minimise" @click.stop="collapsed = !collapsed" @dblclick.stop>
+          <v-icon>mdi-window-minimize</v-icon>
+        </button>
+        <button type="button" class="fw-btn" :title="maximized ? 'Restore' : 'Maximise'" @click.stop="toggleMaximized" @dblclick.stop>
+          <v-icon>{{ maximized ? 'mdi-window-restore' : 'mdi-window-maximize' }}</v-icon>
+        </button>
+        <button type="button" class="fw-btn fw-btn-close" title="Close" @click.stop="$emit('update:modelValue', false)" @dblclick.stop>
+          <v-icon>mdi-window-close</v-icon>
+        </button>
       </div>
       <div v-show="!collapsed" class="floating-body">
         <slot></slot>
       </div>
-      <template v-if="!collapsed">
+      <template v-if="!collapsed && !maximized">
         <div v-for="dir in HANDLES" :key="dir" class="resize-handle" :class="'resize-' + dir" :data-dir="dir"
              @pointerdown.stop.prevent="startResize($event, dir)"></div>
       </template>
@@ -50,10 +55,41 @@ const win = ref(null)
 const w = ref(props.width)
 const h = ref(props.height)
 
-const style = computed(() => ({
+const maximized = ref(false)
+let restoreTo = null
+const area = ref({x: 0, y: 0, w: innerWidth, h: innerHeight})
+
+// Maximised means filling the page below the app bar, so the navigation stays reachable
+function measureArea() {
+  const top = document.querySelector('.v-app-bar')?.getBoundingClientRect().bottom ?? 0
+  area.value = {x: 0, y: top, w: innerWidth, h: innerHeight - top}
+}
+
+function toggleMaximized() {
+  if (maximized.value) {
+    maximized.value = false
+    if (restoreTo) ({x: x.value, y: y.value, w: w.value, h: h.value} = restoreTo)
+  } else {
+    restoreTo = {x: x.value, y: y.value, w: w.value, h: h.value}
+    collapsed.value = false
+    measureArea()
+    maximized.value = true
+  }
+  raise()
+}
+
+const style = computed(() => maximized.value ? {
+  left: area.value.x + 'px', top: area.value.y + 'px', zIndex: z.value,
+  width: area.value.w + 'px', height: area.value.h + 'px',
+} : {
   left: x.value + 'px', top: y.value + 'px', zIndex: z.value,
   width: w.value + 'px', height: collapsed.value ? 'auto' : h.value + 'px',
-}))
+})
+
+window.addEventListener('resize', onPageResize)
+function onPageResize() {
+  if (maximized.value) measureArea()
+}
 
 const MIN_W = 280
 const MIN_H = 120
@@ -90,7 +126,7 @@ function stopResize() {
 
 let drag = null
 function startDrag(e) {
-  if (e.target.closest('button')) return
+  if (e.target.closest('button') || maximized.value) return
   raise()
   drag = {dx: e.clientX - x.value, dy: e.clientY - y.value}
   window.addEventListener('pointermove', onDrag)
@@ -109,6 +145,7 @@ function stopDrag() {
 onBeforeUnmount(() => {
   stopDrag()
   stopResize()
+  window.removeEventListener('resize', onPageResize)
 })
 </script>
 
@@ -119,53 +156,68 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-width: 280px;
   min-height: 40px;
-  max-width: 95vw;
-  max-height: 90vh;
   overflow: visible;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
 }
+/* The same material language as the app bar: surface colour, primary line under it, the theme's own text colours */
 .floating-title {
-  height: 36px;
+  height: 32px;
   flex: none;
   cursor: move;
   user-select: none;
   touch-action: none;
-  background: rgb(var(--v-theme-surface-variant));
-  color: rgb(var(--v-theme-on-surface-variant));
-  border-radius: 8px 8px 0 0;
+  padding-left: 10px;
+  padding-right: 4px;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  border-bottom: 2px solid rgb(var(--v-theme-primary));
+  border-radius: 4px 4px 0 0;
 }
-/* Grab areas on every edge and corner, a few pixels wide and partly outside the window so they are easy to hit */
-.resize-handle {
-  position: absolute;
-  z-index: 2;
-  touch-action: none;
+.floating-title-icon {
+  font-size: 16px !important;
+  margin-right: 8px;
+  color: rgb(var(--v-theme-primary));
 }
-.resize-n, .resize-s { left: 8px; right: 8px; height: 8px; cursor: ns-resize; }
-.resize-n { top: -3px; }
-.resize-s { bottom: -3px; }
-.resize-e, .resize-w { top: 8px; bottom: 8px; width: 8px; cursor: ew-resize; }
-.resize-e { right: -3px; }
-.resize-w { left: -3px; }
-.resize-ne, .resize-nw, .resize-se, .resize-sw { width: 14px; height: 14px; }
-.resize-ne { top: -3px; right: -3px; cursor: nesw-resize; }
-.resize-nw { top: -3px; left: -3px; cursor: nwse-resize; }
-.resize-se { bottom: -3px; right: -3px; cursor: nwse-resize; }
-.resize-sw { bottom: -3px; left: -3px; cursor: nesw-resize; }
+.maximized .floating-title,
+.maximized {
+  border-radius: 0;
+}
 
-.floating-title-text {
-  font-size: 0.8125rem;
-  font-weight: 500;
-}
-.floating-btn {
+/* Plain buttons, not v-btn: the global rule on `.v-btn--icon .v-icon` makes the icon of every icon button huge.
+   24 px with a 16 px glyph, about what a KDE title bar button is. */
+.fw-btn {
+  width: 24px;
+  height: 24px;
   margin-left: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.fw-btn .v-icon {
+  font-size: 16px !important;
+  width: 16px;
+  height: 16px;
+}
+.fw-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.12);
+}
+.fw-btn-close:hover {
+  background: rgb(var(--v-theme-error));
+  color: rgb(var(--v-theme-on-error));
 }
 .floating-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 0 4px 4px;
 }
 </style>
