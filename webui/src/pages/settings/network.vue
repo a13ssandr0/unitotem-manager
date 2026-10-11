@@ -453,6 +453,7 @@
 </template>
 
 <script setup>
+import {api} from '@/api'
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 
 // ── state ──────────────────────────────────────────────────────────────────
@@ -514,130 +515,125 @@ const errorMsg   = ref('')
 
 // Convenience
 const wifiDevices = computed(() => devices.value.filter(d => d.type === 2))
-const sendCommand = window.sendCommand
 
 // ── WS setup ───────────────────────────────────────────────────────────────
 
-window.setInitCommands(
-  'Settings/hostname',
-  'Settings/NM/devices',
-  'Settings/NM/connections',
-  'Settings/NM/activeConnections',
-  'Settings/has_wireless',
-)
+api.Settings.hostname.on(data => {
+  hostname.value = data.hostname
+  originalHostname.value = data.hostname
+}, {init: true})
 
-onWSMessage = (data) => {
-  switch (data.target) {
-    case 'Settings/hostname':
-      hostname.value = data.hostname
-      originalHostname.value = data.hostname
-      break
+api.Settings.NM.devices.on(data => {
+  if (data.error) { showError(data.error); return }
+  if (data.devices !== undefined) devices.value = data.devices
+}, {init: true})
 
-    case 'Settings/NM/devices':
-      if (data.error) { showError(data.error); break }
-      if (data.devices !== undefined) devices.value = data.devices
-      break
-
-    case 'Settings/NM/connections':
-    case 'Settings/NM/editConnection':
-    case 'Settings/NM/deleteConnection':
-      if (data.error) { showError(data.error); break }
-      if (data.connections !== undefined) connections.value = data.connections
-      if (data.target === 'Settings/NM/editConnection') {
-        editorSaving.value = false
-        editorOpen.value = false
-      }
-      break
-
-    case 'Settings/NM/connectionDetails':
-      if (data.error) { showError(data.error); break }
-      if (data.details && editorOpen.value) {
-        const d = data.details
-        const ipv4 = d.ipv4 || {}
-        editorForm.ip_method = ipv4.method || 'auto'
-        if (Array.isArray(ipv4['address-data']) && ipv4['address-data'].length) {
-          editorForm.ip_address = ipv4['address-data'][0].address || ''
-          editorForm.prefix_len = ipv4['address-data'][0].prefix || 24
-        }
-        editorForm.gateway = ipv4.gateway || ''
-        editorForm.dns     = ipv4.dns || []
-        const wifi = d['802-11-wireless']
-        if (wifi && wifi.ssid) {
-          editorForm.ssid = typeof wifi.ssid === 'string'
-            ? wifi.ssid
-            : new TextDecoder().decode(Uint8Array.from(wifi.ssid))
-        }
-      }
-      break
-
-    case 'Settings/NM/activeConnections':
-      if (data.active !== undefined) activeConns.value = data.active
-      break
-
-    // activate / deactivate / connectWifi all yield devices + active updates
-    case 'Settings/NM/activate':
-    case 'Settings/NM/deactivate':
-    case 'Settings/NM/connectWifi':
-      if (data.error) {
-        showError(data.error)
-        wifiConnecting.value = false
-        break
-      }
-      if (data.devices !== undefined)     devices.value    = data.devices
-      if (data.active !== undefined)      activeConns.value = data.active
-      if (data.connections !== undefined) connections.value = data.connections
-      if (data.target === 'Settings/NM/connectWifi' && data.connected_uuid !== undefined) {
-        wifiConnecting.value = false
-        wifiDialogOpen.value = false
-        // refresh connections so the new profile appears
-        sendCommand('Settings/NM/connections')
-      }
-      break
-
-    case 'Settings/has_wireless':
-      has_wireless.value = data.wireless
-      if (data.wireless) {
-        sendCommand('Settings/is_wireless_enabled')
-        sendCommand('Settings/get_default_wlan_device')
-      }
-      break
-
-    case 'Settings/is_wireless_enabled':
-      is_wireless_enabled.value = data.enabled
-      break
-
-    case 'Settings/get_default_wlan_device':
-      default_wireless_device.value = data.device
-      if (!wifiForm.device) wifiForm.device = data.device
-      break
-
-    case 'Settings/get_wireless_networks':
-      wifiNetworks.value = data.wifis ?? []
-      scanningWifi.value = false
-      break
-  }
+function onConnections(data) {
+  if (data.error) { showError(data.error); return false }
+  if (data.connections !== undefined) connections.value = data.connections
+  return true
 }
+
+api.Settings.NM.connections.on(onConnections, {init: true})
+api.Settings.NM.deleteConnection.on(onConnections)
+api.Settings.NM.editConnection.on(data => {
+  if (onConnections(data)) {
+    editorSaving.value = false
+    editorOpen.value = false
+  }
+})
+
+api.Settings.NM.connectionDetails.on(data => {
+  if (data.error) { showError(data.error); return }
+  if (data.details && editorOpen.value) {
+    const d = data.details
+    const ipv4 = d.ipv4 || {}
+    editorForm.ip_method = ipv4.method || 'auto'
+    if (Array.isArray(ipv4['address-data']) && ipv4['address-data'].length) {
+      editorForm.ip_address = ipv4['address-data'][0].address || ''
+      editorForm.prefix_len = ipv4['address-data'][0].prefix || 24
+    }
+    editorForm.gateway = ipv4.gateway || ''
+    editorForm.dns     = ipv4.dns || []
+    const wifi = d['802-11-wireless']
+    if (wifi && wifi.ssid) {
+      editorForm.ssid = typeof wifi.ssid === 'string'
+        ? wifi.ssid
+        : new TextDecoder().decode(Uint8Array.from(wifi.ssid))
+    }
+  }
+})
+
+api.Settings.NM.activeConnections.on(data => {
+  if (data.active !== undefined) activeConns.value = data.active
+}, {init: true})
+
+// activate / deactivate / connectWifi all yield devices + active updates
+function onActivation(data) {
+  if (data.error) {
+    showError(data.error)
+    wifiConnecting.value = false
+    return false
+  }
+  if (data.devices !== undefined)     devices.value    = data.devices
+  if (data.active !== undefined)      activeConns.value = data.active
+  if (data.connections !== undefined) connections.value = data.connections
+  return true
+}
+
+api.Settings.NM.activate.on(onActivation)
+api.Settings.NM.deactivate.on(onActivation)
+api.Settings.NM.connectWifi.on(data => {
+  if (onActivation(data) && data.connected_uuid !== undefined) {
+    wifiConnecting.value = false
+    wifiDialogOpen.value = false
+    // refresh connections so the new profile appears
+    api.Settings.NM.connections()
+  }
+})
+
+api.Settings.has_wireless.on(data => {
+  has_wireless.value = data.wireless
+  if (data.wireless) {
+    api.Settings.is_wireless_enabled()
+    api.Settings.get_default_wlan_device()
+  }
+}, {init: true})
+
+api.Settings.is_wireless_enabled.on(data => {
+  is_wireless_enabled.value = data.enabled
+})
+
+api.Settings.get_default_wlan_device.on(data => {
+  default_wireless_device.value = data.device
+  if (!wifiForm.device) wifiForm.device = data.device
+})
+
+api.Settings.get_wireless_networks.on(data => {
+  wifiNetworks.value = data.wifis ?? []
+  scanningWifi.value = false
+})
 
 // ── actions ────────────────────────────────────────────────────────────────
 
 const applyHostname = () => {
-  sendCommand('Settings/setHostname', { hostname: hostname.value })
+  api.Settings.setHostname({ hostname: hostname.value })
 }
 
 const refreshDevices = () => {
-  sendCommand('Settings/NM/devices')
-  sendCommand('Settings/NM/activeConnections')
+  api.Settings.NM.devices()
+  api.Settings.NM.activeConnections()
 }
 
 const refreshConnections = () => {
-  sendCommand('Settings/NM/connections')
-  sendCommand('Settings/NM/activeConnections')
+  api.Settings.NM.connections()
+  api.Settings.NM.activeConnections()
 }
 
 const isActive = (uuid) => activeConns.value.some(a => a.uuid === uuid)
 
 const deactivateConn = (activePath) => {
-  sendCommand('Settings/NM/deactivate', { active_path: activePath })
+  api.Settings.NM.deactivate({ active_path: activePath })
 }
 
 const deactivateByUuid = (uuid) => {
@@ -658,12 +654,12 @@ const activateConn = (connPath) => {
     const d = devices.value.find(d => d.type === 1)
     if (d) devPath = d.path
   }
-  sendCommand('Settings/NM/activate', { conn_path: connPath, dev_path: devPath })
+  api.Settings.NM.activate({ conn_path: connPath, dev_path: devPath })
 }
 
 const activateOnDev = (connPath, devPath) => {
   connPickerOpen.value = false
-  sendCommand('Settings/NM/activate', { conn_path: connPath, dev_path: devPath })
+  api.Settings.NM.activate({ conn_path: connPath, dev_path: devPath })
 }
 
 const openConnectionPicker = (dev) => {
@@ -682,14 +678,14 @@ const openEditor = (conn) => {
     ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
   })
   // Fetch full details to populate IP fields
-  sendCommand('Settings/NM/connectionDetails', { path: conn.path })
+  api.Settings.NM.connectionDetails({ path: conn.path })
   editorOpen.value = true
 }
 
 const saveEditor = () => {
   if (!editorConn.value) return
   editorSaving.value = true
-  sendCommand('Settings/NM/editConnection', {
+  api.Settings.NM.editConnection({
     conn_path   : editorConn.value.path,
     conn_id     : editorForm.id,
     autoconnect : editorForm.autoconnect,
@@ -713,7 +709,7 @@ const confirmDelete = (conn) => {
 
 const doDelete = () => {
   if (!connToDelete.value) return
-  sendCommand('Settings/NM/deleteConnection', { conn_path: connToDelete.value.path })
+  api.Settings.NM.deleteConnection({ conn_path: connToDelete.value.path })
   deleteDialogOpen.value = false
   connToDelete.value = null
 }
@@ -721,12 +717,12 @@ const doDelete = () => {
 // ── WiFi ───────────────────────────────────────────────────────────────────
 
 const toggleWifi = (val) => {
-  sendCommand('Settings/set_wireless_enabled', { enabled: val })
+  api.Settings.set_wireless_enabled({ enabled: val })
 }
 
 const scanWifi = () => {
   scanningWifi.value = true
-  sendCommand('Settings/get_wireless_networks')
+  api.Settings.get_wireless_networks()
 }
 
 const openWifiConnect = (net) => {
@@ -745,7 +741,7 @@ const openWifiConnect = (net) => {
 const connectWifi = () => {
   if (!wifiForm.ssid) return
   wifiConnecting.value = true
-  sendCommand('Settings/NM/connectWifi', {
+  api.Settings.NM.connectWifi({
     ssid      : wifiForm.ssid,
     device    : wifiForm.device,
     password  : wifiForm.password || null,
