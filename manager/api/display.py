@@ -3,6 +3,7 @@ from typing import Optional
 
 import aiohttp
 
+from api.display_screens import Screens
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
 from utils.models.user import UserPerms
@@ -23,6 +24,8 @@ def _vm() -> WebviewManager:
 
 
 class Display(WSAPIBase):
+    # Settings/Display/Screens/*: kept in its own module so this one stays small, the path is the same
+    Screens = Screens
 
     def displays(self, viewer_id: Optional[str] = None):
         if viewer_id:
