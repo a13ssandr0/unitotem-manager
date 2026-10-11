@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal, Union
 
 import urllib3
-from fastapi import (FastAPI, HTTPException, Request)
+from fastapi import (Depends, FastAPI, HTTPException, Request)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse
@@ -114,6 +114,12 @@ async def health(request: Request):
     if request.client is None or request.client.host not in ('127.0.0.1', '::1'):
         raise HTTPException(status_code=404)
     return {'status': 'ok', 'version': const.__version__}
+
+
+@WWW.get('/api/schema', dependencies=[Depends(LOGMAN)])
+async def api_schema():
+    """Every websocket API function with its permissions and argument schema, for the web UI client."""
+    return api.schema
 
 
 WWW.include_router(routers.login.router)
