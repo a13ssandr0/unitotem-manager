@@ -154,6 +154,7 @@ async def pdf_view(request: Request):
 WWW.include_router(routers.login.router)
 WWW.include_router(routers.websocket.remote.router)
 WWW.include_router(routers.websocket.web_ui.router)
+WWW.include_router(routers.websocket.terminal.router)
 WWW.include_router(routers.scheduler.router)
 WWW.include_router(routers.backup.router)
 

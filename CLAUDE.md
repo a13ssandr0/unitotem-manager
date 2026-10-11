@@ -494,4 +494,13 @@ the VM-specific ones.
   regenerates `webui/src/api.d.ts` for editors: run it after adding or changing an API function.
   `tools/ui-smoke.py` drives headless Chrome over every page and compares console errors and visible text
   before/after a front-end change.
+- **The web terminal runs `login`, never a shell, and is started without forking the manager.** The manager is root and
+  multi-threaded (Qt, CEF): `pty.fork()` in it is unsafe, so `routers/websocket/terminal.py` opens a pty and starts
+  `setsid -c /bin/login` with the subprocess machinery. A non-blocking read on the pty master wakes spuriously and
+  raises `BlockingIOError`, which is an `OSError`: treating every `OSError` as "the session ended" closed about a third
+  of the sessions the moment they opened (EIO is the real end). Needs the admin capability, at most 4 sessions, 15 min idle.
+  `tools/ui-terminal.py` tests it end to end in headless Chrome (login, command, refusals).
+- **`pkill -f <pattern>` inside an ssh command line kills the command's own shell**, because the pattern is in its
+  command line: the rest of the command silently never runs (a `systemctl restart` after it did not happen and the
+  manager was left down). Use `pkill -x name`, a pid, or a pattern written like `[i]nit.py`.
 

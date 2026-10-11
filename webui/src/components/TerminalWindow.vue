@@ -1,0 +1,84 @@
+<template>
+  <FloatingWindow v-model="open" title="Terminal" icon="mdi-console" :width="760" :height="460">
+    <div ref="host" class="terminal-host"></div>
+  </FloatingWindow>
+</template>
+
+<script setup>
+/**
+ * A terminal in a floating window, over the /terminal websocket (a pty running `login`: the operating-system
+ * account and password are asked here, they are not the web UI's). The connection exists only while the window is open.
+ */
+import {nextTick, onBeforeUnmount, ref, watch} from 'vue'
+import {Terminal} from '@xterm/xterm'
+import {FitAddon} from '@xterm/addon-fit'
+import '@xterm/xterm/css/xterm.css'
+import FloatingWindow from '@/components/FloatingWindow.vue'
+
+const open = defineModel({type: Boolean, default: false})
+const host = ref(null)
+
+let term = null
+let fit = null
+let socket = null
+let observer = null
+
+const encoder = new TextEncoder()
+
+function sendSize() {
+  if (socket?.readyState === WebSocket.OPEN && term) {
+    socket.send(JSON.stringify({resize: [term.cols, term.rows]}))
+  }
+}
+
+function connect() {
+  term = new Terminal({cursorBlink: true, fontSize: 14, convertEol: false, scrollback: 2000,
+    theme: {background: '#000000'}})
+  fit = new FitAddon()
+  term.loadAddon(fit)
+  term.open(host.value)
+  fit.fit()
+
+  socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/terminal`)
+  socket.binaryType = 'arraybuffer'
+  socket.onopen = () => { sendSize(); term.focus() }
+  socket.onmessage = (e) => term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data))
+  socket.onclose = (e) => term.write(`\r\n\x1b[2m[connection closed${e.reason ? ': ' + e.reason : ''}]\x1b[0m\r\n`)
+  term.onData(data => { if (socket.readyState === WebSocket.OPEN) socket.send(encoder.encode(data)) })
+  term.onResize(sendSize)
+
+  // The window can be resized by the user: refit the terminal to it
+  observer = new ResizeObserver(() => { try { fit.fit() } catch { /* hidden while collapsed */ } })
+  observer.observe(host.value)
+}
+
+function disconnect() {
+  observer?.disconnect()
+  observer = null
+  socket?.close()
+  socket = null
+  term?.dispose()
+  term = null
+}
+
+watch(open, async (isOpen) => {
+  if (isOpen) {
+    await nextTick()
+    connect()
+  } else {
+    disconnect()
+  }
+})
+
+onBeforeUnmount(disconnect)
+</script>
+
+<style scoped>
+.terminal-host {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  padding: 4px;
+  box-sizing: border-box;
+}
+</style>
