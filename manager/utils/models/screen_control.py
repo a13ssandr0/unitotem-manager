@@ -69,6 +69,9 @@ class OutputConfig(BaseModel, validate_assignment=True):
     identity: Optional[str] = None
     ddc_bus: Optional[int] = None
     ddc_capabilities: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # VCP codes the monitor answers for, from the capabilities string or, when the monitor cannot give one (common),
+    # from asking for each code we use. DDC power needs D6; a monitor can have volume and input and no power control.
+    ddc_features: list[str] = Field(default_factory=list)
 
 
 class ScreenTimer(BaseModel, validate_assignment=True):

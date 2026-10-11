@@ -44,9 +44,10 @@ def _availability(name: str, cfg: OutputConfig, x_output: Optional[xorg.XOutput]
     result = {
         'x': {'available': x_output is not None,
               'reason': '' if x_output is not None else 'the output is not connected to the X server'},
-        'ddc': {'available': ddc_ok and cfg.ddc_bus is not None,
-                'reason': '' if ddc_ok and cfg.ddc_bus is not None else
-                (ddc_reason or 'no DDC/CI found on this output (run a probe)')},
+        'ddc': {'available': ddc_ok and cfg.ddc_bus is not None and ddc_ctl.VCP_POWER in cfg.ddc_features,
+                'reason': '' if ddc_ok and cfg.ddc_bus is not None and ddc_ctl.VCP_POWER in cfg.ddc_features else
+                (ddc_reason or ('no DDC/CI found on this output (run a probe)' if cfg.ddc_bus is None
+                                else 'this monitor has DDC/CI but no power control over it'))},
         'cec': {'available': cec_device is not None,
                 'reason': '' if cec_device is not None else
                 ('no CEC adapter' if not adapters else 'several CEC adapters: choose one for this output')},
@@ -74,6 +75,7 @@ async def screens() -> list[dict]:
             'geometry': {'x': x.x, 'y': x.y, 'width': x.width, 'height': x.height, 'rotation': x.rotation} if x else None,
             'identity': cfg.identity,
             'mechanisms': _availability(name, cfg, x, tools),
+            'ddc_features': cfg.ddc_features,
             'input_sources': {k: v for k, v in cfg.ddc_capabilities.get(ddc_ctl.VCP_INPUT, {}).items()},
             'config': {
                 'on_mechanism': cfg.on_mechanism, 'off_mechanism': cfg.off_mechanism,
@@ -110,6 +112,9 @@ async def _probe(only: Optional[str]):
                 cfg.ddc_capabilities = await ddc_ctl.capabilities(match.bus)
             except (DdcError, ToolTimeout, ToolMissing) as exc:
                 logger.warning('Cannot read the capabilities of {}: {}', name, exc)
+            cfg.ddc_features = await ddc_ctl.probe_features(match.bus, cfg.ddc_capabilities)
+        else:
+            cfg.ddc_features = []
         logger.info('Probed {}: identity {} ddc bus {}', name, cfg.identity, cfg.ddc_bus)
     screen_control.save()
 
