@@ -180,6 +180,8 @@ export interface Api {
     Update: {
       /** [requires: admin] */
       apply: ApiCall<{ reboot?: boolean }>
+      /** Whether an update was found by the last check: shown as a hint in the navbar of every page. */
+      availability: ApiCall<Record<string, never>>
       /** [requires: admin] */
       cancel: ApiCall<Record<string, never>>
       /** [requires: admin] */

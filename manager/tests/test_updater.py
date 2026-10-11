@@ -28,3 +28,15 @@ def test_failure_keeps_error_code():
 def test_garbage_output_is_reported_not_raised():
     assert parse_output(0, 'not json')['error_code'] == 'bad-output'
     assert parse_output(2, '')['error_code'] == 'failed'
+
+
+def test_record_only_changes_on_a_real_difference_and_ignores_failures():
+    from utils.system import updater
+    updater.availability.update(available=False, version=None, checked_at=None)
+    assert updater.record({'supported': True, 'available': True, 'version': '2026.10.7'}) is True
+    assert updater.record({'supported': True, 'available': True, 'version': '2026.10.7'}) is False
+    # a failed check (no network) must not clear the hint
+    assert updater.record({'supported': True, 'error': 'network'}) is False
+    assert updater.availability['available'] is True
+    assert updater.record({'supported': False}) is False
+    assert updater.record({'supported': True, 'available': False}) is True

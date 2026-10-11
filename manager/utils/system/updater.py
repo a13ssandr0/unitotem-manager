@@ -84,3 +84,20 @@ async def rollback(reboot: bool = True) -> dict[str, Any]:
 
 async def cancel() -> dict[str, Any]:
     return await run('cancel')
+
+
+# What the last successful check found. The daily background check and the manual one both feed it, and it is
+# what the navbar hint shows: a check that fails (no network) leaves the previous answer in place.
+availability: dict[str, Any] = {'available': False, 'version': None, 'checked_at': None}
+
+
+def record(result: dict[str, Any]) -> bool:
+    """Remember a check result. Returns True when what the hint shows has changed."""
+    import time
+    if not result.get('supported') or result.get('error'):
+        return False
+    new = {'available': bool(result.get('available')), 'version': result.get('version'),
+           'checked_at': int(time.time())}
+    changed = (new['available'], new['version']) != (availability['available'], availability['version'])
+    availability.update(new)
+    return changed

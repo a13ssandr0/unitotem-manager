@@ -4,6 +4,10 @@
       <v-app-bar-nav-icon @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
       <v-toolbar-title class="app-bar-title">UniTotem @ {{ hostname }}</v-toolbar-title>
       <v-spacer></v-spacer>
+      <v-btn v-if="updateInfo?.available && allowed('Settings/Update/status')" icon to="/settings/updates"
+             :title="`Update available: ${updateInfo.version ?? ''}`">
+        <v-badge dot color="red"><v-icon>mdi-update</v-icon></v-badge>
+      </v-btn>
       <v-btn icon @click="cycleTheme">
         <v-icon>{{ themeIcon }}</v-icon>
       </v-btn>
@@ -45,7 +49,11 @@
           :prepend-icon="tab.icon"
           :title="tab.name"
           class="sub-item"
-        ></v-list-item>
+        >
+          <template v-slot:append v-if="tab.id === 'updates' && updateInfo?.available">
+            <v-badge dot color="red" inline></v-badge>
+          </template>
+        </v-list-item>
         <v-divider class="my-2"></v-divider>
 
         <v-list-item to="/info" prepend-icon="mdi-information" title="Info"></v-list-item>
@@ -179,6 +187,8 @@ const tabs = ref([
   {id: 'updates', name: 'Updates', icon: 'mdi-update', needs: 'Settings/Update/status'},
   {id: 'backup', name: 'Backup and restore', icon: 'mdi-history', needs: 'Settings/Security/users'},
 ])
+
+const updateInfo = api.Settings.Update.availability.use({pick: 'availability'})
 
 const allowed = (needs) => canCall(needs, logged_user.value)
 const visibleTabs = computed(() => tabs.value.filter(tab => allowed(tab.needs)))
