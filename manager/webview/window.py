@@ -5,6 +5,7 @@ CEF renders directly to an X11 child window (via SetAsChild / winId()),
 so Wayland must be backed by XWayland (QT_QPA_PLATFORM=xcb).
 """
 import json
+from typing import Optional
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -166,7 +167,8 @@ class WebviewWindow(QMainWindow):
 
     # ── commands sent by the manager via WebSocket ────────────────────────
 
-    def show_asset(self, src: str, container: int, fit: int, bg_color: str):
+    def show_asset(self, src: str, container: int, fit: int, bg_color: str,
+                   volume: float = 1.0, muted: bool = False):
         """
         Display an asset.
 
@@ -181,8 +183,14 @@ class WebviewWindow(QMainWindow):
         cont = _CONTAINERS[container] if 0 <= container < len(_CONTAINERS) else None
         fit_s = _FIT_NAMES[fit] if 0 <= fit < len(_FIT_NAMES) else 'contain'
         self._cef.execute_js(
-            f'show({json.dumps(src)}, {json.dumps(cont)}, {json.dumps(fit_s)}, {json.dumps(bg_color)})'
+            f'show({json.dumps(src)}, {json.dumps(cont)}, {json.dumps(fit_s)}, {json.dumps(bg_color)}, '
+            f'{json.dumps(volume)}, {json.dumps(muted)})'
         )
+
+    def set_audio_output(self, device: Optional[str]):
+        """Send this window's sound to the output with that name (its description, as the browser lists it);
+        None means the default one, i.e. whatever the system decides."""
+        self._cef.execute_js(f'setAudioOutput({json.dumps(device)})')
 
     def set_bounds(self, x: int, y: int, width: int, height: int):
         self.setGeometry(x, y, width, height)

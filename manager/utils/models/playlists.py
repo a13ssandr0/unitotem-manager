@@ -64,6 +64,49 @@ class PlaylistsManager:
             am._filepath.unlink()
         self._save_index()
 
+    def rename(self, playlist_id: str, name: str):
+        name = name.strip()
+        if not name:
+            raise ValueError('A playlist needs a name')
+        am = self.get(playlist_id)
+        am.name = name
+        am.save()
+
+    def set_default(self, playlist_id: str):
+        """The default playlist is the one calls without a playlist_id act on, and the one that cannot be deleted."""
+        self.get(playlist_id)  # raises KeyError for an unknown one
+        self._default_id = playlist_id
+        self._save_index()
+
+    def transfer_assets(self, uuids: list[str], source_id: str, target_id: str, move: bool = False) -> list[str]:
+        """Copy (or move) assets from one playlist to another, keeping their order. A copy gets a new uuid: the
+        same asset in two playlists would share timers and a "current" marker. Returns the new uuids."""
+        if source_id == target_id:
+            raise ValueError('Source and target are the same playlist')
+        source, target = self.get(source_id), self.get(target_id)
+        created = []
+        wanted = set(uuids)
+        for asset in [a for a in source.assets if a.uuid in wanted]:
+            data = asset.model_dump(mode='json', exclude={'uuid'})
+            target.append(data)
+            created.append(target.assets[-1].uuid)
+        if move:
+            for uuid in wanted:
+                del source[uuid]
+            source.revalidate_current()
+        target.revalidate_current()
+        target.save()
+        return created
+
+    def referenced_files(self) -> dict[str, list[str]]:
+        """Which playlists use each uploaded file: {filename: [playlist_id, ...]}."""
+        used: dict[str, list[str]] = {}
+        for pid, am in self._playlists.items():
+            for asset in am.assets:
+                if asset.url.startswith('file:'):
+                    used.setdefault(asset.url.removeprefix('file:'), []).append(pid)
+        return used
+
     def _playlist_path(self, playlist_id: str) -> Path:
         return Path(cmdargs.assets_file).parent / f'playlist_{playlist_id}.json'
 
@@ -81,8 +124,13 @@ class PlaylistsManager:
             'default': self._default_id,
             'playlists': {pid: str(am._filepath) for pid, am in self._playlists.items()}
         }
-        with open(self._index_path(), 'w') as f:
+        path = self._index_path()
+        tmp = path.with_name(path.name + '.tmp')
+        with open(tmp, 'w') as f:
             json.dump(index, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp.replace(path)
 
     def load(self):
         index_path = self._index_path()

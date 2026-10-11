@@ -124,6 +124,40 @@ class Scheduler(WSAPIBase):
         return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
 
     @UserPerms.requires.scheduler
+    def rename_playlist(self, playlist_id: str, name: str):
+        try:
+            playlists_manager.rename(playlist_id, name)
+        except (KeyError, ValueError) as e:
+            return WSResponse(error=str(e))
+        return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
+
+    @UserPerms.requires.scheduler
+    def set_default_playlist(self, playlist_id: str):
+        try:
+            playlists_manager.set_default(playlist_id)
+        except KeyError as e:
+            return WSResponse(error=str(e))
+        return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
+
+    @UserPerms.requires.scheduler
+    def copy_assets(self, uuids: list[str], playlist_id: str, target_playlist_id: str):
+        """Copy assets of a playlist to another one."""
+        return self._transfer(uuids, playlist_id, target_playlist_id, move=False)
+
+    @UserPerms.requires.scheduler
+    def move_assets(self, uuids: list[str], playlist_id: str, target_playlist_id: str):
+        """Move assets of a playlist to another one."""
+        return self._transfer(uuids, playlist_id, target_playlist_id, move=True)
+
+    @staticmethod
+    def _transfer(uuids, source_id, target_id, move):
+        try:
+            playlists_manager.transfer_assets(uuids, source_id, target_id, move)
+        except (KeyError, ValueError) as e:
+            return WSResponse(error=str(e))
+        return WSBroadcast(playlists=playlists_manager.serialize())
+
+    @UserPerms.requires.scheduler
     def assets(self, playlist_id: Optional[str] = None):
         am = playlists_manager.get(playlist_id)
         return _make_asset_broadcast(am)
@@ -131,7 +165,7 @@ class Scheduler(WSAPIBase):
     @UserPerms.requires.scheduler
     def files(self):
         return WSBroadcast(files=upload_manager.serialize(), disk_used=upload_manager.disk_usedh,
-                           disk_total=upload_manager.disk_totalh)
+                           disk_total=upload_manager.disk_totalh, used_in=playlists_manager.referenced_files())
 
     @UserPerms.requires.scheduler
     def add_url_assets(self, items: list, playlist_id: Optional[str] = None):
@@ -185,7 +219,9 @@ class Scheduler(WSAPIBase):
              bg_color: Optional[Color] = None,
              ena_date: Optional[FutureDatetime] = None,
              dis_date: Optional[FutureDatetime] = None,
-             enabled: Optional[bool] = None):
+             enabled: Optional[bool] = None,
+             volume: Optional[float] = None,
+             muted: Optional[bool] = None):
         am = playlists_manager.get(playlist_id)
         asset = am[uuid]
 
@@ -209,6 +245,10 @@ class Scheduler(WSAPIBase):
             asset.ena_date = ena_date
         if dis_date is not None and asset.dis_date != dis_date:
             asset.dis_date = dis_date
+        if volume is not None and asset.volume != volume:
+            asset.volume = volume
+        if muted is not None and asset.muted != muted:
+            asset.muted = muted
         if enabled is not None and asset.enabled != enabled:
             asset.enabled = enabled
             # Enabling or disabling changes what should be on screen right now,

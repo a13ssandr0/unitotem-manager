@@ -2,8 +2,11 @@ import asyncio
 from typing import Optional
 
 from api.ws.endpoints import WSAPIBase
-from api.ws.responses import WSBroadcast
+from api.ws.responses import WSBroadcast, WSResponse
+from pulsectl import PulseError
+
 from utils.models.playlists import playlists_manager
+from utils.system.audio import get_audio_devices
 from webview.controller import WebviewManager
 
 
@@ -40,3 +43,24 @@ class Viewers(WSAPIBase):
     def remove_window(self, viewer_id: str, window_id: int):
         asyncio.create_task(_vm().remove_window(viewer_id, window_id))
         return WSBroadcast()
+
+    def set_audio_output(self, viewer_id: str, window_id: int, device: Optional[str] = None):
+        """Where a window plays its sound: the description of one of the outputs of its host, None for the default."""
+        async def apply():
+            try:
+                await _vm().set_audio_output(viewer_id, window_id, device)
+            except KeyError:
+                pass
+        asyncio.create_task(apply())
+        return None
+
+    def audio_outputs(self, viewer_id: str):
+        """The outputs a window of this viewer can choose from. Only this node's own sound devices are known: a
+        remote viewer reports none yet, so its windows can only use the default."""
+        if viewer_id != 'local-webview':
+            return WSBroadcast(viewer_id=viewer_id, outputs=[])
+        try:
+            outputs = [{'name': d['name'], 'description': d['description']} for d in get_audio_devices()]
+        except PulseError:
+            outputs = []
+        return WSBroadcast(viewer_id=viewer_id, outputs=outputs)
