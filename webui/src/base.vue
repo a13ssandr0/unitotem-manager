@@ -112,6 +112,7 @@
 import {onMounted, onUnmounted, ref, computed, watch} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
 import {useRouter} from 'vue-router'
+import {attach, dispatch, initialCommands} from '@/api'
 
 const theme = useTheme()
 const router = useRouter()
@@ -180,6 +181,8 @@ window.sendCommand = (target, args) => {
   ws.send(JSON.stringify(args));
 }
 
+attach((target, args) => window.sendCommand(target, args), () => connected.value)
+
 window.setInitCommands = (...commands) => {
   init_commands.value = commands;
   if (connected.value) {
@@ -202,7 +205,7 @@ function connectWs() {
   ws = new WebSocket(`/ws`)
   ws.onopen = (e) => {
     connected.value = true
-    new Set([...init_commands.value,
+    new Set([...init_commands.value, ...initialCommands(),
       'Settings/hostname', 'Settings/Security/getUser'
     ]).forEach(cmd => sendCommand(cmd))
     // getBounds requires a viewer_id; the navbar shows this device's own
@@ -227,6 +230,7 @@ function connectWs() {
       // new bootstrap.Modal(messageModal).show();
       return;
     }
+    dispatch(data)
     window.onWSMessage(data, e)
   };
   ws.onclose = (e) => {
