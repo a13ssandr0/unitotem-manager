@@ -43,18 +43,18 @@
             </v-tooltip>
           </div>
 
-          <div v-if="screen.mechanisms.ddc.available" class="d-flex align-center flex-wrap ga-4 mb-3">
-            <v-select v-if="Object.keys(screen.input_sources).length" label="Input source" density="compact"
+          <div v-if="screen.ddc_features.length" class="d-flex align-center flex-wrap ga-4 mb-3">
+            <v-select v-if="screen.ddc_features.includes('60') && Object.keys(screen.input_sources).length" label="Input source" density="compact"
                       variant="outlined" hide-details style="max-width: 260px" :items="inputItems(screen)"
                       @update:model-value="v => api.Settings.Display.Screens.set_input({name: screen.name, source: v})">
             </v-select>
-            <v-slider label="Volume" min="0" max="100" step="1" density="compact" hide-details style="min-width: 220px"
+            <v-slider v-if="screen.ddc_features.includes('62')" label="Volume" min="0" max="100" step="1" density="compact" hide-details style="min-width: 220px"
                       v-model="volume[screen.name]" thumb-label
                       @end="api.Settings.Display.Screens.set_volume({name: screen.name, volume: volume[screen.name] ?? 0})">
             </v-slider>
-            <v-btn variant="text" icon="mdi-volume-off" title="Mute"
+            <v-btn v-if="screen.ddc_features.includes('8D')" variant="text" icon="mdi-volume-off" title="Mute"
                    @click="api.Settings.Display.Screens.set_mute({name: screen.name, mute: true})"></v-btn>
-            <v-btn variant="text" icon="mdi-volume-high" title="Unmute"
+            <v-btn v-if="screen.ddc_features.includes('8D')" variant="text" icon="mdi-volume-high" title="Unmute"
                    @click="api.Settings.Display.Screens.set_mute({name: screen.name, mute: false})"></v-btn>
           </div>
 
