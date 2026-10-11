@@ -2,6 +2,7 @@ import asyncio
 
 from api.ws.responses import WSBroadcast
 from api.ws.wsmanager import WSAPIBase
+from utils.models.user import UserPerms
 from utils.system import updater
 
 POLL_INTERVAL = 2  # seconds, only while an operation is running
@@ -29,9 +30,17 @@ class Update(WSAPIBase):
             self._start_polling()
         return WSBroadcast(status=status)
 
+    async def check(self):
+        result = await updater.check()
+        if updater.record(result):
+            await self.ws.broadcast('Settings/Update/availability', availability=updater.availability)
+        return WSBroadcast(check=result)
+
     @staticmethod
-    async def check():
-        return WSBroadcast(check=await updater.check())
+    @UserPerms.requires.none
+    def availability():
+        """Whether an update was found by the last check: shown as a hint in the navbar of every page."""
+        return WSBroadcast(availability=updater.availability)
 
     async def fetch(self, force: bool = False):
         result = await updater.fetch(force)

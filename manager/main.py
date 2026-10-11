@@ -292,6 +292,28 @@ async def screens_at_start():
 
 loop.create_task(screens_at_start(), name='screens_at_start')
 
+UPDATE_CHECK_FIRST_DELAY = 180      # the network may not be up yet right after a boot
+UPDATE_CHECK_INTERVAL = 24 * 3600
+
+
+async def update_watch():
+    """Check for updates in the background once a day and tell every open page when the answer changes."""
+    from utils.system import updater
+    await asyncio.sleep(UPDATE_CHECK_FIRST_DELAY)
+    while not SHUTDOWN_EVENT.is_set():
+        try:
+            if updater.record(await updater.check()):
+                await WS.broadcast('Settings/Update/availability', availability=updater.availability)
+        except Exception:
+            logger.exception('Daily update check failed')
+        try:
+            await asyncio.wait_for(SHUTDOWN_EVENT.wait(), UPDATE_CHECK_INTERVAL)
+        except asyncio.TimeoutError:
+            pass
+
+
+loop.create_task(update_watch(), name='update_watch')
+
 async def _serve_www():
     # a swallowed bind error would leave the manager up but unreachable:
     # fail loudly and shut down instead
