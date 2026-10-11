@@ -488,7 +488,7 @@ the VM-specific ones.
   change is pushed to all connected clients, including the one that asked, so two people on the same page
   always see the same state, and the server only loops over the connected clients, no per-request ids to
   remember. Do not add request/response correlation ids. The client side is `webui/src/api.js`
-  (`api.X.y()` to send, `api.X.y.on(cb)` / `.use()` / `useApiKey` to receive, cleaned up on unmount);
+  (`api.X.y()` to send, `api.X.y.on(cb)` / `.use()` to receive, cleaned up on unmount);
   the old `window.sendCommand`/`onWSMessage`/`setInitCommands` globals no longer exist. The server describes
   its API at `GET /api/schema` (checked at runtime in the browser console) and `tools/gen-api-types.py`
   regenerates `webui/src/api.d.ts` for editors: run it after adding or changing an API function.

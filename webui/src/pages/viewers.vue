@@ -125,10 +125,10 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { api, useApiKey } from '@/api'
+import { api } from '@/api'
 
 const viewersMap = ref({})    // instance_id → viewer info
-const playlists = useApiKey('playlists', {init: ['Scheduler/playlists'], initial: []})
+const playlists = api.Scheduler.playlists.use({pick: 'playlists', initial: []})
 // One entry per window: {webview_id, window_id, playlist_id}
 const assignments = ref([])
 const pending = ref(null)

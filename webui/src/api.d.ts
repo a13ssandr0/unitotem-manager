@@ -75,7 +75,7 @@ export interface Api {
       addWindow: ApiCall<{ viewer_id: string; display?: number; x?: number; y?: number; width?: number; height?: number }>
       /** Whether the viewer displays assets whose certificate does not [requires: admin] */
       getAllowInsecureCerts: ApiCall<Record<string, never>>
-      /** [requires: admin] */
+      /** Size of a window, shown in the navbar of every page. */
       getBounds: ApiCall<{ viewer_id: string; window_id?: number }>
       /** [requires: admin] */
       getDisplays: ApiCall<{ viewer_id?: null | string }>
@@ -131,7 +131,7 @@ export interface Api {
       addUser: ApiCall<{ username: string; password: string }>
       /** [requires: admin] */
       delUser: ApiCall<{ user: string }>
-      /** [requires: admin] */
+      /** The logged in user itself: every page needs it to know what to show, whatever its permissions. */
       getUser: ApiCall<Record<string, never>>
       /** [requires: admin] */
       getUsers: ApiCall<Record<string, never>>
