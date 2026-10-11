@@ -62,6 +62,22 @@ class AssetFiles(StaticFiles):
         return await super().get_response(path, scope)
 
 
+class UploadedFiles(StaticFiles):
+    """
+    The uploaded media. The local viewer fetches them from this same machine, and people logged in to the web
+    UI download them; nobody else on the network gets to read what was uploaded.
+    """
+
+    async def get_response(self, path: str, scope):
+        client = scope.get('client')
+        if client is None or client[0] not in ('127.0.0.1', '::1'):
+            try:
+                await LOGMAN(Request(scope))
+            except NotAuthenticatedException:
+                raise HTTPException(status_code=401)
+        return await super().get_response(path, scope)
+
+
 # noinspection PyTypeChecker
 WWW = FastAPI(
         title='UniTotem', version=const.__version__,
@@ -70,7 +86,7 @@ WWW = FastAPI(
         ],
         routes=[
             Mount('/assets', AssetFiles(directory=const.static_folder.joinpath('assets').resolve()), name='assets'),
-            Mount('/uploaded', StaticFiles(directory=const.uploads_folder), name='uploaded'),
+            Mount('/uploaded', UploadedFiles(directory=const.uploads_folder), name='uploaded'),
         ],
         exception_handlers={
             InvalidSignatureError    : login_redirect,

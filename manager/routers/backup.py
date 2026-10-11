@@ -9,7 +9,7 @@ from starlette import status
 from starlette.responses import Response
 
 import utils.constants as const
-from routers.login import LOGMAN
+from routers.login import require_perm
 from utils.models.assets import AssetsManager
 from utils.models.playlists import playlists_manager
 from utils.models.user import UserPerms, user_manager
@@ -21,7 +21,7 @@ from utils.system.network.netplan import set_netplan, generate_netplan, get_netp
 router = APIRouter()
 
 
-@router.get("/backup", dependencies=[Depends(LOGMAN)])
+@router.get("/backup", dependencies=[Depends(require_perm('admin'))])
 async def create_backup(include_uploaded: bool = False):
     CRONTAB.read()
     config_backup = {
@@ -50,7 +50,7 @@ async def create_backup(include_uploaded: bool = False):
 
 
 # noinspection PyPep8Naming
-@router.post("/backup", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(LOGMAN)])
+@router.post("/backup", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_perm('admin'))])
 async def load_backup(backup_file: UploadFile,
                       CONFIG: Annotated[bool, Body()] = False,
                       def_audio_dev: Annotated[bool, Body()] = False,
@@ -108,7 +108,7 @@ async def load_backup(backup_file: UploadFile,
         raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail=str(e))
 
 
-@router.delete('/backup', status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(LOGMAN)])
+@router.delete('/backup', status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_perm('admin'))])
 async def factory_reset():
     # Reset users to default admin
     user_manager.root.clear()

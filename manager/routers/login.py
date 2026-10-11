@@ -3,7 +3,8 @@ __all__ = [
     "router",
     "LoginForm",
     "LOGMAN",
-    "NotAuthenticatedException"
+    "NotAuthenticatedException",
+    "require_perm"
 ]
 
 import time
@@ -12,7 +13,7 @@ from platform import freedesktop_os_release as os_release, node as gethostname
 from typing import Optional
 from urllib.parse import quote_plus
 
-from fastapi import APIRouter, Depends, Form, status
+from fastapi import APIRouter, Depends, Form, HTTPException, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_login import LoginManager
@@ -68,6 +69,17 @@ LOGMAN = LoginManager(
         default_expiry=timedelta(days=7)
 )
 LOGMAN.user_loader()(user_manager.get_user)
+
+
+def require_perm(perm: str):
+    """A route dependency: the session must belong to a user with the given permission (admin has them all)."""
+
+    async def dependency(user: User = Depends(LOGMAN)) -> User:
+        if not getattr(user.has_perm, perm):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        return user
+
+    return dependency
 
 router = APIRouter()
 

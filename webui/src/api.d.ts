@@ -12,8 +12,6 @@ export interface Api {
     poweroff: ApiCall<Record<string, never>>
     /** [requires: power] */
     reboot: ApiCall<Record<string, never>>
-    /** Debug method */
-    test_method: ApiCall<{ txt?: any }>
   }
   Scheduler: {
     /** [requires: scheduler] */

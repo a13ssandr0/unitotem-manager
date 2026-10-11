@@ -826,16 +826,16 @@ WAS OPEN, superseded - assignment per viewer instead of per window.
   app, gradually; prerequisite is the client API (webui/src/api.js, prototype done on the Updates page).
 
 === API REVIEW (2026-10-11) ===
-DONE: the API now follows the user's convention (snake_case, one function per job, reads named after the state
-they return, every mutation broadcasts that state under the getter's target, network functions under
-Settings/Network, default duration under Scheduler, duplicate Display.addWindow/removeWindow removed, dead apt
-modules removed). Cron fields are day_of_month/day_of_week. add_job requires a full schedule: a job with a
-missing field used to be written as '* * * * *' (a reboot job ran every minute and rebooted the test VM).
-Still open, found by the review: Power.test_method is a debug leftover reachable by anyone logged in; Scheduler
-messages carry playlist_id but scheduler.vue ignores it (with two playlists the items of one overwrite the
-other, and the playlist tabs are hard-coded stubs); the navbar menu is not permission-aware (a scheduler-only
-user sees every settings page and gets permission errors): it can be driven by the permissions in /api/schema;
-Settings/Audio fails with an exception when PulseAudio is missing (should answer with an empty list).
+DONE: API follows the user's naming convention (snake_case, one function per job, reads named after the state,
+mutations broadcast under the getter's target, network under Settings/Network, default duration under Scheduler).
+Cron add_job requires a full schedule (a missing field used to become '* * * * *', a reboot loop).
+Also fixed: Power.test_method removed; Audio answers available=false instead of raising when there is no PulseAudio;
+the menu and routes are permission-aware (driven by the permissions in /api/schema; pages are not mounted until the
+user is known and allowed); /backup now needs admin; /uploaded needs a session unless the request comes from
+loopback (the local viewer); the scheduler page has real playlist tabs, a new-playlist dialog and per-playlist
+delete/settings, and every scheduler call carries playlist_id.
+NOT VERIFIED: interactions in a real browser (only page loads via tools/ui-smoke.py); the playlist tabs with two
+playlists and drag-and-drop reorder have never been exercised.
 
 === NEXT ===
 Decided, in order:
