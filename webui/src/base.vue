@@ -4,6 +4,9 @@
       <v-app-bar-nav-icon @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
       <v-toolbar-title class="app-bar-title">UniTotem @ {{ hostname }}</v-toolbar-title>
       <v-spacer></v-spacer>
+      <v-btn v-if="logged_user.perms?.includes('admin')" icon title="Terminal" @click="terminalOpen = true">
+        <v-icon>mdi-console</v-icon>
+      </v-btn>
       <v-btn v-if="updateInfo?.available && allowed('Settings/Update/status')" icon to="/settings/updates"
              :title="`Update available: ${updateInfo.version ?? ''}`">
         <v-badge dot color="red"><v-icon>mdi-update</v-icon></v-badge>
@@ -82,6 +85,8 @@
       </div>
     </v-main>
 
+    <TerminalWindow v-if="logged_user.perms?.includes('admin')" v-model="terminalOpen" />
+
     <v-dialog v-model="rebootDialog" max-width="fit-content">
       <v-card class="pa-2 pb-0 rounded-lg">
         <v-card-title class="text-h5">Are you sure you want to reboot?</v-card-title>
@@ -124,6 +129,7 @@
 import {onMounted, onUnmounted, ref, computed, watch} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
 import {useRoute, useRouter} from 'vue-router'
+import TerminalWindow from '@/components/TerminalWindow.vue'
 import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, send} from '@/api'
 
 const theme = useTheme()
@@ -188,6 +194,7 @@ const tabs = ref([
   {id: 'backup', name: 'Backup and restore', icon: 'mdi-history', needs: 'Settings/Security/users'},
 ])
 
+const terminalOpen = ref(false)
 const updateInfo = api.Settings.Update.availability.use({pick: 'availability'})
 
 const allowed = (needs) => canCall(needs, logged_user.value)

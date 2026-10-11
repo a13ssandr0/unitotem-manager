@@ -16,5 +16,6 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScreenControl: typeof import('./src/components/ScreenControl.vue')['default']
+    TerminalWindow: typeof import('./src/components/TerminalWindow.vue')['default']
   }
 }
