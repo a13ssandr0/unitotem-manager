@@ -83,16 +83,18 @@
                 <span v-if="dev.ip4 && dev.ip4.gateway">
                   &nbsp;GW {{ dev.ip4.gateway }}
                 </span>
-                <span v-else-if="!dev.active_connection" class="text-medium-emphasis">Not connected</span>
+                <!-- One truth for "connected": the NetworkManager device state, the same one the chip shows. The
+                     active connection is only extra detail (its name), it is never what decides this. -->
+                <span v-else-if="dev.state !== 100" class="text-medium-emphasis">{{ devStateNote(dev.state) }}</span>
               </v-list-item-subtitle>
               <template v-slot:append>
                 <v-btn
-                  v-if="dev.active_connection"
+                  v-if="dev.active_connection && dev.type !== 32"
                   size="small" variant="text" color="error"
                   @click="deactivateConn(dev.active_connection.path)"
                 >Disconnect</v-btn>
                 <v-btn
-                  v-else
+                  v-else-if="dev.state !== 100 && dev.type !== 32"
                   size="small" variant="text" color="primary"
                   @click="openConnectionPicker(dev)"
                 >Connect</v-btn>
@@ -762,6 +764,15 @@ const devStateName = (state) => {
   if (state === 120) return 'Failed'
   if (state >= 40 && state < 100) return 'Connecting…'
   return 'Unknown'
+}
+
+// What the row says under the name when the device is not connected, from the same state as the chip
+const devStateNote = (state) => {
+  if (state === 20) return 'Not available (no cable or radio off)'
+  if (state === 10) return 'Not managed by NetworkManager'
+  if (state === 120) return 'Connection failed'
+  if (state >= 40 && state < 100) return 'Connecting…'
+  return 'Not connected'
 }
 
 const devStateColor = (state) => {
