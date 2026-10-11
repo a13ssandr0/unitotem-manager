@@ -51,6 +51,24 @@
                 />
               </td>
             </tr>
+            <tr>
+              <td class="playlist-col">
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="small" color="primary">mdi-speaker</v-icon>
+                  <div>
+                    <div class="font-weight-medium">Sound output</div>
+                    <div class="text-caption text-medium-emphasis">Where each window plays its sound</div>
+                  </div>
+                </div>
+              </td>
+              <td v-for="win in windows" :key="win.key" class="text-center">
+                <v-select :items="outputItems(win)" :model-value="win.audio_output ?? ''" density="compact"
+                          variant="outlined" hide-details min-width="160"
+                          :disabled="!(audioOutputs[win.viewer_id] || []).length"
+                          @update:model-value="v => api.Viewers.set_audio_output({viewer_id: win.viewer_id, window_id: win.window_id, device: v || null})">
+                </v-select>
+              </td>
+            </tr>
           </tbody>
         </v-table>
       </v-col>
@@ -155,6 +173,7 @@ const windows = computed(() =>
       width: win.width,
       height: win.height,
       assigned_playlist: win.assigned_playlist,
+      audio_output: win.audio_output,
     }))
   )
 )
@@ -181,7 +200,19 @@ async function toggle(playlistId, win) {
 }
 
 // Requests the current state on (re)connect
+const audioOutputs = ref({})   // viewer id -> outputs its windows can use
+
+const outputItems = (win) => [
+  {title: 'Default', value: ''},
+  ...(audioOutputs.value[win.viewer_id] || []).map(o => ({title: o.description, value: o.description})),
+]
+
+api.Viewers.audio_outputs.on(msg => {
+  audioOutputs.value = {...audioOutputs.value, [msg.viewer_id]: msg.outputs}
+})
+
 api.Viewers.list.on(msg => {
+  Object.keys(msg.viewers ?? {}).forEach(id => api.Viewers.audio_outputs({viewer_id: id}))
   viewersMap.value = msg.viewers ?? {}
   assignments.value = msg.assignments ?? {}
 }, {init: true})

@@ -1,5 +1,5 @@
 <template>
-  <div class="d-flex justify-center">
+  <div class="d-flex justify-center flex-column align-center">
     <v-card
       class="ma-4"
       max-width="1000"
@@ -125,11 +125,13 @@
         </div>
       </div>
     </v-card>
+    <ScreenControl />
   </div>
 </template>
 
 <script setup>
 import {api} from '@/api'
+import ScreenControl from '@/components/ScreenControl.vue'
 import {computed, ref, watch} from 'vue'
 import {useTheme} from 'vuetify'
 
