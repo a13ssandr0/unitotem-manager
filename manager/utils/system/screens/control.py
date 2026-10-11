@@ -266,10 +266,16 @@ def configure(name: str, **changes):
     screen_control.save()
 
 
-async def wake_all(attempts: int = 4, delay: float = 20, on_done=None):
-    """After the manager starts: switch on every screen that is not driven. A monitor that stayed off after a boot
-    or a power cut needs this; once it is on, X reports it and the viewer opens its window by itself (hot-plug)."""
-    for attempt in range(attempts):
+async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
+    """After the manager starts: switch on every screen that is not driven, retrying for `budget` seconds. A monitor
+    that stayed off after a boot or a power cut needs this, and some take the best part of a minute to show their
+    source once woken (55 s measured on a touch panel woken by Wake-on-LAN), so a retry has to leave that much time
+    before it counts as failed. Once it is on, X reports it and the viewer opens its window by itself (hot-plug)."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + budget
+    attempt = 0
+    while True:
+        attempt += 1
         x_outputs = {o.name: o for o in await xorg.outputs()}
         todo = [name for name, cfg in screen_control.outputs.items()
                 if cfg.power_on_at_start and not (name in x_outputs and x_outputs[name].active)]
@@ -280,9 +286,11 @@ async def wake_all(attempts: int = 4, delay: float = 20, on_done=None):
         for name in todo:
             try:
                 mech = await set_power(name, 'on')
-                logger.info('Woke screen {} with {} (attempt {})', name, mech, attempt + 1)
+                logger.info('Woke screen {} with {} (attempt {})', name, mech, attempt)
             except ScreenControlError as exc:
-                logger.warning('Cannot wake screen {} (attempt {}): {}', name, attempt + 1, exc)
-        await asyncio.sleep(delay)
+                logger.warning('Cannot wake screen {} (attempt {}): {}', name, attempt, exc)
+        if loop.time() + interval > deadline:
+            break
+        await asyncio.sleep(interval)
     if on_done is not None:
         await on_done()
