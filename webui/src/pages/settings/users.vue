@@ -33,7 +33,7 @@
             </td>
             <td class="text-right">
               <v-btn variant="text" icon="mdi-pencil" color="yellow" class="mr-2" aria-label="Edit" @click="openPasswordDialog(username)"></v-btn>
-              <v-btn variant="text" icon="mdi-delete" color="red" aria-label="Delete" @click="sendCommand('Settings/Security/delUser', {user: username})"></v-btn>
+              <v-btn variant="text" icon="mdi-delete" color="red" aria-label="Delete" @click="api.Settings.Security.delUser({user: username})"></v-btn>
             </td>
           </tr>
           </tbody>
@@ -142,6 +142,7 @@
 
 <script setup>
 import {ref, computed} from 'vue'
+import {api} from '@/api'
 
 const dialog = ref(false)
 const passwordDialog = ref(false)
@@ -178,7 +179,7 @@ function openAddUserDialog() {
 
 function addUser() {
   if (newUsername.value.trim() && passwordsMatch.value) {
-    sendCommand('Settings/Security/addUser', {username: newUsername.value, password: newPassword.value});
+    api.Settings.Security.addUser({username: newUsername.value, password: newPassword.value});
     newUsername.value = ''; // Reset
     newPassword.value = '';
     confirmPassword.value = '';
@@ -197,7 +198,7 @@ function openPasswordDialog(username) {
 
 function changePassword() {
   if (selectedUser.value && passwordsMatch.value) {
-    sendCommand('Settings/Security/setUserPass', {username: selectedUser.value, password: newPassword.value});
+    api.Settings.Security.setUserPass({username: selectedUser.value, password: newPassword.value});
     passwordDialog.value = false;
   }
 }
@@ -213,32 +214,24 @@ function onPermissionChange(username) {
       }
     });
   }
-  sendCommand('Settings/Security/setUserPerms', {username: username, perms: user.perms});
+  api.Settings.Security.setUserPerms({username: username, perms: user.perms});
 }
 
-const sendCommand = window.sendCommand;
-
-window.setInitCommands("Settings/Security/getUsers")
-
-onWSMessage = (data) => {
-  switch (data.target) {
-    case "Settings/Security/getUsers":
-      users.value = data.users;
-      // Enforce admin permissions logic on load
-      for (const username in users.value) {
-        const user = users.value[username];
-        if (user.perms.includes('admin')) {
-          const allPerms = permissions.value.map(p => p.toLowerCase());
-          allPerms.forEach(p => {
-            if (!user.perms.includes(p)) {
-              user.perms.push(p);
-            }
-          });
+api.Settings.Security.getUsers.on(data => {
+  users.value = data.users;
+  // Enforce admin permissions logic on load
+  for (const username in users.value) {
+    const user = users.value[username];
+    if (user.perms.includes('admin')) {
+      const allPerms = permissions.value.map(p => p.toLowerCase());
+      allPerms.forEach(p => {
+        if (!user.perms.includes(p)) {
+          user.perms.push(p);
         }
-      }
-      break;
+      });
+    }
   }
-}
+}, {init: true})
 
 </script>
 

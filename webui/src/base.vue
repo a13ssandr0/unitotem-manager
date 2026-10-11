@@ -81,7 +81,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="rebootDialog = false">Cancel</v-btn>
-          <v-btn color="red darken-1" text @click="rebootDialog = false; sendCommand('Settings/Power/reboot')">Reboot</v-btn>
+          <v-btn color="red darken-1" text @click="rebootDialog = false; api.Power.reboot()">Reboot</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -93,10 +93,14 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="powerOffDialog = false">Cancel</v-btn>
-          <v-btn color="red darken-1" text @click="powerOffDialog = false; sendCommand('Settings/Power/poweroff')">Power Off</v-btn>
+          <v-btn color="red darken-1" text @click="powerOffDialog = false; api.Power.poweroff()">Power Off</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-snackbar v-model="errorSnack" color="error" :timeout="8000" multi-line>
+      {{ errorText }}
+    </v-snackbar>
 
     <v-dialog :model-value="!connected" persistent max-width="400" class="reconnect-dialog">
       <v-card class="pa-4 d-flex align-center">
@@ -112,7 +116,7 @@
 import {onMounted, onUnmounted, ref, computed, watch} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
 import {useRouter} from 'vue-router'
-import {attach, dispatch, initialCommands} from '@/api'
+import {api, attach, dispatch, initialCommands, loadSchema, send} from '@/api'
 
 const theme = useTheme()
 const router = useRouter()
@@ -160,7 +164,8 @@ const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
 const logged_user = ref({name: 'user', permissions: []})
 const disp_size = ref(null)
 const connected = ref(false)
-const init_commands = ref([]);
+const errorSnack = ref(false)
+const errorText = ref('')
 
 const tabs = ref([
   {id: 'audio', name: 'Audio', icon: 'mdi-speaker'},
@@ -175,67 +180,45 @@ const tabs = ref([
 
 let ws = null;
 
-window.sendCommand = (target, args) => {
-  if (args === undefined) args = {};
-  args.target = target
-  ws.send(JSON.stringify(args));
-}
+attach((target, args) => ws.send(JSON.stringify({...args, target})), () => connected.value)
 
-attach((target, args) => window.sendCommand(target, args), () => connected.value)
+api.Settings.hostname.on(data => {
+  hostname.value = data.hostname
+  document.title = data.hostname + ' - UniTotem Manager'
+}, {init: true})
 
-window.setInitCommands = (...commands) => {
-  init_commands.value = commands;
-  if (connected.value) {
-    new Set(commands).forEach(cmd => {
-      sendCommand(cmd)
-    })
-  }
-}
+api.Settings.Security.getUser.on(data => {
+  logged_user.value = data
+}, {init: true})
 
-window.onWSOpen = (e) => {}
-window.onWSMessage = (data, e) => {}
-window.onWSClose = (e) => {}
-window.onWSError = (e) => {}
-
-window.isWSReady = () => {
-  return connected.value
-}
+api.Settings.Display.getBounds.on(data => {
+  disp_size.value = (data.width && data.height) ? data : null
+})
 
 function connectWs() {
   ws = new WebSocket(`/ws`)
-  ws.onopen = (e) => {
+  ws.onopen = () => {
     connected.value = true
-    new Set([...init_commands.value, ...initialCommands(),
-      'Settings/hostname', 'Settings/Security/getUser'
-    ]).forEach(cmd => sendCommand(cmd))
+    initialCommands().forEach(cmd => send(cmd))
     // getBounds requires a viewer_id; the navbar shows this device's own
     // local screen, not an arbitrary/remote one.
-    sendCommand('Settings/Display/getBounds', {viewer_id: 'local-webview', window_id: 0})
-    window.onWSOpen(e)
+    api.Settings.Display.getBounds({viewer_id: 'local-webview', window_id: 0})
   }
   ws.onmessage = e => {
-    const data = JSON.parse(e.data);
-    if (data.target === 'Settings/hostname') {
-      hostname.value = data.hostname;
-      document.title = data.hostname + ' - UniTotem Manager';
-    } else if (data.target === 'Settings/Security/getUser'){
-      logged_user.value = data;
-    } else if (data.target === 'Settings/Display/getBounds'){
-      disp_size.value = (data.width && data.height) ? data : null;
-    }
-    if (data.hasOwnProperty('error')) {
-      // messageModal.find('.modal-title').text('Error');
-      // messageModal.find('.modal-body h6').text(data.target + ' returned ' + data.error);
-      // messageModal.find('.modal-body code').text(data.extra);
-      // new bootstrap.Modal(messageModal).show();
-      return;
+    const data = JSON.parse(e.data)
+    if (Object.hasOwn(data, 'error')) {
+      // Whoever sent the failing command gets this, nobody else
+      console.error(data.target + ' returned ' + data.error, data.extra ?? '')
+      // for an unexpected exception the server sends the traceback as `extra`: its last line says what happened
+      const detail = data.extra ? String(data.extra).trim().split('\n').at(-1) : ''
+      errorText.value = detail && detail !== data.error ? `${data.error}: ${detail}` : String(data.error)
+      errorSnack.value = true
+      return
     }
     dispatch(data)
-    window.onWSMessage(data, e)
-  };
+  }
   ws.onclose = (e) => {
     connected.value = false
-    window.onWSClose(e)
     if (e.reason === 'Not Authenticated') {
       window.location.href = '/login'
       return
@@ -245,11 +228,11 @@ function connectWs() {
   ws.onerror = (e) => {
     connected.value = false
     console.error('WebSocket error:', e)
-    window.onWSError(e)
   }
 }
 
 onMounted(() => {
+  loadSchema()
   connectWs()
 })
 

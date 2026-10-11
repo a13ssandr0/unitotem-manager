@@ -137,6 +137,7 @@
 </template>
 
 <script setup>
+import {api} from '@/api'
 import { ref, computed } from 'vue';
 
 const headers = ref([
@@ -234,16 +235,16 @@ function editItem(item) {
 
 function deleteItem(item) {
   // The list is not touched here: the backend answers every mutation with a
-  // fresh getJobs, and onWSMessage below rewrites it. Splicing locally without
+  // fresh getJobs, and the listener below rewrites it. Splicing locally without
   // ever sending the command - which is what this did - made a deletion look
   // like it worked until the next refresh brought the timer back.
   if (confirm('Are you sure you want to delete this item?')) {
-    sendCommand('Settings/Cron/deleteJob', { uuid: item.uuid });
+    api.Settings.Cron.deleteJob({ uuid: item.uuid });
   }
 }
 
 function setEnabled(item, state) {
-  sendCommand('Settings/Cron/setJobEnabled', { uuid: item.uuid, state: Boolean(state) });
+  api.Settings.Cron.setJobEnabled({ uuid: item.uuid, state: Boolean(state) });
 }
 
 function close() {
@@ -257,24 +258,17 @@ function save() {
   delete item.enabled;
   delete item.known;
   if (editedIndex.value > -1) {
-    sendCommand('Settings/Cron/editJob', item);
+    api.Settings.Cron.editJob(item);
   } else {
     delete item.uuid;
-    sendCommand('Settings/Cron/addJob', item);
+    api.Settings.Cron.addJob(item);
   }
   close();
 }
 
-const sendCommand = window.sendCommand;
-window.setInitCommands("Settings/Cron/getJobs")
-
-onWSMessage = (data) => {
-  switch (data.target) {
-    case "Settings/Cron/getJobs":
-      timers.value = data.jobs;
-      break;
-  }
-}
+api.Settings.Cron.getJobs.on(data => {
+  timers.value = data.jobs;
+}, {init: true})
 
 </script>
 

@@ -50,35 +50,21 @@
 </template>
 
 <script setup>
-import {ref} from 'vue';
+import {api} from '@/api'
 
-const audioDevices = ref({
-  default: null,
-  devices: []
-});
-
-const sendCommand = window.sendCommand;
-window.setInitCommands("Settings/Audio/devices")
-
-onWSMessage = (data) => {
-  switch (data.target) {
-    case "Settings/Audio/devices":
-      audioDevices.value = data;
-      break;
-  }
-}
+const audioDevices = api.Settings.Audio.devices.use({initial: {default: null, devices: []}})
 
 const setDefaultDevice = (deviceName) => {
-  sendCommand("Settings/Audio/default", {device: deviceName})
+  api.Settings.Audio.default({device: deviceName})
 }
 
 const setVolume = (device) => {
-  sendCommand("Settings/Audio/volume", {device: device.name, volume: device.volume})
+  api.Settings.Audio.volume({device: device.name, volume: device.volume})
 }
 
 const toggleMute = (device) => {
   device.muted = !device.muted
-  sendCommand("Settings/Audio/mute", {device: device.name, mute: device.muted})
+  api.Settings.Audio.mute({device: device.name, mute: device.muted})
 }
 </script>
 
