@@ -503,4 +503,10 @@ the VM-specific ones.
 - **`pkill -f <pattern>` inside an ssh command line kills the command's own shell**, because the pattern is in its
   command line: the rest of the command silently never runs (a `systemctl restart` after it did not happen and the
   manager was left down). Use `pkill -x name`, a pid, or a pattern written like `[i]nit.py`.
+- **Importing a name that does not exist, inside a `try/except ImportError`, fails silently.** In
+  `utils/system/network/networkmanager.py` the classes were imported as `NetworkManagerConnectionActive` and
+  `NetworkManagerIP4Config`, which are not classes in sdbus-networkmanager 2.0 (they are `ActiveConnection` and
+  `IPv4Config`): the fallback made them `None` and every device was reported without an active connection and without
+  an address, so the network page said "Connected" and "Not connected" on the same row. Check the real names with
+  `dir(sdbus_async.networkmanager)` on the target, and when a fallback is taken log it as an error, not nothing.
 

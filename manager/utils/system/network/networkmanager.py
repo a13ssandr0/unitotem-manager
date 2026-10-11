@@ -24,15 +24,22 @@ except ImportError:
     # Older versions of sdbus-networkmanager may not export this
     NetworkDeviceGeneric = None  # type: ignore
 
+# The classes are called ActiveConnection and IPv4Config in sdbus-networkmanager (the long NetworkManager...
+# names are the interface mixins, not usable objects). Importing names that do not exist was silently swallowed here
+# and made every device look like it had no active connection and no address.
 try:
-    from sdbus_async.networkmanager import NetworkManagerConnectionActive
+    from sdbus_async.networkmanager import ActiveConnection as NetworkManagerConnectionActive
 except ImportError:
     NetworkManagerConnectionActive = None  # type: ignore
 
 try:
-    from sdbus_async.networkmanager import NetworkManagerIP4Config
+    from sdbus_async.networkmanager import IPv4Config as NetworkManagerIP4Config
 except ImportError:
     NetworkManagerIP4Config = None  # type: ignore
+
+if NetworkManagerConnectionActive is None or NetworkManagerIP4Config is None:
+    from loguru import logger as _logger
+    _logger.error('sdbus_async.networkmanager has no ActiveConnection/IPv4Config: devices will show no address')
 
 try:
     from sdbus_async.networkmanager import NetworkDeviceWired
