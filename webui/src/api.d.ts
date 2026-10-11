@@ -20,6 +20,8 @@ export interface Api {
     add_url_assets: ApiCall<{ items: (any)[]; playlist_id?: null | string }>
     /** [requires: scheduler] */
     assets: ApiCall<{ playlist_id?: null | string }>
+    /** Copy assets of a playlist to another one. [requires: scheduler] */
+    copy_assets: ApiCall<{ uuids: (string)[]; playlist_id: string; target_playlist_id: string }>
     /** [requires: scheduler] */
     create_playlist: ApiCall<{ name?: string }>
     /** [requires: scheduler] */
@@ -33,11 +35,13 @@ export interface Api {
     /** [requires: scheduler] */
     delete_playlist: ApiCall<{ playlist_id: string }>
     /** [requires: scheduler] */
-    edit_asset: ApiCall<{ uuid: string; playlist_id?: null | string; name?: null | string; url?: null | string; duration?: null | number; fit?: 0 | 1 | 2 | null; bg_color?: null | string; ena_date?: null | string; dis_date?: null | string; enabled?: boolean | null }>
+    edit_asset: ApiCall<{ uuid: string; playlist_id?: null | string; name?: null | string; url?: null | string; duration?: null | number; fit?: 0 | 1 | 2 | null; bg_color?: null | string; ena_date?: null | string; dis_date?: null | string; enabled?: boolean | null; volume?: null | number; muted?: boolean | null }>
     /** [requires: scheduler] */
     files: ApiCall<Record<string, never>>
     /** [requires: scheduler] */
     goto_asset: ApiCall<{ index?: null | number | string; playlist_id?: null | string }>
+    /** Move assets of a playlist to another one. [requires: scheduler] */
+    move_assets: ApiCall<{ uuids: (string)[]; playlist_id: string; target_playlist_id: string }>
     /** [requires: scheduler] */
     next_asset: ApiCall<{ playlist_id?: null | string }>
     /** [requires: scheduler] */
@@ -45,9 +49,13 @@ export interface Api {
     /** [requires: scheduler] */
     previous_asset: ApiCall<{ playlist_id?: null | string }>
     /** [requires: scheduler] */
+    rename_playlist: ApiCall<{ playlist_id: string; name: string }>
+    /** [requires: scheduler] */
     reorder_assets: ApiCall<{ from_i: number; to_i: number; playlist_id?: null | string }>
     /** [requires: scheduler] */
     set_default_duration: ApiCall<{ duration: number; playlist_id?: null | string }>
+    /** [requires: scheduler] */
+    set_default_playlist: ApiCall<{ playlist_id: string }>
   }
   Settings: {
     Audio: {
@@ -73,6 +81,24 @@ export interface Api {
       set_job_enabled: ApiCall<{ uuid: string; state: boolean }>
     }
     Display: {
+      Screens: {
+        /** Change how an output is controlled. `wol` is {mac, broadcast?, port?}, `serial` is [requires: admin] */
+        configure: ApiCall<{ name: string; on_mechanism?: null | string; off_mechanism?: null | string; power_on_at_start?: boolean | null; wol?: any | null; serial?: any | null; cec_device?: null | string; clear_wol?: boolean; clear_serial?: boolean }>
+        /** What X, DDC/CI and CEC each say about an output (None where they cannot tell). [requires: power] */
+        power_state: ApiCall<{ name: string }>
+        /** Find out what each monitor supports (DDC/CI buses and advertised inputs). Slow, runs in the background. [requires: admin] */
+        probe: ApiCall<{ name?: null | string }>
+        /** Every output with the mechanisms available on it, its configuration and what the last probe found. [requires: audio, power] */
+        screens: ApiCall<Record<string, never>>
+        /** Select the input of a monitor over DDC/CI, among the values it advertises. [requires: admin] */
+        set_input: ApiCall<{ name: string; source: number }>
+        /** [requires: audio] */
+        set_mute: ApiCall<{ name: string; mute: boolean }>
+        /** Switch a monitor 'on' or 'off' with one mechanism, or 'auto' to try them in order. [requires: power] */
+        set_power: ApiCall<{ name: string; state: string; mechanism?: string }>
+        /** The speaker volume of a monitor over DDC/CI, 0 to 100. [requires: audio] */
+        set_volume: ApiCall<{ name: string; volume: number }>
+      }
       /** Whether the viewer displays assets whose certificate does not [requires: admin] */
       allow_insecure_certs: ApiCall<Record<string, never>>
       /** Size of a window, shown in the navbar of every page. */
@@ -173,10 +199,14 @@ export interface Api {
     add_window: ApiCall<{ viewer_id: string; display?: number; x?: number; y?: number; width?: number; height?: number }>
     /** Put one window on one playlist. A window shows a single playlist, [requires: admin] */
     assign_playlist: ApiCall<{ viewer_id: string; window_id: number; playlist_id: string }>
+    /** The outputs a window of this viewer can choose from. Only this node's own sound devices are known: a [requires: admin] */
+    audio_outputs: ApiCall<{ viewer_id: string }>
     /** [requires: admin] */
     list: ApiCall<Record<string, never>>
     /** [requires: admin] */
     remove_window: ApiCall<{ viewer_id: string; window_id: number }>
+    /** Where a window plays its sound: the description of one of the outputs of its host, None for the default. [requires: admin] */
+    set_audio_output: ApiCall<{ viewer_id: string; window_id: number; device?: null | string }>
     /** [requires: admin] */
     unassign_playlist: ApiCall<{ viewer_id: string; window_id: number }>
   }

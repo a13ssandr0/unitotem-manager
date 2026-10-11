@@ -20,12 +20,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-Mechanism = Literal['cec', 'ddc', 'x']
+Mechanism = Literal['cec', 'ddc', 'x', 'wol', 'serial']
 Action = Literal['on', 'off']
 
+# 'wol' and 'serial' are only ever available when somebody configured them for the output, which is the intent
+# to use them: a monitor with Wake-on-LAN is woken by it first. WOL has no "off", it is simply never offered there.
 _ORDER: dict[Action, tuple[Mechanism, ...]] = {
-    'on':  ('cec', 'ddc', 'x'),
-    'off': ('ddc', 'cec', 'x'),
+    'on':  ('wol', 'cec', 'ddc', 'serial', 'x'),
+    'off': ('ddc', 'cec', 'serial', 'x'),
 }
 
 
@@ -58,3 +60,14 @@ def resolve_mechanism(available: set[Mechanism], action: Action,
             return mechanism
     raise NoMechanismAvailable(
         f'no mechanism available for {action!r} on this output')
+
+
+def candidates(available: set[Mechanism], action: Action, preferred: str = 'auto') -> list[Mechanism]:
+    """The mechanisms to try, in order. An explicit preference is the only candidate (no silent rerouting); on
+    'auto' every available mechanism is a candidate, best first, so a failing one falls through to the next."""
+    if preferred != 'auto':
+        return [resolve_mechanism(available, action, preferred)]
+    ordered = [m for m in _ORDER[action] if m in available]
+    if not ordered:
+        raise NoMechanismAvailable(f'no mechanism available for {action!r} on this output')
+    return ordered
