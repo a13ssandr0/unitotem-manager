@@ -34,7 +34,7 @@ class Remote(WSAPIBase):
             # first boot: remote.json does not exist yet, start with defaults
             self.remote_manager = RemoteManager()
 
-    def getMode(self):
+    def mode(self):
         return WSBroadcast(
                 remote_server=self.remote_manager.server_ip.compressed if self.remote_manager.server_ip else None,
                 remote_connected=self.__remote_connected,
@@ -42,11 +42,11 @@ class Remote(WSAPIBase):
                 remote_clients=self.remote_manager.clients_list,
         )
 
-    def getKeyStatus(self):
+    def key_status(self):
         """State of the RSA signing key: missing, generating or ready"""
         return WSBroadcast(status=RemoteManager.signing_key_status())
 
-    def setMode(self, remote_server: Optional[IPv4Address],
+    def set_mode(self, remote_server: Optional[IPv4Address],
                 remote_port: Optional[PositiveInt] = cmdargs.port_secure):
         remote_port = remote_port or cmdargs.port_secure
         if self.remote_manager.server_ip == remote_server and self.remote_manager.server_port == remote_port:
@@ -61,9 +61,9 @@ class Remote(WSAPIBase):
         if remote_server:
             # noinspection PyAsyncCall
             asyncio.create_task(self.__connect_to_server(remote_server, remote_port), name='remote_control')
-        return self.getMode()
+        return self.mode()
 
-    async def disconnect(self, client: str):
+    async def disconnect_client(self, client: str):
         for remote in self.remote_ws.active_connections:
             if remote.headers['instance_id'] == client:
                 await remote.close(code=4023, reason="Server forced disconnection")
@@ -71,7 +71,7 @@ class Remote(WSAPIBase):
                 del self.remote_manager.clients[remote.headers['instance_id']]
                 self.remote_manager.save()
                 break
-        return self.getMode()
+        return self.mode()
 
     async def __connect_to_server(self, ip: IPv4Address, port: PositiveInt = cmdargs.port_secure, headers=None):
         if headers is None:
@@ -98,7 +98,7 @@ class Remote(WSAPIBase):
                         if isinstance(msg, CloseConnection):
                             if msg.code == 4023:
                                 self.__remote_connected = False
-                                self.setMode(remote_server=None, remote_port=None)
+                                self.set_mode(remote_server=None, remote_port=None)
                                 return
                             break
                         data, signature = getattr(msg, 'data', '.').split('.')

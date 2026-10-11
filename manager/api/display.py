@@ -24,7 +24,7 @@ def _vm() -> WebviewManager:
 
 class Display(WSAPIBase):
 
-    def getDisplays(self, viewer_id: Optional[str] = None):
+    def displays(self, viewer_id: Optional[str] = None):
         if viewer_id:
             return WSBroadcast(displays=_vm().get_webview_screens(viewer_id))
         # Return screens grouped by webview
@@ -33,7 +33,7 @@ class Display(WSAPIBase):
             for vid in _vm().get_webviews()
         })
 
-    async def getGPUFeatureStats(self):
+    async def gpu_feature_stats(self):
         """
         Graphics Feature Status for this node's own local webview - the same
         data chrome://gpu and Electron's old app.getGPUFeatureStatus() both
@@ -76,54 +76,45 @@ class Display(WSAPIBase):
                            gpu_profile=detect_gpu().as_dict())
 
     @UserPerms.requires.none
-    def getBounds(self, viewer_id: str, window_id: int = 0):
+    def bounds(self, viewer_id: str, window_id: int = 0):
         """Size of a window, shown in the navbar of every page."""
         windows = _vm().get_webview_windows(viewer_id)
         if window_id < len(windows):
             return WSBroadcast(**windows[window_id])
         return WSBroadcast()
 
-    def setBounds(self, viewer_id: str, window_id: int, x: int, y: int, width: int, height: int):
+    def set_bounds(self, viewer_id: str, window_id: int, x: int, y: int, width: int, height: int):
         asyncio.create_task(_vm().set_bounds(viewer_id, window_id, x, y, width, height))
-        return WSBroadcast(x=x, y=y, width=width, height=height)
+        return WSBroadcast(self.bounds, x=x, y=y, width=width, height=height)
 
-    def getOrientation(self, viewer_id: str, window_id: int = 0):
+    def orientation(self, viewer_id: str, window_id: int = 0):
         windows = _vm().get_webview_windows(viewer_id)
         orientation = windows[window_id].get('orientation', 0) if window_id < len(windows) else 0
         return WSBroadcast(orientation=orientation)
 
-    def setOrientation(self, viewer_id: str, window_id: int, orientation: int):
+    def set_orientation(self, viewer_id: str, window_id: int, orientation: int):
         asyncio.create_task(_vm().set_orientation(viewer_id, window_id, orientation))
-        return WSBroadcast(orientation=orientation)
+        return WSBroadcast(self.orientation, orientation=orientation)
 
-    def getFlip(self, viewer_id: str, window_id: int = 0):
+    def flip(self, viewer_id: str, window_id: int = 0):
         windows = _vm().get_webview_windows(viewer_id)
         flip = windows[window_id].get('flip', 0) if window_id < len(windows) else 0
         return WSBroadcast(flip=flip)
 
-    def setFlip(self, viewer_id: str, window_id: int, flip: int):
+    def set_flip(self, viewer_id: str, window_id: int, flip: int):
         asyncio.create_task(_vm().set_flip(viewer_id, window_id, flip))
-        return WSBroadcast(flip=flip)
+        return WSBroadcast(self.flip, flip=flip)
 
-    def addWindow(self, viewer_id: str, display: int = 0, x: int = 0, y: int = 0,
-                  width: int = 1920, height: int = 1080):
-        asyncio.create_task(_vm().add_window(viewer_id, display, x, y, width, height))
-        return WSBroadcast()
-
-    def removeWindow(self, viewer_id: str, window_id: int):
-        asyncio.create_task(_vm().remove_window(viewer_id, window_id))
-        return WSBroadcast()
-
-    def getAllowInsecureCerts(self):
+    def allow_insecure_certs(self):
         """Whether the viewer displays assets whose certificate does not
         validate. Admin-only, like every other method here (a method with no
         explicit permission requires admin - see api.ws.permissions)."""
         return WSBroadcast(allow=viewer_settings.allow_insecure_certs)
 
-    def setAllowInsecureCerts(self, allow: bool):
+    def set_allow_insecure_certs(self, allow: bool):
         """Stored now, applied by the viewer the next time it starts: CEF
         takes it as a command-line switch at initialisation and Chromium
         offers no way to change it on a running browser."""
         viewer_settings.allow_insecure_certs = allow
         viewer_settings.save()
-        return WSBroadcast(self.getAllowInsecureCerts, allow=viewer_settings.allow_insecure_certs)
+        return WSBroadcast(self.allow_insecure_certs, allow=viewer_settings.allow_insecure_certs)

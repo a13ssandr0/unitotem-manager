@@ -30,9 +30,9 @@ def test_serialize_does_not_raise_on_wildcards():
     job = jobs[0]
     assert job['minute'] == '0'
     assert job['hour'] == '22'
-    assert job['dayOfMonth'] == '*'
+    assert job['day_of_month'] == '*'
     assert job['month'] == '*'
-    assert job['dayOfWeek'] == '*'
+    assert job['day_of_week'] == '*'
 
 
 def test_serialize_preserves_step_and_range_slices():
@@ -43,7 +43,7 @@ def test_serialize_preserves_step_and_range_slices():
     jobs = tab.serialize()
     by_uuid = {j['uuid']: j for j in jobs}
     assert by_uuid['11223344']['minute'] == '*/15'
-    assert by_uuid['deadbeef']['dayOfMonth'] == '1-5'
+    assert by_uuid['deadbeef']['day_of_month'] == '1-5'
 
 
 # ── command <-> action key mapping ──────────────────────────────────────────
@@ -129,3 +129,18 @@ def test_schedule_error_none_means_leave_the_schedule_alone():
 
 def test_schedule_error_accepts_ints_from_older_clients():
     assert _schedule_error(0, 22, '*', '*', '*') is None
+
+
+# ── a new job must never silently run every minute ──────────────────────────
+
+def test_new_refuses_an_incomplete_schedule():
+    # A reboot timer created with only minute and hour used to be written as '* * * * *': a reboot loop.
+    tab = make_tab('')
+    assert tab.new('reb', '0', '3') is False
+    assert list(tab.crons) == []
+
+
+def test_new_with_a_full_schedule_writes_it():
+    tab = make_tab('')
+    assert tab.new('reb', '0', '3', '*', '*', '*') is True
+    assert str(tab.crons[0].slices) == '0 3 * * *'

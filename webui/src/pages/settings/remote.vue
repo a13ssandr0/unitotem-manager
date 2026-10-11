@@ -109,25 +109,25 @@ function setMode(){
   if (mode.value === 'Server') {
     serverIp.value = ''
     serverPort.value = ''
-    api.Settings.Remote.setMode({remote_server: null});
+    api.Settings.Remote.set_mode({remote_server: null});
   }
 }
 
 function connectToServer(){
-  api.Settings.Remote.setMode({
+  api.Settings.Remote.set_mode({
     remote_server: serverIp.value,
     remote_port: serverPort.value,
   })
 }
 
-api.Settings.Remote.getMode.on(data => {
+api.Settings.Remote.mode.on(data => {
   mode.value = data.remote_server ? 'Client' : 'Server';
   serverIp.value = data.remote_server || '';
   serverPort.value = data.remote_port || '';
   clients.value = data.remote_clients;
 }, {init: true})
 
-api.Settings.Remote.getKeyStatus.on(data => {
+api.Settings.Remote.key_status.on(data => {
   keyStatus.value = data.status;
 }, {init: true})
 

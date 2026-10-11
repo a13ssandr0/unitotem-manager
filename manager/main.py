@@ -244,15 +244,15 @@ loop.create_task(info_loop(WS, SHUTDOWN_EVENT), name='info_loop')
 async def generate_signing_key():
     # RSA-4096 can take minutes on a Pi: generate it in a worker thread right
     # after startup instead of blocking the loop at the first signature.
-    # Progress is observable in the webUI via Settings/Remote/getKeyStatus.
+    # Progress is observable in the webUI via Settings/Remote/key_status.
     if RemoteManager.signing_key_status() != 'missing':
         return
-    await WS.broadcast('Settings/Remote/getKeyStatus', status='generating')
+    await WS.broadcast('Settings/Remote/key_status', status='generating')
     try:
         await loop.run_in_executor(None, RemoteManager.get_signing_key)
     except Exception as e:
         logger.error('RSA signing key generation failed: {}', e)
-    await WS.broadcast('Settings/Remote/getKeyStatus', status=RemoteManager.signing_key_status())
+    await WS.broadcast('Settings/Remote/key_status', status=RemoteManager.signing_key_status())
 
 
 loop.create_task(generate_signing_key(), name='rsa_keygen')
