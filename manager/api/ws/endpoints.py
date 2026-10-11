@@ -1,5 +1,6 @@
 import inspect
 import types
+from typing import Any
 from functools import wraps
 from importlib import import_module
 from inspect import isclass, isgeneratorfunction, iscoroutinefunction, isasyncgenfunction
@@ -7,7 +8,7 @@ from os.path import join
 
 from benedict import benedict
 from loguru import logger
-from pydantic import validate_call
+from pydantic import create_model, validate_call
 
 from api.ws.permissions import check_permissions
 from api.ws.wsmanager import Context
@@ -31,6 +32,40 @@ class WebSocketAPI:
     def tree(self):
         items = benedict({k: (f.__doc__ or '').strip() for k, f in self.generators.items() if '/_' not in k}).unflatten('/')
         return dict_sort(items)
+
+    @property
+    def schema(self) -> dict:
+        """
+        Machine-readable description of every callable: its path, docstring, the permissions needed to call
+        it (None = anyone logged in) and the JSON schema of its arguments. The web UI builds its client from
+        this, so a new API function never needs a matching declaration on the JavaScript side.
+        """
+        out = {}
+        for path, gen in sorted(self.generators.items()):
+            if '/_' in path:  # private by convention, like in `tree`
+                continue
+            func = gen.__original_func__
+            perms = getattr(func, 'perms', {'admin'})
+            fields = {}
+            for name, param in inspect.signature(func).parameters.items():
+                if param.annotation is Context or name in ('self', 'cls'):
+                    continue
+                fields[name] = (
+                    Any if param.annotation is inspect.Parameter.empty else param.annotation,
+                    ... if param.default is inspect.Parameter.empty else param.default,
+                )
+            try:
+                params = create_model(path, __config__={'arbitrary_types_allowed': True}, **fields) \
+                    .model_json_schema(mode='validation')
+            except Exception:
+                logger.warning('Cannot describe the arguments of {}', path)
+                params = {'type': 'object'}
+            out[path] = {
+                'doc'        : (func.__doc__ or '').strip(),
+                'permissions': None if perms is None else sorted(str(getattr(p, 'value', p)) for p in perms),
+                'params'     : params,
+            }
+        return out
 
     def import_class(self, path: str, name: str, prefix: str = None):
         logger.debug(f'Importing {name} from {path}')

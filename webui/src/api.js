@@ -17,6 +17,7 @@
 import {onUnmounted, ref} from 'vue'
 
 const listeners = new Map() // target -> Set<callback>
+const keyListeners = new Map() // payload key -> Set<callback>
 const initCommands = new Map() // command -> number of components that asked for it
 
 let sendFn = () => {}
@@ -31,6 +32,9 @@ export function attach(send, ready) {
 /** Called by the owner of the socket for every message received. */
 export function dispatch(data) {
   listeners.get(data.target)?.forEach(callback => callback(data))
+  for (const key of Object.keys(data)) {
+    keyListeners.get(key)?.forEach(callback => callback(data[key], data))
+  }
 }
 
 /** Commands to (re)send whenever the socket opens. */
@@ -38,8 +42,41 @@ export function initialCommands() {
   return [...initCommands.keys()]
 }
 
+let schema = null
+
+/**
+ * Fetches the server's description of the API. It is only used to catch mistakes early (a path that does
+ * not exist, an argument the function does not take) with a console error; calls are never blocked.
+ */
+export async function loadSchema() {
+  try {
+    const response = await fetch('/api/schema', {credentials: 'include'})
+    if (response.ok) schema = await response.json()
+  } catch (e) {
+    console.warn('API schema not available', e)
+  }
+}
+
+function check(target, args) {
+  if (!schema) return
+  const entry = schema[target]
+  if (!entry) {
+    console.error(`Unknown API function: ${target}`)
+    return
+  }
+  const known = entry.params?.properties ?? {}
+  for (const name of Object.keys(args)) {
+    if (!(name in known)) console.error(`${target} takes no argument named "${name}"`)
+  }
+  for (const name of entry.params?.required ?? []) {
+    if (!(name in args)) console.error(`${target} needs the argument "${name}"`)
+  }
+}
+
 export function send(target, args) {
-  sendFn(target, args === undefined ? {} : {...args})
+  const payload = args === undefined ? {} : {...args}
+  check(target, payload)
+  sendFn(target, payload)
 }
 
 function subscribe(target, callback, init) {
@@ -47,7 +84,7 @@ function subscribe(target, callback, init) {
   listeners.get(target).add(callback)
   for (const command of init) {
     initCommands.set(command, (initCommands.get(command) ?? 0) + 1)
-    if (readyFn()) sendFn(command, {})
+    if (readyFn()) send(command, {})
   }
   return () => {
     listeners.get(target)?.delete(callback)
@@ -71,20 +108,55 @@ export function onApi(target, callback, {init = []} = {}) {
  * A ref with the last message of `target` (or of its `pick` field). The target is also the command that
  * asks for the current value, unless `init` says otherwise.
  */
-export function useApiState(target, {pick = null, init = [target]} = {}) {
-  const state = ref(null)
+export function useApiState(target, {pick = null, init = [target], initial = null} = {}) {
+  const state = ref(initial)
   onApi(target, data => {
     state.value = pick ? data[pick] : data
   }, {init})
   return state
 }
 
-function proxy(path) {
-  return new Proxy(function() {}, {
-    get: (_, key) => (typeof key === 'symbol' || key === 'then' ? undefined : proxy([...path, key])),
-    apply: (_, __, [args]) => send(path.join('/'), args),
+/**
+ * Some pieces of state (the playlists, for one) are sent by several functions, each under its own target.
+ * `onApiKey('playlists', cb)` runs `cb(value, message)` for every message that carries that key, whoever
+ * sent it, which is what a page showing that state actually wants. `init` lists the commands that fetch it.
+ */
+export function onApiKey(key, callback, {init = []} = {}) {
+  if (!keyListeners.has(key)) keyListeners.set(key, new Set())
+  keyListeners.get(key).add(callback)
+  const release = subscribe(`\0key:${key}`, () => {}, init)
+  onUnmounted(() => {
+    keyListeners.get(key)?.delete(callback)
+    release()
   })
 }
 
-/** `api.Settings.Update.check()` === send('Settings/Update/check'). */
+/** A ref following the payload key `key` of any message. */
+export function useApiKey(key, {init = [], initial = null} = {}) {
+  const state = ref(initial)
+  onApiKey(key, value => {
+    state.value = value
+  }, {init})
+  return state
+}
+
+function proxy(path) {
+  const target = path.join('/')
+  return new Proxy(function() {}, {
+    get: (_, key) => {
+      if (typeof key === 'symbol' || key === 'then') return undefined
+      // `api.Settings.Update.status.on(cb)` / `.use()` listen to the messages of that function
+      if (key === 'on') return (callback, {init = false} = {}) => onApi(target, callback, {init: init ? [target] : []})
+      if (key === 'use') return ({pick = null, init = true, initial = null} = {}) => useApiState(target, {pick, init: init ? [target] : [], initial})
+      return proxy([...path, key])
+    },
+    apply: (_, __, [args]) => send(target, args),
+  })
+}
+
+/**
+ * `api.Settings.Update.check()` === send('Settings/Update/check'). The tree is not declared anywhere: the
+ * server describes it (GET /api/schema) and tools/gen-api-types.py turns that into api.d.ts for editors.
+ * @type {import('./api').Api}
+ */
 export const api = proxy([])
