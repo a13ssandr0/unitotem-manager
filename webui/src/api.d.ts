@@ -70,11 +70,11 @@ export interface Api {
     }
     Cron: {
       /** Every field of the schedule is required: python-crontab's default for a missing one is '*', which [requires: admin] */
-      add_job: ApiCall<{ command: string; minute: string; hour: string; day_of_month: string; month: string; day_of_week: string }>
+      add_job: ApiCall<{ command: string; minute: string; hour: string; day_of_month: string; month: string; day_of_week: string; output?: null | string; mechanism?: string }>
       /** [requires: admin] */
       delete_job: ApiCall<{ uuid: string }>
       /** [requires: admin] */
-      edit_job: ApiCall<{ uuid: string; command?: string; minute?: any; hour?: any; day_of_month?: any; month?: any; day_of_week?: any }>
+      edit_job: ApiCall<{ uuid: string; command?: string; minute?: any; hour?: any; day_of_month?: any; month?: any; day_of_week?: any; output?: null | string; mechanism?: null | string }>
       /** [requires: admin] */
       jobs: ApiCall<Record<string, never>>
       /** [requires: admin] */

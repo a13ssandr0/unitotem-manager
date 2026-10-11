@@ -37,6 +37,7 @@ rsync -a --delete --info=stats1 \
     "$REPO/manager/static" \
     "$REPO/manager/init.py" \
     "$REPO/manager/main.py" \
+    "$REPO/manager/screenctl.py" \
     "$REPO/manager/requirements.txt" \
     "$VM_USER@$VM_HOST:$VM_APP_DIR/"
 

@@ -47,7 +47,7 @@ override_dh_auto_install:
 	install -d $(SHARE)
 	cp -r manager/api manager/routers manager/templates manager/utils \
 	      manager/webview manager/resources manager/static $(SHARE)/
-	cp manager/init.py manager/main.py manager/requirements.txt $(SHARE)/
+	cp manager/init.py manager/main.py manager/screenctl.py manager/requirements.txt $(SHARE)/
 	find $(SHARE) -name __pycache__ -type d -prune -exec rm -rf {} +
 	install -d $(PLYMOUTH)
 	cp -r plymouth/unitotem/. $(PLYMOUTH)/
