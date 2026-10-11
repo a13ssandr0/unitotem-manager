@@ -33,13 +33,13 @@
 
     <v-navigation-drawer v-model="drawer" app clipped>
       <v-list density="compact" color="primary">
-        <v-list-item to="/" exact prepend-icon="mdi-view-dashboard" title="Scheduler"></v-list-item>
-        <v-list-item to="/viewers" prepend-icon="mdi-monitor-multiple" title="Viewers"></v-list-item>
+        <v-list-item v-if="allowed('Scheduler/playlists')" to="/" exact prepend-icon="mdi-view-dashboard" title="Scheduler"></v-list-item>
+        <v-list-item v-if="allowed('Viewers/list')" to="/viewers" prepend-icon="mdi-monitor-multiple" title="Viewers"></v-list-item>
 
         <v-divider class="my-2"></v-divider>
-        <v-list-subheader>Settings</v-list-subheader>
+        <v-list-subheader v-if="visibleTabs.length">Settings</v-list-subheader>
         <v-list-item
-          v-for="(tab, i) in tabs"
+          v-for="(tab, i) in visibleTabs"
           :key="i"
           :to="'/settings/' + tab.id"
           :prepend-icon="tab.icon"
@@ -70,7 +70,7 @@
 
     <v-main>
       <div class="main-content px-2 pt-2">
-        <router-view/>
+        <router-view v-if="routeAllowed"/>
       </div>
     </v-main>
 
@@ -115,11 +115,12 @@
 <script setup>
 import {onMounted, onUnmounted, ref, computed, watch} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
-import {useRouter} from 'vue-router'
-import {api, attach, dispatch, initialCommands, loadSchema, send} from '@/api'
+import {useRoute, useRouter} from 'vue-router'
+import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, send} from '@/api'
 
 const theme = useTheme()
 const router = useRouter()
+const route = useRoute()
 
 const themeMode = ref(localStorage.getItem('themeMode') || 'auto')
 
@@ -161,22 +162,48 @@ const powerOffDialog = ref(false)
 
 const hostname = ref(window.__INITIAL_STATE__.hostname)
 const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
-const logged_user = ref({name: 'user', permissions: []})
+const logged_user = ref({name: 'user', perms: null})
 const disp_size = ref(null)
 const connected = ref(false)
 const errorSnack = ref(false)
 const errorText = ref('')
 
+// `needs` is the API function that decides whether a user can use the page (its permissions come from the server)
 const tabs = ref([
-  {id: 'audio', name: 'Audio', icon: 'mdi-speaker'},
-  {id: 'display', name: 'Display', icon: 'mdi-monitor'},
-  {id: 'remote', name: 'Remote control', icon: 'mdi-remote'},
-  {id: 'users', name: 'Users', icon: 'mdi-account-key'},
-  {id: 'timers', name: 'Timers', icon: 'mdi-alarm'},
-  {id: 'network', name: 'Network', icon: 'mdi-ethernet'},
-  {id: 'updates', name: 'Updates', icon: 'mdi-update'},
-  {id: 'backup', name: 'Backup and restore', icon: 'mdi-history'},
+  {id: 'audio', name: 'Audio', icon: 'mdi-speaker', needs: 'Settings/Audio/devices'},
+  {id: 'display', name: 'Display', icon: 'mdi-monitor', needs: 'Settings/Display/displays'},
+  {id: 'remote', name: 'Remote control', icon: 'mdi-remote', needs: 'Settings/Remote/mode'},
+  {id: 'users', name: 'Users', icon: 'mdi-account-key', needs: 'Settings/Security/users'},
+  {id: 'timers', name: 'Timers', icon: 'mdi-alarm', needs: 'Settings/Cron/jobs'},
+  {id: 'network', name: 'Network', icon: 'mdi-ethernet', needs: 'Settings/Network/devices'},
+  {id: 'updates', name: 'Updates', icon: 'mdi-update', needs: 'Settings/Update/status'},
+  {id: 'backup', name: 'Backup and restore', icon: 'mdi-history', needs: 'Settings/Security/users'},
 ])
+
+const allowed = (needs) => canCall(needs, logged_user.value)
+const visibleTabs = computed(() => tabs.value.filter(tab => allowed(tab.needs)))
+
+// The first page the user may open, for when they land on one they may not (a bookmark, a typed address)
+const pagePermissions = computed(() => [
+  ['/', 'Scheduler/playlists'],
+  ['/viewers', 'Viewers/list'],
+  ...tabs.value.map(tab => ['/settings/' + tab.id, tab.needs]),
+])
+// Pages are not mounted before the user is known and allowed to use them: a page asks for its data as soon as
+// it appears, and a refusal for something the user was never meant to open would show up as an error
+const routeAllowed = computed(() => {
+  if (!logged_user.value.perms) return false
+  const page = pagePermissions.value.find(([path]) => path === route.path)
+  return !page || allowed(page[1])
+})
+
+watch([() => route.path, logged_user, pagePermissions], () => {
+  const page = pagePermissions.value.find(([path]) => path === route.path)
+  if (page && !allowed(page[1])) {
+    const first = pagePermissions.value.find(([, needs]) => allowed(needs))
+    router.replace(first ? first[0] : '/info')
+  }
+})
 
 let ws = null;
 
@@ -203,6 +230,7 @@ function connectWs() {
     // getBounds requires a viewer_id; the navbar shows this device's own
     // local screen, not an arbitrary/remote one.
     api.Settings.Display.bounds({viewer_id: 'local-webview', window_id: 0})
+    notifyOpen()
   }
   ws.onmessage = e => {
     const data = JSON.parse(e.data)

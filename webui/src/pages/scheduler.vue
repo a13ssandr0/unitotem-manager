@@ -4,20 +4,13 @@
       <!-- Playlist -->
       <v-col cols="12" md="8">
         <v-card>
-<!--          <v-tabs v-if="playlistTabs.length > 1" v-model="playlistTab" color="primary">-->
-<!--            <v-tab v-for="(tab, index) in playlistTabs" :key="index" :value="tab" :text="`Playlist ${tab}`">-->
-<!--&lt;!&ndash;              <template v-slot:prepend>?</template>&ndash;&gt;-->
-<!--&lt;!&ndash;              <template v-slot:append>X</template>&ndash;&gt;-->
-<!--            </v-tab>-->
-<!--          </v-tabs>-->
-          <v-divider v-if="playlistTabs.length > 1"></v-divider>
           <v-card-title class="d-flex align-center">
-            <v-tabs v-if="playlistTabs.length > 1" v-model="playlistTab" color="primary">
-              <v-tab v-for="(tab, index) in playlistTabs" :key="index" :value="tab" :text="`Playlist ${tab}`">
-  <!--              <template v-slot:prepend>?</template>-->
-  <!--              <template v-slot:append>X</template>-->
-              </v-tab>
+            <v-tabs v-model="selectedPlaylist" color="primary" show-arrows>
+              <v-tab v-for="playlist in playlists" :key="playlist.playlist_id" :value="playlist.playlist_id"
+                     :text="playlist.name"></v-tab>
             </v-tabs>
+            <v-btn icon="mdi-plus" title="New playlist" variant="text" density="compact"
+                   @click="openNewPlaylistDialog"></v-btn>
             <v-spacer></v-spacer>
             <div class="d-flex align-center">
               <v-btn icon="mdi-cog" title="Settings" variant="text" density="compact" class="mr-4" @click="showSettingsDialog = true"></v-btn>
@@ -70,7 +63,7 @@
                   <!-- action buttons -->
                   <template v-slot:append>
                     <v-switch v-model="item.enabled" hide-details color="primary" density="compact"
-                              @click="api.Scheduler.edit_asset({uuid: item.uuid, enabled: !item.enabled})"></v-switch>
+                              @click="api.Scheduler.edit_asset({uuid: item.uuid, enabled: !item.enabled, playlist_id: selectedPlaylist})"></v-switch>
                     <v-menu>
                       <template v-slot:activator="{ props }">
                         <v-btn icon="mdi-dots-vertical" class="ms-2" variant="text" size="small" v-bind="props"></v-btn>
@@ -80,11 +73,11 @@
                           <template v-slot:prepend><v-icon>mdi-pencil</v-icon></template>
                           <v-list-item-title>Edit</v-list-item-title>
                         </v-list-item>
-                        <v-list-item @click="api.Scheduler.goto_asset({'index': index})">
+                        <v-list-item @click="api.Scheduler.goto_asset({index: index, playlist_id: selectedPlaylist})">
                           <template v-slot:prepend><v-icon>mdi-login</v-icon></template>
                           <v-list-item-title>Play Now</v-list-item-title>
                         </v-list-item>
-                        <v-list-item @click="api.Scheduler.delete_asset({uuid: item.uuid})">
+                        <v-list-item @click="api.Scheduler.delete_asset({uuid: item.uuid, playlist_id: selectedPlaylist})">
                           <template v-slot:prepend><v-icon color="red">mdi-delete</v-icon></template>
                           <v-list-item-title class="text-red">Delete</v-list-item-title>
                         </v-list-item>
@@ -161,7 +154,7 @@
     <!-- Settings Dialog -->
     <v-dialog v-model="showSettingsDialog" max-width="400px">
       <v-card class="pa-2 pb-0">
-        <v-card-title>Default Asset Duration</v-card-title>
+        <v-card-title>Playlist settings</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="defaultDuration"
@@ -173,9 +166,27 @@
           ></v-text-field>
         </v-card-text>
         <v-card-actions>
+          <v-btn color="red" variant="text" :disabled="!currentPlaylist || currentPlaylist.is_default"
+                 @click="deletePlaylist">Delete playlist</v-btn>
           <v-spacer></v-spacer>
-          <v-btn text @click="showSettingsDialog = false">Annulla</v-btn>
-          <v-btn color="primary" @click="saveSettings">Salva</v-btn>
+          <v-btn text @click="showSettingsDialog = false">Cancel</v-btn>
+          <v-btn color="primary" @click="saveSettings">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- New playlist dialog -->
+    <v-dialog v-model="showNewPlaylistDialog" max-width="400px">
+      <v-card class="pa-2 pb-0">
+        <v-card-title>New playlist</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="newPlaylistName" label="Name" variant="outlined" autofocus
+                        @keyup.enter="createPlaylist"></v-text-field>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="showNewPlaylistDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :disabled="!newPlaylistName.trim()" @click="createPlaylist">Create</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -312,8 +323,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="showAddUrlDialog = false">Annulla</v-btn>
-          <v-btn color="primary" @click="saveUrlItem">Salva</v-btn>
+          <v-btn text @click="showAddUrlDialog = false">Cancel</v-btn>
+          <v-btn color="primary" @click="saveUrlItem">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -321,9 +332,9 @@
 </template>
 
 <script setup>
-import {api} from '@/api'
+import {api, onOpen} from '@/api'
 import draggable from 'vuedraggable';
-import {ref, computed} from 'vue';
+import {ref, computed, watch} from 'vue';
 
 const mediaFiles = ref({});
 const disk_used = ref('');
@@ -332,8 +343,11 @@ const disk_total = ref('');
 const selectedFiles = ref([]);
 const fileInput = ref(null);
 
-const playlistTabs = ref(['one', 'two', /*'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'*/]);
-const playlistTab = ref(playlistTabs.value[0]);
+const playlists = api.Scheduler.playlists.use({pick: 'playlists', initial: []});
+const selectedPlaylist = ref(null);
+const currentPlaylist = computed(() => playlists.value.find(p => p.playlist_id === selectedPlaylist.value));
+const showNewPlaylistDialog = ref(false);
+const newPlaylistName = ref('');
 const playlistItems = ref([]);
 
 const hoveredRow = ref(null);
@@ -372,13 +386,16 @@ const isIndefinite = computed({
 });
 
 
+// Messages about a playlist carry its id: only the one on screen is shown
+const isSelected = data => data.playlist_id === selectedPlaylist.value
+
 api.Scheduler.assets.on(data => {
-  playlistItems.value = data.items;
-}, {init: true})
+  if (isSelected(data)) playlistItems.value = data.items;
+})
 
 api.Scheduler.current.on(data => {
-  current_asset.value = data.current;
-}, {init: true})
+  if (isSelected(data)) current_asset.value = data.current;
+})
 
 api.Scheduler.files.on(data => {
   mediaFiles.value = data.files;
@@ -387,8 +404,50 @@ api.Scheduler.files.on(data => {
 }, {init: true})
 
 api.Scheduler.default_duration.on(data => {
-  defaultDuration.value = data.duration;
-}, {init: true})
+  if (isSelected(data)) defaultDuration.value = data.duration;
+})
+
+// Show the first (default) playlist at the start, and a valid one when the one on screen disappears
+watch(playlists, list => {
+  if (!list.some(p => p.playlist_id === selectedPlaylist.value)) {
+    selectedPlaylist.value = (list.find(p => p.is_default) ?? list[0])?.playlist_id ?? null;
+  }
+}, {deep: true});
+
+// What a playlist shows is asked for when it is selected, and again whenever the connection comes back
+function refreshPlaylist() {
+  if (!selectedPlaylist.value) return;
+  const args = {playlist_id: selectedPlaylist.value};
+  api.Scheduler.assets(args);
+  api.Scheduler.current(args);
+  api.Scheduler.default_duration(args);
+}
+
+watch(selectedPlaylist, () => {
+  playlistItems.value = [];
+  current_asset.value = null;
+  refreshPlaylist();
+});
+onOpen(refreshPlaylist);
+
+const openNewPlaylistDialog = () => {
+  newPlaylistName.value = '';
+  showNewPlaylistDialog.value = true;
+};
+
+const createPlaylist = () => {
+  if (!newPlaylistName.value.trim()) return;
+  api.Scheduler.create_playlist({name: newPlaylistName.value.trim()});
+  showNewPlaylistDialog.value = false;
+};
+
+const deletePlaylist = () => {
+  if (!currentPlaylist.value || currentPlaylist.value.is_default) return;
+  if (confirm(`Delete the playlist "${currentPlaylist.value.name}" and its assets?`)) {
+    api.Scheduler.delete_playlist({playlist_id: selectedPlaylist.value});
+    showSettingsDialog.value = false;
+  }
+};
 
 
 const reload = () => {
@@ -399,8 +458,8 @@ const reload = () => {
   }, 500); // Durata dell'animazione
 };
 
-const back = () => {api.Scheduler.previous_asset()};
-const next = () => {api.Scheduler.next_asset()};
+const back = () => {api.Scheduler.previous_asset({playlist_id: selectedPlaylist.value})};
+const next = () => {api.Scheduler.next_asset({playlist_id: selectedPlaylist.value})};
 
 const triggerFileUpload = () => fileInput.value.click();
 
@@ -453,7 +512,7 @@ const deselectAll = () => {
 };
 
 const addSelected = () => {
-  api.Scheduler.add_file_assets({items: [... selectedFiles.value]});
+  api.Scheduler.add_file_assets({items: [... selectedFiles.value], playlist_id: selectedPlaylist.value});
   deselectAll();
 }
 
@@ -487,8 +546,7 @@ const durationToText = (duration) => {
 }
 
 const saveSettings = () => {
-  // Qui andrà la logica per salvare le impostazioni
-  api.Scheduler.set_default_duration({duration: defaultDuration.value});
+  api.Scheduler.set_default_duration({duration: defaultDuration.value, playlist_id: selectedPlaylist.value});
   showSettingsDialog.value = false;
 };
 
@@ -559,16 +617,16 @@ const saveUrlItem = () => {
   };
 
   if (isEditing.value) {
-    api.Scheduler.edit_asset(payload);
+    api.Scheduler.edit_asset({...payload, playlist_id: selectedPlaylist.value});
   } else {
-    api.Scheduler.add_url_assets({items: [payload]});
+    api.Scheduler.add_url_assets({items: [payload], playlist_id: selectedPlaylist.value});
   }
 
   showAddUrlDialog.value = false;
 };
 
 const onDraggableUpdate = (event) => {
-  api.Scheduler.reorder_assets({from_i: event.oldIndex, to_i: event.newIndex});
+  api.Scheduler.reorder_assets({from_i: event.oldIndex, to_i: event.newIndex, playlist_id: selectedPlaylist.value});
 }
 </script>
 

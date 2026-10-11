@@ -14,9 +14,10 @@
  * Both composables clean up after themselves when the component goes away, so several pages (or windows)
  * can listen at the same time, unlike the old single `window.onWSMessage`.
  */
-import {onUnmounted, ref} from 'vue'
+import {onUnmounted, ref, shallowRef} from 'vue'
 
 const listeners = new Map() // target -> Set<callback>
+const openListeners = new Set()
 const initCommands = new Map() // command -> number of components that asked for it
 
 let sendFn = () => {}
@@ -33,12 +34,29 @@ export function dispatch(data) {
   listeners.get(data.target)?.forEach(callback => callback(data))
 }
 
+/** Called by the owner of the socket each time it opens, after the initial commands have been sent. */
+export function notifyOpen() {
+  openListeners.forEach(callback => callback())
+}
+
+/**
+ * Runs `callback` now (if the socket is open) and every time it reopens: for state that cannot be asked
+ * with a plain initial command, because the request depends on what the page is showing.
+ */
+export function onOpen(callback) {
+  openListeners.add(callback)
+  if (readyFn()) callback()
+  onUnmounted(() => openListeners.delete(callback))
+}
+
 /** Commands to (re)send whenever the socket opens. */
 export function initialCommands() {
   return [...initCommands.keys()]
 }
 
 let schema = null
+/** The schema as a ref, for what depends on it in the UI (see `canCall`). */
+export const apiSchema = shallowRef(null)
 
 /**
  * Fetches the server's description of the API. It is only used to catch mistakes early (a path that does
@@ -47,7 +65,10 @@ let schema = null
 export async function loadSchema() {
   try {
     const response = await fetch('/api/schema', {credentials: 'include'})
-    if (response.ok) schema = await response.json()
+    if (response.ok) {
+      schema = await response.json()
+      apiSchema.value = schema
+    }
   } catch (e) {
     console.warn('API schema not available', e)
   }
@@ -132,3 +153,17 @@ function proxy(path) {
  * @type {import('./api').Api}
  */
 export const api = proxy([])
+
+/**
+ * Whether a user may call an API function, from the permissions the server declares for it. Meant for
+ * hiding what a user cannot use; the server checks every call anyway. While the schema is not loaded yet
+ * everything is allowed, so the menu does not flicker.
+ */
+export function canCall(path, user) {
+  const entry = apiSchema.value?.[path]
+  if (!entry) return true
+  if (entry.permissions === null) return true
+  if (!user?.perms) return true // the user is not known yet
+  const perms = user.perms
+  return perms.includes('admin') || entry.permissions.some(p => perms.includes(p))
+}
