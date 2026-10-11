@@ -137,8 +137,9 @@
 
 <script setup>
 import {computed, ref} from 'vue'
+import {api, onApi, useApiState} from '@/api'
 
-const status = ref(null)
+const status = useApiState('Settings/Update/status', {pick: 'status'})
 const check = ref(null)
 const checking = ref(false)
 const message = ref(null)
@@ -178,34 +179,24 @@ function formatSize(bytes) {
 
 function send(command) {
   message.value = null
-  window.sendCommand('Settings/Update/' + command)
+  api.Settings.Update[command]()
 }
 
 function runCheck() {
   checking.value = true
-  window.sendCommand('Settings/Update/check')
+  api.Settings.Update.check()
 }
 
-window.setInitCommands('Settings/Update/status')
+onApi('Settings/Update/check', data => {
+  check.value = data.check
+  checking.value = false
+})
 
-onWSMessage = (data) => {
-  switch (data.target) {
-    case 'Settings/Update/status':
-      status.value = data.status
-      break
-    case 'Settings/Update/fetch':
-    case 'Settings/Update/cancel':
-    case 'Settings/Update/apply':
-    case 'Settings/Update/confirm':
-    case 'Settings/Update/rollback':
-      message.value = data.result.error
-        ? {type: friendlyErrors[data.result.error_code] ? 'warning' : 'error', text: describeError(data.result)}
-        : (data.result.returncode === 12 ? {type: 'warning', text: errors[12]} : null)
-      break
-    case 'Settings/Update/check':
-      check.value = data.check
-      checking.value = false
-      break
-  }
+for (const command of ['fetch', 'cancel', 'apply', 'confirm', 'rollback']) {
+  onApi('Settings/Update/' + command, data => {
+    message.value = data.result.error
+      ? {type: friendlyErrors[data.result.error_code] ? 'warning' : 'error', text: describeError(data.result)}
+      : (data.result.returncode === 12 ? {type: 'warning', text: errors[12]} : null)
+  })
 }
 </script>

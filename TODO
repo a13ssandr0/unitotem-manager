@@ -805,6 +805,26 @@ brings the content straight back.
 
 WAS OPEN, superseded - assignment per viewer instead of per window.
 
+=== PLANNED (decided with the user, 2026-10-11, not started unless noted) ===
+- Display power: mechanisms CEC, DDC/CI, WOL (the touchscreen monitor itself has WOL, its node does not) and
+  serial (vendor RS-232 command tables, user-configurable); other mechanisms later. Off = panel off, not the OS.
+  The panel must be switched on after boot and the hotplug detected. Builds on SCREEN-CONTROL-PLAN.md (steps 4-7).
+- Suspend with scheduled wake-up: compute the delta between now and the next wake time for rtcwake; decide the
+  RTC timezone (UTC/local) like installers do; refuse before suspending if there is no usable RTC.
+- Multi-page PDF: start from CEF's built-in viewer with every bar removed (test first: is the PDF plugin in our
+  CEF 147 build, do #toolbar=0&navpanes=0&scrollbar=0&page=N work, does changing page work); fallback pdf.js.
+  `duration` = seconds per page; the scheduler expands a PDF into one step per page.
+- Asset preview in the web UI as a window, not a popup.
+- VNC in the browser: noVNC + x11vnc/TigerVNC, view-only, localhost only, started on demand and stopped on
+  close/idle, token proxied through the manager (admin only).
+- Remote terminal: xterm.js + pty running `login` (OS account, separate from web users), admin capability to open,
+  attempt limit, audit log. Images carry NO working password: first access is a setup wizard (web admin + OS
+  account) protected by a claim code shown on the totem screen; remove the admin:admin fallback in routers/backup.py.
+  PAM: auth takes 0.05-0.10 s on the x86 VM, failure 1.6-3.7 s (pam_faildelay); on a Pi 4 it was seen taking a
+  couple of seconds even on success: re-measure on a Pi (run PAM in a thread).
+- Desktop-style web UI (windows for settings/terminal/preview/VNC): option A, window manager in the current Vue
+  app, gradually; prerequisite is the client API (webui/src/api.js, prototype done on the Updates page).
+
 === NEXT ===
 Decided, in order:
 1. Updates page, as specified in CLAUDE.md: xterm.js console, daily
