@@ -530,7 +530,11 @@ class WebviewApp:
                 container= data.get('container', 0),
                 fit      = data.get('fit', 0),
                 bg_color = data.get('bg_color', 'rgb(0,0,0)'),
+                volume   = data.get('volume', 1.0),
+                muted    = data.get('muted', False),
             )
+        elif target == 'SetAudioOutput' and win:
+            win.set_audio_output(data.get('device'))
         elif target == 'SetBounds' and win:
             win.set_bounds(data['x'], data['y'], data['width'], data['height'])
         elif target == 'SetOrientation' and win:

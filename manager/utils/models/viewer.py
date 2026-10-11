@@ -22,6 +22,10 @@ class ViewerSettings(BaseModel, validate_assignment=True):
     # so a change only takes effect on the next viewer start.
     allow_insecure_certs: bool = False
 
+    # Where each window sends its sound: "<viewer id>|<screen name>" -> output description, absent for the default.
+    # Keyed on the screen like the playlist assignments, so it survives unplugging and replugging a monitor.
+    audio_outputs: dict[str, str] = {}
+
     @staticmethod
     def _filepath() -> Path:
         """Beside the playlists, i.e. in the configuration directory."""

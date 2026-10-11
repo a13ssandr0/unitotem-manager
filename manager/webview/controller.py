@@ -10,6 +10,7 @@ from loguru import logger
 from api.commons import SHUTDOWN_EVENT
 from utils.models.assets import Asset, AssetsManager, idle_asset
 from utils.models.command_line import cmdargs
+from utils.models.viewer import viewer_settings
 
 if TYPE_CHECKING:
     from api.ws.wsmanager import WSManager
@@ -39,6 +40,9 @@ def show_payload(asset: Asset, window_id: int) -> dict:
         # apart from a deliberate black: only in the first case does it
         # sample the picture's own average colour for the letterbox bars.
         bg_color=asset.bg_color.as_rgb() if asset.bg_color is not None else None,
+        # Meaningful for video and audio only, the page ignores them for everything else
+        volume=asset.volume,
+        muted=asset.muted,
     )
 
 
@@ -137,6 +141,8 @@ class WebviewManager:
         # which runs on every info update - does not reload it under them each
         # time a screen is plugged or unplugged elsewhere on the same node.
         self._idle_windows: set[tuple[str, int]] = set()
+        # (viewer id, window id) whose sound output has been sent: done once per window, when it first shows up
+        self._audio_applied: set[tuple[str, int]] = set()
 
     @classmethod
     def get_instance(cls) -> WebviewManager:
@@ -264,6 +270,7 @@ class WebviewManager:
                 loop.unassign(vid, window_id)
         self._idle_windows -= {(vid, window_id) for vid, window_id in self._idle_windows
                                if vid == instance_id and window_id not in live_ids}
+        self._audio_applied = {k for k in self._audio_applied if k[0] != instance_id or k[1] in live_ids}
 
         legacy = self._legacy_assignments.pop(instance_id, None)
         if legacy is not None:
@@ -317,6 +324,13 @@ class WebviewManager:
             self._save_assignments()
 
         for window_id, screen_name in windows:
+            # A window that has just appeared is told where to play its sound
+            if (instance_id, window_id) not in self._audio_applied:
+                self._audio_applied.add((instance_id, window_id))
+                device = viewer_settings.audio_outputs.get(self._audio_key(instance_id, screen_name))
+                if device:
+                    asyncio.create_task(self.send_webview_command(
+                        instance_id, 'SetAudioOutput', window_id=window_id, device=device))
             playlist_id = self._assignments.get((instance_id, screen_name)) if screen_name else None
             loop = self._loops.get(playlist_id) if playlist_id else None
             if loop:
@@ -347,6 +361,7 @@ class WebviewManager:
         # they would be left spinning, with this side believing they are idle.
         self._idle_windows = {(vid, wid) for vid, wid in self._idle_windows
                               if vid != instance_id}
+        self._audio_applied = {k for k in self._audio_applied if k[0] != instance_id}
         # Detach from the loop so it stops sending assets to something that is
         # no longer there, but KEEP the assignment: a viewer that disconnects
         # has not been unassigned, it is merely absent (restarted, rebooted,
@@ -540,6 +555,26 @@ class WebviewManager:
         await self.send_webview_command(webview_id, 'SetOrientation',
                                        window_id=window_id, orientation=orientation)
 
+    @staticmethod
+    def _audio_key(webview_id: str, screen_name: Optional[str]) -> str:
+        return f'{webview_id}|{screen_name}'
+
+    async def set_audio_output(self, webview_id: str, window_id: int, device: Optional[str]):
+        """Send the sound of one window to an output (by description); None goes back to the system default."""
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        key = self._audio_key(webview_id, screen_name)
+        if device:
+            viewer_settings.audio_outputs[key] = device
+        else:
+            viewer_settings.audio_outputs.pop(key, None)
+        viewer_settings.save()
+        for window in self._webviews.get(webview_id, {}).get('windows', []):
+            if window.get('window_id') == window_id:
+                window['audio_output'] = device
+        await self.send_webview_command(webview_id, 'SetAudioOutput', window_id=window_id, device=device)
+
     async def set_flip(self, webview_id: str, window_id: int, flip: int):
         if webview_id in self._webviews:
             windows = self._webviews[webview_id].get('windows', [])
@@ -565,7 +600,8 @@ class WebviewManager:
             vid: {
                 **info,
                 'windows': [
-                    {**w, 'assigned_playlist': self._assignments.get((vid, w.get('screen_name')))}
+                    {**w, 'assigned_playlist': self._assignments.get((vid, w.get('screen_name'))),
+                     'audio_output': viewer_settings.audio_outputs.get(self._audio_key(vid, w.get('screen_name')))}
                     for w in info.get('windows', [])
                 ],
             }

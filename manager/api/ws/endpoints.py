@@ -177,4 +177,11 @@ async def handle_call(target, user, request_data):
 
 
 
-upload_manager._callback = lambda x: WS.broadcast('Scheduler/files', files=x)
+def _broadcast_files(files):
+    # The same payload as Scheduler/files, so a page never sees a half-filled one
+    from utils.models.playlists import playlists_manager
+    return WS.broadcast('Scheduler/files', files=files, disk_used=upload_manager.disk_usedh,
+                        disk_total=upload_manager.disk_totalh, used_in=playlists_manager.referenced_files())
+
+
+upload_manager._callback = _broadcast_files
