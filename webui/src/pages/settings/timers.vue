@@ -13,7 +13,7 @@
         no-data-text="No timers set"
       >
         <template v-slot:item.command="{ item }">
-          {{ getActionTitle(item.command) }}
+          {{ getActionTitle(item.command) }}<span v-if="item.output" class="text-medium-emphasis"> ({{ item.output }})</span>
         </template>
         <template v-slot:item.month="{ item }">
           {{ getMonthTitle(item.month) }}
@@ -62,6 +62,13 @@
                   :hint="editedItem.known === false ? 'Set outside UniTotem: only the schedule can be changed' : undefined"
                   :persistent-hint="editedItem.known === false"
                 ></v-select>
+              </v-col>
+              <v-col cols="12" sm="6" v-if="isScreenAction(editedItem.command)">
+                <v-combobox v-model="editedItem.output" :items="outputNameList" label="Screen" variant="outlined"
+                            hint="The name of the output, e.g. HDMI-1" persistent-hint></v-combobox>
+              </v-col>
+              <v-col cols="12" sm="6" v-if="isScreenAction(editedItem.command)">
+                <v-select v-model="editedItem.mechanism" :items="mechanismItems" label="Switch with" variant="outlined"></v-select>
               </v-col>
               <!-- Comboboxes, not selects: cron slices are not limited to the
                    plain numbers offered here ('*/15', '1-5', '0,30' are all
@@ -154,7 +161,20 @@ const headers = ref([
 const commands = [
   { title: 'Shutdown', value: 'pwr' },
   { title: 'Reboot', value: 'reb' },
+  { title: 'Switch screen on', value: 'scr_on' },
+  { title: 'Switch screen off', value: 'scr_off' },
 ];
+const isScreenAction = (value) => value === 'scr_on' || value === 'scr_off';
+const mechanismItems = [
+  { title: 'Automatic', value: 'auto' },
+  { title: 'Display output', value: 'x' },
+  { title: 'DDC/CI', value: 'ddc' },
+  { title: 'CEC', value: 'cec' },
+  { title: 'Wake-on-LAN', value: 'wol' },
+  { title: 'Serial', value: 'serial' },
+];
+const outputNames = api.Settings.Display.Screens.screens.use({pick: 'screens', initial: []});
+const outputNameList = computed(() => outputNames.value.map(s => s.name));
 
 // Every option value is a STRING, because a cron field is a string: the
 // backend now reports the raw slice ('*', '0', '*/15') instead of coercing it
@@ -198,6 +218,8 @@ const defaultItem = {
   day_of_month: daysOfMonth[0],
   month: months[0].value,
   day_of_week: daysOfWeek[0].value,
+  output: null,
+  mechanism: 'auto',
 };
 
 // Filled from Settings/Cron/getJobs. Starts empty: it used to be seeded with a
@@ -257,6 +279,11 @@ function save() {
   const item = { ...editedItem.value };
   delete item.enabled;
   delete item.known;
+  if (!isScreenAction(item.command)) {
+    // only screen timers have an output and a mechanism
+    delete item.output;
+    delete item.mechanism;
+  }
   if (editedIndex.value > -1) {
     api.Settings.Cron.edit_job(item);
   } else {

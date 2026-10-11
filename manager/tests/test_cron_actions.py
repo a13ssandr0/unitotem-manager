@@ -144,3 +144,16 @@ def test_new_with_a_full_schedule_writes_it():
     tab = make_tab('')
     assert tab.new('reb', '0', '3', '*', '*', '*') is True
     assert str(tab.crons[0].slices) == '0 3 * * *'
+
+
+# ── screen timers: the crontab line carries only the uuid ───────────────────
+
+def test_screen_job_line_is_python_screenctl_and_the_uuid_only():
+    from utils.system.crontab import SCREEN_ACTIONS, screen_command
+    assert SCREEN_ACTIONS == ('scr_on', 'scr_off')
+    tab = make_tab('')
+    assert tab.new('scr_off', '0', '22', '*', '*', '*') is True
+    job = tab.crons[0]
+    assert job.command == screen_command(tab.last_uuid)
+    assert job.command.endswith(f'screenctl.py {tab.last_uuid}')
+    assert job.comment == f'unitotem:-){tab.last_uuid}'
