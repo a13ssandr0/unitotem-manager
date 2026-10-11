@@ -61,23 +61,38 @@ async def capabilities(bus: int) -> dict[str, dict[str, str]]:
     return parse_capabilities(result.stdout)
 
 
+RETRIES = 3          # DDC/CI is flaky on many monitors: a transaction that fails once often works the next time
+RETRY_DELAY = 0.6
+
+
 async def getvcp(bus: int, code: str) -> Optional[VcpValue]:
     """The current value of one VCP feature, None if the monitor does not support it."""
-    async with _lock(bus):
-        result = await run(['ddcutil', '--bus', str(bus), '--terse', 'getvcp', code], timeout=15)
-    return parse_getvcp_terse(result.stdout)
+    for attempt in range(RETRIES):
+        async with _lock(bus):
+            result = await run(['ddcutil', '--bus', str(bus), '--terse', 'getvcp', code], timeout=15)
+        try:
+            return parse_getvcp_terse(result.stdout)
+        except CommunicationFailed:
+            if attempt == RETRIES - 1:
+                raise
+            await asyncio.sleep(RETRY_DELAY)
 
 
 async def setvcp(bus: int, code: str, value: int):
     """Set one VCP feature. --noverify: many monitors cannot answer the read-back that follows a write, and
     the failure of that read-back would be reported as a failure of the write."""
-    async with _lock(bus):
-        result = await run(['ddcutil', '--bus', str(bus), '--noverify', 'setvcp', code, str(value)], timeout=15)
-    text = result.stdout + result.stderr
-    if result.returncode != 0:
+    for attempt in range(RETRIES):
+        async with _lock(bus):
+            result = await run(['ddcutil', '--bus', str(bus), '--noverify', 'setvcp', code, str(value)], timeout=15)
+        text = result.stdout + result.stderr
+        if result.returncode == 0:
+            return
         if 'does not exist' in text:
             raise BusNotFound(text.strip())
-        if 'communication failed' in text.lower():
+        if 'communication failed' in text.lower() or 'retries exceeded' in text.lower():
+            if attempt < RETRIES - 1:
+                await asyncio.sleep(RETRY_DELAY)
+                continue
             raise CommunicationFailed(text.strip())
         raise DdcError(text.strip() or f'ddcutil exited with {result.returncode}')
 
@@ -107,3 +122,22 @@ async def power_state(bus: int) -> Optional[str]:
     if value is None:
         return None
     return {POWER_ON: 'on', 0x04: 'standby', 0x05: 'off', 0x02: 'standby', 0x03: 'standby'}.get(value.value)
+
+
+FEATURES = (VCP_INPUT, VCP_VOLUME, VCP_MUTE, VCP_POWER)
+
+
+async def probe_features(bus: int, caps: dict) -> list[str]:
+    """The VCP codes this monitor supports. The capabilities string is the best source, but many monitors never
+    answer for it ("Maximum DDC retries exceeded"), so each code we use is asked for instead; a transient
+    communication failure is retried once before the code is counted as unsupported."""
+    if caps:
+        return [code for code in FEATURES if code in caps]
+    found = []
+    for code in FEATURES:
+        try:
+            if await getvcp(bus, code) is not None:
+                found.append(code)
+        except DdcError:
+            pass
+    return found
