@@ -43,6 +43,20 @@ def test_magic_packet_layout():
         wol.normalise_mac('not a mac')
 
 
+def test_ethernet_frame_is_what_routeros_sends():
+    src = bytes.fromhex('1c697aabcac3')
+    frame = wol.ethernet_frame('ec:c1:ab:28:bf:c1', src)
+    assert frame[:6] == b'\xff' * 6 and frame[6:12] == src and frame[12:14] == b'\x08\x42'
+    assert frame[14:] == wol.magic_packet('ec:c1:ab:28:bf:c1')
+
+
+def test_wol_config_defaults_and_validation():
+    cfg = WolConfig(mac='ec:c1:ab:28:bf:c1')
+    assert cfg.repeat == 10 and cfg.interface is None
+    with pytest.raises(ValueError):
+        WolConfig(mac='ec:c1:ab:28:bf:c1', interface='eth0; reboot')
+
+
 def test_serial_command_escapes_and_port_validation():
     assert serial.parse_command('ka 00 01\\r') == b'ka 00 01\r'
     assert serial.parse_command('\\xAA\\x11\\xFE') == b'\xaa\x11\xfe'
