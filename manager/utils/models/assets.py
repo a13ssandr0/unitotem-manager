@@ -51,6 +51,9 @@ class Asset(BaseModel, validate_assignment=True):
     enabled: bool = False
     fit: FitEnum = FitEnum.contain
     bg_color: Optional[Color] = None
+    # Per-asset volume of the asset's own sound (video and audio only), independent from the system volume
+    volume: float = Field(default=1.0, ge=0.0, le=1.0)
+    muted: bool = False
     media_type: MediaType = MediaType.undefined
     uuid: str = Field(default_factory=lambda: os.urandom(16).hex(), frozen=True)
 
@@ -230,13 +233,20 @@ class AssetsManager(BaseModel, validate_assignment=True):
     @field_validator('default_duration')
     @classmethod
     def after_asset_validation(cls, v: int):
-        const.def_duration = v
+        # Deliberately no write to a module-level default: every playlist has its own, and a global would be
+        # whatever the last playlist loaded or edited said. See `_asset` for how an asset gets it.
         return v
 
     def model_post_init(self, context: Any, /) -> None:
         # after initialization set the timer callback function to
         # avoid assigning later or adding overheads with if statements
         self._waiting_timer = Timer(None, self.next_a)
+
+    def _asset(self, obj) -> Asset:
+        """Build an asset for this playlist: one that comes without a duration gets the playlist's own default."""
+        if isinstance(obj, dict) and 'duration' not in obj:
+            obj = {**obj, 'duration': self.default_duration}
+        return Asset.model_validate(obj)
 
     def __getitem__(self, item):
         if isinstance(item, str):
@@ -249,12 +259,12 @@ class AssetsManager(BaseModel, validate_assignment=True):
             return self.assets[item]
 
     def __setitem__(self, index, item):
-        self.assets[index] = Asset.model_validate(item)
+        self.assets[index] = self._asset(item)
         self.on_assets_update()
         self.save()
 
     def append(self, __object):
-        self.assets.append(Asset.model_validate(__object))
+        self.assets.append(self._asset(__object))
         self.on_assets_update()
         self.save()
 
@@ -262,12 +272,12 @@ class AssetsManager(BaseModel, validate_assignment=True):
         # not the most efficient way to do it, but if it's ever going to be used
         # no realistic number of objects will ever be a performance issue
         for __object in __iterable:
-            self.assets.append(Asset.model_validate(__object))
+            self.assets.append(self._asset(__object))
         self.on_assets_update()
         self.save()
 
     def insert(self, __index, __object):
-        self.assets.insert(__index, Asset.model_validate(__object))
+        self.assets.insert(__index, self._asset(__object))
         self.on_assets_update()
         self.save()
 
@@ -493,8 +503,14 @@ class AssetsManager(BaseModel, validate_assignment=True):
         filepath = filepath or self._filepath or cmdargs.assets_file
         self.on_assets_update()
         logger.info('Saving assets in {}', filepath)
-        with open(filepath, 'w') as file:
+        filepath = Path(filepath)
+        # Written aside and renamed over: a power cut must never leave half a playlist behind
+        tmp = filepath.with_name(filepath.name + '.tmp')
+        with open(tmp, 'w') as file:
             json.dump(self.model_dump(mode='json'), file, indent=4)
+            file.flush()
+            os.fsync(file.fileno())
+        tmp.replace(filepath)
 
 
 assets_manager = AssetsManager()

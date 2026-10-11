@@ -13,6 +13,12 @@ import pytest
 # must happen before ANY test module's own imports run.
 sys.argv = sys.argv[:1]
 
+# Importing the asset models builds a module-level AssetsManager, whose timers need an event loop to exist
+# (Python 3.14 no longer creates one implicitly). Same rule: before any test module's own imports.
+import asyncio  # noqa: E402
+
+asyncio.set_event_loop(asyncio.new_event_loop())
+
 FIXTURES = Path(__file__).parent / 'fixtures'
 
 
