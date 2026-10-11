@@ -1,4 +1,14 @@
 === CURRENT WORK ===
+TOUCHSCREEN NODE (2026-10-11, pi@10.113.6.8 "TerzoPianoVert", x86_64 Debian 11, manager 2.3.0; panel = an LG on DP-3,
+EDID "IWB:PC Monitor", 4K rotated left): its own NIC is 10.113.6.152 / ec:c1:ab:28:bf:c1 (Shiyuan OUI), same subnet as a MikroTik
+(10.113.6.208, RouterOS, Winbox 8291/API 8728 reachable only from the node's subnet; gateway .254 is a Huawei).
+Findings: xrandr --off and xset dpms force off do NOT power the panel down (connector stays "connected" and the panel answers
+ping for minutes); DDC/CI gives "all responses null" (ddcutil 0.9.9 on bus 13, i2c-dev must be modprobed: not loaded by
+default); no CEC (DisplayPort). The panel has TCP ports 4321, 4664, 7382, 7385 open that give no banner and answer neither
+HTTP nor TLS; nothing sent to them. The user reports ~55 s from the WoL packet to the source showing. NOT DONE: a real
+off command for this panel (needs the LG model / its IP-control setting), and the WoL test (needs the panel to be off).
+WoL on-at-start must wait much longer than 4 x 20 s: raise wake_all to >= 90 s of retrying.
+
 (2026-10-11) Multi-playlist backend+UI and screen control steps 4-6 done in one go (see the commit log).
 
 MULTI-PLAYLIST: rename/set-default/copy/move assets, per-playlist default duration (it used to be a module-level
