@@ -70,6 +70,10 @@
                         <v-btn icon="mdi-dots-vertical" class="ms-2" variant="text" size="small" v-bind="props"></v-btn>
                       </template>
                       <v-list density="compact">
+                        <v-list-item @click="preview(item)">
+                          <template v-slot:prepend><v-icon>mdi-eye</v-icon></template>
+                          <v-list-item-title>Preview</v-list-item-title>
+                        </v-list-item>
                         <v-list-item @click="openEditDialog(item)">
                           <template v-slot:prepend><v-icon>mdi-pencil</v-icon></template>
                           <v-list-item-title>Edit</v-list-item-title>
@@ -168,6 +172,7 @@
                 <v-chip v-for="pid in usedIn[filename]" :key="pid" size="x-small" class="me-1" color="primary" variant="tonal">{{ playlistName_(pid) }}</v-chip>
               </div>
               <template v-slot:append>
+                <v-btn icon="mdi-eye" size="small" variant="text" title="Preview" @click.stop="preview({url: 'file:' + filename, name: filename, media_type: mediaKind(file)})"></v-btn>
                 <v-btn icon="mdi-download" size="small" variant="text" title="Download" @click.stop="download(filename)"></v-btn>
               </template>
             </v-list-item>
@@ -177,6 +182,8 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <AssetPreview v-model="previewOpen" :asset="previewAsset" />
 
     <!-- Settings Dialog -->
     <v-dialog v-model="showSettingsDialog" max-width="400px">
@@ -373,6 +380,7 @@
 <script setup>
 import {api, onOpen} from '@/api'
 import draggable from 'vuedraggable';
+import AssetPreview from '@/components/AssetPreview.vue';
 import {ref, computed, watch} from 'vue';
 
 const mediaFiles = ref({});
@@ -578,6 +586,21 @@ const deleteSelected = () => {
   api.Scheduler.delete_files({files: [... selectedFiles.value]});
   deselectAll();
 }
+
+const previewOpen = ref(false);
+const previewAsset = ref(null);
+const preview = (asset) => {
+  previewAsset.value = asset;
+  previewOpen.value = true;
+};
+// the uploads list carries the MIME type, a playlist item the numeric media type
+const mediaKind = (file) => {
+  const mime = file.mime ?? '';
+  if (mime.includes('image')) return 1;
+  if (mime.includes('video')) return 2;
+  if (mime.includes('audio')) return 3;
+  return 0;
+};
 
 const download = (filename) => {
   const link = document.createElement('a');
