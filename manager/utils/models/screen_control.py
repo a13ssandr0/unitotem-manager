@@ -25,6 +25,9 @@ class WolConfig(BaseModel, validate_assignment=True):
     mac: str
     broadcast: str = '255.255.255.255'
     port: int = Field(default=9, ge=1, le=65535)
+    # Interface for the raw Ethernet form (all of them when empty) and how many times the packet is repeated
+    interface: Optional[str] = Field(default=None, pattern=r'^[A-Za-z0-9_.:-]{1,15}$')
+    repeat: int = Field(default=10, ge=1, le=30)
 
     @field_validator('mac')
     @classmethod

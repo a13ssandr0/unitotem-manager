@@ -77,6 +77,10 @@
                           hide-details style="max-width: 220px" placeholder="aa:bb:cc:dd:ee:ff"></v-text-field>
             <v-text-field v-model="form[screen.name].wol_broadcast" label="Broadcast address" density="compact"
                           variant="outlined" hide-details style="max-width: 200px"></v-text-field>
+            <v-text-field v-model="form[screen.name].wol_interface" label="Interface (empty: all)" density="compact"
+                          variant="outlined" hide-details style="max-width: 200px"></v-text-field>
+            <v-text-field v-model.number="form[screen.name].wol_repeat" label="Repeat" type="number" density="compact"
+                          variant="outlined" hide-details style="max-width: 100px"></v-text-field>
           </div>
 
           <div class="text-caption text-medium-emphasis mb-1">
@@ -135,6 +139,7 @@ function fillForm(screen) {
   form[screen.name] = {
     on_mechanism: c.on_mechanism, off_mechanism: c.off_mechanism, power_on_at_start: c.power_on_at_start,
     wol_mac: c.wol?.mac ?? '', wol_broadcast: c.wol?.broadcast ?? '255.255.255.255',
+    wol_interface: c.wol?.interface ?? '', wol_repeat: c.wol?.repeat ?? 10,
     serial_port: c.serial?.port ?? '', serial_baud: c.serial?.baud ?? 9600,
     serial_on: c.serial?.on_command ?? '', serial_off: c.serial?.off_command ?? '',
   }
@@ -162,7 +167,8 @@ function save(screen) {
   const f = form[screen.name]
   const args = {name: screen.name, on_mechanism: f.on_mechanism, off_mechanism: f.off_mechanism,
     power_on_at_start: f.power_on_at_start}
-  if (f.wol_mac.trim()) args.wol = {mac: f.wol_mac.trim(), broadcast: f.wol_broadcast.trim() || '255.255.255.255'}
+  if (f.wol_mac.trim()) args.wol = {mac: f.wol_mac.trim(), broadcast: f.wol_broadcast.trim() || '255.255.255.255',
+    interface: f.wol_interface.trim() || null, repeat: f.wol_repeat || 10}
   else args.clear_wol = true
   if (f.serial_port.trim()) {
     args.serial = {port: f.serial_port.trim(), baud: f.serial_baud, on_command: f.serial_on, off_command: f.serial_off}

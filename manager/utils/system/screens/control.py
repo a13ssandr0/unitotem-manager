@@ -156,7 +156,7 @@ async def _do_power(name: str, mechanism: str, on: bool, cfg: OutputConfig, x: O
         device = cfg.cec_device or adapters[0].path
         await cec.set_power(device, on)
     elif mechanism == 'wol':
-        await wol.wake(cfg.wol.mac, cfg.wol.broadcast, cfg.wol.port)
+        await wol.wake(cfg.wol.mac, cfg.wol.broadcast, cfg.wol.port, cfg.wol.interface, cfg.wol.repeat)
     elif mechanism == 'serial':
         command = cfg.serial.on_command if on else cfg.serial.off_command
         if not command:
