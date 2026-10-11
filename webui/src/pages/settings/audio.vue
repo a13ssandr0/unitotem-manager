@@ -6,7 +6,10 @@
       width="100%"
       :title="String($route.name)"
     >
-      <v-list>
+      <v-card-text v-if="audioDevices.available === false">
+        <v-alert type="info" variant="tonal">No sound server is running on this device.</v-alert>
+      </v-card-text>
+      <v-list v-else>
         <v-radio-group v-model="audioDevices.default" @update:model-value="setDefaultDevice">
           <v-list-item
             v-for="device in audioDevices.devices"
