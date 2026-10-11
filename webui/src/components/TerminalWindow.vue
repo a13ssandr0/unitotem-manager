@@ -43,7 +43,14 @@ function connect() {
   socket.binaryType = 'arraybuffer'
   socket.onopen = () => { sendSize(); term.focus() }
   socket.onmessage = (e) => term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data))
-  socket.onclose = (e) => term.write(`\r\n\x1b[2m[connection closed${e.reason ? ': ' + e.reason : ''}]\x1b[0m\r\n`)
+  socket.onclose = (e) => {
+    // The shell ended (logout, Ctrl+D, exit): there is nothing left to show, the window goes with it
+    if (e.reason === 'Session ended') {
+      open.value = false
+      return
+    }
+    term?.write(`\r\n\x1b[2m[connection closed${e.reason ? ': ' + e.reason : ''}]\x1b[0m\r\n`)
+  }
   term.onData(data => { if (socket.readyState === WebSocket.OPEN) socket.send(encoder.encode(data)) })
   term.onResize(sendSize)
 

@@ -30,7 +30,7 @@
         </template>
         <v-list>
           <v-list-item>
-            <v-btn prepend-icon="mdi-logout" variant="text" :href="'/logout'">
+            <v-btn prepend-icon="mdi-logout" variant="text" :href="'/logout'" @click="terminalOpen = false">
               Logout
             </v-btn>
           </v-list-item>
@@ -130,7 +130,7 @@ import {onMounted, onUnmounted, ref, computed, watch} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
 import {useRoute, useRouter} from 'vue-router'
 import TerminalWindow from '@/components/TerminalWindow.vue'
-import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, send} from '@/api'
+import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, onApi, send} from '@/api'
 
 const theme = useTheme()
 const router = useRouter()
@@ -195,6 +195,11 @@ const tabs = ref([
 ])
 
 const terminalOpen = ref(false)
+// The server logs a user out (password changed): close what holds a session before leaving
+onApi('logout', () => {
+  terminalOpen.value = false
+  window.location.href = '/logout'
+})
 const updateInfo = api.Settings.Update.availability.use({pick: 'availability'})
 
 const allowed = (needs) => canCall(needs, logged_user.value)

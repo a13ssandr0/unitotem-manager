@@ -103,9 +103,18 @@ async def main(args):
             await type_line('echo TERMINAL-$((6*7))-OK; id -un')
             check('a command runs in the session', await wait_for('TERMINAL-42-OK'))
             check('as the operating-system user that logged in', await wait_for(args.os_user))
+            await type_line('exit')
+            for _ in range(20):
+                if await cdp.eval("document.querySelectorAll('.floating-window').length") == 0:
+                    break
+                await asyncio.sleep(0.5)
+            check('logging out of the session (exit / Ctrl+D) closes the window',
+                  await cdp.eval("document.querySelectorAll('.floating-window').length") == 0)
+            await cdp.eval("document.querySelector('button[title=Terminal]').click()")
+            check('it can be opened again', await wait_for('login:'))
             await cdp.eval("document.querySelector('.floating-window button[title=Close]').click()")
             await asyncio.sleep(1)
-            check('closing the window removes it', await cdp.eval("document.querySelectorAll('.floating-window').length") == 0)
+            check('the Close button removes it', await cdp.eval("document.querySelectorAll('.floating-window').length") == 0)
 
         await refused(args.host, None, 'a connection without a session is refused', check)
         # a web user without the admin capability
