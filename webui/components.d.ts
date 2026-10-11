@@ -12,10 +12,12 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AssetPreview: typeof import('./src/components/AssetPreview.vue')['default']
+    CardColumn: typeof import('./src/components/CardColumn.vue')['default']
     FloatingWindow: typeof import('./src/components/FloatingWindow.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScreenControl: typeof import('./src/components/ScreenControl.vue')['default']
     TerminalWindow: typeof import('./src/components/TerminalWindow.vue')['default']
+    WindowTaskbar: typeof import('./src/components/WindowTaskbar.vue')['default']
   }
 }

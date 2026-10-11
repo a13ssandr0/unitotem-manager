@@ -77,19 +77,24 @@ async def terminal(websocket: WebSocket):
     await websocket.accept()
     # Not os.fork()/pty.fork(): this process is multi-threaded (Qt, CEF) and forking it is unsafe. The child is
     # started by the subprocess machinery with the pty as its stdio, and `setsid -c` makes that pty its controlling
-    # terminal, which login needs.
-    fd, slave = pty.openpty()
-    try:
-        proc = await asyncio.create_subprocess_exec(
+    # terminal, which login needs. The parent keeps its own end of the slave open for the whole session, because
+    # login may have to be started again on the same pty (see `supervise`).
+    master, slave = pty.openpty()
+    fd = master
+
+    async def spawn() -> asyncio.subprocess.Process:
+        return await asyncio.create_subprocess_exec(
             'setsid', '-c', LOGIN_PROGRAM, stdin=slave, stdout=slave, stderr=slave, close_fds=True,
             env={'TERM': 'xterm-256color', 'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'})
+
+    try:
+        proc = await spawn()
     except OSError as exc:
         logger.error('Cannot start {}: {}', LOGIN_PROGRAM, exc)
-        os.close(fd)
+        os.close(master)
         os.close(slave)
         await websocket.close(1011, 'Cannot start the terminal')
         return
-    os.close(slave)
     pid = proc.pid
     _sessions.add(pid)
     started = time.monotonic()
@@ -97,19 +102,57 @@ async def terminal(websocket: WebSocket):
     loop = asyncio.get_running_loop()
     output: asyncio.Queue[bytes | None] = asyncio.Queue()
     os.set_blocking(fd, False)
+    closing = False      # set when the browser went away or the server ends the session
 
     def on_readable():
         try:
             data = os.read(fd, 65536)
-        except BlockingIOError:
-            return            # woken with nothing to read: that is not the end of the session
-        except OSError:       # EIO: the child closed its side, the session is over
-            data = b''
-        output.put_nowait(data or None)
-        if not data:
-            loop.remove_reader(fd)
+        except (BlockingIOError, OSError):
+            return        # woken with nothing to read; the end of the session is detected by `supervise`
+        if data:
+            output.put_nowait(data)
 
     loop.add_reader(fd, on_readable)
+    state = {'proc': proc, 'logged_in': False}
+
+    def has_session(p: asyncio.subprocess.Process) -> bool:
+        """login forks the user's shell and waits for it: while it has a child, somebody is logged in."""
+        try:
+            with open(f'/proc/{p.pid}/task/{p.pid}/children') as file:
+                return bool(file.read().strip())
+        except OSError:
+            return False
+
+    async def supervise():
+        try:
+            await _supervise()
+        except Exception:
+            logger.exception('Terminal supervisor of {} failed', user.name)
+            output.put_nowait(None)
+
+    async def _supervise():
+        """login ends for two different reasons. The user logged out of a session they had: the window closes. Or
+        login gave up without anybody having logged in (it times out after 60 s at the prompt, and stops after three
+        wrong passwords): nothing has happened that the user asked for, so login is simply started again on the
+        same terminal and the window stays."""
+        while True:
+            current = state['proc']
+            waiter = asyncio.ensure_future(current.wait())
+            while not waiter.done():
+                if has_session(current):
+                    state['logged_in'] = True
+                await asyncio.wait({waiter}, timeout=0.2)
+            await asyncio.sleep(0.15)     # let the reader deliver what login printed last
+            if closing or state['logged_in']:
+                break
+            logger.info('login for {} ended before anybody logged in (status {}): starting it again',
+                        user.name, current.returncode)
+            try:
+                state['proc'] = await spawn()
+            except OSError:
+                break
+        output.put_nowait(None)
+
     last_input = time.monotonic()
 
     async def pump_output():
@@ -125,7 +168,7 @@ async def terminal(websocket: WebSocket):
                 await websocket.close(1000, 'Idle')
                 return
 
-    tasks = [asyncio.create_task(pump_output()), asyncio.create_task(watch_idle())]
+    tasks = [asyncio.create_task(pump_output()), asyncio.create_task(watch_idle()), asyncio.create_task(supervise())]
     try:
         while True:
             message = await websocket.receive()
@@ -145,13 +188,16 @@ async def terminal(websocket: WebSocket):
     except Exception:
         logger.exception('Terminal of {} failed', user.name)
     finally:
+        closing = True
         for task in tasks:
             task.cancel()
         try:
             loop.remove_reader(fd)
         except ValueError:
             pass
+        proc = state['proc']
         await _terminate(proc)
+        os.close(slave)
         if proc.returncode not in (0, -signal.SIGHUP, -signal.SIGTERM, -signal.SIGKILL):
             logger.warning('login for {} ended with status {}', user.name, proc.returncode)
         os.close(fd)

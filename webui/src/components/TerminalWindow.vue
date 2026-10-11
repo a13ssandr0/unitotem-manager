@@ -1,5 +1,5 @@
 <template>
-  <FloatingWindow v-model="open" title="Terminal" icon="mdi-console" :width="760" :height="460">
+  <FloatingWindow v-model="open" :title="title" icon="mdi-console" :width="760" :height="460">
     <div ref="host" class="terminal-host"></div>
   </FloatingWindow>
 </template>
@@ -17,6 +17,8 @@ import FloatingWindow from '@/components/FloatingWindow.vue'
 
 const open = defineModel({type: Boolean, default: false})
 const host = ref(null)
+// The title is whatever the shell asks for (user@host: directory), like any terminal emulator
+const title = ref('Terminal')
 
 let term = null
 let fit = null
@@ -37,6 +39,8 @@ function connect() {
   fit = new FitAddon()
   term.loadAddon(fit)
   term.open(host.value)
+  term.onTitleChange(t => { title.value = t || 'Terminal' })
+  title.value = 'Terminal'
   fit.fit()
 
   socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/terminal`)
@@ -55,7 +59,12 @@ function connect() {
   term.onResize(sendSize)
 
   // The window can be resized by the user: refit the terminal to it
-  observer = new ResizeObserver(() => { try { fit.fit() } catch { /* hidden while collapsed */ } })
+  observer = new ResizeObserver(() => {
+    // Never fit to a box that is (nearly) empty: that shrinks the terminal to a couple of columns and the text is lost
+    if (host.value && host.value.clientWidth > 100 && host.value.clientHeight > 50) {
+      try { fit.fit() } catch { /* not laid out yet */ }
+    }
+  })
   observer.observe(host.value)
 }
 

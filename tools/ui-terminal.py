@@ -103,6 +103,29 @@ async def main(args):
             await type_line('echo TERMINAL-$((6*7))-OK; id -un')
             check('a command runs in the session', await wait_for('TERMINAL-42-OK'))
             check('as the operating-system user that logged in', await wait_for(args.os_user))
+            # the title follows what the shell asks for (OSC 0/2), like any terminal emulator
+            await type_line("printf '\\033]0;shell-title-test\\007'")
+            for _ in range(20):
+                if await cdp.eval("document.querySelector('.floating-title-text')?.innerText") == 'shell-title-test':
+                    break
+                await asyncio.sleep(0.25)
+            check('the window title follows the shell', await cdp.eval("document.querySelector('.floating-title-text').innerText") == 'shell-title-test')
+            # minimise goes to the taskbar and restoring does not lose anything
+            marker = await screen()
+            await cdp.eval("document.querySelector('.floating-window button[title=Minimise]').click()")
+            await asyncio.sleep(0.6)
+            state = await cdp.eval("""(() => { const w = document.querySelector('.floating-window');
+              const item = document.querySelector('.window-taskbar .taskbar-item'); const bar = document.querySelector('.window-taskbar');
+              return {hidden: getComputedStyle(w).visibility === 'hidden', chip: item ? item.innerText.trim() : null,
+                      bottom: bar ? Math.round(bar.getBoundingClientRect().bottom) == innerHeight : false} })()""")
+            check('minimising hides the window and lists it in a taskbar at the bottom',
+                  state['hidden'] and state['chip'] == 'shell-title-test' and state['bottom'])
+            await cdp.eval("document.querySelector('.window-taskbar .taskbar-item').click()")
+            await asyncio.sleep(0.6)
+            visible = await cdp.eval("getComputedStyle(document.querySelector('.floating-window')).visibility") == 'visible'
+            after = await screen()
+            check('clicking the taskbar button brings it back', visible)
+            check('with the terminal content intact', 'TERMINAL-42-OK' in after and after.count('\n') >= marker.count('\n'))
             await type_line('exit')
             for _ in range(20):
                 if await cdp.eval("document.querySelectorAll('.floating-window').length") == 0:
