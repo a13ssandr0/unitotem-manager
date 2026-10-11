@@ -1,5 +1,6 @@
 <template>
-  <div class="d-flex flex-column align-center">
+  <CardColumn>
+    <div class="d-flex justify-center" style="width: 100%">
     <v-card
       class="ma-4"
       max-width="1000"
@@ -37,6 +38,7 @@
         </template>
       </v-data-table>
     </v-card>
+    </div>
 
     <v-dialog v-model="dialog" max-width="500px">
       <v-card>
@@ -131,20 +133,15 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-    <v-btn
-      class="ma-4"
-      position="fixed"
-      location="bottom right"
-      icon="mdi-plus"
-      color="primary"
-      @click="dialog = true"
-      aria-label="Add timer"
-    ></v-btn>
-  </div>
+    <template #fab>
+      <v-btn icon="mdi-plus" color="primary" size="large" elevation="6" @click="dialog = true" aria-label="Add timer"></v-btn>
+    </template>
+  </CardColumn>
 </template>
 
 <script setup>
 import {api} from '@/api'
+import CardColumn from '@/components/CardColumn.vue'
 import { ref, computed } from 'vue';
 
 const headers = ref([

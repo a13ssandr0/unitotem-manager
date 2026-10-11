@@ -69,10 +69,10 @@
                       label="Switch on when UniTotem starts"></v-switch>
           </div>
 
-          <div class="text-caption text-medium-emphasis mb-1">
+          <div v-if="usesWol(screen.name)" class="text-caption text-medium-emphasis mb-1">
             Wake-on-LAN, for a monitor with a network port of its own (it can only switch the monitor on):
           </div>
-          <div class="d-flex flex-wrap ga-4 mb-3">
+          <div v-if="usesWol(screen.name)" class="d-flex flex-wrap ga-4 mb-3">
             <v-text-field v-model="form[screen.name].wol_mac" label="MAC address" density="compact" variant="outlined"
                           hide-details style="max-width: 220px" placeholder="aa:bb:cc:dd:ee:ff"></v-text-field>
             <v-text-field v-model="form[screen.name].wol_broadcast" label="Broadcast address" density="compact"
@@ -83,10 +83,10 @@
                           variant="outlined" hide-details style="max-width: 100px"></v-text-field>
           </div>
 
-          <div class="text-caption text-medium-emphasis mb-1">
+          <div v-if="usesSerial(screen.name)" class="text-caption text-medium-emphasis mb-1">
             Serial port: the commands come from the monitor's manual; \r \n and \xNN are escapes.
           </div>
-          <div class="d-flex flex-wrap ga-4 mb-3">
+          <div v-if="usesSerial(screen.name)" class="d-flex flex-wrap ga-4 mb-3">
             <v-text-field v-model="form[screen.name].serial_port" label="Port" density="compact" variant="outlined"
                           hide-details style="max-width: 200px" placeholder="/dev/ttyUSB0"></v-text-field>
             <v-select v-model="form[screen.name].serial_baud" :items="bauds" label="Baud rate" density="compact"
@@ -133,6 +133,13 @@ function methodItems(screen) {
 function inputItems(screen) {
   return Object.entries(screen.input_sources).map(([value, title]) => ({title: `${title} (0x${value})`, value: parseInt(value, 16)}))
 }
+
+// The settings of a mechanism are only shown when that mechanism can be used: chosen explicitly for switching on or
+// off, or left on Automatic, which may pick it. With DDC/CI or CEC chosen for both, the Wake-on-LAN and serial fields
+// would only be noise. What was typed in a hidden section is kept and still saved.
+const chosen = (name) => [form[name]?.on_mechanism, form[name]?.off_mechanism]
+const usesWol = (name) => chosen(name).some(m => m === 'auto' || m === 'wol')
+const usesSerial = (name) => chosen(name).some(m => m === 'auto' || m === 'serial')
 
 function fillForm(screen) {
   const c = screen.config

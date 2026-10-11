@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="d-flex justify-center">
+  <CardColumn>
+    <div class="d-flex justify-center" style="width: 100%">
       <v-card
         class="ma-4"
         max-width="1000"
@@ -128,21 +128,16 @@
       </v-card>
     </v-dialog>
 
-    <v-btn
-      class="ma-4"
-      position="fixed"
-      location="bottom right"
-      icon="mdi-account-plus"
-      color="primary"
-      @click="openAddUserDialog"
-      aria-label="Add user"
-    ></v-btn>
-  </div>
+    <template #fab>
+      <v-btn icon="mdi-account-plus" color="primary" size="large" elevation="6" @click="openAddUserDialog" aria-label="Add user"></v-btn>
+    </template>
+  </CardColumn>
 </template>
 
 <script setup>
 import {ref, computed} from 'vue'
 import {api} from '@/api'
+import CardColumn from '@/components/CardColumn.vue'
 
 const dialog = ref(false)
 const passwordDialog = ref(false)

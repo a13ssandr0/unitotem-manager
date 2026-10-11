@@ -85,6 +85,7 @@
       </div>
     </v-main>
 
+    <WindowTaskbar />
     <TerminalWindow v-if="logged_user.perms?.includes('admin')" v-model="terminalOpen" />
 
     <v-dialog v-model="rebootDialog" max-width="fit-content">
@@ -130,6 +131,7 @@ import {onMounted, onUnmounted, ref, computed, watch} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
 import {useRoute, useRouter} from 'vue-router'
 import TerminalWindow from '@/components/TerminalWindow.vue'
+import WindowTaskbar from '@/components/WindowTaskbar.vue'
 import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, onApi, send} from '@/api'
 
 const theme = useTheme()

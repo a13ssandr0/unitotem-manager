@@ -1,11 +1,11 @@
 <template>
   <Teleport to="body">
-    <div v-if="modelValue" ref="win" class="floating-window elevation-12" :class="{maximized}" :style="style" @mousedown="raise">
+    <div v-if="modelValue" ref="win" class="floating-window elevation-12" :class="{maximized, minimized}" :style="style" @mousedown="raise">
       <div class="floating-title d-flex align-center" @pointerdown="startDrag" @dblclick="toggleMaximized">
         <v-icon v-if="icon" class="floating-title-icon">{{ icon }}</v-icon>
         <span class="floating-title-text text-subtitle-2 text-truncate">{{ title }}</span>
         <v-spacer></v-spacer>
-        <button type="button" class="fw-btn" title="Minimise" @click.stop="collapsed = !collapsed" @dblclick.stop>
+        <button type="button" class="fw-btn" title="Minimise" @click.stop="minimize" @dblclick.stop>
           <v-icon>mdi-window-minimize</v-icon>
         </button>
         <button type="button" class="fw-btn" :title="maximized ? 'Restore' : 'Maximise'" @click.stop="toggleMaximized" @dblclick.stop>
@@ -15,10 +15,10 @@
           <v-icon>mdi-window-close</v-icon>
         </button>
       </div>
-      <div v-show="!collapsed" class="floating-body">
+      <div class="floating-body">
         <slot></slot>
       </div>
-      <template v-if="!collapsed && !maximized">
+      <template v-if="!maximized">
         <div v-for="dir in HANDLES" :key="dir" class="resize-handle" :class="'resize-' + dir" :data-dir="dir"
              @pointerdown.stop.prevent="startResize($event, dir)"></div>
       </template>
@@ -29,10 +29,11 @@
 <script setup>
 /**
  * A window that floats over the page, not a dialog: it does not dim or block what is behind it, can be dragged by
- * its title bar, resized from the corner, collapsed to the title bar and closed. Several can be open at once and the
+ * its title bar, resized from any edge or corner, maximised, minimised to the taskbar and closed. Several can be open at once and the
  * one clicked comes to the front. It is the building block of the desktop-style interface (see TODO).
  */
-import {computed, onBeforeUnmount, ref} from 'vue'
+import {computed, onBeforeUnmount, ref, watch} from 'vue'
+import {newWindowId, windows} from '@/windows'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -47,7 +48,6 @@ let nextZ = (window.__floatingZ ??= 1500)
 const z = ref(nextZ)
 const x = ref(Math.max(8, (innerWidth - props.width) / 2 + (nextZ % 7) * 18))
 const y = ref(Math.max(8, 72 + (nextZ % 5) * 18))
-const collapsed = ref(false)
 const win = ref(null)
 
 // Position and size are state of their own: the user moves and resizes the window, so nothing is rebuilt from the
@@ -71,7 +71,6 @@ function toggleMaximized() {
     if (restoreTo) ({x: x.value, y: y.value, w: w.value, h: h.value} = restoreTo)
   } else {
     restoreTo = {x: x.value, y: y.value, w: w.value, h: h.value}
-    collapsed.value = false
     measureArea()
     maximized.value = true
   }
@@ -83,7 +82,7 @@ const style = computed(() => maximized.value ? {
   width: area.value.w + 'px', height: area.value.h + 'px',
 } : {
   left: x.value + 'px', top: y.value + 'px', zIndex: z.value,
-  width: w.value + 'px', height: collapsed.value ? 'auto' : h.value + 'px',
+  width: w.value + 'px', height: h.value + 'px',
 })
 
 window.addEventListener('resize', onPageResize)
@@ -95,9 +94,30 @@ const MIN_W = 280
 const MIN_H = 120
 const HANDLES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
 
+// Registered with the taskbar while open. Minimising hides the window (it keeps its size and its content, a terminal
+// keeps its session) and the taskbar button brings it back.
+const id = newWindowId()
+const minimized = computed(() => windows[id]?.minimized ?? false)
+
 function raise() {
   z.value = ++window.__floatingZ
+  if (windows[id]) windows[id].z = z.value
 }
+
+function minimize() {
+  if (windows[id]) windows[id].minimized = true
+}
+
+watch(() => props.modelValue, (open) => {
+  if (open) {
+    windows[id] = {title: props.title, icon: props.icon, minimized: false, z: z.value, raise}
+  } else {
+    delete windows[id]
+  }
+}, {immediate: true})
+watch(() => [props.title, props.icon], ([title, icon]) => {
+  if (windows[id]) Object.assign(windows[id], {title, icon})
+})
 
 let resizing = null
 function startResize(e, dir) {
@@ -143,6 +163,7 @@ function stopDrag() {
   window.removeEventListener('pointermove', onDrag)
 }
 onBeforeUnmount(() => {
+  delete windows[id]
   stopDrag()
   stopResize()
   window.removeEventListener('resize', onPageResize)
@@ -181,6 +202,10 @@ onBeforeUnmount(() => {
   margin-right: 8px;
   color: inherit;
   opacity: 0.7;
+}
+.minimized {
+  visibility: hidden;
+  pointer-events: none;
 }
 .maximized .floating-title,
 .maximized {
