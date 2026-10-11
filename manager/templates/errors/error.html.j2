@@ -49,13 +49,10 @@
 
 <body>
     <div class="error">
+        {% if image %}<img src="{{ image }}" alt="{{ code }}" style="height: 20rem; max-width: 90vw; object-fit: contain;">{% endif %}
         <h1>{{code}}{% if short_desc %} - {{short_desc}}{% endif %}</h1>
         {% if long_desc %}<p>{{long_desc}}</p>{% endif %}
         <p><a href="/">Back to home</a></p>
-    </div>
-
-    <div class="sysinfo">
-        <p style="font-size: 1vw; margin-block:0;">UniTotem {{ut_vers}}<br>Running on {{os_vers}}<br>IP address: {{ip_addr}}<br>Hostname: {{hostname}}</p>
     </div>
 </body>
 
