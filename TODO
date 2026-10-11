@@ -1,4 +1,25 @@
 === CURRENT WORK ===
+(2026-10-11) Multi-playlist backend+UI and screen control steps 4-6 done in one go (see the commit log).
+
+MULTI-PLAYLIST: rename/set-default/copy/move assets, per-playlist default duration (it used to be a module-level
+global, so the last playlist touched won), per-asset volume/mute (viewer applies them to <video>/<audio>), per-window
+sound output (stored per output name in viewer_settings.json, applied with setSinkId by the description Chromium shows
+= the PulseAudio sink description; only this node's own sinks are listable, remote viewers can only use the default),
+files show which playlists use them, per-file download (was "NOT IMPLEMENTED YET"), playlist/asset saves are atomic.
+Verified with tools/ui-playlists.py in headless Chrome (create playlist, add asset, isolation between playlists,
+switch, rename). NOT verified: per-asset volume and per-window sound output on a real screen with sound, copy/move from
+the UI, drag-and-drop reorder with two playlists, remote viewers.
+
+SCREEN CONTROL: utils/system/screens/{_exec,xorg,ddc_ctl,cec,wol,serial,control}.py, models/screen_control.py,
+api/display_screens.py (Settings/Display/Screens/*), components/ScreenControl.vue, screen timers (cron line = python
+screenctl.py <uuid>; what to do lives in screen_control.json), wake_all/probe at manager start. Mechanisms: X (RandR),
+DDC/CI, CEC, Wake-on-LAN (on only), serial (user-configured commands). Verified on unitotem-test (GTX 1060, LG
+Ultrafine on DP-1): X off/on through the API, the viewer window re-appears and screenctl.py runs with an empty
+environment. NOT verified, no hardware or no go-ahead: DDC writes (setvcp: not run on the user's monitor), CEC (no
+adapter), WOL (no monitor with a NIC here), serial (no port), power-on-at-start with a monitor that stays off.
+ddcutil/cec-ctl are not installed on that VM, so both report "unavailable" there. unitotem-system has to ship
+ddcutil, v4l-utils, i2c-tools and the i2c-dev module (asked in a message, not done by me).
+
 (2026-10-10, night) FULL UPDATE CYCLE VERIFIED on VM unitotem-ab (image 2026.10.6 with manager 3.0.0~dev2,
 release 2026.10.7, fake-github on 192.168.122.1:8080 serving unitotem-system/work/powercut/releases), all driven
 through the manager websocket API: check (1.36 GB), fetch with live progress, apply+reboot, trial boot in
