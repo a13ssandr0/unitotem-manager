@@ -67,6 +67,38 @@ async def main(args):
             check('a floating window opened', bool(info) and info['fixed'] == 'fixed')
             check('it shows the image and the image loaded', bool(info) and bool(info['loaded']) and args.file in (info['img'] or ''))
             check('it is not a modal (no scrim over the page)', bool(info) and not info['modal'])
+            # resize from the edges, as the user would, with pointer events on the handles
+            drag_js = """(async (dir, dx, dy) => { const w = document.querySelector('.floating-window');
+              const h = w.querySelector('.resize-' + dir); const r = h.getBoundingClientRect();
+              const before = w.getBoundingClientRect();
+              h.dispatchEvent(new PointerEvent('pointerdown', {clientX: r.left + 4, clientY: r.top + 4, bubbles: true, pointerId: 1}));
+              window.dispatchEvent(new PointerEvent('pointermove', {clientX: r.left + 4 + dx, clientY: r.top + 4 + dy, bubbles: true}));
+              window.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+              await new Promise(r => setTimeout(r, 300));
+              const a = w.getBoundingClientRect();
+              return {dx: Math.round(a.left - before.left), dy: Math.round(a.top - before.top),
+                      dw: Math.round(a.width - before.width), dh: Math.round(a.height - before.height)} })"""
+            east = await cdp.eval(drag_js + "('e', 60, 0)", True)
+            check('the right edge grows the window to the right', east['dw'] == 60 and east['dx'] == 0)
+            south = await cdp.eval(drag_js + "('s', 0, 40)", True)
+            check('the bottom edge grows it downwards', south['dh'] == 40 and south['dy'] == 0)
+            west = await cdp.eval(drag_js + "('w', -50, 0)", True)
+            check('the left edge grows it to the left (the window moves with it)', west['dw'] == 50 and west['dx'] == -50)
+            north = await cdp.eval(drag_js + "('n', 0, -30)", True)
+            check('the top edge grows it upwards', north['dh'] == 30 and north['dy'] == -30)
+            corner = await cdp.eval(drag_js + "('se', 20, 20)", True)
+            check('a corner resizes both ways', corner['dw'] == 20 and corner['dh'] == 20)
+            size = await cdp.eval("(() => { const b = document.querySelector('.floating-window').getBoundingClientRect(); return [Math.round(b.width), Math.round(b.height)] })()")
+            moved = await cdp.eval("""(async () => { const w = document.querySelector('.floating-window');
+              const t = w.querySelector('.floating-title'); const r = t.getBoundingClientRect(); const o = w.getBoundingClientRect();
+              t.dispatchEvent(new PointerEvent('pointerdown', {clientX: r.left + 100, clientY: r.top + 10, bubbles: true, pointerId: 1}));
+              window.dispatchEvent(new PointerEvent('pointermove', {clientX: r.left + 160, clientY: r.top + 60, bubbles: true}));
+              window.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+              await new Promise(r => setTimeout(r, 300));
+              const b = w.getBoundingClientRect();
+              return {x: Math.round(b.left - o.left), w: Math.round(b.width), h: Math.round(b.height)} })()""", True)
+            check('dragging moves the window', moved['x'] != 0)
+            check('and keeps the size the user gave it', [moved['w'], moved['h']] == size)
             await cdp.eval(click_preview)
             await asyncio.sleep(1)
             check('clicking Preview again keeps one window for the same asset', await cdp.eval("document.querySelectorAll('.floating-window').length") >= 1)
