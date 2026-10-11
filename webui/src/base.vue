@@ -182,16 +182,16 @@ let ws = null;
 
 attach((target, args) => ws.send(JSON.stringify({...args, target})), () => connected.value)
 
-api.Settings.hostname.on(data => {
+api.Settings.Network.hostname.on(data => {
   hostname.value = data.hostname
   document.title = data.hostname + ' - UniTotem Manager'
 }, {init: true})
 
-api.Settings.Security.getUser.on(data => {
+api.Settings.Security.current_user.on(data => {
   logged_user.value = data
 }, {init: true})
 
-api.Settings.Display.getBounds.on(data => {
+api.Settings.Display.bounds.on(data => {
   disp_size.value = (data.width && data.height) ? data : null
 })
 
@@ -202,7 +202,7 @@ function connectWs() {
     initialCommands().forEach(cmd => send(cmd))
     // getBounds requires a viewer_id; the navbar shows this device's own
     // local screen, not an arbitrary/remote one.
-    api.Settings.Display.getBounds({viewer_id: 'local-webview', window_id: 0})
+    api.Settings.Display.bounds({viewer_id: 'local-webview', window_id: 0})
   }
   ws.onmessage = e => {
     const data = JSON.parse(e.data)

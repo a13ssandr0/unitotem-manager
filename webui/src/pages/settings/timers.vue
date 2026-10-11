@@ -18,8 +18,8 @@
         <template v-slot:item.month="{ item }">
           {{ getMonthTitle(item.month) }}
         </template>
-        <template v-slot:item.dayOfWeek="{ item }">
-          {{ getDayOfWeekTitle(item.dayOfWeek) }}
+        <template v-slot:item.day_of_week="{ item }">
+          {{ getDayOfWeekTitle(item.day_of_week) }}
         </template>
         <template v-slot:item.enabled="{ item }">
           <v-switch
@@ -85,7 +85,7 @@
               </v-col>
               <v-col cols="12">
                 <v-combobox
-                  v-model="editedItem.dayOfMonth"
+                  v-model="editedItem.day_of_month"
                   :items="daysOfMonth"
                   label="Day of the month"
                   variant="outlined"
@@ -104,7 +104,7 @@
               </v-col>
               <v-col cols="12">
                 <v-combobox
-                  v-model="editedItem.dayOfWeek"
+                  v-model="editedItem.day_of_week"
                   :items="daysOfWeek"
                   item-title="title"
                   item-value="value"
@@ -144,9 +144,9 @@ const headers = ref([
   { title: 'Action', key: 'command' },
   { title: 'Hour', key: 'hour' },
   { title: 'Minute', key: 'minute' },
-  { title: 'Day of the month', key: 'dayOfMonth' },
+  { title: 'Day of the month', key: 'day_of_month' },
   { title: 'Month', key: 'month' },
-  { title: 'Day of the week', key: 'dayOfWeek' },
+  { title: 'Day of the week', key: 'day_of_week' },
   { title: 'Enabled', key: 'enabled', sortable: false },
   { title: '', key: 'actions', sortable: false },
 ]);
@@ -195,9 +195,9 @@ const defaultItem = {
   command: commands[0].value,
   hour: hours[0],
   minute: minutes[0],
-  dayOfMonth: daysOfMonth[0],
+  day_of_month: daysOfMonth[0],
   month: months[0].value,
-  dayOfWeek: daysOfWeek[0].value,
+  day_of_week: daysOfWeek[0].value,
 };
 
 // Filled from Settings/Cron/getJobs. Starts empty: it used to be seeded with a
@@ -239,12 +239,12 @@ function deleteItem(item) {
   // ever sending the command - which is what this did - made a deletion look
   // like it worked until the next refresh brought the timer back.
   if (confirm('Are you sure you want to delete this item?')) {
-    api.Settings.Cron.deleteJob({ uuid: item.uuid });
+    api.Settings.Cron.delete_job({ uuid: item.uuid });
   }
 }
 
 function setEnabled(item, state) {
-  api.Settings.Cron.setJobEnabled({ uuid: item.uuid, state: Boolean(state) });
+  api.Settings.Cron.set_job_enabled({ uuid: item.uuid, state: Boolean(state) });
 }
 
 function close() {
@@ -258,15 +258,15 @@ function save() {
   delete item.enabled;
   delete item.known;
   if (editedIndex.value > -1) {
-    api.Settings.Cron.editJob(item);
+    api.Settings.Cron.edit_job(item);
   } else {
     delete item.uuid;
-    api.Settings.Cron.addJob(item);
+    api.Settings.Cron.add_job(item);
   }
   close();
 }
 
-api.Settings.Cron.getJobs.on(data => {
+api.Settings.Cron.jobs.on(data => {
   timers.value = data.jobs;
 }, {init: true})
 

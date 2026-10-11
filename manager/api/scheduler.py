@@ -85,7 +85,7 @@ class Scheduler(WSAPIBase):
         _ws = self.ws
         am.set_on_assets_update(
             lambda assets, current, _pid=pid: _ws.broadcast(
-                'Scheduler/asset', playlist_id=_pid, items=assets, current=current
+                'Scheduler/assets', playlist_id=_pid, items=assets, current=current
             )
         )
         am.set_on_current_update(
@@ -124,17 +124,17 @@ class Scheduler(WSAPIBase):
         return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
 
     @UserPerms.requires.scheduler
-    def asset(self, playlist_id: Optional[str] = None):
+    def assets(self, playlist_id: Optional[str] = None):
         am = playlists_manager.get(playlist_id)
         return _make_asset_broadcast(am)
 
     @UserPerms.requires.scheduler
-    def file(self):
+    def files(self):
         return WSBroadcast(files=upload_manager.serialize(), disk_used=upload_manager.disk_usedh,
                            disk_total=upload_manager.disk_totalh)
 
     @UserPerms.requires.scheduler
-    def add_url(self, items: list, playlist_id: Optional[str] = None):
+    def add_url_assets(self, items: list, playlist_id: Optional[str] = None):
         am = playlists_manager.get(playlist_id)
         for element in items:
             if isinstance(element, str):
@@ -149,7 +149,7 @@ class Scheduler(WSAPIBase):
         am.save()
 
     @UserPerms.requires.scheduler
-    def add_file(self, items: list, playlist_id: Optional[str] = None):
+    def add_file_assets(self, items: list, playlist_id: Optional[str] = None):
         am = playlists_manager.get(playlist_id)
         invalid = []
         for element in items:
@@ -175,7 +175,7 @@ class Scheduler(WSAPIBase):
 
     # noinspection PyTypeHints
     @UserPerms.requires.scheduler
-    def edit(self,
+    def edit_asset(self,
              uuid: str,
              playlist_id: Optional[str] = None,
              name: Optional[str] = None,
@@ -225,7 +225,7 @@ class Scheduler(WSAPIBase):
         return None
 
     @UserPerms.requires.scheduler
-    def delete(self, uuid: str, playlist_id: Optional[str] = None):
+    def delete_asset(self, uuid: str, playlist_id: Optional[str] = None):
         am = playlists_manager.get(playlist_id)
         del am[uuid]
         # Deleting what was playing, or the last enabled asset, has to move the
@@ -234,35 +234,38 @@ class Scheduler(WSAPIBase):
         am.save()
 
     @UserPerms.requires.scheduler
-    def delete_file(self, files: list[str]):
+    def delete_files(self, files: list[str]):
         for file in files:
             upload_manager.remove(file)
         playlists_manager.default.save()
 
     @UserPerms.requires.scheduler
-    def goto(self, index: Union[None, int, str] = None, playlist_id: Optional[str] = None):
+    def goto_asset(self, index: Union[None, int, str] = None, playlist_id: Optional[str] = None):
         playlists_manager.get(playlist_id).goto_a(index)
 
     @UserPerms.requires.scheduler
-    def back(self, playlist_id: Optional[str] = None):
+    def previous_asset(self, playlist_id: Optional[str] = None):
         playlists_manager.get(playlist_id).prev_a()
 
     @UserPerms.requires.scheduler
-    def next(self, playlist_id: Optional[str] = None):
+    def next_asset(self, playlist_id: Optional[str] = None):
         playlists_manager.get(playlist_id).next_a()
 
     @UserPerms.requires.scheduler
-    def reorder(self, from_i: int, to_i: int, playlist_id: Optional[str] = None):
+    def reorder_assets(self, from_i: int, to_i: int, playlist_id: Optional[str] = None):
         am = playlists_manager.get(playlist_id)
         am.move(from_i, to_i)
         am.save()
 
-
-class Settings(WSAPIBase):
     @UserPerms.requires.scheduler
-    def default_duration(self, duration: Optional[int] = None, playlist_id: Optional[str] = None):
+    def default_duration(self, playlist_id: Optional[str] = None):
+        """Seconds an asset without an intrinsic duration is shown for."""
         am = playlists_manager.get(playlist_id)
-        if duration is not None:
-            am.default_duration = duration
-            am.save()
-        return WSBroadcast(duration=am.default_duration)
+        return WSBroadcast(playlist_id=am.playlist_id, duration=am.default_duration)
+
+    @UserPerms.requires.scheduler
+    def set_default_duration(self, duration: int, playlist_id: Optional[str] = None):
+        am = playlists_manager.get(playlist_id)
+        am.default_duration = duration
+        am.save()
+        return self.default_duration(playlist_id)

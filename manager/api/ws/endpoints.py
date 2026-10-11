@@ -144,10 +144,9 @@ api = WebSocketAPI(WS, REMOTE_WS)
 logger.info("WebSocketAPI initialized")
 
 api.import_class('api.scheduler', 'Scheduler')
-api.import_class('api.scheduler', 'Settings')
 api.import_class('api.audio', 'Audio', 'Settings')
 api.import_class('api.remote', 'Remote', 'Settings')
-api.import_class('api.network', 'Settings')
+api.import_class('api.network', 'Network', 'Settings')
 api.import_class('api.system.cron', 'Cron', 'Settings')
 api.import_class('api.system.power', 'Power')
 api.import_class('api.system.updater', 'Update', 'Settings')
@@ -178,4 +177,4 @@ async def handle_call(target, user, request_data):
 
 
 
-upload_manager._callback = lambda x: WS.broadcast('Scheduler/file', files=x)
+upload_manager._callback = lambda x: WS.broadcast('Scheduler/files', files=x)

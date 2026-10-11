@@ -171,9 +171,9 @@ async function toggle(playlistId, win) {
   pending.value = `${playlistId}:${win.key}`
   try {
     if (isAssigned(playlistId, win)) {
-      api.Viewers.unassign({ viewer_id: win.viewer_id, window_id: win.window_id })
+      api.Viewers.unassign_playlist({ viewer_id: win.viewer_id, window_id: win.window_id })
     } else {
-      api.Viewers.assign({ viewer_id: win.viewer_id, window_id: win.window_id, playlist_id: playlistId })
+      api.Viewers.assign_playlist({ viewer_id: win.viewer_id, window_id: win.window_id, playlist_id: playlistId })
     }
   } finally {
     pending.value = null
