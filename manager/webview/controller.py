@@ -16,7 +16,10 @@ if TYPE_CHECKING:
     from api.ws.wsmanager import WSManager
 
 
-def show_payload(asset: Asset, window_id: int) -> dict:
+_FIT_NAMES = ('contain', 'cover', 'fill')
+
+
+def show_payload(asset: Asset, window_id: int, page: int = 0) -> dict:
     """The 'Show' command for one asset on one window.
 
     Built in a single place because the playback loop, the immediate push on
@@ -24,8 +27,18 @@ def show_payload(asset: Asset, window_id: int) -> dict:
     it was written out twice the copies drifted apart.
     """
     url = asset.url
+    container = asset.media_type + 1 if asset.media_type >= 0 else -1
     if url.startswith('file:'):
-        url = 'https://localhost/uploaded/' + url.removeprefix('file:')
+        name = url.removeprefix('file:')
+        if name.lower().endswith('.pdf'):
+            # One page at a time, drawn by our own page without any interface (see webui/src/pdf-view.js)
+            from urllib.parse import urlencode
+            bg = asset.bg_color.as_rgb() if asset.bg_color is not None else 'rgb(0,0,0)'
+            url = 'https://localhost/pdf-view?' + urlencode({
+                'file': name, 'page': page + 1, 'fit': _FIT_NAMES[int(asset.fit)], 'bg': bg})
+            container = 1
+        else:
+            url = 'https://localhost/uploaded/' + name
     return dict(
         src=url,
         window_id=window_id,
@@ -34,7 +47,7 @@ def show_payload(asset: Asset, window_id: int) -> dict:
         # worked before the Qt/CEF migration and is the only way a plain
         # URL pointing straight at an image or a video can land anywhere
         # but an iframe.
-        container=asset.media_type + 1 if asset.media_type >= 0 else -1,
+        container=container,
         fit=asset.fit,
         # None means "no colour chosen", which the viewer needs to tell
         # apart from a deliberate black: only in the first case does it
@@ -87,7 +100,7 @@ class PlaylistLoop:
                     continue
                 for webview_id, window_id in list(self.assigned_webviews):
                     await self.remote_ws.multicast(
-                        webview_id, 'Show', **show_payload(asset, window_id))
+                        webview_id, 'Show', **show_payload(asset, window_id, self.playlist.current_page))
         except asyncio.CancelledError:
             logger.info('Playlist loop stopped: {}', self.playlist.playlist_id)
 
@@ -96,7 +109,7 @@ class PlaylistLoop:
         so a freshly assigned screen does not sit on the boot logo until the
         next rotation."""
         await self.remote_ws.multicast(
-            webview_id, 'Show', **show_payload(self.playlist.current, window_id))
+            webview_id, 'Show', **show_payload(self.playlist.current, window_id, self.playlist.current_page))
 
 
 class WebviewManager:

@@ -30,7 +30,7 @@ from api.ws.endpoints import REMOTE_WS, WS, api
 from api.ws.wsmanager import WSManager
 from routers.error import http_exception_handler
 from routers.login import LOGMAN, NotAuthenticatedException, login_redirect
-from templates import public_asset_files, templates
+from templates import get_vite_assets, public_asset_files, templates
 from utils._logging import Logger
 from utils.models.command_line import cmdargs
 from utils.models.playlists import playlists_manager
@@ -54,7 +54,10 @@ class AssetFiles(StaticFiles):
     """
 
     async def get_response(self, path: str, scope):
-        if path.endswith('.js') and f'assets/{path}' not in public_asset_files():
+        client = scope.get('client')
+        local = client is not None and client[0] in ('127.0.0.1', '::1')
+        # The local viewer has no session: it loads the PDF page (and its scripts) from this same machine
+        if not local and path.endswith('.js') and f'assets/{path}' not in public_asset_files():
             try:
                 await LOGMAN(Request(scope))
             except NotAuthenticatedException:
@@ -136,6 +139,16 @@ async def health(request: Request):
 async def api_schema():
     """Every websocket API function with its permissions and argument schema, for the web UI client."""
     return api.schema
+
+
+@WWW.get('/pdf-view', response_class=HTMLResponse)
+async def pdf_view(request: Request):
+    """The page the local viewer shows for one page of a PDF. Loopback only, like the other pages made for the viewer."""
+    if request.client is None or request.client.host not in ('127.0.0.1', '::1'):
+        raise HTTPException(status_code=404)
+    js = get_vite_assets('src/pdf-view.js')['js']
+    return HTMLResponse('<!doctype html><html><head><meta charset="utf-8"><title>PDF</title></head><body>'
+                        f'<script type="module" src="{js}"></script></body></html>')
 
 
 WWW.include_router(routers.login.router)

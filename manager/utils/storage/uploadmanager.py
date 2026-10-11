@@ -130,7 +130,8 @@ class UploadManager(FileSystemEventHandler):
             'url': 'file:' + file_data.filename,
             'duration': file_data.duration_s,
             'enabled': False,
-            'media_type': file_data.mime
+            'media_type': file_data.mime,
+            'pages': file_data.pages or 1,
         })
         am.save()
 
