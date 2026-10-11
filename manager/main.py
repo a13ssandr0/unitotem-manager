@@ -273,6 +273,25 @@ async def generate_signing_key():
 
 loop.create_task(generate_signing_key(), name='rsa_keygen')
 
+
+async def screens_at_start():
+    """Wake the screens that are off (a monitor that stayed off after a boot or a power cut), then probe what each
+    one supports. Neither needs a display to exist: on a headless node both simply find nothing to do."""
+    from utils.system.screens import control
+
+    async def broadcast():
+        await WS.broadcast('Settings/Display/Screens/screens', screens=await control.screens(),
+                           probing=control.probing())
+
+    try:
+        await control.wake_all(on_done=broadcast)
+        await control.probe(on_done=broadcast)
+    except Exception:
+        logger.exception('Screen start-up failed')
+
+
+loop.create_task(screens_at_start(), name='screens_at_start')
+
 async def _serve_www():
     # a swallowed bind error would leave the manager up but unreachable:
     # fail loudly and shut down instead
