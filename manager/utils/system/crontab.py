@@ -32,12 +32,14 @@ class UniCron(CronTab):
         command = ACTIONS.get(cmd)
         if command is None:
             return False
+        if None in [m, h, dom, mon, dow]:
+            # a job with no schedule would silently be '* * * * *', i.e. run every minute
+            return False
         item = super().new(
             command,                                    # command
             self.__job_prefix + os.urandom(16).hex()    # comment
         )
-        if None not in [m, h, dom, mon, dow]:
-            item.setall(m, h, dom, mon, dow)  # time
+        item.setall(m, h, dom, mon, dow)  # time
         return True
 
     def read(self, filename=None) -> 'UniCron':
@@ -64,7 +66,7 @@ class UniCron(CronTab):
         # slice that is not a plain number - and '*' is the default the web UI
         # offers for every field. A single "every day at 22:00" timer, whose
         # day-of-month, month and day-of-week are all '*', therefore blew up
-        # getJobs for the *whole* list, so one wildcard made every timer on the
+        # jobs for the *whole* list, so one wildcard made every timer on the
         # node invisible. Ranges and steps ('*/15', '1-5', '0,30') could never
         # be represented either.
         #
@@ -81,9 +83,9 @@ class UniCron(CronTab):
             'known': job.command in _ACTION_OF_COMMAND,
             'minute': str(job.minute),
             'hour': str(job.hour),
-            'dayOfMonth': str(job.dom),
+            'day_of_month': str(job.dom),
             'month': str(job.month),
-            'dayOfWeek': str(job.dow),
+            'day_of_week': str(job.dow),
             'enabled': job.enabled,
         } for job in self.findById()]
 

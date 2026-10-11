@@ -70,7 +70,7 @@
                   <!-- action buttons -->
                   <template v-slot:append>
                     <v-switch v-model="item.enabled" hide-details color="primary" density="compact"
-                              @click="api.Scheduler.edit({uuid: item.uuid, enabled: !item.enabled})"></v-switch>
+                              @click="api.Scheduler.edit_asset({uuid: item.uuid, enabled: !item.enabled})"></v-switch>
                     <v-menu>
                       <template v-slot:activator="{ props }">
                         <v-btn icon="mdi-dots-vertical" class="ms-2" variant="text" size="small" v-bind="props"></v-btn>
@@ -80,11 +80,11 @@
                           <template v-slot:prepend><v-icon>mdi-pencil</v-icon></template>
                           <v-list-item-title>Edit</v-list-item-title>
                         </v-list-item>
-                        <v-list-item @click="api.Scheduler.goto({'index': index})">
+                        <v-list-item @click="api.Scheduler.goto_asset({'index': index})">
                           <template v-slot:prepend><v-icon>mdi-login</v-icon></template>
                           <v-list-item-title>Play Now</v-list-item-title>
                         </v-list-item>
-                        <v-list-item @click="api.Scheduler.delete({uuid: item.uuid})">
+                        <v-list-item @click="api.Scheduler.delete_asset({uuid: item.uuid})">
                           <template v-slot:prepend><v-icon color="red">mdi-delete</v-icon></template>
                           <v-list-item-title class="text-red">Delete</v-list-item-title>
                         </v-list-item>
@@ -372,7 +372,7 @@ const isIndefinite = computed({
 });
 
 
-api.Scheduler.asset.on(data => {
+api.Scheduler.assets.on(data => {
   playlistItems.value = data.items;
 }, {init: true})
 
@@ -380,13 +380,13 @@ api.Scheduler.current.on(data => {
   current_asset.value = data.current;
 }, {init: true})
 
-api.Scheduler.file.on(data => {
+api.Scheduler.files.on(data => {
   mediaFiles.value = data.files;
   disk_used.value = data.disk_used;
   disk_total.value = data.disk_total;
 }, {init: true})
 
-api.Settings.default_duration.on(data => {
+api.Scheduler.default_duration.on(data => {
   defaultDuration.value = data.duration;
 }, {init: true})
 
@@ -399,8 +399,8 @@ const reload = () => {
   }, 500); // Durata dell'animazione
 };
 
-const back = () => {api.Scheduler.back()};
-const next = () => {api.Scheduler.next()};
+const back = () => {api.Scheduler.previous_asset()};
+const next = () => {api.Scheduler.next_asset()};
 
 const triggerFileUpload = () => fileInput.value.click();
 
@@ -453,12 +453,12 @@ const deselectAll = () => {
 };
 
 const addSelected = () => {
-  api.Scheduler.add_file({items: [... selectedFiles.value]});
+  api.Scheduler.add_file_assets({items: [... selectedFiles.value]});
   deselectAll();
 }
 
 const deleteSelected = () => {
-  api.Scheduler.delete_file({files: [... selectedFiles.value]});
+  api.Scheduler.delete_files({files: [... selectedFiles.value]});
   deselectAll();
 }
 
@@ -488,7 +488,7 @@ const durationToText = (duration) => {
 
 const saveSettings = () => {
   // Qui andrà la logica per salvare le impostazioni
-  api.Settings.default_duration({duration: defaultDuration.value});
+  api.Scheduler.set_default_duration({duration: defaultDuration.value});
   showSettingsDialog.value = false;
 };
 
@@ -559,16 +559,16 @@ const saveUrlItem = () => {
   };
 
   if (isEditing.value) {
-    api.Scheduler.edit(payload);
+    api.Scheduler.edit_asset(payload);
   } else {
-    api.Scheduler.add_url({items: [payload]});
+    api.Scheduler.add_url_assets({items: [payload]});
   }
 
   showAddUrlDialog.value = false;
 };
 
 const onDraggableUpdate = (event) => {
-  api.Scheduler.reorder({from_i: event.oldIndex, to_i: event.newIndex});
+  api.Scheduler.reorder_assets({from_i: event.oldIndex, to_i: event.newIndex});
 }
 </script>
 

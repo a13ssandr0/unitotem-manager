@@ -55,16 +55,16 @@ import {api} from '@/api'
 const audioDevices = api.Settings.Audio.devices.use({initial: {default: null, devices: []}})
 
 const setDefaultDevice = (deviceName) => {
-  api.Settings.Audio.default({device: deviceName})
+  api.Settings.Audio.set_default_device({device: deviceName})
 }
 
 const setVolume = (device) => {
-  api.Settings.Audio.volume({device: device.name, volume: device.volume})
+  api.Settings.Audio.set_volume({device: device.name, volume: device.volume})
 }
 
 const toggleMute = (device) => {
   device.muted = !device.muted
-  api.Settings.Audio.mute({device: device.name, mute: device.muted})
+  api.Settings.Audio.set_mute({device: device.name, mute: device.muted})
 }
 </script>
 

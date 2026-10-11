@@ -15,19 +15,18 @@ class Audio(WSAPIBase):
         return WSBroadcast(self.devices, devices=get_audio_devices(), default=get_default_audio_device())
 
     @UserPerms.requires.audio
-    def default(self, device: Optional[str] = None):
-        if device is not None:
-            set_default_audio_device(device)
+    def set_default_device(self, device: str):
+        set_default_audio_device(device)
         return self.devices()
 
     @UserPerms.requires.audio
-    def volume(self, device: Optional[str] = None, volume: Optional[float] = None):
-        if volume is not None:
-            set_volume(device, volume)
+    def set_volume(self, volume: float, device: Optional[str] = None):
+        """`device` None means the default one."""
+        set_volume(device, volume)
         return self.devices()
 
     @UserPerms.requires.audio
-    def mute(self, device: Optional[str] = None, mute: Optional[bool] = None):
-        if mute is not None:
-            set_mute(device, mute)
+    def set_mute(self, mute: bool, device: Optional[str] = None):
+        """`device` None means the default one."""
+        set_mute(device, mute)
         return self.devices()

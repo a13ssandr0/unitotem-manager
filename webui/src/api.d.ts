@@ -17,128 +17,141 @@ export interface Api {
   }
   Scheduler: {
     /** [requires: scheduler] */
-    add_file: ApiCall<{ items: (any)[]; playlist_id?: null | string }>
+    add_file_assets: ApiCall<{ items: (any)[]; playlist_id?: null | string }>
     /** [requires: scheduler] */
-    add_url: ApiCall<{ items: (any)[]; playlist_id?: null | string }>
+    add_url_assets: ApiCall<{ items: (any)[]; playlist_id?: null | string }>
     /** [requires: scheduler] */
-    asset: ApiCall<{ playlist_id?: null | string }>
-    /** [requires: scheduler] */
-    back: ApiCall<{ playlist_id?: null | string }>
+    assets: ApiCall<{ playlist_id?: null | string }>
     /** [requires: scheduler] */
     create_playlist: ApiCall<{ name?: string }>
     /** [requires: scheduler] */
     current: ApiCall<{ playlist_id?: null | string }>
+    /** Seconds an asset without an intrinsic duration is shown for. [requires: scheduler] */
+    default_duration: ApiCall<{ playlist_id?: null | string }>
     /** [requires: scheduler] */
-    delete: ApiCall<{ uuid: string; playlist_id?: null | string }>
+    delete_asset: ApiCall<{ uuid: string; playlist_id?: null | string }>
     /** [requires: scheduler] */
-    delete_file: ApiCall<{ files: (string)[] }>
+    delete_files: ApiCall<{ files: (string)[] }>
     /** [requires: scheduler] */
     delete_playlist: ApiCall<{ playlist_id: string }>
     /** [requires: scheduler] */
-    edit: ApiCall<{ uuid: string; playlist_id?: null | string; name?: null | string; url?: null | string; duration?: null | number; fit?: 0 | 1 | 2 | null; bg_color?: null | string; ena_date?: null | string; dis_date?: null | string; enabled?: boolean | null }>
+    edit_asset: ApiCall<{ uuid: string; playlist_id?: null | string; name?: null | string; url?: null | string; duration?: null | number; fit?: 0 | 1 | 2 | null; bg_color?: null | string; ena_date?: null | string; dis_date?: null | string; enabled?: boolean | null }>
     /** [requires: scheduler] */
-    file: ApiCall<Record<string, never>>
+    files: ApiCall<Record<string, never>>
     /** [requires: scheduler] */
-    goto: ApiCall<{ index?: null | number | string; playlist_id?: null | string }>
+    goto_asset: ApiCall<{ index?: null | number | string; playlist_id?: null | string }>
     /** [requires: scheduler] */
-    next: ApiCall<{ playlist_id?: null | string }>
+    next_asset: ApiCall<{ playlist_id?: null | string }>
     /** [requires: scheduler] */
     playlists: ApiCall<Record<string, never>>
     /** [requires: scheduler] */
-    reorder: ApiCall<{ from_i: number; to_i: number; playlist_id?: null | string }>
+    previous_asset: ApiCall<{ playlist_id?: null | string }>
+    /** [requires: scheduler] */
+    reorder_assets: ApiCall<{ from_i: number; to_i: number; playlist_id?: null | string }>
+    /** [requires: scheduler] */
+    set_default_duration: ApiCall<{ duration: number; playlist_id?: null | string }>
   }
   Settings: {
     Audio: {
       /** [requires: audio] */
-      default: ApiCall<{ device?: null | string }>
-      /** [requires: audio] */
       devices: ApiCall<Record<string, never>>
       /** [requires: audio] */
-      mute: ApiCall<{ device?: null | string; mute?: boolean | null }>
-      /** [requires: audio] */
-      volume: ApiCall<{ device?: null | string; volume?: null | number }>
+      set_default_device: ApiCall<{ device: string }>
+      /** `device` None means the default one. [requires: audio] */
+      set_mute: ApiCall<{ mute: boolean; device?: null | string }>
+      /** `device` None means the default one. [requires: audio] */
+      set_volume: ApiCall<{ volume: number; device?: null | string }>
     }
     Cron: {
+      /** Every field of the schedule is required: python-crontab's default for a missing one is '*', which [requires: admin] */
+      add_job: ApiCall<{ command: string; minute: string; hour: string; day_of_month: string; month: string; day_of_week: string }>
       /** [requires: admin] */
-      addJob: ApiCall<{ command?: string; minute?: any; hour?: any; dayOfMonth?: any; month?: any; dayOfWeek?: any }>
+      delete_job: ApiCall<{ uuid: string }>
       /** [requires: admin] */
-      deleteJob: ApiCall<{ uuid: string }>
+      edit_job: ApiCall<{ uuid: string; command?: string; minute?: any; hour?: any; day_of_month?: any; month?: any; day_of_week?: any }>
       /** [requires: admin] */
-      editJob: ApiCall<{ uuid: string; command?: string; minute?: any; hour?: any; dayOfMonth?: any; month?: any; dayOfWeek?: any }>
+      jobs: ApiCall<Record<string, never>>
       /** [requires: admin] */
-      getJobs: ApiCall<Record<string, never>>
-      /** [requires: admin] */
-      setJobEnabled: ApiCall<{ uuid: string; state: boolean }>
+      set_job_enabled: ApiCall<{ uuid: string; state: boolean }>
     }
     Display: {
-      /** [requires: admin] */
-      addWindow: ApiCall<{ viewer_id: string; display?: number; x?: number; y?: number; width?: number; height?: number }>
       /** Whether the viewer displays assets whose certificate does not [requires: admin] */
-      getAllowInsecureCerts: ApiCall<Record<string, never>>
+      allow_insecure_certs: ApiCall<Record<string, never>>
       /** Size of a window, shown in the navbar of every page. */
-      getBounds: ApiCall<{ viewer_id: string; window_id?: number }>
+      bounds: ApiCall<{ viewer_id: string; window_id?: number }>
       /** [requires: admin] */
-      getDisplays: ApiCall<{ viewer_id?: null | string }>
+      displays: ApiCall<{ viewer_id?: null | string }>
       /** [requires: admin] */
-      getFlip: ApiCall<{ viewer_id: string; window_id?: number }>
+      flip: ApiCall<{ viewer_id: string; window_id?: number }>
       /** Graphics Feature Status for this node's own local webview - the same [requires: admin] */
-      getGPUFeatureStats: ApiCall<Record<string, never>>
+      gpu_feature_stats: ApiCall<Record<string, never>>
       /** [requires: admin] */
-      getOrientation: ApiCall<{ viewer_id: string; window_id?: number }>
-      /** [requires: admin] */
-      removeWindow: ApiCall<{ viewer_id: string; window_id: number }>
+      orientation: ApiCall<{ viewer_id: string; window_id?: number }>
       /** Stored now, applied by the viewer the next time it starts: CEF [requires: admin] */
-      setAllowInsecureCerts: ApiCall<{ allow: boolean }>
+      set_allow_insecure_certs: ApiCall<{ allow: boolean }>
       /** [requires: admin] */
-      setBounds: ApiCall<{ viewer_id: string; window_id: number; x: number; y: number; width: number; height: number }>
+      set_bounds: ApiCall<{ viewer_id: string; window_id: number; x: number; y: number; width: number; height: number }>
       /** [requires: admin] */
-      setFlip: ApiCall<{ viewer_id: string; window_id: number; flip: number }>
+      set_flip: ApiCall<{ viewer_id: string; window_id: number; flip: number }>
       /** [requires: admin] */
-      setOrientation: ApiCall<{ viewer_id: string; window_id: number; orientation: number }>
+      set_orientation: ApiCall<{ viewer_id: string; window_id: number; orientation: number }>
     }
-    NM: {
+    Network: {
       /** Activate a connection on a device. [requires: admin] */
-      activate: ApiCall<{ conn_path: string; dev_path: string }>
+      activate_connection: ApiCall<{ conn_path: string; dev_path: string }>
       /** List active connections with state. [requires: admin] */
-      activeConnections: ApiCall<Record<string, never>>
+      active_connections: ApiCall<Record<string, never>>
       /** Add (or update) a WiFi profile and immediately activate it. [requires: admin] */
-      connectWifi: ApiCall<{ ssid: string; device: string; password?: null | string; bssid?: null | string; ip_method?: string; ip_address?: null | string; prefix_len?: number; gateway?: null | string; dns?: (any)[] | null }>
+      connect_wifi: ApiCall<{ ssid: string; device: string; password?: null | string; bssid?: null | string; ip_method?: string; ip_address?: null | string; prefix_len?: number; gateway?: null | string; dns?: (any)[] | null }>
       /** Return full (unpacked) settings for one connection. [requires: admin] */
-      connectionDetails: ApiCall<{ path: string }>
+      connection_details: ApiCall<{ path: string }>
       /** List all saved connection profiles. [requires: admin] */
       connections: ApiCall<Record<string, never>>
       /** Deactivate an active connection. [requires: admin] */
-      deactivate: ApiCall<{ active_path: string }>
+      deactivate_connection: ApiCall<{ active_path: string }>
+      /** [requires: admin] */
+      default_wlan_device: ApiCall<Record<string, never>>
       /** Remove a connection profile permanently. [requires: admin] */
-      deleteConnection: ApiCall<{ conn_path: string }>
+      delete_connection: ApiCall<{ conn_path: string }>
       /** List all network devices with state, type, IP address, and active connection. [requires: admin] */
       devices: ApiCall<Record<string, never>>
       /** Edit an existing connection profile in-place. [requires: admin] */
-      editConnection: ApiCall<{ conn_path: string; conn_id?: null | string; autoconnect?: boolean | null; ip_method?: string; ip_address?: null | string; prefix_len?: number; gateway?: null | string; dns?: (any)[] | null; ssid?: null | string; password?: null | string }>
+      edit_connection: ApiCall<{ conn_path: string; conn_id?: null | string; autoconnect?: boolean | null; ip_method?: string; ip_address?: null | string; prefix_len?: number; gateway?: null | string; dns?: (any)[] | null; ssid?: null | string; password?: null | string }>
+      /** [requires: admin] */
+      has_wireless: ApiCall<Record<string, never>>
+      hostname: ApiCall<Record<string, never>>
+      /** [requires: admin] */
+      set_hostname: ApiCall<{ hostname: string }>
+      /** [requires: admin] */
+      set_wireless_enabled: ApiCall<{ enabled: boolean }>
+      /** [requires: admin] */
+      wireless_enabled: ApiCall<Record<string, never>>
+      /** [requires: admin] */
+      wireless_networks: ApiCall<Record<string, never>>
     }
     Remote: {
       /** [requires: admin] */
-      disconnect: ApiCall<{ client: string }>
+      disconnect_client: ApiCall<{ client: string }>
       /** State of the RSA signing key: missing, generating or ready [requires: admin] */
-      getKeyStatus: ApiCall<Record<string, never>>
+      key_status: ApiCall<Record<string, never>>
       /** [requires: admin] */
-      getMode: ApiCall<Record<string, never>>
+      mode: ApiCall<Record<string, never>>
       /** [requires: admin] */
-      setMode: ApiCall<{ remote_server: null | string; remote_port?: null | number }>
+      set_mode: ApiCall<{ remote_server: null | string; remote_port?: null | number }>
     }
     Security: {
       /** [requires: admin] */
-      addUser: ApiCall<{ username: string; password: string }>
-      /** [requires: admin] */
-      delUser: ApiCall<{ user: string }>
+      add_user: ApiCall<{ username: string; password: string }>
       /** The logged in user itself: every page needs it to know what to show, whatever its permissions. */
-      getUser: ApiCall<Record<string, never>>
+      current_user: ApiCall<Record<string, never>>
       /** [requires: admin] */
-      getUsers: ApiCall<Record<string, never>>
+      delete_user: ApiCall<{ username: string }>
       /** [requires: admin] */
-      setUserPass: ApiCall<{ username: string; password: string }>
+      set_user_password: ApiCall<{ username: string; password: string }>
       /** [requires: admin] */
-      setUserPerms: ApiCall<{ username: string; perms: ("scheduler" | "power" | "audio" | "admin")[] }>
+      set_user_permissions: ApiCall<{ username: string; perms: ("scheduler" | "power" | "audio" | "admin")[] }>
+      /** [requires: admin] */
+      users: ApiCall<Record<string, never>>
     }
     Update: {
       /** [requires: admin] */
@@ -156,33 +169,18 @@ export interface Api {
       /** [requires: admin] */
       status: ApiCall<Record<string, never>>
     }
-    /** [requires: scheduler] */
-    default_duration: ApiCall<{ duration?: null | number; playlist_id?: null | string }>
-    /** [requires: admin] */
-    get_default_wlan_device: ApiCall<Record<string, never>>
-    /** [requires: admin] */
-    get_wireless_networks: ApiCall<Record<string, never>>
-    /** [requires: admin] */
-    has_wireless: ApiCall<Record<string, never>>
-    hostname: ApiCall<Record<string, never>>
-    /** [requires: admin] */
-    is_wireless_enabled: ApiCall<Record<string, never>>
-    /** [requires: admin] */
-    setHostname: ApiCall<{ hostname: string }>
-    /** [requires: admin] */
-    set_wireless_enabled: ApiCall<{ enabled: boolean }>
   }
   Viewers: {
     /** [requires: admin] */
-    addWindow: ApiCall<{ viewer_id: string; display?: number; x?: number; y?: number; width?: number; height?: number }>
+    add_window: ApiCall<{ viewer_id: string; display?: number; x?: number; y?: number; width?: number; height?: number }>
     /** Put one window on one playlist. A window shows a single playlist, [requires: admin] */
-    assign: ApiCall<{ viewer_id: string; window_id: number; playlist_id: string }>
+    assign_playlist: ApiCall<{ viewer_id: string; window_id: number; playlist_id: string }>
     /** [requires: admin] */
     list: ApiCall<Record<string, never>>
     /** [requires: admin] */
-    removeWindow: ApiCall<{ viewer_id: string; window_id: number }>
+    remove_window: ApiCall<{ viewer_id: string; window_id: number }>
     /** [requires: admin] */
-    unassign: ApiCall<{ viewer_id: string; window_id: number }>
+    unassign_playlist: ApiCall<{ viewer_id: string; window_id: number }>
   }
 }
 export const api: Api

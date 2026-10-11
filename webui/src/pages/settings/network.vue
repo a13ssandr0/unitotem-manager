@@ -518,32 +518,26 @@ const wifiDevices = computed(() => devices.value.filter(d => d.type === 2))
 
 // ── WS setup ───────────────────────────────────────────────────────────────
 
-api.Settings.hostname.on(data => {
+api.Settings.Network.hostname.on(data => {
   hostname.value = data.hostname
   originalHostname.value = data.hostname
 }, {init: true})
 
-api.Settings.NM.devices.on(data => {
+api.Settings.Network.devices.on(data => {
   if (data.error) { showError(data.error); return }
   if (data.devices !== undefined) devices.value = data.devices
 }, {init: true})
 
-function onConnections(data) {
-  if (data.error) { showError(data.error); return false }
+// Saving a profile answers with the refreshed list, which is also what closes the editor
+api.Settings.Network.connections.on(data => {
   if (data.connections !== undefined) connections.value = data.connections
-  return true
-}
-
-api.Settings.NM.connections.on(onConnections, {init: true})
-api.Settings.NM.deleteConnection.on(onConnections)
-api.Settings.NM.editConnection.on(data => {
-  if (onConnections(data)) {
+  if (editorSaving.value) {
     editorSaving.value = false
     editorOpen.value = false
   }
-})
+}, {init: true})
 
-api.Settings.NM.connectionDetails.on(data => {
+api.Settings.Network.connection_details.on(data => {
   if (data.error) { showError(data.error); return }
   if (data.details && editorOpen.value) {
     const d = data.details
@@ -564,52 +558,38 @@ api.Settings.NM.connectionDetails.on(data => {
   }
 })
 
-api.Settings.NM.activeConnections.on(data => {
+api.Settings.Network.active_connections.on(data => {
   if (data.active !== undefined) activeConns.value = data.active
 }, {init: true})
 
-// activate / deactivate / connectWifi all yield devices + active updates
-function onActivation(data) {
-  if (data.error) {
-    showError(data.error)
-    wifiConnecting.value = false
-    return false
-  }
-  if (data.devices !== undefined)     devices.value    = data.devices
-  if (data.active !== undefined)      activeConns.value = data.active
-  if (data.connections !== undefined) connections.value = data.connections
-  return true
-}
-
-api.Settings.NM.activate.on(onActivation)
-api.Settings.NM.deactivate.on(onActivation)
-api.Settings.NM.connectWifi.on(data => {
-  if (onActivation(data) && data.connected_uuid !== undefined) {
+// activate / deactivate / connect_wifi refresh devices and active_connections, which are listened to above
+api.Settings.Network.connect_wifi.on(data => {
+  if (data.connected_uuid !== undefined) {
     wifiConnecting.value = false
     wifiDialogOpen.value = false
     // refresh connections so the new profile appears
-    api.Settings.NM.connections()
+    api.Settings.Network.connections()
   }
 })
 
-api.Settings.has_wireless.on(data => {
+api.Settings.Network.has_wireless.on(data => {
   has_wireless.value = data.wireless
   if (data.wireless) {
-    api.Settings.is_wireless_enabled()
-    api.Settings.get_default_wlan_device()
+    api.Settings.Network.wireless_enabled()
+    api.Settings.Network.default_wlan_device()
   }
 }, {init: true})
 
-api.Settings.is_wireless_enabled.on(data => {
+api.Settings.Network.wireless_enabled.on(data => {
   is_wireless_enabled.value = data.enabled
 })
 
-api.Settings.get_default_wlan_device.on(data => {
+api.Settings.Network.default_wlan_device.on(data => {
   default_wireless_device.value = data.device
   if (!wifiForm.device) wifiForm.device = data.device
 })
 
-api.Settings.get_wireless_networks.on(data => {
+api.Settings.Network.wireless_networks.on(data => {
   wifiNetworks.value = data.wifis ?? []
   scanningWifi.value = false
 })
@@ -617,23 +597,23 @@ api.Settings.get_wireless_networks.on(data => {
 // ── actions ────────────────────────────────────────────────────────────────
 
 const applyHostname = () => {
-  api.Settings.setHostname({ hostname: hostname.value })
+  api.Settings.Network.set_hostname({ hostname: hostname.value })
 }
 
 const refreshDevices = () => {
-  api.Settings.NM.devices()
-  api.Settings.NM.activeConnections()
+  api.Settings.Network.devices()
+  api.Settings.Network.active_connections()
 }
 
 const refreshConnections = () => {
-  api.Settings.NM.connections()
-  api.Settings.NM.activeConnections()
+  api.Settings.Network.connections()
+  api.Settings.Network.active_connections()
 }
 
 const isActive = (uuid) => activeConns.value.some(a => a.uuid === uuid)
 
 const deactivateConn = (activePath) => {
-  api.Settings.NM.deactivate({ active_path: activePath })
+  api.Settings.Network.deactivate_connection({ active_path: activePath })
 }
 
 const deactivateByUuid = (uuid) => {
@@ -654,12 +634,12 @@ const activateConn = (connPath) => {
     const d = devices.value.find(d => d.type === 1)
     if (d) devPath = d.path
   }
-  api.Settings.NM.activate({ conn_path: connPath, dev_path: devPath })
+  api.Settings.Network.activate_connection({ conn_path: connPath, dev_path: devPath })
 }
 
 const activateOnDev = (connPath, devPath) => {
   connPickerOpen.value = false
-  api.Settings.NM.activate({ conn_path: connPath, dev_path: devPath })
+  api.Settings.Network.activate_connection({ conn_path: connPath, dev_path: devPath })
 }
 
 const openConnectionPicker = (dev) => {
@@ -678,14 +658,14 @@ const openEditor = (conn) => {
     ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
   })
   // Fetch full details to populate IP fields
-  api.Settings.NM.connectionDetails({ path: conn.path })
+  api.Settings.Network.connection_details({ path: conn.path })
   editorOpen.value = true
 }
 
 const saveEditor = () => {
   if (!editorConn.value) return
   editorSaving.value = true
-  api.Settings.NM.editConnection({
+  api.Settings.Network.edit_connection({
     conn_path   : editorConn.value.path,
     conn_id     : editorForm.id,
     autoconnect : editorForm.autoconnect,
@@ -709,7 +689,7 @@ const confirmDelete = (conn) => {
 
 const doDelete = () => {
   if (!connToDelete.value) return
-  api.Settings.NM.deleteConnection({ conn_path: connToDelete.value.path })
+  api.Settings.Network.delete_connection({ conn_path: connToDelete.value.path })
   deleteDialogOpen.value = false
   connToDelete.value = null
 }
@@ -717,12 +697,12 @@ const doDelete = () => {
 // ── WiFi ───────────────────────────────────────────────────────────────────
 
 const toggleWifi = (val) => {
-  api.Settings.set_wireless_enabled({ enabled: val })
+  api.Settings.Network.set_wireless_enabled({ enabled: val })
 }
 
 const scanWifi = () => {
   scanningWifi.value = true
-  api.Settings.get_wireless_networks()
+  api.Settings.Network.wireless_networks()
 }
 
 const openWifiConnect = (net) => {
@@ -741,7 +721,7 @@ const openWifiConnect = (net) => {
 const connectWifi = () => {
   if (!wifiForm.ssid) return
   wifiConnecting.value = true
-  api.Settings.NM.connectWifi({
+  api.Settings.Network.connect_wifi({
     ssid      : wifiForm.ssid,
     device    : wifiForm.device,
     password  : wifiForm.password || null,
