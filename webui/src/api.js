@@ -17,7 +17,6 @@
 import {onUnmounted, ref} from 'vue'
 
 const listeners = new Map() // target -> Set<callback>
-const keyListeners = new Map() // payload key -> Set<callback>
 const initCommands = new Map() // command -> number of components that asked for it
 
 let sendFn = () => {}
@@ -32,9 +31,6 @@ export function attach(send, ready) {
 /** Called by the owner of the socket for every message received. */
 export function dispatch(data) {
   listeners.get(data.target)?.forEach(callback => callback(data))
-  for (const key of Object.keys(data)) {
-    keyListeners.get(key)?.forEach(callback => callback(data[key], data))
-  }
 }
 
 /** Commands to (re)send whenever the socket opens. */
@@ -112,30 +108,6 @@ export function useApiState(target, {pick = null, init = [target], initial = nul
   const state = ref(initial)
   onApi(target, data => {
     state.value = pick ? data[pick] : data
-  }, {init})
-  return state
-}
-
-/**
- * Some pieces of state (the playlists, for one) are sent by several functions, each under its own target.
- * `onApiKey('playlists', cb)` runs `cb(value, message)` for every message that carries that key, whoever
- * sent it, which is what a page showing that state actually wants. `init` lists the commands that fetch it.
- */
-export function onApiKey(key, callback, {init = []} = {}) {
-  if (!keyListeners.has(key)) keyListeners.set(key, new Set())
-  keyListeners.get(key).add(callback)
-  const release = subscribe(`\0key:${key}`, () => {}, init)
-  onUnmounted(() => {
-    keyListeners.get(key)?.delete(callback)
-    release()
-  })
-}
-
-/** A ref following the payload key `key` of any message. */
-export function useApiKey(key, {init = [], initial = null} = {}) {
-  const state = ref(initial)
-  onApiKey(key, value => {
-    state.value = value
   }, {init})
   return state
 }

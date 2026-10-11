@@ -96,7 +96,7 @@ class Scheduler(WSAPIBase):
 
     @UserPerms.requires.scheduler
     def playlists(self):
-        return WSBroadcast(playlists=playlists_manager.serialize())
+        return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
 
     @UserPerms.requires.scheduler
     def create_playlist(self, name: str = 'New Playlist'):
@@ -108,7 +108,7 @@ class Scheduler(WSAPIBase):
             WebviewManager.get_instance().add_playlist_loop(am)
         except RuntimeError:
             pass
-        return WSBroadcast(playlists=playlists_manager.serialize())
+        return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
 
     @UserPerms.requires.scheduler
     def delete_playlist(self, playlist_id: str):
@@ -121,7 +121,7 @@ class Scheduler(WSAPIBase):
                 pass
         except ValueError as e:
             return WSResponse(error=str(e))
-        return WSBroadcast(playlists=playlists_manager.serialize())
+        return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
 
     @UserPerms.requires.scheduler
     def asset(self, playlist_id: Optional[str] = None):

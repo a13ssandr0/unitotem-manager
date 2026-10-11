@@ -5,6 +5,7 @@ import aiohttp
 
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
+from utils.models.user import UserPerms
 from utils.models.viewer import viewer_settings
 from utils.system.gpu import detect_gpu
 from webview.controller import WebviewManager
@@ -74,7 +75,9 @@ class Display(WSAPIBase):
         return WSBroadcast(features={}, video_decoding=[],
                            gpu_profile=detect_gpu().as_dict())
 
+    @UserPerms.requires.none
     def getBounds(self, viewer_id: str, window_id: int = 0):
+        """Size of a window, shown in the navbar of every page."""
         windows = _vm().get_webview_windows(viewer_id)
         if window_id < len(windows):
             return WSBroadcast(**windows[window_id])
