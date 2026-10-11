@@ -54,6 +54,8 @@ class Asset(BaseModel, validate_assignment=True):
     # Per-asset volume of the asset's own sound (video and audio only), independent from the system volume
     volume: float = Field(default=1.0, ge=0.0, le=1.0)
     muted: bool = False
+    # A PDF is shown one page at a time and `duration` is how long each page stays up
+    pages: int = Field(default=1, ge=1)
     media_type: MediaType = MediaType.undefined
     uuid: str = Field(default_factory=lambda: os.urandom(16).hex(), frozen=True)
 
@@ -228,6 +230,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
     _waiting_evt: asyncio.Event = PrivateAttr(default_factory=asyncio.Event)
     _waiting_timer: Optional[Timer] = PrivateAttr(default=None)
     _filepath: Optional[Path] = PrivateAttr(default=None)
+    _page: int = PrivateAttr(default=0)
 
     # noinspection PyNestedDecorators
     @field_validator('default_duration')
@@ -240,11 +243,12 @@ class AssetsManager(BaseModel, validate_assignment=True):
     def model_post_init(self, context: Any, /) -> None:
         # after initialization set the timer callback function to
         # avoid assigning later or adding overheads with if statements
-        self._waiting_timer = Timer(None, self.next_a)
+        self._waiting_timer = Timer(None, self._timer_fired)
 
     def _asset(self, obj) -> Asset:
         """Build an asset for this playlist: one that comes without a duration gets the playlist's own default."""
-        if isinstance(obj, dict) and 'duration' not in obj:
+        if isinstance(obj, dict) and obj.get('duration') is None:
+            # a file with no duration of its own (an image, a PDF) arrives with None: that is "use the default"
             obj = {**obj, 'duration': self.default_duration}
         return Asset.model_validate(obj)
 
@@ -393,8 +397,27 @@ class AssetsManager(BaseModel, validate_assignment=True):
             return self.assets[self._current]
         return idle_asset()
 
+    @property
+    def current_page(self) -> int:
+        """The page of the current asset on screen (always 0 unless it is a multi-page PDF)."""
+        return self._page
+
+    def _timer_fired(self):
+        """The current step has run its time: the next page of a multi-page asset, or the next asset."""
+        current = self.current
+        if self._current >= 0 and self._page + 1 < current.pages:
+            self._page += 1
+            self.on_current_update()
+            self._last_change_time = time()
+            self._waiting_evt.set()
+            self._waiting_evt.clear()
+            self._waiting_timer.set_timeout(current.duration or inf)
+        else:
+            self.next_a()
+
     def __set_current(self, value):
         self._current = value
+        self._page = 0
         self.on_current_update()
         self._last_change_time = time()
         self._waiting_evt.set()

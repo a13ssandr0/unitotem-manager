@@ -195,7 +195,8 @@ class Scheduler(WSAPIBase):
                     'name'      : element['url'],
                     'duration'  : element.get('duration', upload_manager.files_info[element['url']].duration_s),
                     'enabled'   : element.get('enabled', False),
-                    'media_type': element.get('media_type', upload_manager.files_info[element['url']].mime)
+                    'media_type': element.get('media_type', upload_manager.files_info[element['url']].mime),
+                    'pages'     : upload_manager.files_info[element['url']].pages or 1,
                 })
             else:
                 invalid.append(element)

@@ -39,3 +39,4 @@ uvloop
 validators
 watchdog
 wcmatch
+pypdf

@@ -81,3 +81,48 @@ def test_volume_and_mute_default_and_validation(manager):
     assert a.assets[0].volume == 1.0 and a.assets[0].muted is False
     with pytest.raises(Exception):
         a.append({'url': 'file:loud.mp4', 'volume': 2})
+
+
+# ── multi-page PDFs: `duration` is the time of each page ────────────────────
+
+def test_a_multi_page_asset_advances_page_by_page_then_moves_on(manager):
+    a = manager.default
+    a.append({'url': 'file:slides.pdf', 'duration': 5, 'enabled': True, 'pages': 3})
+    a.append({'url': 'https://example.com/next', 'duration': 5, 'enabled': True})
+    a.next_a()
+    assert a.current.url == 'file:slides.pdf' and a.current_page == 0
+    a._timer_fired()
+    assert a.current.url == 'file:slides.pdf' and a.current_page == 1
+    a._timer_fired()
+    assert a.current_page == 2
+    a._timer_fired()
+    assert a.current.url == 'https://example.com/next' and a.current_page == 0
+
+
+def test_skipping_forward_resets_the_page(manager):
+    a = manager.default
+    a.append({'url': 'file:slides.pdf', 'duration': 5, 'enabled': True, 'pages': 3})
+    a.append({'url': 'https://example.com/next', 'duration': 5, 'enabled': True})
+    a.next_a()
+    a._timer_fired()
+    assert a.current_page == 1
+    a.next_a()
+    a.prev_a()
+    assert a.current.url == 'file:slides.pdf' and a.current_page == 0
+
+
+def test_show_payload_for_a_pdf_page_points_at_the_pdf_view_page(manager):
+    from webview.controller import show_payload
+    a = manager.default
+    a.append({'url': 'file:my slides.pdf', 'duration': 5, 'enabled': True, 'pages': 2, 'fit': 1})
+    payload = show_payload(a.assets[0], 0, 1)
+    assert payload['container'] == 1   # the browser container
+    assert payload['src'].startswith('https://localhost/pdf-view?')
+    assert 'file=my+slides.pdf' in payload['src'] and 'page=2' in payload['src'] and 'fit=cover' in payload['src']
+
+
+def test_none_duration_means_the_playlist_default(manager):
+    a = manager.default
+    a.default_duration = 12
+    a.append({'url': 'file:picture.png', 'duration': None})
+    assert a.assets[0].duration == 12

@@ -68,6 +68,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './src/main.js',
+        pdf: './src/pdf-view.js',
         // altre entry point per pagine specifiche
       }
     }

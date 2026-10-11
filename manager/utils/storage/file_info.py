@@ -21,8 +21,21 @@ def get_file_info(b, *f):
                 dur = track_data.get('other_duration', [None])[0]
                 dur_s = ceil(int(track_data['duration']) / 1000)
             break  # we only need the first general track
+    # MediaInfo does not classify PDFs, so the extension decides
+    if f.lower().endswith('.pdf'):
+        mime = 'application/pdf'
     return FileInfo(filename=basename(f), duration=dur, duration_s=dur_s,
-                    size=human_readable_size(getsize(f)), mime=mime)
+                    size=human_readable_size(getsize(f)), mime=mime,
+                    pages=pdf_pages(f) if mime == 'application/pdf' else None)
+
+
+def pdf_pages(path) -> Optional[int]:
+    """How many pages a PDF has, None if it cannot be read (encrypted, damaged): it then plays as one step."""
+    try:
+        from pypdf import PdfReader
+        return len(PdfReader(path).pages)
+    except Exception:
+        return None
 
 
 class FileInfo(BaseModel):
@@ -32,6 +45,7 @@ class FileInfo(BaseModel):
     duration_s: Optional[int] = None
     size: str
     mime: Optional[str]
+    pages: Optional[int] = None
 
 
 def get_dominant_color(pil_img: Image.Image, palette_size=16):  # https://stackoverflow.com/a/61730849/9655651

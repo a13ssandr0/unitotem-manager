@@ -48,7 +48,8 @@
                   <template v-slot:subtitle>
                     <span class="text-truncate" v-if="item.name && (item.url!=='file:'+item.name)">{{ item.url }}</span>
                     <div class="mt-1">
-                      <v-chip density="compact" size="default" color="green">Duration: {{ durationToText(item.duration) }}</v-chip>
+                      <v-chip density="compact" size="default" color="green">Duration: {{ durationToText(item.duration) }}{{ item.pages > 1 ? ' per page' : '' }}</v-chip>
+                      <v-chip density="compact" size="default" color="primary" v-if="item.pages > 1">{{ item.pages }} pages</v-chip>
 
                       <v-chip density="compact" size="default" color="primary" v-if="item.media_type === 1">Type: Image</v-chip>
                       <v-chip density="compact" size="default" color="primary" v-else-if="item.media_type === 2">Type: Video</v-chip>
