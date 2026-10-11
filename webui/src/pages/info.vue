@@ -111,6 +111,7 @@
 </template>
 
 <script setup>
+import {api} from '@/api'
 import { ref, onMounted, computed, defineComponent, h } from 'vue';
 import { useTheme } from 'vuetify';
 import { VProgressLinear, VChip } from 'vuetify/components';
@@ -143,14 +144,11 @@ const chartColors_transparent = {
     grey: 'rgba(201, 203, 207, 0.5)'
 };
 
-onWSMessage = (data) => {
-  switch (data.target) {
-    case "Settings/info":
-      info.value = data;
-      updateChartData();
-      break;
-  }
-}
+// Pushed by the server every few seconds to every logged-in client; there is no function to call for it
+api.Settings.info.on(data => {
+  info.value = data;
+  updateChartData();
+})
 
 const initializeChart = () => {
   if (!cpuChartCanvas.value) return;

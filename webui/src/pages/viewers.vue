@@ -125,11 +125,10 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-
-const sendCommand = window.sendCommand;
+import { api, useApiKey } from '@/api'
 
 const viewersMap = ref({})    // instance_id → viewer info
-const playlists = ref([])
+const playlists = useApiKey('playlists', {init: ['Scheduler/playlists'], initial: []})
 // One entry per window: {webview_id, window_id, playlist_id}
 const assignments = ref([])
 const pending = ref(null)
@@ -172,28 +171,20 @@ async function toggle(playlistId, win) {
   pending.value = `${playlistId}:${win.key}`
   try {
     if (isAssigned(playlistId, win)) {
-      sendCommand('Viewers/unassign', { viewer_id: win.viewer_id, window_id: win.window_id })
+      api.Viewers.unassign({ viewer_id: win.viewer_id, window_id: win.window_id })
     } else {
-      sendCommand('Viewers/assign',
-                  { viewer_id: win.viewer_id, window_id: win.window_id, playlist_id: playlistId })
+      api.Viewers.assign({ viewer_id: win.viewer_id, window_id: win.window_id, playlist_id: playlistId })
     }
   } finally {
     pending.value = null
   }
 }
 
-// Request current state on (re)connect
-window.setInitCommands('Viewers/list')
-
-onWSMessage = (msg) => {
-  if (msg.target === 'Viewers/list') {
-    viewersMap.value = msg.viewers ?? {}
-    assignments.value = msg.assignments ?? {}
-  }
-  if (msg.target === 'Scheduler/playlists' || msg.playlists) {
-    playlists.value = msg.playlists ?? []
-  }
-}
+// Requests the current state on (re)connect
+api.Viewers.list.on(msg => {
+  viewersMap.value = msg.viewers ?? {}
+  assignments.value = msg.assignments ?? {}
+}, {init: true})
 </script>
 
 <style scoped>

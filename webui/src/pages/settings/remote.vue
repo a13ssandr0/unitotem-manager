@@ -74,6 +74,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { api } from '@/api'
 
 const mode = ref('Server')
 const items = ref(['Server', 'Client'])
@@ -108,33 +109,27 @@ function setMode(){
   if (mode.value === 'Server') {
     serverIp.value = ''
     serverPort.value = ''
-    sendCommand('Settings/Remote/setMode', {remote_server:null});
+    api.Settings.Remote.setMode({remote_server: null});
   }
 }
 
 function connectToServer(){
-  sendCommand('Settings/Remote/setMode', {
+  api.Settings.Remote.setMode({
     remote_server: serverIp.value,
     remote_port: serverPort.value,
   })
 }
 
-const sendCommand = window.sendCommand;
-window.setInitCommands("Settings/Remote/getMode", "Settings/Remote/getKeyStatus")
+api.Settings.Remote.getMode.on(data => {
+  mode.value = data.remote_server ? 'Client' : 'Server';
+  serverIp.value = data.remote_server || '';
+  serverPort.value = data.remote_port || '';
+  clients.value = data.remote_clients;
+}, {init: true})
 
-onWSMessage = (data) => {
-  switch (data.target) {
-    case "Settings/Remote/getMode":
-      mode.value = data.remote_server ? 'Client' : 'Server';
-      serverIp.value = data.remote_server || '';
-      serverPort.value = data.remote_port || '';
-      clients.value = data.remote_clients;
-      break;
-    case "Settings/Remote/getKeyStatus":
-      keyStatus.value = data.status;
-      break;
-  }
-}
+api.Settings.Remote.getKeyStatus.on(data => {
+  keyStatus.value = data.status;
+}, {init: true})
 
 </script>
 

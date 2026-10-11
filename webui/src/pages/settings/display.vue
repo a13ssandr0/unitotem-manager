@@ -39,7 +39,7 @@
               :width="disp.width"
               :height="disp.height"
               fill="#00000000"
-              @click="sendCommand('Settings/Display/setBounds', {viewer_id: currentViewerId, window_id: 0, x: disp.x, y: disp.y, width: disp.width, height: disp.height})"/>
+              @click="api.Settings.Display.setBounds({viewer_id: currentViewerId, window_id: 0, x: disp.x, y: disp.y, width: disp.width, height: disp.height})"/>
           </template>
           <text x="500" y="500" v-if="svg.disabled" :fill="textColor">Disconnected</text>
           <rect id="window_bound_rect"
@@ -53,16 +53,16 @@
       <div class="d-flex justify-center align-center mb-4">
         <v-label class="text-center mr-2">Orientation:</v-label>
         <v-btn-toggle v-model="orientation" mandatory>
-          <v-btn @click="sendCommand('Settings/Display/setOrientation', {viewer_id: currentViewerId, window_id: 0, orientation: 0})">
+          <v-btn @click="api.Settings.Display.setOrientation({viewer_id: currentViewerId, window_id: 0, orientation: 0})">
             <v-icon :style="{ transform: 'rotate(0deg)' }">mdi-monitor</v-icon>
           </v-btn>
-          <v-btn @click="sendCommand('Settings/Display/setOrientation', {viewer_id: currentViewerId, window_id: 0, orientation: 1})">
+          <v-btn @click="api.Settings.Display.setOrientation({viewer_id: currentViewerId, window_id: 0, orientation: 1})">
             <v-icon :style="{ transform: 'rotate(90deg)' }">mdi-monitor</v-icon>
           </v-btn>
-          <v-btn @click="sendCommand('Settings/Display/setOrientation', {viewer_id: currentViewerId, window_id: 0, orientation: 2})">
+          <v-btn @click="api.Settings.Display.setOrientation({viewer_id: currentViewerId, window_id: 0, orientation: 2})">
             <v-icon :style="{ transform: 'rotate(180deg)' }">mdi-monitor</v-icon>
           </v-btn>
-          <v-btn @click="sendCommand('Settings/Display/setOrientation', {viewer_id: currentViewerId, window_id: 0, orientation: 3})">
+          <v-btn @click="api.Settings.Display.setOrientation({viewer_id: currentViewerId, window_id: 0, orientation: 3})">
             <v-icon :style="{ transform: 'rotate(270deg)' }">mdi-monitor</v-icon>
           </v-btn>
         </v-btn-toggle>
@@ -70,15 +70,15 @@
       <div class="d-flex justify-center align-center mb-4">
         <v-label class="text-center mr-2">Flip:</v-label>
         <v-btn-toggle v-model="flip" mandatory>
-          <v-btn @click="sendCommand('Settings/Display/setFlip', {viewer_id: currentViewerId, window_id: 0, flip: 0})">
+          <v-btn @click="api.Settings.Display.setFlip({viewer_id: currentViewerId, window_id: 0, flip: 0})">
             No
           </v-btn>
 
-          <v-btn @click="sendCommand('Settings/Display/setFlip', {viewer_id: currentViewerId, window_id: 0, flip: 1})">
+          <v-btn @click="api.Settings.Display.setFlip({viewer_id: currentViewerId, window_id: 0, flip: 1})">
             <v-icon>mdi-reflect-horizontal</v-icon>
           </v-btn>
 
-          <v-btn @click="sendCommand('Settings/Display/setFlip', {viewer_id: currentViewerId, window_id: 0, flip: 2})">
+          <v-btn @click="api.Settings.Display.setFlip({viewer_id: currentViewerId, window_id: 0, flip: 2})">
             <v-icon>mdi-reflect-vertical</v-icon>
           </v-btn>
         </v-btn-toggle>
@@ -129,6 +129,7 @@
 </template>
 
 <script setup>
+import {api} from '@/api'
 import {computed, ref, watch} from 'vue'
 import {useTheme} from 'vuetify'
 
@@ -224,61 +225,57 @@ watch(displays, (_displays) => {
   }
 )
 
-const sendCommand = window.sendCommand;
 
 function setAllowInsecureCerts(value) {
   allowInsecureCertsDirty.value = true;
-  sendCommand('Settings/Display/setAllowInsecureCerts', {allow: value});
+  api.Settings.Display.setAllowInsecureCerts({allow: value});
 }
 
 // getDisplays/getBounds/getOrientation/getFlip all require a viewer_id -
 // resolve it first (defaulting to the first known viewer, usually the
 // local one) before fetching anything that depends on it.
-window.setInitCommands("Settings/Display/getGPUFeatureStats",
-                       "Settings/Display/getAllowInsecureCerts",
-                       "Viewers/list")
+api.Settings.Display.getGPUFeatureStats.on(data => {
+  gpu.value = data.features;
+}, {init: true})
 
-onWSMessage = (data) => {
-  switch (data.target) {
-    case "Settings/Display/getGPUFeatureStats":
-      gpu.value = data.features;
-      break;
-    case "Settings/Display/getAllowInsecureCerts":
-      allowInsecureCerts.value = data.allow;
-      break;
-    case "Viewers/list": {
-      // Re-broadcast whenever a webview's screens/windows change (see
-      // webview.app.WebviewApp._notify_screens_changed), not just once at
-      // page load - re-fetch so a hot-plugged/unplugged monitor shows up
-      // here immediately instead of only after a manual refresh. Keep the
-      // current viewer selected as long as it's still around; only pick a
-      // new one if none was selected yet or the selected one disconnected.
-      const ids = Object.keys(data.viewers || {});
-      if (!currentViewerId.value || !ids.includes(currentViewerId.value)) {
-        currentViewerId.value = ids.includes('local-webview') ? 'local-webview' : (ids[0] || null);
-      }
-      if (currentViewerId.value) {
-        sendCommand('Settings/Display/getDisplays', {viewer_id: currentViewerId.value});
-        sendCommand('Settings/Display/getBounds', {viewer_id: currentViewerId.value, window_id: 0});
-        sendCommand('Settings/Display/getOrientation', {viewer_id: currentViewerId.value, window_id: 0});
-        sendCommand('Settings/Display/getFlip', {viewer_id: currentViewerId.value, window_id: 0});
-      }
-      break;
-    }
-    case "Settings/Display/getDisplays":
-      displays.value = data.displays;
-      break;
-    case "Settings/Display/getBounds":
-      window_bound_rect.value = data;
-      break;
-    case "Settings/Display/getOrientation":
-      orientation.value = data.orientation;
-      break;
-    case "Settings/Display/getFlip":
-      flip.value = data.flip;
-      break;
+api.Settings.Display.getAllowInsecureCerts.on(data => {
+  allowInsecureCerts.value = data.allow;
+}, {init: true})
+
+api.Viewers.list.on(data => {
+  // Re-broadcast whenever a webview's screens/windows change (see
+  // webview.app.WebviewApp._notify_screens_changed), not just once at
+  // page load - re-fetch so a hot-plugged/unplugged monitor shows up
+  // here immediately instead of only after a manual refresh. Keep the
+  // current viewer selected as long as it's still around; only pick a
+  // new one if none was selected yet or the selected one disconnected.
+  const ids = Object.keys(data.viewers || {});
+  if (!currentViewerId.value || !ids.includes(currentViewerId.value)) {
+    currentViewerId.value = ids.includes('local-webview') ? 'local-webview' : (ids[0] || null);
   }
-}
+  if (currentViewerId.value) {
+    api.Settings.Display.getDisplays({viewer_id: currentViewerId.value});
+    api.Settings.Display.getBounds({viewer_id: currentViewerId.value, window_id: 0});
+    api.Settings.Display.getOrientation({viewer_id: currentViewerId.value, window_id: 0});
+    api.Settings.Display.getFlip({viewer_id: currentViewerId.value, window_id: 0});
+  }
+}, {init: true})
+
+api.Settings.Display.getDisplays.on(data => {
+  displays.value = data.displays;
+})
+
+api.Settings.Display.getBounds.on(data => {
+  window_bound_rect.value = data;
+})
+
+api.Settings.Display.getOrientation.on(data => {
+  orientation.value = data.orientation;
+})
+
+api.Settings.Display.getFlip.on(data => {
+  flip.value = data.flip;
+})
 </script>
 
 <style scoped>
