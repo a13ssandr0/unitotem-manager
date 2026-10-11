@@ -271,7 +271,7 @@ the VM-specific ones.
   absent. Ask the linker instead: `ldd .../PySide6/Qt/plugins/platforms/libqxcb.so | grep "not found"`.
 - **`rsync -a` into `/etc/sudoers.d/` produces a file sudo refuses to parse**, because it preserves
   the source's uid. Always `chown root:root` afterwards.
-- **A web UI tab left open across a deploy stops navigating, and it is not a bug.** The bundle
+- **A web UI tab left open across a deploy stops navigating (now it reloads itself, see `webui/src/main.js`).** The bundle
   names are content-hashed and `tools/vm-deploy` rsyncs with `--delete`, so the old chunks are
   gone; a tab still running the previous `main` chunk asks for a lazy-loaded page that no longer
   exists and the click appears to do nothing, with no visible error. Reload the page (Ctrl+Shift+R)
