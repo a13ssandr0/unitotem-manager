@@ -13,7 +13,7 @@
                    @click="openNewPlaylistDialog"></v-btn>
             <v-spacer></v-spacer>
             <div class="d-flex align-center">
-              <v-btn icon="mdi-cog" title="Settings" variant="text" density="compact" class="mr-4" @click="showSettingsDialog = true"></v-btn>
+              <v-btn icon="mdi-cog" title="Settings" variant="text" density="compact" class="mr-4" @click="openSettings"></v-btn>
               <v-btn icon="mdi-arrow-left" title="Previous" @click="back" variant="text" density="compact"></v-btn>
               <v-btn icon title="Reload" @click="reload" variant="text" density="compact">
                 <v-icon :class="{ 'rotate-once': isReloading }">mdi-reload</v-icon>
@@ -76,6 +76,26 @@
                         <v-list-item @click="api.Scheduler.goto_asset({index: index, playlist_id: selectedPlaylist})">
                           <template v-slot:prepend><v-icon>mdi-login</v-icon></template>
                           <v-list-item-title>Play Now</v-list-item-title>
+                        </v-list-item>
+                        <v-list-item v-if="otherPlaylists.length" append-icon="mdi-menu-right">
+                          <template v-slot:prepend><v-icon>mdi-content-copy</v-icon></template>
+                          <v-list-item-title>Copy to</v-list-item-title>
+                          <v-menu activator="parent" location="end" open-on-hover submenu>
+                            <v-list density="compact">
+                              <v-list-item v-for="p in otherPlaylists" :key="p.playlist_id" :title="p.name"
+                                           @click="api.Scheduler.copy_assets({uuids: [item.uuid], playlist_id: selectedPlaylist, target_playlist_id: p.playlist_id})"></v-list-item>
+                            </v-list>
+                          </v-menu>
+                        </v-list-item>
+                        <v-list-item v-if="otherPlaylists.length" append-icon="mdi-menu-right">
+                          <template v-slot:prepend><v-icon>mdi-file-move</v-icon></template>
+                          <v-list-item-title>Move to</v-list-item-title>
+                          <v-menu activator="parent" location="end" open-on-hover submenu>
+                            <v-list density="compact">
+                              <v-list-item v-for="p in otherPlaylists" :key="p.playlist_id" :title="p.name"
+                                           @click="api.Scheduler.move_assets({uuids: [item.uuid], playlist_id: selectedPlaylist, target_playlist_id: p.playlist_id})"></v-list-item>
+                            </v-list>
+                          </v-menu>
                         </v-list-item>
                         <v-list-item @click="api.Scheduler.delete_asset({uuid: item.uuid, playlist_id: selectedPlaylist})">
                           <template v-slot:prepend><v-icon color="red">mdi-delete</v-icon></template>
@@ -143,6 +163,12 @@
               </template>
               <v-list-item-title>{{ file.filename }}</v-list-item-title>
               <v-list-item-subtitle>Duration: {{ file.duration }} | Size: {{ file.size }}</v-list-item-subtitle>
+              <div v-if="usedIn[filename]" class="mt-1">
+                <v-chip v-for="pid in usedIn[filename]" :key="pid" size="x-small" class="me-1" color="primary" variant="tonal">{{ playlistName_(pid) }}</v-chip>
+              </div>
+              <template v-slot:append>
+                <v-btn icon="mdi-download" size="small" variant="text" title="Download" @click.stop="download(filename)"></v-btn>
+              </template>
             </v-list-item>
           </v-list>
           <v-divider></v-divider>
@@ -156,6 +182,9 @@
       <v-card class="pa-2 pb-0">
         <v-card-title>Playlist settings</v-card-title>
         <v-card-text>
+          <v-text-field v-model="playlistName" label="Name" variant="outlined"></v-text-field>
+          <v-checkbox v-if="currentPlaylist && !currentPlaylist.is_default" v-model="makeDefault"
+                      label="Make this the default playlist" hide-details density="compact" class="mb-2"></v-checkbox>
           <v-text-field
             v-model="defaultDuration"
             label="Default duration"
@@ -236,6 +265,15 @@
                   density="compact"
                 ></v-checkbox>
               </div>
+            </v-col>
+            <v-col cols="12" v-if="hasSound(newUrlItem)">
+              <div class="d-flex align-center">
+                <v-icon class="me-3">{{ newUrlItem.muted ? 'mdi-volume-off' : 'mdi-volume-high' }}</v-icon>
+                <v-slider v-model="newUrlItem.volume" min="0" max="100" step="1" hide-details density="compact"
+                          :disabled="newUrlItem.muted" label="Volume" thumb-label></v-slider>
+                <v-checkbox v-model="newUrlItem.muted" label="Mute" hide-details density="compact" class="ml-4"></v-checkbox>
+              </div>
+              <div class="text-caption text-medium-emphasis">Volume of this asset only, independent of the system volume.</div>
             </v-col>
             <v-col cols="12">
               <div class="text-subtitle-2 mb-2">Object fit (only for images and videos)</div>
@@ -346,6 +384,11 @@ const fileInput = ref(null);
 const playlists = api.Scheduler.playlists.use({pick: 'playlists', initial: []});
 const selectedPlaylist = ref(null);
 const currentPlaylist = computed(() => playlists.value.find(p => p.playlist_id === selectedPlaylist.value));
+const otherPlaylists = computed(() => playlists.value.filter(p => p.playlist_id !== selectedPlaylist.value));
+const usedIn = ref({});
+const playlistName = ref('');
+const makeDefault = ref(false);
+const playlistName_ = (pid) => playlists.value.find(p => p.playlist_id === pid)?.name ?? pid;
 const showNewPlaylistDialog = ref(false);
 const newPlaylistName = ref('');
 const playlistItems = ref([]);
@@ -368,7 +411,10 @@ const newUrlItem = ref({
   backgroundColor: '#000000',
   autoBackgroundColor: true,
   enableDate: null,
-  disableDate: null
+  disableDate: null,
+  volume: 100,
+  muted: false,
+  media_type: undefined
 });
 
 const previousDuration = ref(30);
@@ -401,6 +447,7 @@ api.Scheduler.files.on(data => {
   mediaFiles.value = data.files;
   disk_used.value = data.disk_used;
   disk_total.value = data.disk_total;
+  usedIn.value = data.used_in ?? {};
 }, {init: true})
 
 api.Scheduler.default_duration.on(data => {
@@ -429,6 +476,14 @@ watch(selectedPlaylist, () => {
   refreshPlaylist();
 });
 onOpen(refreshPlaylist);
+
+const openSettings = () => {
+  playlistName.value = currentPlaylist.value?.name ?? '';
+  makeDefault.value = false;
+  showSettingsDialog.value = true;
+};
+
+const hasSound = (item) => item.media_type === 2 || item.media_type === 3 || item.media_type === undefined || item.media_type === -1;
 
 const openNewPlaylistDialog = () => {
   newPlaylistName.value = '';
@@ -517,21 +572,24 @@ const addSelected = () => {
 }
 
 const deleteSelected = () => {
+  const using = [...new Set(selectedFiles.value.flatMap(f => usedIn.value[f] ?? []))].map(playlistName_);
+  if (using.length && !confirm(`The selected files are used in: ${using.join(', ')}. Delete them and remove them from those playlists?`)) return;
   api.Scheduler.delete_files({files: [... selectedFiles.value]});
   deselectAll();
 }
 
+const download = (filename) => {
+  const link = document.createElement('a');
+  link.href = '/uploaded/' + encodeURIComponent(filename);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
+
 const downloadSelected = () => {
-  /*for (const filename of selectedFiles.value){
-    let link = document.createElement("a");
-    link.href = 'https://localhost/uploaded/' + filename;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  }*/
+  selectedFiles.value.forEach(download);
   deselectAll();
-  alert("NOT IMPLEMENTED YET!")
 }
 
 const durationToText = (duration) => {
@@ -546,6 +604,11 @@ const durationToText = (duration) => {
 }
 
 const saveSettings = () => {
+  const name = playlistName.value.trim();
+  if (name && currentPlaylist.value && name !== currentPlaylist.value.name) {
+    api.Scheduler.rename_playlist({playlist_id: selectedPlaylist.value, name});
+  }
+  if (makeDefault.value) api.Scheduler.set_default_playlist({playlist_id: selectedPlaylist.value});
   api.Scheduler.set_default_duration({duration: defaultDuration.value, playlist_id: selectedPlaylist.value});
   showSettingsDialog.value = false;
 };
@@ -561,7 +624,10 @@ const openAddUrlDialog = () => {
     backgroundColor: null,
     autoBackgroundColor: true,
     enableDate: null,
-    disableDate: null
+    disableDate: null,
+    volume: 100,
+    muted: false,
+    media_type: undefined
   };
   previousDuration.value = defaultDuration.value;
   showAddUrlDialog.value = true;
@@ -584,7 +650,10 @@ const openEditDialog = (item) => {
     backgroundColor: item.bg_color || '#000000',
     autoBackgroundColor: item.bg_color === null,
     enableDate: item.ena_date,
-    disableDate: item.dis_date
+    disableDate: item.dis_date,
+    volume: Math.round((item.volume ?? 1) * 100),
+    muted: item.muted ?? false,
+    media_type: item.media_type
   };
 
   if (item.duration > 0) {
@@ -613,7 +682,9 @@ const saveUrlItem = () => {
     fit: fitInt,
     bg_color: newUrlItem.value.autoBackgroundColor ? null : newUrlItem.value.backgroundColor,
     ena_date: newUrlItem.value.enableDate,
-    dis_date: newUrlItem.value.disableDate
+    dis_date: newUrlItem.value.disableDate,
+    volume: newUrlItem.value.volume / 100,
+    muted: newUrlItem.value.muted
   };
 
   if (isEditing.value) {
