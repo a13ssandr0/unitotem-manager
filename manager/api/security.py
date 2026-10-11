@@ -12,7 +12,9 @@ class Security(WSAPIBase):
         return WSBroadcast(users={user: {'perms': list(data.permissions)} for user, data in user_manager.items()})
 
     @staticmethod
+    @UserPerms.requires.none
     def getUser(ctx: Context):
+        """The logged in user itself: every page needs it to know what to show, whatever its permissions."""
         return WSResponse(name=ctx.username, perms=list(user_manager[ctx.username].permissions))
 
     def addUser(self, username: str, password: str):

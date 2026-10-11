@@ -825,6 +825,19 @@ WAS OPEN, superseded - assignment per viewer instead of per window.
 - Desktop-style web UI (windows for settings/terminal/preview/VNC): option A, window manager in the current Vue
   app, gradually; prerequisite is the client API (webui/src/api.js, prototype done on the Updates page).
 
+=== API REVIEW (2026-10-11) ===
+Fixed: getUser and getBounds were admin-only although every page calls them (a non-admin user never learned who
+it was, and every page load raised a permission error); playlist mutations now broadcast under the getter's target
+`Scheduler/playlists` like Audio already does. Open, found by the review (see the naming proposal given to the
+user): mixed snake_case/camelCase; get/set pairs vs single functions with optional arguments; duplicated
+addWindow/removeWindow in Display and Viewers; Settings/default_duration is a scheduler function; hostname and
+wireless functions sit in the Settings root instead of Network; Security.delUser takes `user` where the others
+take `username`; Security.getUser returns the CURRENT user; Power.test_method is a debug leftover reachable by
+anyone logged in; Scheduler messages carry playlist_id but scheduler.vue ignores it (with two playlists the
+items of one overwrite the other, and the playlist tabs are hard-coded stubs); the navbar menu is not
+permission-aware (a scheduler-only user sees every settings page and gets permission errors): it can be driven
+by the permissions in /api/schema.
+
 === NEXT ===
 Decided, in order:
 1. Updates page, as specified in CLAUDE.md: xterm.js console, daily
