@@ -1,4 +1,15 @@
 === CURRENT WORK ===
+PDF (2026-10-11): multi-page PDFs play page by page, `duration` = seconds per page. The browser's own PDF viewer exists in
+our CEF 147 build (toolbar, thumbnails, "1 / 3") but its toolbar/navpanes/scrollbar open parameters are IGNORED, so the bars
+cannot be removed that way: the viewer shows /pdf-view (webui/src/pdf-view.js, pdf.js 6.3.289 pinned) which draws one page
+on a canvas with no interface, honouring fit and bg_color. pypdf counts pages at upload (Asset.pages, FileInfo.pages;
+MediaInfo does not classify PDFs, the extension decides). AssetsManager._timer_fired advances the page before the asset.
+Verified on unitotem-test (GTX 1060, passthrough monitor): pages 1->2->3->1 at 8 s each, full-screen render, no bars.
+NOT verified: remote viewers (a client needs the PDF file and its own /pdf-view), fonts not embedded in a PDF (system
+fonts are used, standard-font data not bundled), very large pages (canvas capped at 4096 px), the asset preview window.
+Also found: add_file_assets failed for any file with no duration of its own (None duration), fixed.
+Updates: daily background check + navbar hint (update_watch in main.py); not tested against a real updater.
+
 TOUCHSCREEN NODE (2026-10-11, pi@10.113.6.8 "TerzoPianoVert", x86_64 Debian 11, manager 2.3.0; panel = an LG on DP-3,
 EDID "IWB:PC Monitor", 4K rotated left): its own NIC is 10.113.6.152 / ec:c1:ab:28:bf:c1 (Shiyuan OUI), same subnet as a MikroTik
 (10.113.6.208, RouterOS, Winbox 8291/API 8728 reachable only from the node's subnet; gateway .254 is a Huawei).
