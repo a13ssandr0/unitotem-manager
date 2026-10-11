@@ -39,6 +39,33 @@ const router = createRouter({
   routes,
 })
 
+// A tab left open across an update keeps asking for page chunks whose names changed (they are content-hashed and the old
+// ones are gone), and the click then fails with a 404 and nothing visible. When that happens the page is loaded again,
+// once: a second failure within a few seconds is a real problem and must not turn into a reload loop.
+const RELOAD_KEY = 'unitotem-chunk-reload'
+function reloadForNewVersion(target) {
+  try {
+    const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0)
+    if (Date.now() - last < 10000) return false
+    sessionStorage.setItem(RELOAD_KEY, String(Date.now()))
+  } catch { /* storage unavailable: reload anyway, once per call */ }
+  window.location.assign(target || window.location.href)
+  return true
+}
+// The chunk error can surface before the router reports it, so the page being navigated to is tracked here: that is
+// where the reloaded page should land
+let navigatingTo = null
+router.beforeEach((to) => { navigatingTo = to.fullPath })
+router.afterEach(() => { navigatingTo = null })
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadForNewVersion(navigatingTo)) event.preventDefault()
+})
+router.onError((error, to) => {
+  if (/dynamically imported module|Importing a module script failed|Failed to fetch/i.test(String(error?.message))) {
+    reloadForNewVersion(to?.fullPath)
+  }
+})
+
 const app = createApp(App)
 
 app
