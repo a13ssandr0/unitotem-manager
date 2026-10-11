@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
 }
-/* The same material language as the app bar: surface colour, primary line under it, the theme's own text colours */
+/* The same material language as the app bar: the theme's surface and text colours, nothing coloured */
 .floating-title {
   height: 32px;
   flex: none;
@@ -173,13 +173,14 @@ onBeforeUnmount(() => {
   padding-right: 4px;
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
-  border-bottom: 2px solid rgb(var(--v-theme-primary));
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 4px 4px 0 0;
 }
 .floating-title-icon {
   font-size: 16px !important;
   margin-right: 8px;
-  color: rgb(var(--v-theme-primary));
+  color: inherit;
+  opacity: 0.7;
 }
 .maximized .floating-title,
 .maximized {
