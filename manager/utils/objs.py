@@ -1,10 +1,13 @@
 __all__ = [
     "dict_sort",
+    "parse_datetime",
+    "unflatten",
     "find_by_attribute",
     "flatten",
 ]
 
 from collections import OrderedDict
+from datetime import datetime
 from typing import Optional, Tuple, Any
 
 from jinja2 import Undefined
@@ -60,3 +63,36 @@ def dict_sort(value):
         else:
             result[k] = v
     return result
+
+
+def unflatten(flat: dict, separator: str = '/') -> dict:
+    """{'a/b': 1, 'a/c': 2} -> {'a': {'b': 1, 'c': 2}}."""
+    result: dict = {}
+    for key, value in flat.items():
+        *parents, leaf = key.split(separator)
+        node = result
+        for part in parents:
+            node = node.setdefault(part, {})
+        node[leaf] = value
+    return result
+
+
+def parse_datetime(value) -> Optional[datetime]:
+    """A datetime from what the web UI or a saved file holds: a datetime, an ISO 8601 string, a Unix timestamp
+    (number or numeric string), or anything python-dateutil understands. None and '' give None."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value)
+    text = str(value).strip()
+    try:
+        return datetime.fromtimestamp(float(text))
+    except ValueError:
+        pass
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        from dateutil import parser
+        return parser.parse(text)

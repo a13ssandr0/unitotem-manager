@@ -6,8 +6,8 @@ from collections import defaultdict
 from json import dumps
 from typing import Optional
 
-from Crypto.Hash import SHA256
-from Crypto.Signature import pss as PSS
+from Cryptodome.Hash import SHA256
+from Cryptodome.Signature import pss as PSS
 from fastapi import WebSocket
 
 from utils.models.remote import RemoteManager

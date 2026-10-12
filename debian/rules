@@ -76,6 +76,17 @@ print(next((a['browser_download_url'] for a in d['assets'] if '-$$CEF_PYTAG-' in
 		CEF_WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$$CEF_PYTAG-*.whl | head -1); \
 	fi; \
 	$(VENV)/bin/pip3 install --no-cache-dir "$$CEF_WHEEL"
+	# The CEF libraries ship with symbol tables and debug info that nothing at runtime reads: libcef.so is 465 MB on
+	# amd64 and about 2 GB on the aarch64 wheel, and 252 MB / ~240 MB once stripped (CEF verified to start, with GPU
+	# compositing, after the strip). dh_strip skips the venv (see below), so it is done here, with the strip of the
+	# architecture being built (packages are built natively). A library that is still huge afterwards fails the build.
+	CEFDIR=$$(find $(VENV)/lib -maxdepth 4 -type d -name cefpython3 | head -1); \
+	test -n "$$CEFDIR" || { echo "cefpython3 is not in the venv" >&2; exit 1; }; \
+	for lib in libcef.so libGLESv2.so libEGL.so libvk_swiftshader.so libvulkan.so.1; do \
+		if [ -f "$$CEFDIR/$$lib" ]; then strip --strip-unneeded "$$CEFDIR/$$lib" || exit 1; fi; \
+	done; \
+	SIZE=$$(stat -c %s "$$CEFDIR/libcef.so"); \
+	test "$$SIZE" -lt 629145600 || { echo "libcef.so is still $$SIZE bytes after stripping" >&2; exit 1; }
 	# CAP_NET_BIND_SERVICE is a file xattr: dpkg's data.tar does not reliably
 	# preserve it across extraction, so it is (re)applied in postinst instead
 

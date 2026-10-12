@@ -9,8 +9,7 @@ from time import sleep
 
 # noinspection PyUnresolvedReferences
 from psutil import _cpu_times_deltas, _cpu_tot_time
-from psutil._common import get_procfs_path, open_binary
-from psutil._pslinux import CLOCK_TICKS, scputimes
+from utils.system.procfs import CLOCK_TICKS, get_procfs_path, open_binary, scputimes
 
 
 # reimplementation of psutil CPU related functions to get all CPU data at once

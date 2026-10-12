@@ -126,3 +126,22 @@ def test_none_duration_means_the_playlist_default(manager):
     a.default_duration = 12
     a.append({'url': 'file:picture.png', 'duration': None})
     assert a.assets[0].duration == 12
+
+
+# ── the date parsing and tree helpers that replaced python-benedict ─────────
+
+def test_parse_datetime_accepts_what_the_ui_and_saved_files_hold():
+    from datetime import datetime
+    from utils.objs import parse_datetime
+    assert parse_datetime(None) is None and parse_datetime('') is None
+    assert parse_datetime('2026-10-12T21:30:00') == datetime(2026, 10, 12, 21, 30)
+    assert parse_datetime('2026-10-12T21:30:00Z').year == 2026
+    assert parse_datetime(datetime(2026, 1, 1)) == datetime(2026, 1, 1)
+    assert parse_datetime(0) == datetime.fromtimestamp(0)
+    assert parse_datetime('12 Oct 2026 21:30') == datetime(2026, 10, 12, 21, 30)
+
+
+def test_unflatten_builds_the_api_tree():
+    from utils.objs import unflatten
+    assert unflatten({'Settings/Audio/devices': 'a', 'Settings/Audio/set_mute': 'b', 'Power/reboot': 'c'}) == {
+        'Settings': {'Audio': {'devices': 'a', 'set_mute': 'b'}}, 'Power': {'reboot': 'c'}}
