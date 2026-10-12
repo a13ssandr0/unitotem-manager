@@ -191,7 +191,8 @@ class WebviewApp:
             # scheduled, in a kiosk with no address bar, no user input and no
             # credentials to steal cross-origin, so the policy protects nothing
             # here while breaking a feature. Chromium requires a dedicated
-            # user-data-dir for this, which cache_path above already provides.
+            # user-data-dir for this (cache_path alone is not enough: Chromium logs an error and ignores the switch).
+            'user-data-dir': cache_path,
             'disable-web-security': '',
             'allow-file-access-from-files': '',
         }
