@@ -4,7 +4,7 @@ from secrets import token_hex
 from threading import Lock
 from typing import Annotated, Optional
 
-from Crypto.PublicKey import RSA
+from Cryptodome.PublicKey import RSA
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
 from utils import constants as const

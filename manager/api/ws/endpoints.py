@@ -6,14 +6,13 @@ from importlib import import_module
 from inspect import isclass, isgeneratorfunction, iscoroutinefunction, isasyncgenfunction
 from os.path import join
 
-from benedict import benedict
 from loguru import logger
 from pydantic import create_model, validate_call
 
 from api.ws.permissions import check_permissions
 from api.ws.wsmanager import Context
 from api.ws.wsmanager import WSManager, WSAPIBase
-from utils.objs import dict_sort
+from utils.objs import dict_sort, unflatten
 from utils.storage.uploadmanager import upload_manager
 
 REMOTE_WS = WSManager(cache_last=True, sign_messages=True)
@@ -30,7 +29,7 @@ class WebSocketAPI:
 
     @property
     def tree(self):
-        items = benedict({k: (f.__doc__ or '').strip() for k, f in self.generators.items() if '/_' not in k}).unflatten('/')
+        items = unflatten({k: (f.__doc__ or '').strip() for k, f in self.generators.items() if '/_' not in k})
         return dict_sort(items)
 
     @property
