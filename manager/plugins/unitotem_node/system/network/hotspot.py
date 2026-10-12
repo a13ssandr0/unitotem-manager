@@ -14,8 +14,8 @@ from sdbus_async.networkmanager import (NetworkConnectionSettings, NetworkDevice
                                         NmSettingsInvalidConnectionError)
 
 from utils import constants as const
-from utils.system.network.misc import get_default_wireless
-from utils.system.network.wifi import open_system_bus
+from unitotem_node.system.network.misc import get_default_wireless
+from unitotem_node.system.network.wifi import open_system_bus
 
 load_dotenv(const.envfile)
 

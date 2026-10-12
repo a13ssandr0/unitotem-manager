@@ -3,7 +3,7 @@ from typing import Optional
 
 import aiohttp
 
-from api.display_screens import Screens
+from unitotem_node.api.display_screens import Screens
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
 from utils.models.user import UserPerms
@@ -11,8 +11,8 @@ from utils.models.viewer import viewer_settings
 from utils.system.gpu import detect_gpu
 from webview.controller import WebviewManager
 
-# Must match webview.app.CDP_PORT. Duplicated as a plain literal (rather than
-# imported) because webview.app hard-imports PySide6/cefpython at module
+# Must match unitotem_viewer.app.CDP_PORT. Duplicated as a plain literal (rather than
+# imported) because unitotem_viewer.app hard-imports PySide6/cefpython at module
 # level and this module must stay importable on headless nodes without them.
 _CDP_PORT = 9223
 

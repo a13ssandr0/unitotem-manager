@@ -18,7 +18,7 @@ class ViewerSettings(BaseModel, validate_assignment=True):
     # Whether the viewer displays assets served over https with an invalid
     # certificate (self-signed, expired, wrong hostname). Off by default:
     # with it on, anything able to intercept the connection can decide what
-    # ends up on the screen. Read by webview.app.WebviewApp at CEF startup,
+    # ends up on the screen. Read by unitotem_viewer.app.WebviewApp at CEF startup,
     # so a change only takes effect on the next viewer start.
     allow_insecure_certs: bool = False
 

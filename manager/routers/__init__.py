@@ -3,4 +3,3 @@ import routers.error
 import routers.login
 import routers.scheduler
 import routers.websocket
-import routers.websocket.terminal

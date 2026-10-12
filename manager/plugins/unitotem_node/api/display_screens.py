@@ -1,7 +1,7 @@
 """
 Monitor control of this node's own outputs: power (X, DDC/CI, CEC, Wake-on-LAN, serial), input source, volume.
 
-Paths: Settings/Display/Screens/<function> (bound into api.display.Display). Every change answers on `screens`, so
+Paths: Settings/Display/Screens/<function> (bound into unitotem_node.api.display.Display). Every change answers on `screens`, so
 any page showing the outputs is updated; errors the operator can act on come back as an `error` message.
 """
 from typing import Optional
@@ -9,8 +9,8 @@ from typing import Optional
 from api.ws.responses import WSBroadcast, WSResponse
 from api.ws.wsmanager import WSAPIBase
 from utils.models.user import UserPerms
-from utils.system.screens import control
-from utils.system.screens.control import ScreenControlError
+from unitotem_node.system.screens import control
+from unitotem_node.system.screens.control import ScreenControlError
 
 
 class Screens(WSAPIBase):

@@ -6,11 +6,12 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
 import utils.constants as const
+import utils.plugins as plugins
 from routers.login import LOGMAN
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
 from utils.models.user import User
 from utils.storage.uploadmanager import upload_manager
-from utils.system.network.ip import do_ip_addr
+from utils.system.ip import default_ipv4
 
 router = APIRouter()
 
@@ -51,7 +52,8 @@ async def home(request: Request, path: str, user: User = Depends(LOGMAN)):
             "user": user.name,
             "ut_vers": const.__version__,
             "os_vers": os_release()['PRETTY_NAME'],
-            "ip_addr": ip['addr'][0]['addr'] if (ip:=do_ip_addr(True)) else None,
+            "ip_addr": default_ipv4(),
             "hostname": gethostname(),
+            "plugins": [p.name for p in plugins.loaded],
         },
     })

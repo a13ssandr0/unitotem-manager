@@ -109,14 +109,15 @@ window there must be controls to change content orientation (like screen rotatio
 content flip (ex: for backwards projection).
 
 ### Timers
-Based on user crontab allows setting reboot/poweroff timers.
+Reboot, power-off and screen on/off timers with cron-style schedules, run by UniTotem itself (`timers.json`, schedules
+evaluated with croniter): no dependency on a cron daemon or on the system crontab.
 
 ### Updates
 The system is updated by replacing the whole root image, never by upgrading packages: apt is not
 available at runtime (dpkg stays). The device downloads a signed release image from the project's
 repository (GitHub Releases) into the inactive slot, boots it on trial and confirms it only once the
 manager answers `GET /health`; otherwise it rolls back to the previous slot. User data (`DATA`:
-`/etc/unitotem`, certificates, uploads, crontab) is never part of the image and survives updates.
+`/etc/unitotem`, certificates, uploads) is never part of the image and survives updates.
 
 The device side is `/usr/sbin/unitotem-update --json` (subcommands `status`, `check`, `fetch`, `apply`,
 `confirm`, `rollback`, `cancel`; progress as one JSON line in `/run/unitotem-update.progress`),
@@ -172,6 +173,34 @@ At startup program must check for configuration files presence and for internet 
 if no configuration file is present this is the first run after installation/reset, shows welcome screen,
 if internet is also not available starts a hotspot and displays SSID and password on the welcome screen together with a
 QR code, if possible configuration page should be advertised as captive portal
+
+
+# Packages and plugins
+
+UniTotem comes in roles, and the code is split along them (nothing is shared between packages, no directory is written
+by two of them):
+
+- **`unitotem-manager`** (the core, `manager/` minus `plugins/`): scheduler, uploads, users, remote control of other nodes,
+  backup, web UI. Installed alone it is a server that orchestrates other nodes and touches nothing of its own machine:
+  no updates, no network/audio/display management, no terminal, no power buttons, no timers.
+- **`unitotem-node`** (`manager/plugins/unitotem_node`): everything that manages the machine - network, audio, displays and
+  screen power, power, timers, updates, terminal, first-boot hotspot. Needs the core.
+- **`unitotem-viewer`** (`manager/plugins/unitotem_viewer`): the local Qt+CEF windows. Needs the core and the node.
+- **`unitotem`**: metapackage, a totem is all three. `python3-cefpython3` and `plymouth-theme-unitotem` are their own packages.
+
+A plugin is a Python package in `manager/plugins/` exposing `PLUGIN` (`utils/plugins.py`: API classes, routers, backup parts,
+start-up/first-boot/shutdown hooks, `run_gui`). The core loads whatever is there, logs and skips a plugin that fails to load,
+and **never imports a plugin directly** (only through the hooks). A plugin may import the core. The web UI hides what the
+server does not offer: `canCall()` is false for a function missing from `/api/schema`, and `window.__INITIAL_STATE__.plugins`
+lists the loaded plugins (the terminal is a websocket route, not an API function). New code that touches the machine
+(subprocess, DBus, /sys, systemd) goes in the node plugin; new core code must run on a plain Debian server.
+
+Backup, restore and reset work on *parts* (`utils/backup.py`, `BackupPart`): the core has playlists, users, pairing
+(keys and certificates) and uploads; a plugin adds its own. `GET /backup/parts` tells the UI what to offer.
+
+The service is `Type=notify`: `utils/ready.py` sends READY=1 when the first frame of the viewer is on screen (an early
+Qt splash, before CEF starts, so the system's boot splash can end), or when the web server answers if there are no local
+windows. `TimeoutStartSec=300`.
 
 
 # Rules
@@ -509,4 +538,17 @@ the VM-specific ones.
   `IPv4Config`): the fallback made them `None` and every device was reported without an active connection and without
   an address, so the network page said "Connected" and "Not connected" on the same row. Check the real names with
   `dir(sdbus_async.networkmanager)` on the target, and when a fallback is taken log it as an error, not nothing.
-
+- **A router included after `routers.scheduler` is unreachable for GET.** The scheduler router ends in a catch-all
+  `/{path:path}` that serves the web UI, and Starlette matches routes in order: `GET /backup` was answering the HTML page
+  (the download "worked" and saved HTML). Include every router *before* it; plugin routers are included before it too.
+- **Do not parse `ip addr` (or any CLI) for facts psutil or /proc already give.** `utils/system/ip.py` was a copy of a
+  Red Hat parser of `ip addr`'s text that also needed `/usr/sbin/ip`, which a minimal Debian does not have: the login page
+  answered 500 on a clean install. It is now `psutil` plus the default route from `/proc/net/route`. Prefer a library
+  (croniter for schedules, python-xlib for DPMS, sdnotify for READY) to anything hand-written.
+- **`dh_python3` renames the `.so` files of a package it is run on** (`libcef.so` becomes `libcef.cpython-313-...so`) and CEF
+  loads them by their plain names. It is not run on `python3-cefpython3`; its dependencies are written by hand.
+- **`dpkg-shlibdeps` needs the libraries a binary links against installed in the build environment.** CEF's own are in
+  `Build-Depends` (`libgtk-3-0t64`, `libnss3`, ...) so `Depends` is computed, not guessed. Debian's `t64` names apply on trixie.
+- **Do not strip blank lines from `debian/control`**: they separate the stanzas ("duplicate field Package found").
+- **The unit tests need a root-writable `/etc/unitotem`** (the settings objects create their files at import), so
+  they run in `debian/tests` (autopkgtest) against the installed packages, not during the build.

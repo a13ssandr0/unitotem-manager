@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from utils.models.timers import Timer, TimerManager
+from unitotem_node.models.timers import Timer, TimerManager
 
 
 def at(text):

@@ -2,15 +2,15 @@ from typing import Optional
 
 from loguru import logger
 
-import utils.system.network.wifi as w
+import unitotem_node.system.network.wifi as w
 from api.ws.responses import WSBroadcast, WSResponse
 from api.ws.wsmanager import WSAPIBase
 from utils.models import assets
 from utils.models.playlists import playlists_manager
 from utils.models.user import UserPerms
-from utils.system.network.hotspot import is_hotspot_enabled, stop_hotspot
-from utils.system.network.ip import do_ip_addr
-from utils.system.network.misc import get_default_wireless
+from unitotem_node.system.network.hotspot import is_hotspot_enabled, stop_hotspot
+from utils.system.ip import default_ipv4
+from unitotem_node.system.network.misc import get_default_wireless
 
 
 class Network(WSAPIBase):
@@ -23,11 +23,11 @@ class Network(WSAPIBase):
 
     @UserPerms.requires.none
     async def hostname(self):
-        from utils.system.dbus_system import get_hostname
+        from unitotem_node.system.dbus_system import get_hostname
         return WSBroadcast(hostname=await get_hostname())
 
     async def set_hostname(self, hostname: str):
-        from utils.system.dbus_system import set_static_hostname, get_hostname
+        from unitotem_node.system.dbus_system import set_static_hostname, get_hostname
         try:
             await set_static_hostname(hostname)
             return WSBroadcast(Network.hostname, hostname=await get_hostname())
@@ -61,7 +61,7 @@ class Network(WSAPIBase):
     @staticmethod
     async def devices():
         """List all network devices with state, type, IP address, and active connection."""
-        from utils.system.network.networkmanager import get_devices
+        from unitotem_node.system.network.networkmanager import get_devices
         try:
             return WSBroadcast(devices=await get_devices())
         except Exception as e:
@@ -71,7 +71,7 @@ class Network(WSAPIBase):
     @staticmethod
     async def connections():
         """List all saved connection profiles."""
-        from utils.system.network.networkmanager import get_all_connections
+        from unitotem_node.system.network.networkmanager import get_all_connections
         try:
             return WSBroadcast(connections=await get_all_connections())
         except Exception as e:
@@ -81,7 +81,7 @@ class Network(WSAPIBase):
     @staticmethod
     async def active_connections():
         """List active connections with state."""
-        from utils.system.network.networkmanager import get_active_connections
+        from unitotem_node.system.network.networkmanager import get_active_connections
         try:
             return WSBroadcast(active=await get_active_connections())
         except Exception as e:
@@ -91,7 +91,7 @@ class Network(WSAPIBase):
     @staticmethod
     async def connection_details(path: str):
         """Return full (unpacked) settings for one connection."""
-        from utils.system.network.networkmanager import get_connection_details
+        from unitotem_node.system.network.networkmanager import get_connection_details
         try:
             return WSBroadcast(details=await get_connection_details(path))
         except Exception as e:
@@ -101,11 +101,11 @@ class Network(WSAPIBase):
     @staticmethod
     async def activate_connection(conn_path: str, dev_path: str):
         """Activate a connection on a device."""
-        from utils.system.network.networkmanager import activate_connection, get_devices, get_active_connections
+        from unitotem_node.system.network.networkmanager import activate_connection, get_devices, get_active_connections
         try:
             await activate_connection(conn_path, dev_path)
             # If we just connected to a network, stop the fallback hotspot
-            if await is_hotspot_enabled() and do_ip_addr(True):
+            if await is_hotspot_enabled() and default_ipv4():
                 await stop_hotspot()
                 am = playlists_manager.default
                 if am.current == assets.first_boot:
@@ -119,7 +119,7 @@ class Network(WSAPIBase):
     @staticmethod
     async def deactivate_connection(active_path: str):
         """Deactivate an active connection."""
-        from utils.system.network.networkmanager import deactivate_connection, get_devices, get_active_connections
+        from unitotem_node.system.network.networkmanager import deactivate_connection, get_devices, get_active_connections
         try:
             await deactivate_connection(active_path)
             yield WSBroadcast(Network.devices, devices=await get_devices())
@@ -142,7 +142,7 @@ class Network(WSAPIBase):
         Add (or update) a WiFi profile and immediately activate it.
         Handles DHCP and static IP configurations.
         """
-        from utils.system.network.networkmanager import connect_wifi, get_devices, get_active_connections
+        from unitotem_node.system.network.networkmanager import connect_wifi, get_devices, get_active_connections
         try:
             uid = await connect_wifi(
                 ssid=ssid, password=password,
@@ -151,7 +151,7 @@ class Network(WSAPIBase):
                 prefix_len=prefix_len, gateway=gateway, dns=dns,
             )
             # Stop fallback hotspot once we connected
-            if await is_hotspot_enabled() and do_ip_addr(True):
+            if await is_hotspot_enabled() and default_ipv4():
                 await stop_hotspot()
                 am = playlists_manager.default
                 if am.current == assets.first_boot:
@@ -175,7 +175,7 @@ class Network(WSAPIBase):
                              ssid: Optional[str] = None,
                              password: Optional[str] = None):
         """Edit an existing connection profile in-place."""
-        from utils.system.network.networkmanager import edit_connection, get_all_connections
+        from unitotem_node.system.network.networkmanager import edit_connection, get_all_connections
         try:
             await edit_connection(
                 conn_path=conn_path, conn_id=conn_id,
@@ -192,7 +192,7 @@ class Network(WSAPIBase):
     @staticmethod
     async def delete_connection(conn_path: str):
         """Remove a connection profile permanently."""
-        from utils.system.network.networkmanager import delete_connection, get_all_connections
+        from unitotem_node.system.network.networkmanager import delete_connection, get_all_connections
         try:
             await delete_connection(conn_path)
             return WSBroadcast(connections=await get_all_connections())

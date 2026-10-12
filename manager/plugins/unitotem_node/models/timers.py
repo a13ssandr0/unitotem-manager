@@ -3,7 +3,7 @@ Reboot, power-off and screen on/off timers, persisted in /etc/unitotem/timers.js
 
 There is no crontab involved: a timer is an action *name* (never a command), a five-field schedule (see
 utils.cronexpr) and, for the screen actions, which output and mechanism. What an action does is decided in
-`utils.system.timer_actions`, so nothing a user typed is ever executed as a command line.
+`unitotem_node.system.timer_actions`, so nothing a user typed is ever executed as a command line.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from croniter import croniter
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from utils.models.command_line import cmdargs
-from utils.models.screen_control import MechanismChoice, OUTPUT_NAME_RE
+from unitotem_node.models.screen_control import MechanismChoice, OUTPUT_NAME_RE
 
 ACTIONS = ('pwr', 'reb')
 SCREEN_ACTIONS = ('scr_on', 'scr_off')

@@ -1,4 +1,4 @@
-from utils.system.updater import parse_output
+from unitotem_node.system.updater import parse_output
 
 STATUS = ('{"layout":1,"ab":false,"current_version":"0","slot":null,"other_slot":null,"trial":false,'
           '"pending_confirm":false,"rollback_available":false,"op":null,"last_result":null,"base_url":"x"}')
@@ -31,7 +31,7 @@ def test_garbage_output_is_reported_not_raised():
 
 
 def test_record_only_changes_on_a_real_difference_and_ignores_failures():
-    from utils.system import updater
+    from unitotem_node.system import updater
     updater.availability.update(available=False, version=None, checked_at=None)
     assert updater.record({'supported': True, 'available': True, 'version': '2026.10.7'}) is True
     assert updater.record({'supported': True, 'available': True, 'version': '2026.10.7'}) is False

@@ -4,7 +4,7 @@
       <v-app-bar-nav-icon @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
       <v-toolbar-title class="app-bar-title">UniTotem @ {{ hostname }}</v-toolbar-title>
       <v-spacer></v-spacer>
-      <v-btn v-if="logged_user.perms?.includes('admin')" icon title="Terminal" @click="terminalOpen = true">
+      <v-btn v-if="hasTerminal" icon title="Terminal" @click="terminalOpen = true">
         <v-icon>mdi-console</v-icon>
       </v-btn>
       <v-btn v-if="updateInfo?.available && allowed('Settings/Update/status')" icon to="/settings/updates"
@@ -14,10 +14,10 @@
       <v-btn icon @click="cycleTheme">
         <v-icon>{{ themeIcon }}</v-icon>
       </v-btn>
-      <v-btn icon @click="rebootDialog = true">
+      <v-btn v-if="allowed('Power/reboot')" icon @click="rebootDialog = true">
         <v-icon>mdi-restart</v-icon>
       </v-btn>
-      <v-btn icon @click="powerOffDialog = true">
+      <v-btn v-if="allowed('Power/poweroff')" icon @click="powerOffDialog = true">
         <v-icon>mdi-power</v-icon>
       </v-btn>
 
@@ -86,7 +86,7 @@
     </v-main>
 
     <WindowTaskbar />
-    <TerminalWindow v-if="logged_user.perms?.includes('admin')" v-model="terminalOpen" />
+    <TerminalWindow v-if="hasTerminal" v-model="terminalOpen" />
 
     <v-dialog v-model="rebootDialog" max-width="fit-content">
       <v-card class="pa-2 pb-0 rounded-lg">
@@ -177,6 +177,9 @@ const rebootDialog = ref(false)
 const powerOffDialog = ref(false)
 
 const hostname = ref(window.__INITIAL_STATE__.hostname)
+// The terminal is offered by the node plugin: a server without it has no terminal to open
+const hasNode = Boolean(window.__INITIAL_STATE__.plugins?.includes('node'))
+const hasTerminal = computed(() => hasNode && logged_user.value.perms?.includes('admin'))
 const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
 const logged_user = ref({name: 'user', perms: null})
 const disp_size = ref(null)
@@ -202,7 +205,8 @@ onApi('logout', () => {
   terminalOpen.value = false
   window.location.href = '/logout'
 })
-const updateInfo = api.Settings.Update.availability.use({pick: 'availability'})
+// Updates are offered by the node plugin: without it there is nothing to ask
+const updateInfo = api.Settings.Update.availability.use({pick: 'availability', init: hasNode})
 
 const allowed = (needs) => canCall(needs, logged_user.value)
 const visibleTabs = computed(() => tabs.value.filter(tab => allowed(tab.needs)))
@@ -236,7 +240,7 @@ attach((target, args) => ws.send(JSON.stringify({...args, target})), () => conne
 api.Settings.Network.hostname.on(data => {
   hostname.value = data.hostname
   document.title = data.hostname + ' - UniTotem Manager'
-}, {init: true})
+}, {init: hasNode})
 
 api.Settings.Security.current_user.on(data => {
   logged_user.value = data
@@ -253,7 +257,7 @@ function connectWs() {
     initialCommands().forEach(cmd => send(cmd))
     // getBounds requires a viewer_id; the navbar shows this device's own
     // local screen, not an arbitrary/remote one.
-    api.Settings.Display.bounds({viewer_id: 'local-webview', window_id: 0})
+    if (hasNode) api.Settings.Display.bounds({viewer_id: 'local-webview', window_id: 0})
     notifyOpen()
   }
   ws.onmessage = e => {

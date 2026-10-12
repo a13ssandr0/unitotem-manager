@@ -3,7 +3,7 @@ import asyncio
 from api.ws.responses import WSBroadcast
 from api.ws.wsmanager import WSAPIBase
 from utils.models.user import UserPerms
-from utils.system import updater
+from unitotem_node.system import updater
 
 POLL_INTERVAL = 2  # seconds, only while an operation is running
 
