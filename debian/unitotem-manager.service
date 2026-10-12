@@ -3,7 +3,8 @@ Description=UniTotem Manager
 
 [Service]
 WorkingDirectory=/usr/share/unitotem-manager
-ExecStart=/var/unitotem-venv/bin/python3 /usr/share/unitotem-manager/init.py
+StateDirectory=unitotem
+ExecStart=/usr/sbin/unitotem-manager
 Environment=PYTHONUNBUFFERED=1
 # Local kiosk X11 session (if any) always runs on :0 - see WebviewApp.display_available()
 # in manager/webview/app.py, which checks the actual X11 socket before ever using this,

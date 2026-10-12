@@ -1,0 +1,4 @@
+# UniTotem manages networking through NetworkManager only: netplan has to render for it.
+network:
+  version: 2
+  renderer: NetworkManager

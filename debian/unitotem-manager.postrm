@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+#DEBHELPER#
+
+case "$1" in
+    purge)
+        rm -f /etc/ssl/unitotem.pem
+        rm -rf /etc/unitotem /var/lib/unitotem
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = configure ]; then
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth \
+        /usr/share/plymouth/themes/unitotem/unitotem.plymouth 100
+    # An image may pin another theme by hand, which puts the alternative in manual mode
+    if command -v plymouth-set-default-theme >/dev/null; then
+        plymouth-set-default-theme unitotem || true
+    fi
+    if command -v update-initramfs >/dev/null; then
+        update-initramfs -u || true
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0
