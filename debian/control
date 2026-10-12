@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Alessandro Campolo <campolo.alex@gmail.com>
 Build-Depends: debhelper-compat (= 13),
                patchelf,
+               unzip,
                python3-all,
                libasound2t64,
                libatk-bridge2.0-0t64,
