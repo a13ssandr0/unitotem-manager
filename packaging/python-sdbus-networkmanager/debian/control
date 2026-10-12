@@ -1,0 +1,22 @@
+Source: python-sdbus-networkmanager
+Section: python
+Priority: optional
+Maintainer: Alessandro Campolo <campolo.alex@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               dh-sequence-python3,
+               python3-all,
+               python3-setuptools,
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/igo95862/python-sdbus
+Testsuite: autopkgtest-pkg-pybuild
+
+Package: python3-sdbus-networkmanager
+Architecture: all
+Depends: ${python3:Depends}, ${misc:Depends}
+Description: NetworkManager binding for python-sdbus
+ Typed asynchronous and blocking Python interfaces to the NetworkManager
+ D-Bus API, built on python-sdbus: devices, connections, access points,
+ settings and the other objects NetworkManager exposes.
+ .
+ Packaged in the UniTotem repository because Debian does not ship it.

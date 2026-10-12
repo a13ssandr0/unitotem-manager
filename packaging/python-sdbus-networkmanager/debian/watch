@@ -1,0 +1,2 @@
+version=4
+https://pypi.debian.net/sdbus-networkmanager/sdbus[-_]networkmanager-(.+)\.tar\.gz

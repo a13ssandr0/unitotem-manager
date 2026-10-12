@@ -1,0 +1,7 @@
+#!/usr/bin/make -f
+export PYBUILD_NAME=fastapi-login
+# The PyPI source distribution carries no tests
+export PYBUILD_DISABLE=test
+
+%:
+	dh $@ --buildsystem=pybuild
