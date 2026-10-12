@@ -15,7 +15,7 @@ from utils.models.playlists import playlists_manager
 from utils.models.user import UserPerms, user_manager
 from utils.storage.uploadmanager import upload_manager
 from utils.system.audio import get_default_audio_device, set_default_audio_device
-from utils.system.crontab import CRONTAB
+from utils.models.timers import timer_manager
 from utils.system.network.netplan import set_netplan, generate_netplan, get_netplan_file, get_netplan_file_list
 
 router = APIRouter()
@@ -23,7 +23,6 @@ router = APIRouter()
 
 @router.get("/backup", dependencies=[Depends(require_perm('admin'))])
 async def create_backup(include_uploaded: bool = False):
-    CRONTAB.read()
     config_backup = {
         "version": const.__version__,
         "CONFIG": {
@@ -34,7 +33,7 @@ async def create_backup(include_uploaded: bool = False):
         "hostname": __import__('socket').gethostname(),
         "def_audio_dev": get_default_audio_device(),
         "netplan": {fname: get_netplan_file(fname) for fname in get_netplan_file_list()},
-        "cron": CRONTAB.serialize()
+        "timers": [t.model_dump() for t in timer_manager.timers.values()]
     }
 
     zip_buffer = BytesIO()
@@ -119,9 +118,8 @@ async def factory_reset():
         am.assets.clear()
         am.save()
 
-    CRONTAB.read()
-    CRONTAB.remove_all(comment=CRONTAB._cron_re)
-    CRONTAB.write()
+    for uuid in list(timer_manager.timers):
+        timer_manager.remove(uuid)
 
     for file in list(upload_manager.files):
         upload_manager.remove(file)

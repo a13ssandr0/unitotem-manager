@@ -306,6 +306,13 @@ async def screens_at_start():
 
 loop.create_task(screens_at_start(), name='screens_at_start')
 
+def _start_timers():
+    from utils.system.timer_actions import run_timers
+    loop.create_task(run_timers(), name='timers')
+
+
+_start_timers()
+
 UPDATE_CHECK_FIRST_DELAY = 180      # the network may not be up yet right after a boot
 UPDATE_CHECK_INTERVAL = 24 * 3600
 

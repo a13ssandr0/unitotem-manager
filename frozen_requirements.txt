@@ -47,7 +47,6 @@ PyGObject==3.50.0
 PyJWT==2.10.1
 pymediainfo==7.0.1
 python-benedict==0.34.0
-python-crontab==3.2.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
 python-fsutil==0.15.0
