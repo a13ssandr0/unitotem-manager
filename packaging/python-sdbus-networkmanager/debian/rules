@@ -1,0 +1,7 @@
+#!/usr/bin/make -f
+export PYBUILD_NAME=sdbus-networkmanager
+# The tests need a running NetworkManager on the system bus
+export PYBUILD_DISABLE=test
+
+%:
+	dh $@ --buildsystem=pybuild
