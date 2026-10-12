@@ -13,6 +13,7 @@ pypdf
 Werkzeug
 aiofiles
 aiohttp
+croniter
 # dasbus, pygobject removed: sdbus-networkmanager gestisce già la comunicazione DBus con NM
 fastapi
 fastapi-login
@@ -28,7 +29,6 @@ pydantic-extra-types
 pydantic
 pydantic_settings
 pymediainfo
-python-crontab
 python-dotenv
 python-multipart
 qrcode

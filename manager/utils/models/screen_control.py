@@ -77,24 +77,8 @@ class OutputConfig(BaseModel, validate_assignment=True):
     ddc_features: list[str] = Field(default_factory=list)
 
 
-class ScreenTimer(BaseModel, validate_assignment=True):
-    """What a screen timer does. The crontab line carries only the job's uuid; everything else is here, validated,
-    so no byte the user typed ever reaches root's crontab."""
-    output: str
-    state: Literal['on', 'off']
-    mechanism: MechanismChoice = 'auto'
-
-    @field_validator('output')
-    @classmethod
-    def _output(cls, v: str) -> str:
-        if not OUTPUT_NAME_RE.match(v):
-            raise ValueError(f'{v!r} is not an output name')
-        return v
-
-
 class ScreenControl(BaseModel, validate_assignment=True):
     outputs: dict[str, OutputConfig] = Field(default_factory=dict)
-    timers: dict[str, ScreenTimer] = Field(default_factory=dict)
 
     def output(self, name: str) -> OutputConfig:
         if not OUTPUT_NAME_RE.match(name):
