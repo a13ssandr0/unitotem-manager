@@ -1,3 +1,21 @@
+unitotem-manager (3.0.0~dev5) stable; urgency=medium
+
+  * Split by role: unitotem-manager is a complete orchestrator on its own;
+    the machine integration (network, audio, displays, power, timers,
+    updates, terminal, hotspot) is unitotem-node and the local windows are
+    unitotem-viewer, both plugins of the core; "unitotem" installs all three
+  * No bundled virtualenv: runs on the system Python with Debian packages
+  * Timers run inside UniTotem (croniter), not in the system crontab
+  * Backup, restore and reset by selectable parts, including the pairing
+    keys and certificates; GET /backup was answering the web page
+  * The service is Type=notify: an early Qt splash is on screen before CEF
+    starts and READY=1 is sent at that point (or when the web server
+    answers, without local windows)
+  * The service now fails, and is restarted, when the X server goes away
+  * DPMS is set by the viewer itself through python-xlib
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Tue, 13 Oct 2026 10:00:00 +0200
+
 unitotem-manager (3.0.0~dev4) stable; urgency=medium
 
   * Multi-page PDFs (pdf.js page renderer, pypdf for the page count), floating

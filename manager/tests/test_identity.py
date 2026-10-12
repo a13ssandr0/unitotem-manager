@@ -6,7 +6,7 @@ route, and why it is driver/topology-dependent - confirmed both ways: it
 worked on the kiosk's own X session and failed, for an understood reason, on
 this project's XWayland-backed dev host).
 """
-from utils.system.screens.identity import (
+from unitotem_node.system.screens.identity import (
     canonical_output_name,
     edid_identity,
     same_output,

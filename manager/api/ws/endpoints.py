@@ -9,6 +9,7 @@ from os.path import join
 from loguru import logger
 from pydantic import create_model, validate_call
 
+import utils.plugins as plugins
 from api.ws.permissions import check_permissions
 from api.ws.wsmanager import Context
 from api.ws.wsmanager import WSManager, WSAPIBase
@@ -143,15 +144,16 @@ api = WebSocketAPI(WS, REMOTE_WS)
 logger.info("WebSocketAPI initialized")
 
 api.import_class('api.scheduler', 'Scheduler')
-api.import_class('api.audio', 'Audio', 'Settings')
 api.import_class('api.remote', 'Remote', 'Settings')
-api.import_class('api.network', 'Network', 'Settings')
-api.import_class('api.system.timers', 'Timers', 'Settings')
-api.import_class('api.system.power', 'Power')
-api.import_class('api.system.updater', 'Update', 'Settings')
 api.import_class('api.security', 'Security', 'Settings')
-api.import_class('api.display', 'Display', 'Settings')
 api.import_class('api.viewers', 'Viewers')
+
+# What the plugins offer (network, audio, displays, power, timers, updates...) is registered the same way. A server
+# without them simply lacks those functions, and /api/schema, which the web UI reads to decide what to show, says so.
+plugins.load()
+for _plugin, _specs in plugins.each('api'):
+    for _spec in _specs:
+        api.import_class(*_spec)
 
 
 async def handle_call(target, user, request_data):

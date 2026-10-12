@@ -27,7 +27,7 @@ from templates import get_vite_assets, is_vite_dev, load_vite_manifest, template
 from utils.environment import environ
 from utils.models.remote import RemoteManager
 from utils.models.user import User, user_manager
-from utils.system.network.ip import do_ip_addr
+from utils.system.ip import default_ipv4
 
 
 class NotAuthenticatedException(Exception):
@@ -130,7 +130,7 @@ async def login_page(request: Request, src: Optional[str] = '/'):
             "src": src or '/',
             "ut_vers": const.__version__,
             "os_vers": os_release()['PRETTY_NAME'],
-            "ip_addr": ip['addr'][0]['addr'] if (ip:=do_ip_addr(True)) else None,
+            "ip_addr": default_ipv4(),
             "hostname": gethostname(),
         },
     })

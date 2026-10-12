@@ -1,6 +1,6 @@
 import pytest
 
-from utils.system.screens.mechanism import NoMechanismAvailable, resolve_mechanism
+from unitotem_node.system.screens.mechanism import NoMechanismAvailable, resolve_mechanism
 
 
 def test_auto_power_on_prefers_cec_then_ddc_then_x():

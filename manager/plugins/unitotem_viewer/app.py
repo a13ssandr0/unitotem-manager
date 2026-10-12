@@ -36,7 +36,9 @@ from utils.browser import user_agent
 from utils.models.viewer import viewer_settings
 from utils.system.gpu import detect_gpu
 
+from .splash import show_splashes
 from .window import WebviewWindow
+import utils.ready as ready
 
 try:
     from cefpython3 import cefpython as cef
@@ -46,7 +48,7 @@ except ImportError:
 # Loopback-only Chrome DevTools Protocol port (CEF/Chromium default-binds
 # remote-debugging-port to 127.0.0.1, not 0.0.0.0, but 'remote-debugging-
 # address' is set explicitly below for defense in depth). Used by
-# api.display.getGPUFeatureStats() to query SystemInfo.getInfo - the same
+# unitotem_node.api.display.getGPUFeatureStats() to query SystemInfo.getInfo - the same
 # underlying data chrome://gpu and Electron's old app.getGPUFeatureStatus()
 # both surface. Not a secret; just needs to not collide with anything else.
 CDP_PORT = 9223
@@ -154,6 +156,13 @@ class WebviewApp:
         if 'QT_NO_GLIB' not in os.environ:
             os.environ['QT_NO_GLIB'] = '1'
 
+        self.qt_app = QApplication.instance() or QApplication([])
+        self.qt_app.setApplicationName('UniTotem')
+
+        # The first frame goes up before CEF starts, which takes seconds: the boot splash of the system ends on it
+        self._splashes = show_splashes(self._real_screens())
+        ready.ready('first frame on screen')
+
         # CEF's default profile dir is under $HOME/.config, which on the
         # kiosk image is only writable during maintenance windows (the root
         # filesystem is otherwise read-only) - CEF's ProcessSingleton lock
@@ -249,9 +258,6 @@ class WebviewApp:
             },
             switches=switches,
         )
-
-        self.qt_app = QApplication.instance() or QApplication([])
-        self.qt_app.setApplicationName('UniTotem')
 
         # A UniTotem node must keep running with zero screens - at boot and
         # after the *last* monitor is unplugged at runtime. Qt's default
@@ -361,6 +367,11 @@ class WebviewApp:
         if self._ws_loop is not None and self._ws is not None:
             asyncio.run_coroutine_threadsafe(self._send_webview_info(self._ws), self._ws_loop)
 
+    def _close_splashes(self):
+        for splash in self._splashes:
+            splash.close()
+        self._splashes = []
+
     def request_quit(self):
         """
         Thread-safe: ask the Qt main thread's exec() to return. Called from
@@ -423,6 +434,8 @@ class WebviewApp:
         # found. Not the way out either: external_message_pump and
         # multi_threaded_message_loop, both dead ends on Linux (see CLAUDE.md).
         cef_timer.start(10)
+        # the browser has had time to paint its first page: the splash has done its job
+        QTimer.singleShot(1500, self._close_splashes)
 
         # cef.MessageLoopWork is a C-extension function: PySide6 can invoke it
         # as a slot without ever entering CPython's bytecode eval loop, which

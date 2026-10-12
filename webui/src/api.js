@@ -157,11 +157,13 @@ export const api = proxy([])
 /**
  * Whether a user may call an API function, from the permissions the server declares for it. Meant for
  * hiding what a user cannot use; the server checks every call anyway. While the schema is not loaded yet
- * everything is allowed, so the menu does not flicker.
+ * everything is allowed, so the menu does not flicker. A function the server does not have at all (it comes from a plugin
+ * that is not installed) is not allowed.
  */
 export function canCall(path, user) {
-  const entry = apiSchema.value?.[path]
-  if (!entry) return true
+  if (!apiSchema.value) return true // the schema is not loaded yet
+  const entry = apiSchema.value[path]
+  if (!entry) return false // this server does not offer the function (a plugin that is not installed)
   if (entry.permissions === null) return true
   if (!user?.perms) return true // the user is not known yet
   const perms = user.perms

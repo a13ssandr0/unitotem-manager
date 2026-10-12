@@ -56,6 +56,6 @@ case "$WHAT" in main|all) build_main ;; esac
 
 echo "=== lintian"
 cd /out
-for deb in python3-*.deb unitotem-*.deb plymouth-*.deb; do echo "--- $deb"; lintian --info --display-info "$deb" 2>&1 | head -30 || true; done
+for deb in python3-*.deb unitotem*.deb plymouth-*.deb; do echo "--- $deb"; lintian --info --display-info "$deb" 2>&1 | head -30 || true; done
 '
 ls -la "$REPO/dist"

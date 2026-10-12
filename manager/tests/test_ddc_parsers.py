@@ -7,7 +7,7 @@ SCREEN-CONTROL-PLAN.md sections 1.1/6/10 for the full story.
 """
 import pytest
 
-from utils.system.screens.ddc import (
+from unitotem_node.system.screens.ddc import (
     BusNotFound,
     CommunicationFailed,
     parse_capabilities,

@@ -4,7 +4,7 @@ from pydantic import ValidationError
 
 from api.ws.responses import WSBroadcast, WSResponse
 from api.ws.wsmanager import WSAPIBase
-from utils.models.timers import ACTIONS, SCREEN_ACTIONS, Timer, timer_manager
+from unitotem_node.models.timers import ACTIONS, SCREEN_ACTIONS, Timer, timer_manager
 
 
 def _invalid(exc: ValidationError) -> WSResponse:
