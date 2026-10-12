@@ -11,7 +11,7 @@ from typing import Optional
 
 from loguru import logger
 
-from utils.models.screen_control import OutputConfig, ScreenControl, screen_control
+from unitotem_node.models.screen_control import OutputConfig, ScreenControl, screen_control
 from . import cec, ddc_ctl, serial, wol, xorg
 from ._exec import ToolMissing, ToolTimeout
 from .ddc import DdcError

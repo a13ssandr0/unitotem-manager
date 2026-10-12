@@ -9,16 +9,15 @@ from starlette.templating import Jinja2Templates
 import resources
 import utils.constants as const
 from utils.objs import flatten
-from utils.system.network.ip import do_ip_addr
+from utils.system.ip import default_ipv4
 
 
 def ctx_proc(request):
-    ip = do_ip_addr(True)
     return dict(
             R=resources,
             ut_vers=const.__version__,
             os_vers=os_release()['PRETTY_NAME'],
-            ip_addr=ip['addr'][0]['addr'] if ip else None,
+            ip_addr=default_ipv4(),
             hostname=gethostname(),
     )
 

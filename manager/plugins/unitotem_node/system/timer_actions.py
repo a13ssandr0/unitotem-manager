@@ -5,12 +5,12 @@ from datetime import datetime
 from loguru import logger
 
 from api.commons import SHUTDOWN_EVENT
-from utils.models.timers import Timer, timer_manager
+from unitotem_node.models.timers import Timer, timer_manager
 
 
 async def execute(timer: Timer):
-    from utils.system.dbus_system import system_poweroff, system_reboot
-    from utils.system.screens import control
+    from unitotem_node.system.dbus_system import system_poweroff, system_reboot
+    from unitotem_node.system.screens import control
     if timer.action == 'pwr':
         await system_poweroff()
     elif timer.action == 'reb':

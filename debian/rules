@@ -3,6 +3,7 @@
 CEF_WHEEL_DIR ?= vendor/cefpython-wheels
 PYTAG := cp$(subst .,,$(shell python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])'))
 SHARE := debian/unitotem-manager/usr/share/unitotem-manager
+NODE := debian/unitotem-node/usr/share/unitotem-manager
 VIEWER := debian/unitotem-viewer/usr/share/unitotem-manager
 CEF := debian/python3-cefpython3/usr/lib/python3/dist-packages
 
@@ -23,15 +24,18 @@ override_dh_auto_build:
 override_dh_auto_test:
 
 override_dh_auto_install:
-	install -d $(SHARE) $(VIEWER)/webview
+	# core: the orchestrator, complete on its own
+	install -d $(SHARE)/plugins
 	cp -r manager/api manager/routers manager/templates manager/utils manager/resources manager/static $(SHARE)/
 	cp -r manager/webview $(SHARE)/
 	cp manager/init.py manager/main.py $(SHARE)/
-	# The viewer package owns the Qt/CEF half of the webview module
-	mkdir -p $(VIEWER)/webview
-	mv $(SHARE)/webview/app.py $(SHARE)/webview/window.py $(SHARE)/webview/static $(VIEWER)/webview/
-	find debian/unitotem-manager debian/unitotem-viewer -type f ! -name '*.sh' -exec chmod 644 {} +
-	find debian/unitotem-manager debian/unitotem-viewer -name __pycache__ -type d -prune -exec rm -rf {} +
+	# plugins: each in its own package, so nothing is shared between the binary packages
+	install -d $(NODE)/plugins $(VIEWER)/plugins
+	cp -r manager/plugins/unitotem_node $(NODE)/plugins/
+	cp -r manager/plugins/unitotem_viewer $(VIEWER)/plugins/
+	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -name __pycache__ -type d -prune -exec rm -rf {} +
+	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -name requirements.txt -delete
+	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -type f ! -name '*.sh' -exec chmod 644 {} +
 	# python3-cefpython3: unpack the wheel (it is already a dist-packages layout)
 	WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$(PYTAG)-*.whl 2>/dev/null | head -1); \
 	test -n "$$WHEEL" || { echo "No cefpython3 wheel for $(PYTAG) in $(CEF_WHEEL_DIR)" >&2; exit 1; }; \
@@ -50,7 +54,8 @@ override_dh_auto_install:
 # loads them by their plain names.
 override_dh_python3:
 	dh_python3 -p unitotem-manager /usr/share/unitotem-manager
-	dh_python3 -p unitotem-viewer /usr/share/unitotem-manager
+	dh_python3 -p unitotem-node /usr/share/unitotem-manager/plugins/unitotem_node
+	dh_python3 -p unitotem-viewer /usr/share/unitotem-manager/plugins/unitotem_viewer
 
 # The shipped CEF libraries carry debug info nothing reads: libcef.so is 465 MB unstripped, 252 MB stripped.
 override_dh_strip:
@@ -69,4 +74,4 @@ override_dh_shlibdeps:
 # netplan refuses to be quiet about a configuration file readable by others
 override_dh_fixperms:
 	dh_fixperms
-	chmod 600 debian/unitotem-manager/etc/netplan/01-unitotem-nm.yaml
+	chmod 600 debian/unitotem-node/etc/netplan/01-unitotem-nm.yaml

@@ -1,8 +1,8 @@
 import asyncio
 import json
 import signal
+import sys
 import threading
-import time
 import warnings
 from argparse import ArgumentParser
 from functools import cache, lru_cache
@@ -25,6 +25,8 @@ from starlette.responses import FileResponse
 from watchdog.observers import Observer
 import routers
 import utils.constants as const
+import utils.plugins as plugins
+import utils.ready as ready
 from api.commons import SHUTDOWN_EVENT
 from api.ws.endpoints import REMOTE_WS, WS, api
 from api.ws.wsmanager import WSManager
@@ -37,8 +39,6 @@ from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager, remote_manager
 from utils.models.user import user_manager
 from utils.storage.uploadmanager import upload_manager
-from utils.system.network.hotspot import get_hotspot_with_qr, is_hotspot_enabled, start_hotspot, stop_hotspot
-from utils.system.network.ip import do_ip_addr
 from utils.system.lsblk import start_fs_usage_cache
 from utils.system.sysinfo import get_sysinfo
 from webview.controller import WebviewManager
@@ -120,8 +120,10 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
         logger.warning('Rejected non-local request for /unitotem-{} from {}',
                        page, request.client.host if request.client else 'unknown')
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse(request, f'{page}.html.j2',
-                                      {'wifi': await get_hotspot_with_qr() if await is_hotspot_enabled() else None})
+    context = {'wifi': None}
+    for _plugin, hook in plugins.each('first_boot_context'):
+        context.update(await hook())
+    return templates.TemplateResponse(request, f'{page}.html.j2', context)
 
 
 @WWW.api_route("/health", methods=['GET', 'HEAD'])
@@ -154,9 +156,12 @@ async def pdf_view(request: Request):
 WWW.include_router(routers.login.router)
 WWW.include_router(routers.websocket.remote.router)
 WWW.include_router(routers.websocket.web_ui.router)
-WWW.include_router(routers.websocket.terminal.router)
-WWW.include_router(routers.scheduler.router)
+# Before the scheduler router, which ends in a catch-all that requires a session
+for _plugin, _routers in plugins.each('routers'):
+    for _router in _routers:
+        WWW.include_router(_router)
 WWW.include_router(routers.backup.router)
+WWW.include_router(routers.scheduler.router)
 
 
 parser = ArgumentParser()
@@ -176,26 +181,25 @@ logger.debug('Got event loop {}', id(loop))
 # ── graceful shutdown ─────────────────────────────────────────────────────
 # Runs inside the asyncio thread; sets SHUTDOWN_EVENT, cleans up, stops loop.
 
-# Set once the local Qt webview is constructed (full mode only; see below).
-# With quitOnLastWindowClosed disabled (webview.app.WebviewApp), closing the
-# last window no longer makes Qt's exec() return on its own, so a real
-# shutdown must explicitly ask it to quit - otherwise the Qt thread (and thus
-# the whole process, since run() blocks on it) never exits.
-_webview_app = None
-
-
 async def _shutdown():
     if not SHUTDOWN_EVENT.is_set():
         SHUTDOWN_EVENT.set()
-        await stop_hotspot()
+        for _plugin, hook in plugins.each('on_shutdown'):
+            try:
+                await hook()
+            except Exception:
+                logger.exception('Plugin {} failed to shut down cleanly', _plugin.name)
     loop.stop()
 
 
-def _schedule_shutdown():
-    """Thread-safe: schedule _shutdown() in the asyncio event loop."""
+def _schedule_shutdown(from_gui=False):
+    """Thread-safe: schedule _shutdown() in the asyncio event loop. `from_gui`: the windows are the ones that ended."""
     asyncio.run_coroutine_threadsafe(_shutdown(), loop)
-    if _webview_app is not None:
-        _webview_app.request_quit()
+    # With quitOnLastWindowClosed disabled, closing the last window does not make Qt's exec() return on its own, so a
+    # real shutdown must ask the windows to quit, or the main thread (and so the whole process) never exits.
+    if not from_gui:
+        for _plugin, hook in plugins.each('request_quit'):
+            hook()
 
 
 # signal.signal works from the main thread regardless of where asyncio runs
@@ -209,13 +213,8 @@ try:
     playlists_manager.load()
 except FileNotFoundError:
     logger.warning('First boot or no configuration file found.')
-    try:
-        if not do_ip_addr(True):
-            ssid, passwd = loop.run_until_complete(start_hotspot())
-            logger.info(
-                    f'Not connected to any network, started fallback hotspot {ssid} with password {passwd}.')
-    except Exception as e:
-        logger.error(f"Couldn't start wifi hotspot: {e}")
+    for _plugin, hook in plugins.each('on_first_boot'):
+        loop.run_until_complete(hook())
 
 try:
     user_manager.load()
@@ -288,57 +287,9 @@ async def generate_signing_key():
 loop.create_task(generate_signing_key(), name='rsa_keygen')
 
 
-async def screens_at_start():
-    """Wake the screens that are off (a monitor that stayed off after a boot or a power cut), then probe what each
-    one supports. Neither needs a display to exist: on a headless node both simply find nothing to do."""
-    from utils.system.screens import control
+for _plugin, hook in plugins.each('on_startup'):
+    hook(loop)
 
-    async def broadcast():
-        await WS.broadcast('Settings/Display/Screens/screens', screens=await control.screens(),
-                           probing=control.probing())
-
-    try:
-        from utils.system.screens import xorg
-        try:
-            await xorg.dpms_policy()
-        except Exception as exc:
-            logger.warning('Cannot apply the DPMS policy: {}', exc)
-        await control.wake_all(on_done=broadcast)
-        await control.probe(on_done=broadcast)
-    except Exception:
-        logger.exception('Screen start-up failed')
-
-
-loop.create_task(screens_at_start(), name='screens_at_start')
-
-def _start_timers():
-    from utils.system.timer_actions import run_timers
-    loop.create_task(run_timers(), name='timers')
-
-
-_start_timers()
-
-UPDATE_CHECK_FIRST_DELAY = 180      # the network may not be up yet right after a boot
-UPDATE_CHECK_INTERVAL = 24 * 3600
-
-
-async def update_watch():
-    """Check for updates in the background once a day and tell every open page when the answer changes."""
-    from utils.system import updater
-    await asyncio.sleep(UPDATE_CHECK_FIRST_DELAY)
-    while not SHUTDOWN_EVENT.is_set():
-        try:
-            if updater.record(await updater.check()):
-                await WS.broadcast('Settings/Update/availability', availability=updater.availability)
-        except Exception:
-            logger.exception('Daily update check failed')
-        try:
-            await asyncio.wait_for(SHUTDOWN_EVENT.wait(), UPDATE_CHECK_INTERVAL)
-        except asyncio.TimeoutError:
-            pass
-
-
-loop.create_task(update_watch(), name='update_watch')
 
 async def _serve_www():
     # a swallowed bind error would leave the manager up but unreachable:
@@ -362,6 +313,25 @@ async def _serve_www():
 
 loop.create_task(_serve_www(), name='server')
 
+# With a local viewer, READY is its first frame on screen (it ends the boot splash); otherwise it is the server answering
+_gui = next((hook for _plugin, hook in plugins.each('run_gui')), None)
+_viewer_will_notify = bool(_gui and not cmdargs.no_gui and not remote_manager.server_ip)
+
+
+async def _ready_when_serving():
+    for _ in range(600):
+        try:
+            _, writer = await asyncio.open_connection('127.0.0.1', cmdargs.port_secure)
+            writer.close()
+            break
+        except OSError:
+            await asyncio.sleep(0.1)
+    if not _viewer_will_notify:
+        ready.ready('web server answering')
+
+
+loop.create_task(_ready_when_serving(), name='ready')
+
 
 # ── asyncio thread ────────────────────────────────────────────────────────
 # asyncio runs in a background thread so Qt can occupy the main thread
@@ -371,44 +341,21 @@ asyncio_thread = threading.Thread(target=loop.run_forever, name='asyncio', daemo
 asyncio_thread.start()
 
 
-# ── full mode: Qt webview on main thread ───────────────────────────────────
+# ── the local windows, on the main thread, if the viewer is installed ─────
 
-if not cmdargs.no_gui and not remote_manager.server_ip:
+exit_status = 0
+if _viewer_will_notify:
     try:
-        from webview.app import WebviewApp
-
-        # No display at all (e.g. a node with no monitor connected, or a
-        # systemd service with no access to a graphical session) is a
-        # supported, permanent situation, not just a transient one: keep
-        # running headless and poll for a display becoming reachable,
-        # since constructing WebviewApp with none aborts the whole process
-        # natively (SIGABRT, uncatchable) rather than raising an exception.
-        if not WebviewApp.display_available():
-            logger.warning('No display reachable; running headless until one appears')
-            while not SHUTDOWN_EVENT.is_set() and not WebviewApp.display_available():
-                time.sleep(5)
-
-        if not SHUTDOWN_EVENT.is_set():
-            webview_app = WebviewApp(
-                manager_url=f'wss://localhost:{cmdargs.port_secure}/remote',
-                instance_id='local-webview',
-            )
-            _webview_app = webview_app  # let _schedule_shutdown() reach request_quit()
-            # Propagate Qt quit → asyncio shutdown
-            webview_app.qt_app.aboutToQuit.connect(_schedule_shutdown)
-            logger.info('Starting local Qt6 webview (full mode)')
-            webview_app.run()          # blocks until request_quit() (see _schedule_shutdown above)
-        else:
-            asyncio_thread.join()
-    except ImportError as e:
-        logger.warning('Webview unavailable ({}), running in headless mode', e)
-        asyncio_thread.join()
+        if not _gui(_schedule_shutdown):
+            asyncio_thread.join()           # the windows cannot run here: serve without them
     except Exception as e:
-        logger.exception('Qt webview crashed: {}', e)
+        logger.exception('The viewer stopped: {}', e)
+        exit_status = 1                     # so that systemd restarts the service
+        ready.ready('viewer failed')
         _schedule_shutdown()
         asyncio_thread.join(timeout=5)
 else:
-    # ── headless mode: block main thread until asyncio stops ──────────────
+    # ── no local windows: block the main thread until asyncio stops ───────
     asyncio_thread.join()
 
 
@@ -417,3 +364,4 @@ else:
 _schedule_shutdown()
 asyncio_thread.join(timeout=5)
 observer.stop()
+sys.exit(exit_status)

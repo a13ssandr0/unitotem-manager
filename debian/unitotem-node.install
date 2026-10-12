@@ -1,0 +1,2 @@
+debian/01-unitotem-nm.yaml etc/netplan
+debian/10-x11.conf usr/lib/systemd/system/unitotem-manager.service.d

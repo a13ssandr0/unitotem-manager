@@ -3,10 +3,9 @@ from typing import Optional
 
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast, WSResponse
-from pulsectl import PulseError
 
 from utils.models.playlists import playlists_manager
-from utils.system.audio import get_audio_devices
+import utils.plugins as plugins
 from webview.controller import WebviewManager
 
 
@@ -59,8 +58,7 @@ class Viewers(WSAPIBase):
         remote viewer reports none yet, so its windows can only use the default."""
         if viewer_id != 'local-webview':
             return WSBroadcast(viewer_id=viewer_id, outputs=[])
-        try:
-            outputs = [{'name': d['name'], 'description': d['description']} for d in get_audio_devices()]
-        except PulseError:
-            outputs = []
+        outputs = []
+        for _plugin, hook in plugins.each('audio_outputs'):
+            outputs = hook()
         return WSBroadcast(viewer_id=viewer_id, outputs=outputs)

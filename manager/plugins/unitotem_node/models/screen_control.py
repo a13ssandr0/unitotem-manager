@@ -32,7 +32,7 @@ class WolConfig(BaseModel, validate_assignment=True):
     @field_validator('mac')
     @classmethod
     def _mac(cls, v: str) -> str:
-        from utils.system.screens.wol import normalise_mac
+        from unitotem_node.system.screens.wol import normalise_mac
         return normalise_mac(v)
 
 
@@ -45,7 +45,7 @@ class SerialConfig(BaseModel, validate_assignment=True):
     @field_validator('port')
     @classmethod
     def _port(cls, v: str) -> str:
-        from utils.system.screens.serial import valid_port
+        from unitotem_node.system.screens.serial import valid_port
         if not valid_port(v):
             raise ValueError(f'{v!r} is not a serial port')
         return v
@@ -53,7 +53,7 @@ class SerialConfig(BaseModel, validate_assignment=True):
     @field_validator('on_command', 'off_command')
     @classmethod
     def _command(cls, v: str) -> str:
-        from utils.system.screens.serial import parse_command
+        from unitotem_node.system.screens.serial import parse_command
         parse_command(v)  # raises on anything that is not ASCII
         return v
 

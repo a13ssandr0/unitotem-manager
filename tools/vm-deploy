@@ -33,6 +33,7 @@ rsync -a --delete --info=stats1 \
     "$REPO/manager/templates" \
     "$REPO/manager/utils" \
     "$REPO/manager/webview" \
+    "$REPO/manager/plugins" \
     "$REPO/manager/resources" \
     "$REPO/manager/static" \
     "$REPO/manager/init.py" \

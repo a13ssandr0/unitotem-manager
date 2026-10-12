@@ -1,10 +1,10 @@
 """Pure parts of the screen control hardware layer: xrandr, CEC, Wake-on-LAN, serial, the model, mechanism order."""
 import pytest
 
-from utils.models.screen_control import OutputConfig, SerialConfig, WolConfig
-from utils.system.screens import cec, serial, wol, xorg
-from utils.system.screens.ddc_ctl import power_off_value
-from utils.system.screens.mechanism import NoMechanismAvailable, candidates
+from unitotem_node.models.screen_control import OutputConfig, SerialConfig, WolConfig
+from unitotem_node.system.screens import cec, serial, wol, xorg
+from unitotem_node.system.screens.ddc_ctl import power_off_value
+from unitotem_node.system.screens.mechanism import NoMechanismAvailable, candidates
 
 XRANDR = """Screen 0: minimum 320 x 200, current 5760 x 2160, maximum 16384 x 16384
 DP-1 connected primary 3840x2160+0+0 (normal left inverted right x axis y axis) 600mm x 340mm

@@ -1,0 +1,7 @@
+# Python dependencies of the unitotem_node plugin, on top of ../../requirements.txt
+croniter
+packaging
+pulsectl
+python-xlib
+qrcode
+sdbus-networkmanager
