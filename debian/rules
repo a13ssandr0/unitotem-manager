@@ -26,7 +26,7 @@ override_dh_auto_install:
 	install -d $(SHARE) $(VIEWER)/webview
 	cp -r manager/api manager/routers manager/templates manager/utils manager/resources manager/static $(SHARE)/
 	cp -r manager/webview $(SHARE)/
-	cp manager/init.py manager/main.py manager/screenctl.py $(SHARE)/
+	cp manager/init.py manager/main.py $(SHARE)/
 	# The viewer package owns the Qt/CEF half of the webview module
 	mkdir -p $(VIEWER)/webview
 	mv $(SHARE)/webview/app.py $(SHARE)/webview/window.py $(SHARE)/webview/static $(VIEWER)/webview/

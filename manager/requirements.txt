@@ -33,6 +33,7 @@ python-dotenv
 python-multipart
 qrcode
 requests
+python-xlib
 sdbus-networkmanager
 uvloop
 watchdog
