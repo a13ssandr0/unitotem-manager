@@ -1,0 +1,22 @@
+.TH UNITOTEM-MANAGER 8 "October 2026" "unitotem-manager" "System Administration"
+.SH NAME
+unitotem-manager \- UniTotem kiosk scheduler and web management interface
+.SH SYNOPSIS
+.B unitotem-manager
+[\fIoptions\fR]
+.SH DESCRIPTION
+Starts the scheduler, the HTTPS API with the web interface (ports 443, and 80 redirecting to it) and, when
+unitotem-viewer is installed and a display is available, one viewer window per screen. It is normally started
+by the unitotem-manager.service unit.
+.SH FILES
+.TP
+.I /etc/unitotem
+Configuration, playlists, users and pairing data.
+.TP
+.I /var/lib/unitotem/uploaded
+Uploaded files.
+.TP
+.I /etc/ssl/unitotem.pem
+Certificate and key of the web interface, created at installation.
+.SH SEE ALSO
+https://github.com/a13ssandr0/unitotem-manager

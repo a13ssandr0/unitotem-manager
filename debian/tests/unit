@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+cp -r manager/tests "$AUTOPKGTEST_TMP/tests"
+cd "$AUTOPKGTEST_TMP"
+PYTHONPATH=/usr/share/unitotem-manager python3 -m pytest -q tests

@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Self-signed certificate for the web interface, created once and kept across upgrades (paired nodes
+        # trust it). It is removed on purge only.
+        if [ ! -e /etc/ssl/unitotem.pem ]; then
+            umask 077
+            openssl req -x509 -nodes -newkey rsa:2048 -days 36500 \
+                -keyout /etc/ssl/unitotem.key.tmp -out /etc/ssl/unitotem.crt.tmp \
+                -subj "/O=UniTotem/CN=UniTotem" >/dev/null 2>&1
+            cat /etc/ssl/unitotem.crt.tmp /etc/ssl/unitotem.key.tmp > /etc/ssl/unitotem.pem
+            rm -f /etc/ssl/unitotem.crt.tmp /etc/ssl/unitotem.key.tmp
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

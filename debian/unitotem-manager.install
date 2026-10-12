@@ -1,0 +1,2 @@
+debian/01-unitotem-nm.yaml etc/netplan
+debian/unitotem-manager.8 usr/share/man/man8
