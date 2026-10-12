@@ -48,7 +48,7 @@ override_dh_auto_install-arch:
 	# python3-cefpython3: unpack the wheel (it is already a dist-packages layout)
 	WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$(PYTAG)-*-linux_$(shell uname -m).whl 2>/dev/null | head -1); \
 	test -n "$$WHEEL" || { echo "No cefpython3 wheel for $(PYTAG) $(shell uname -m) in $(CEF_WHEEL_DIR)" >&2; exit 1; }; \
-	install -d $(CEF); python3 -m zipfile -e "$$WHEEL" $(CEF)
+	install -d $(CEF); unzip -q "$$WHEEL" -d $(CEF)
 	# The wheel was built with an RUNPATH pointing into the CI machine; the helper finds its libraries beside itself
 	patchelf --set-rpath '$$ORIGIN' $(CEF)/cefpython3/subprocess
 
@@ -66,6 +66,12 @@ override_dh_python3-indep:
 # The shipped CEF libraries carry debug info nothing reads: libcef.so is 465 MB unstripped, 252 MB stripped.
 override_dh_strip-arch:
 	dh_strip --no-automatic-dbgsym
+
+# CEF execs its helper: it must be executable (a wheel is a zip, a careless extraction loses the bit)
+override_dh_fixperms-arch:
+	dh_fixperms
+	chmod 755 $(CEF)/cefpython3/subprocess
+	test -x $(CEF)/cefpython3/subprocess
 
 override_dh_dwz-arch:
 	dh_dwz --no-dwz-multifile -Xcefpython3
