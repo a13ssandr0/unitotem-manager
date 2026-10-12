@@ -1,6 +1,8 @@
 Pillow
 # viewer (Qt6+CEF) — only needed in full (non-headless) mode
-PySide6>=6.4.0
+# Essentials only: the manager imports QtCore, QtGui and QtWidgets and shows pages with CEF, so WebEngine, Addons and
+# Pdf (about 420 MB on amd64) are not needed
+PySide6-Essentials>=6.4.0
 websockets>=12.0
 # cefpython3: no PyPI release. Wheel built by the vendor/cefpython submodule's
 # own CI (github.com/a13ssandr0/cefpython, arm64 fork of linesight/cefpython)
