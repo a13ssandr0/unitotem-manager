@@ -1,41 +1,58 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: unitotem-manager
-Upstream-Contact: campoloalex@gmail.com
+Upstream-Contact: Alessandro Campolo <campolo.alex@gmail.com>
 Source: https://github.com/a13ssandr0/unitotem-manager
 
 Files: *
-Copyright: 2022 Alessandro Campolo
-License: GPL-3
-    '/usr/share/common-licenses/GPL-3'
+Copyright: 2022-2026 Alessandro Campolo
+License: GPL-3+
 
-Files: opt/unitotem/static/ace-builds/*
-Copyright: 2010 Ajax.org B.V.
-License: BSD
-    '/usr/share/common-licenses/BSD'
+Files: manager/static/assets/*
+Copyright: Evan You and Vue contributors (vue, vue-router, pinia)
+           Vuetify, LLC and contributors (vuetify)
+           Anthony Fu and contributors (@vueuse/core)
+           Chart.js contributors (chart.js)
+           SortableJS and vuedraggable contributors (vuedraggable)
+           The xterm.js authors, Microsoft Corporation (@xterm/xterm, @xterm/addon-fit)
+           Austin Andrews (@mdi/font, Material Design Icons)
+           Mozilla Foundation and contributors (pdfjs-dist)
+           Christian Robertson (Roboto, via @fontsource/roboto)
+Comment: The web interface is built with Vite from webui/ (see webui/package.json and package-lock.json for the exact
+ versions); the files in this directory are the compiled bundle and embed the libraries listed here.
+ @mdi/font is Apache-2.0 for the code and OFL-1.1 for the font; pdfjs-dist is Apache-2.0; Roboto is OFL-1.1;
+ everything else is MIT.
+License: Expat and Apache-2.0 and OFL-1.1
 
-Files: opt/unitotem/static/bootstrap-\*/*
-Copyright:  2011-2022 Twitter, Inc.
-            2011-2022 The Bootstrap Authors
-License: MIT
-    The MIT License (MIT)
+Files: manager/webview/static/NotoSans.ttf
+Copyright: 2012 Google Inc. and the Noto Project Authors
+License: OFL-1.1
 
-    Copyright (c) 2011-2022 Twitter, Inc.
-    Copyright (c) 2011-2022 The Bootstrap Authors
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+ License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+ version.
+ .
+ On Debian systems, the complete text of the GNU General Public License version 3 can be found in
+ /usr/share/common-licenses/GPL-3.
 
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
+License: Expat
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+ rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+ persons to whom the Software is furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+ Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+ WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-    The above copyright notice and this permission notice shall be included in
-    all copies or substantial portions of the Software.
+License: Apache-2.0
+ On Debian systems, the complete text of the Apache License, Version 2.0 can be found in
+ /usr/share/common-licenses/Apache-2.0.
 
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-    THE SOFTWARE.
+License: OFL-1.1
+ This Font Software is licensed under the SIL Open Font License, Version 1.1. The full text is available at
+ https://openfontlicense.org/open-font-license-official-text/

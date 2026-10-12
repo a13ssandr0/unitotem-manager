@@ -1,37 +1,45 @@
 unitotem-manager (3.0.0~dev4) stable; urgency=medium
 
-  * Multi-page PDFs (pdf.js page renderer, pypdf for the page count), floating windows, web terminal
-  * The CEF libraries are stripped at build time and PySide6-Essentials replaces PySide6: the venv is about 1 GB smaller
+  * Multi-page PDFs (pdf.js page renderer, pypdf for the page count), floating
+    windows, web terminal
+  * The CEF libraries are stripped at build time and PySide6-Essentials
+    replaces PySide6: the venv is about 1 GB smaller
   * The page reloads itself when it was left open across an update
 
  -- Alessandro Campolo <campolo.alex@gmail.com>  Mon, 12 Oct 2026 21:07:02 +0200
 
 unitotem-manager (3.0.0~dev3) stable; urgency=medium
 
-  * Multi-playlist scheduler: rename, default, copy/move assets, per-playlist default duration
+  * Multi-playlist scheduler: rename, default, copy/move assets, per-playlist
+    default duration
   * Per-asset volume and mute, per-window sound output
-  * Screen control: X, DDC/CI, CEC, Wake-on-LAN and serial; screen timers via screenctl.py
+  * Screen control: X, DDC/CI, CEC, Wake-on-LAN and serial; screen timers via
+    screenctl.py
   * Updates page and API naming convention (snake_case), permission-aware menu
 
  -- Alessandro Campolo <campolo.alex@gmail.com>  Sun, 11 Oct 2026 17:32:36 +0200
 
 unitotem-manager (3.0.0~dev2) stable; urgency=medium
 
-  * Qt6 + CEF viewer, multi-playlist scheduler, remote control and screen control
+  * Qt6 + CEF viewer, multi-playlist scheduler, remote control and screen
+    control
   * Updates page driven by unitotem-update (whole-image A/B updates), no apt
   * Loopback-only /health endpoint used to confirm a trial boot
   * Uploads moved to /var/lib/unitotem/uploaded (read-only root)
-  * Depend on libxcb-icccm4 and libxcb-shape0 (Qt aborted the whole manager without them)
+  * Depend on libxcb-icccm4 and libxcb-shape0 (Qt aborted the whole manager
+    without them)
   * Disable a leftover haproxy, the manager binds 80/443 itself
 
  -- Alessandro Campolo <campolo.alex@gmail.com>  Sat, 10 Oct 2026 17:44:57 +0200
 
 unitotem-manager (2.3.0) stable; urgency=medium
 
-  * Added a custom page that displays images and videos fullscreen, replacing browser's default one
+  * Added a custom page that displays images and videos fullscreen, replacing
+    browser's default one
   * Fixed duration attribute when uploading non-video elements
   * Improved error details visualization
-  * Images have a background with their dominant color to replace black bars when they don't match the aspect ratio of the screen
+  * Images have a background with their dominant color to replace black bars
+    when they don't match the aspect ratio of the screen
 
  -- Alessandro Campolo <campoloalex@gmail.com>  Mon, 13 Nov 2022 20:26:50 +0200
 
@@ -39,7 +47,8 @@ unitotem-manager (2.2.1) stable; urgency=high
 
   * After uploading a file, now it is automatically added to the playlist
   * Added --version cmdline argument
-  * Added --no-exit cmdline agument to disable exiting after 5 unsuccessful connection attempts to Chrome (for debugging)
+  * Added --no-exit cmdline agument to disable exiting after 5 unsuccessful
+    connection attempts to Chrome (for debugging)
   * Corrected list reordering bug
 
  -- Alessandro Campolo <campoloalex@gmail.com>  Mon, 1 Nov 2022 17:47:10 +0200
@@ -49,7 +58,8 @@ unitotem-manager (2.2.0) stable; urgency=medium
   * Simplified file manager, now appears in main page, not modal
   * Removed unnecessary files from bootstrap, bootstrap-icons, ace-builds
   * Added batch file deleting/loading-in-playlist
-  * Corrected a bug that made an entire row disappear when canceling duration editor
+  * Corrected a bug that made an entire row disappear when canceling duration
+    editor
   * Updated return codes for commands that return nothing
   * Added configuration Backup/Restore/Reset
   * Added batch file editing/creation for netplan config files

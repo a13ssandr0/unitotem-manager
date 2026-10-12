@@ -1,107 +1,72 @@
 #!/usr/bin/make -f
-# See debhelper(7) (uncomment to enable)
-# output every command that modifies files on the build system.
-#export DH_VERBOSE = 1
+# The CEF wheel is built separately (heavy, occasional: see vendor/cefpython) and consumed here.
+CEF_WHEEL_DIR ?= vendor/cefpython-wheels
+PYTAG := cp$(subst .,,$(shell python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])'))
+SHARE := debian/unitotem-manager/usr/share/unitotem-manager
+VIEWER := debian/unitotem-viewer/usr/share/unitotem-manager
+CEF := debian/python3-cefpython3/usr/lib/python3/dist-packages
 
-
-# see FEATURE AREAS in dpkg-buildflags(1)
-#export DEB_BUILD_MAINT_OPTIONS = hardening=+all
-
-# see ENVIRONMENT in dpkg-buildflags(1)
-# package maintainers to append CFLAGS
-#export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
-# package maintainers to append LDFLAGS
-#export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
-
-
-PKGDIR       := debian/unitotem-manager
-VENV         := $(PKGDIR)/var/unitotem-venv
-SHARE        := $(PKGDIR)/usr/share/unitotem-manager
-PLYMOUTH     := $(PKGDIR)/usr/share/plymouth/themes/unitotem
-# cefpython3 has no PyPI release for this fork (vendor/cefpython submodule).
-# Building it is a separate, heavy, occasional native CEF compile (~765MB
-# CDN download + cmake/ninja on GitHub's arm64 runners, see
-# vendor/cefpython/.github/workflows/build-arm64-release.yml), not something
-# dpkg-buildpackage should redo on every run: wheels are prebuilt and
-# published as GitHub Release assets, downloaded here on first use and
-# cached locally so repeated package builds don't re-fetch ~400MB each time.
-CEF_WHEEL_DIR    ?= vendor/cefpython-wheels
-CEF_RELEASE_REPO ?= a13ssandr0/cefpython
-# Must track the tag built from the vendor/cefpython submodule's pinned commit
-CEF_RELEASE_TAG  ?= v147.0.0-arm64
+export PYBUILD_NAME = unitotem
 
 %:
 	dh $@
 
-
+# Gzip keeps the package readable by every dpkg, including the one on the image being updated from.
 override_dh_builddeb:
 	dh_builddeb -- -Zgzip
 
-
+# Needs network access for npm: the front end is not packaged by Debian.
 override_dh_auto_build:
 	cd webui && npm ci && npm run build
 
+# The tests need cron and a writable /etc/unitotem, which a build chroot does not have: see debian/tests
+override_dh_auto_test:
 
 override_dh_auto_install:
-	dh_auto_install
-	install -d $(SHARE)
-	cp -r manager/api manager/routers manager/templates manager/utils \
-	      manager/webview manager/resources manager/static $(SHARE)/
-	cp manager/init.py manager/main.py manager/screenctl.py manager/requirements.txt $(SHARE)/
-	find $(SHARE) -name __pycache__ -type d -prune -exec rm -rf {} +
-	install -d $(PLYMOUTH)
-	cp -r plymouth/unitotem/. $(PLYMOUTH)/
-	# self-contained venv shipped inside the package: no network access is
-	# required on the target device to install UniTotem (it may have none,
-	# see the hotspot/captive-portal first-boot flow)
-	python3 -m venv --system-site-packages --copies $(VENV)
-	$(VENV)/bin/pip3 install --no-cache-dir -r manager/requirements.txt
-	CEF_PYTAG=$$($(VENV)/bin/python3 -c "import sys; print(f'cp{sys.version_info[0]}{sys.version_info[1]}')"); \
-	CEF_WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$$CEF_PYTAG-*.whl 2>/dev/null | head -1); \
-	if [ -z "$$CEF_WHEEL" ]; then \
-		echo "No cached cefpython3 wheel for $$CEF_PYTAG, fetching from" \
-		     "$(CEF_RELEASE_REPO)@$(CEF_RELEASE_TAG)..."; \
-		mkdir -p $(CEF_WHEEL_DIR); \
-		ASSET_URL=$$(python3 -c "import json,urllib.request as u; \
-d=json.load(u.urlopen('https://api.github.com/repos/$(CEF_RELEASE_REPO)/releases/tags/$(CEF_RELEASE_TAG)')); \
-print(next((a['browser_download_url'] for a in d['assets'] if '-$$CEF_PYTAG-' in a['name'] and a['name'].endswith('linux_aarch64.whl')), ''))"); \
-		if [ -z "$$ASSET_URL" ]; then \
-			echo "No cefpython3 wheel for $$CEF_PYTAG in release" \
-			     "$(CEF_RELEASE_REPO)@$(CEF_RELEASE_TAG)." >&2; \
-			echo "Check https://github.com/$(CEF_RELEASE_REPO)/releases/tag/$(CEF_RELEASE_TAG)" >&2; \
-			echo "or drop a matching wheel in $(CEF_WHEEL_DIR)/ manually." >&2; \
-			exit 1; \
-		fi; \
-		curl -fL -o "$(CEF_WHEEL_DIR)/$$(basename $$ASSET_URL)" "$$ASSET_URL"; \
-		CEF_WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$$CEF_PYTAG-*.whl | head -1); \
-	fi; \
-	$(VENV)/bin/pip3 install --no-cache-dir "$$CEF_WHEEL"
-	# The CEF libraries ship with symbol tables and debug info that nothing at runtime reads: libcef.so is 465 MB on
-	# amd64 and about 2 GB on the aarch64 wheel, and 252 MB / ~240 MB once stripped (CEF verified to start, with GPU
-	# compositing, after the strip). dh_strip skips the venv (see below), so it is done here, with the strip of the
-	# architecture being built (packages are built natively). A library that is still huge afterwards fails the build.
-	CEFDIR=$$(find $(VENV)/lib -maxdepth 4 -type d -name cefpython3 | head -1); \
-	test -n "$$CEFDIR" || { echo "cefpython3 is not in the venv" >&2; exit 1; }; \
-	for lib in libcef.so libGLESv2.so libEGL.so libvk_swiftshader.so libvulkan.so.1; do \
-		if [ -f "$$CEFDIR/$$lib" ]; then strip --strip-unneeded "$$CEFDIR/$$lib" || exit 1; fi; \
-	done; \
-	SIZE=$$(stat -c %s "$$CEFDIR/libcef.so"); \
-	test "$$SIZE" -lt 629145600 || { echo "libcef.so is still $$SIZE bytes after stripping" >&2; exit 1; }
-	# CAP_NET_BIND_SERVICE is a file xattr: dpkg's data.tar does not reliably
-	# preserve it across extraction, so it is (re)applied in postinst instead
+	install -d $(SHARE) $(VIEWER)/webview
+	cp -r manager/api manager/routers manager/templates manager/utils manager/resources manager/static $(SHARE)/
+	cp -r manager/webview $(SHARE)/
+	cp manager/init.py manager/main.py manager/screenctl.py $(SHARE)/
+	# The viewer package owns the Qt/CEF half of the webview module
+	mkdir -p $(VIEWER)/webview
+	mv $(SHARE)/webview/app.py $(SHARE)/webview/window.py $(SHARE)/webview/static $(VIEWER)/webview/
+	find debian/unitotem-manager debian/unitotem-viewer -type f ! -name '*.sh' -exec chmod 644 {} +
+	find debian/unitotem-manager debian/unitotem-viewer -name __pycache__ -type d -prune -exec rm -rf {} +
+	# python3-cefpython3: unpack the wheel (it is already a dist-packages layout)
+	WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$(PYTAG)-*.whl 2>/dev/null | head -1); \
+	test -n "$$WHEEL" || { echo "No cefpython3 wheel for $(PYTAG) in $(CEF_WHEEL_DIR)" >&2; exit 1; }; \
+	install -d $(CEF); python3 -m zipfile -e "$$WHEEL" $(CEF)
+	# The wheel was built with an RUNPATH pointing into the CI machine; the helper finds its libraries beside itself
+	patchelf --set-rpath '$$ORIGIN' $(CEF)/cefpython3/subprocess
+	# plymouth theme
+	install -d debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem
+	cp -r plymouth/unitotem/. debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem/
+	chmod 644 debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem/*
+	# launcher
+	install -D -m 755 debian/unitotem-manager.sh debian/unitotem-manager/usr/sbin/unitotem-manager
 
+# Bytecode for the private module directory; dependencies are listed by hand, imports are lazy in places.
+# python3-cefpython3 is left alone on purpose: dh_python3 would rename libcef.so & co. with an ABI tag, and CEF
+# loads them by their plain names.
+override_dh_python3:
+	dh_python3 -p unitotem-manager /usr/share/unitotem-manager
+	dh_python3 -p unitotem-viewer /usr/share/unitotem-manager
 
-# the bundled venv is not part of this source package: skip shared-library
-# dependency scanning and stripping to avoid dh choking on Qt6/PySide6/CEF
-# binaries inside it (mirrors what dh-virtualenv does for the same reason)
-override_dh_shlibdeps:
-	dh_shlibdeps -X/var/unitotem-venv
-
+# The shipped CEF libraries carry debug info nothing reads: libcef.so is 465 MB unstripped, 252 MB stripped.
 override_dh_strip:
-	dh_strip -X/var/unitotem-venv
+	dh_strip --no-automatic-dbgsym
 
-# dh_dwz runs as a separate step from dh_strip and hits the same prebuilt
-# Qt6/PySide6/CEF binaries; dwz fails on some of them (e.g. malformed/absent
-# debug sections), aborting the whole build if not excluded too.
 override_dh_dwz:
-	dh_dwz -X/var/unitotem-venv
+	dh_dwz --no-dwz-multifile -Xcefpython3
+
+override_dh_installsystemd:
+	dh_installsystemd -p unitotem-manager --name=unitotem-manager unitotem-manager.service
+
+# CEF's own libraries (libvulkan, libEGL...) are shipped beside it and resolved through RPATH
+override_dh_shlibdeps:
+	dh_shlibdeps -p python3-cefpython3 -l$(CURDIR)/$(CEF)/cefpython3 -- --ignore-missing-info
+
+# netplan refuses to be quiet about a configuration file readable by others
+override_dh_fixperms:
+	dh_fixperms
+	chmod 600 debian/unitotem-manager/etc/netplan/01-unitotem-nm.yaml

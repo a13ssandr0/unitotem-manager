@@ -1,0 +1,7 @@
+# Chromium statically links its own copies of these; the CEF build cannot use the system ones
+python3-cefpython3: embedded-library freetype [usr/lib/python3/dist-packages/cefpython3/libcef.so]
+python3-cefpython3: embedded-library lcms2 [usr/lib/python3/dist-packages/cefpython3/libcef.so]
+python3-cefpython3: embedded-library libjpeg [usr/lib/python3/dist-packages/cefpython3/libcef.so]
+python3-cefpython3: embedded-library libjsoncpp [usr/lib/python3/dist-packages/cefpython3/libcef.so]
+python3-cefpython3: embedded-library openjpeg [usr/lib/python3/dist-packages/cefpython3/libcef.so]
+python3-cefpython3: embedded-library srtp [usr/lib/python3/dist-packages/cefpython3/libcef.so]

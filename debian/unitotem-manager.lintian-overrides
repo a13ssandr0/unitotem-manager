@@ -1,0 +1,2 @@
+# netplan warns about configuration files readable by others
+unitotem-manager: non-standard-file-perm 0600 != 0644 [etc/netplan/01-unitotem-nm.yaml]
