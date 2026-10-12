@@ -6,13 +6,13 @@ from socket import gethostname
 from traceback import format_exc
 from typing import Optional
 
-import asyncwebsockets
 import requests
-from Crypto.Hash import SHA256
-from Crypto.Signature import pss as PSS
+from Cryptodome.Hash import SHA256
+from Cryptodome.Signature import pss as PSS
 from loguru import logger
 from pydantic import PositiveInt
-from wsproto.events import CloseConnection
+from websockets.asyncio.client import connect
+from websockets.exceptions import ConnectionClosed
 
 from api.commons import SHUTDOWN_EVENT
 from api.ws.endpoints import WSAPIBase
@@ -89,26 +89,28 @@ class Remote(WSAPIBase):
                     self.remote_manager.save()
 
                 verifier = PSS.new(self.remote_manager.server_pubk)
-                # noinspection PyArgumentList
-                async with asyncwebsockets.open_websocket(url, list(headers.items())) as ws:
+                # Header values must be strings. The server's certificate is checked with the default rules for now;
+                # authentication with the certificates exchanged at pairing time is still to be done.
+                async with connect(url, additional_headers={k: str(v) for k, v in headers.items()}) as ws:
                     self.__remote_connected = True
                     logger.success('Connected to', url)
-                    while not SHUTDOWN_EVENT.is_set():
-                        msg = await ws._next_event()
-                        if isinstance(msg, CloseConnection):
-                            if msg.code == 4023:
-                                self.__remote_connected = False
-                                self.set_mode(remote_server=None, remote_port=None)
-                                return
-                            break
-                        data, signature = getattr(msg, 'data', '.').split('.')
-                        data, signature = b64decode(data), b64decode(signature)
-                        verifier.verify(SHA256.new(data), signature)
-                        data = loads(data)
-                        target = data.pop('target')
-                        if target == 'Show':
-                            # Forward to locally connected Qt webview via WebSocket
-                            await self.remote_ws.broadcast('Show', **data)
+                    try:
+                        async for msg in ws:
+                            if SHUTDOWN_EVENT.is_set():
+                                break
+                            data, signature = (msg if isinstance(msg, str) else msg.decode()).split('.')
+                            data, signature = b64decode(data), b64decode(signature)
+                            verifier.verify(SHA256.new(data), signature)
+                            data = loads(data)
+                            target = data.pop('target')
+                            if target == 'Show':
+                                # Forward to locally connected Qt webview via WebSocket
+                                await self.remote_ws.broadcast('Show', **data)
+                    except ConnectionClosed as closed:
+                        if closed.rcvd is not None and closed.rcvd.code == 4023:
+                            self.__remote_connected = False
+                            self.set_mode(remote_server=None, remote_port=None)
+                            return
             except asyncio.exceptions.CancelledError:
                 logger.info('Disconnected from remote server')
                 break

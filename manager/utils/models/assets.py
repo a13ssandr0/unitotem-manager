@@ -13,7 +13,6 @@ from time import time
 from typing import Any, Callable, Coroutine, Optional, Union
 from urllib.parse import urlsplit
 
-from benedict.dicts.parse.parse_util import parse_datetime
 from loguru import logger
 from pydantic import BaseModel, Field, PrivateAttr, field_serializer, field_validator, model_validator
 from pydantic_core.core_schema import ValidationInfo
@@ -24,6 +23,7 @@ from utils import constants as const
 from utils.async_timer import Timer
 from utils.environment import environ
 from utils.extras import strtobool
+from utils.objs import parse_datetime
 from utils.models.command_line import cmdargs
 
 TIMERS: dict[str, dict[str, Timer]] = {}

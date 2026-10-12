@@ -8,10 +8,11 @@ websockets>=12.0
 # own CI (github.com/a13ssandr0/cefpython, arm64 fork of linesight/cefpython)
 # and installed separately (see debian/rules, CEF_RELEASE_TAG)
 PyJWT
+python-dateutil
+pypdf
 Werkzeug
 aiofiles
 aiohttp
-asyncwebsockets
 # dasbus, pygobject removed: sdbus-networkmanager gestisce già la comunicazione DBus con NM
 fastapi
 fastapi-login
@@ -22,23 +23,16 @@ natsort
 packaging
 psutil
 pulsectl
-pycryptodome
+pycryptodomex
 pydantic-extra-types
 pydantic
 pydantic_settings
 pymediainfo
-python-benedict
-python-benedict[parse]
 python-crontab
 python-dotenv
 python-multipart
 qrcode
 requests
-# rpyc removed: unitotem-admind replaced by hostnamed/NM DBus
-ruamel.yaml
 sdbus-networkmanager
 uvloop
-validators
 watchdog
-wcmatch
-pypdf

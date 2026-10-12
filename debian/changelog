@@ -1,3 +1,11 @@
+unitotem-manager (3.0.0~dev4) stable; urgency=medium
+
+  * Multi-page PDFs (pdf.js page renderer, pypdf for the page count), floating windows, web terminal
+  * The CEF libraries are stripped at build time and PySide6-Essentials replaces PySide6: the venv is about 1 GB smaller
+  * The page reloads itself when it was left open across an update
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Mon, 12 Oct 2026 21:07:02 +0200
+
 unitotem-manager (3.0.0~dev3) stable; urgency=medium
 
   * Multi-playlist scheduler: rename, default, copy/move assets, per-playlist default duration
