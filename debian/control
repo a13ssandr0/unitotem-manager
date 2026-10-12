@@ -25,8 +25,8 @@ Build-Depends: debhelper-compat (= 13),
                python3-pypdf,
                python3-pil,
                python3-aiofiles,
-               python3-crontab,
-               python3-dateutil,
+               python3-croniter,
+         python3-dateutil,
                python3-requests,
                python3-websockets,
                python3-werkzeug,
@@ -58,19 +58,17 @@ Build-Depends: debhelper-compat (= 13),
 Standards-Version: 4.7.0
 Homepage: https://github.com/a13ssandr0/unitotem-manager
 Rules-Requires-Root: no
-
 Package: unitotem-manager
 Architecture: all
 Depends: ${python3:Depends},
          ${misc:Depends},
-         cron | cron-daemon,
          mediainfo,
          netplan.io,
          network-manager,
          openssl,
          python3-aiofiles,
          python3-aiohttp,
-         python3-crontab,
+         python3-croniter,
          python3-dateutil,
          python3-dotenv,
          python3-fastapi,
@@ -107,7 +105,6 @@ Description: Kiosk scheduler and web management interface
  This package contains the scheduler, the API and the web interface. It runs
  on its own as a headless server; the local viewer window is in
  unitotem-viewer.
-
 Package: unitotem-viewer
 Architecture: all
 Depends: ${misc:Depends},
@@ -123,7 +120,6 @@ Description: Fullscreen viewer window for UniTotem
  One frameless fullscreen browser window per connected screen, driven by the
  UniTotem scheduler. Windows follow the screens as they are plugged and
  unplugged.
-
 Package: python3-cefpython3
 Architecture: any
 Section: python
@@ -134,7 +130,6 @@ Description: Python bindings for the Chromium Embedded Framework
  .
  This package repackages a binary build of the upstream project; it is meant
  for the UniTotem repository and is not suitable for the Debian archive.
-
 Package: plymouth-theme-unitotem
 Architecture: all
 Section: misc

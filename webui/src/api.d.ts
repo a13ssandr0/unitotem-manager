@@ -68,18 +68,6 @@ export interface Api {
       /** `device` None means the default one. [requires: audio] */
       set_volume: ApiCall<{ volume: number; device?: null | string }>
     }
-    Cron: {
-      /** Every field of the schedule is required: python-crontab's default for a missing one is '*', which [requires: admin] */
-      add_job: ApiCall<{ command: string; minute: string; hour: string; day_of_month: string; month: string; day_of_week: string; output?: null | string; mechanism?: string }>
-      /** [requires: admin] */
-      delete_job: ApiCall<{ uuid: string }>
-      /** [requires: admin] */
-      edit_job: ApiCall<{ uuid: string; command?: string; minute?: any; hour?: any; day_of_month?: any; month?: any; day_of_week?: any; output?: null | string; mechanism?: null | string }>
-      /** [requires: admin] */
-      jobs: ApiCall<Record<string, never>>
-      /** [requires: admin] */
-      set_job_enabled: ApiCall<{ uuid: string; state: boolean }>
-    }
     Display: {
       Screens: {
         /** Change how an output is controlled. `wol` is {mac, broadcast?, port?}, `serial` is [requires: admin] */
@@ -176,6 +164,18 @@ export interface Api {
       set_user_permissions: ApiCall<{ username: string; perms: ("scheduler" | "power" | "audio" | "admin")[] }>
       /** [requires: admin] */
       users: ApiCall<Record<string, never>>
+    }
+    Timers: {
+      /** Every field of the schedule is required: a missing one would otherwise mean '*'. [requires: admin] */
+      add_job: ApiCall<{ command: string; minute: string; hour: string; day_of_month: string; month: string; day_of_week: string; output?: null | string; mechanism?: string }>
+      /** [requires: admin] */
+      delete_job: ApiCall<{ uuid: string }>
+      /** [requires: admin] */
+      edit_job: ApiCall<{ uuid: string; command?: string; minute?: any; hour?: any; day_of_month?: any; month?: any; day_of_week?: any; output?: null | string; mechanism?: null | string }>
+      /** [requires: admin] */
+      jobs: ApiCall<Record<string, never>>
+      /** [requires: admin] */
+      set_job_enabled: ApiCall<{ uuid: string; state: boolean }>
     }
     Update: {
       /** [requires: admin] */

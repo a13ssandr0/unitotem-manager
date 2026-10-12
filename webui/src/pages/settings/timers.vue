@@ -219,7 +219,7 @@ const defaultItem = {
   mechanism: 'auto',
 };
 
-// Filled from Settings/Cron/getJobs. Starts empty: it used to be seeded with a
+// Filled from Settings/Timers/getJobs. Starts empty: it used to be seeded with a
 // fake "reboot at 00:00" row that looked exactly like a real timer until the
 // first backend reply replaced it, so the page claimed a schedule that did not
 // exist.
@@ -258,12 +258,12 @@ function deleteItem(item) {
   // ever sending the command - which is what this did - made a deletion look
   // like it worked until the next refresh brought the timer back.
   if (confirm('Are you sure you want to delete this item?')) {
-    api.Settings.Cron.delete_job({ uuid: item.uuid });
+    api.Settings.Timers.delete_job({ uuid: item.uuid });
   }
 }
 
 function setEnabled(item, state) {
-  api.Settings.Cron.set_job_enabled({ uuid: item.uuid, state: Boolean(state) });
+  api.Settings.Timers.set_job_enabled({ uuid: item.uuid, state: Boolean(state) });
 }
 
 function close() {
@@ -282,15 +282,15 @@ function save() {
     delete item.mechanism;
   }
   if (editedIndex.value > -1) {
-    api.Settings.Cron.edit_job(item);
+    api.Settings.Timers.edit_job(item);
   } else {
     delete item.uuid;
-    api.Settings.Cron.add_job(item);
+    api.Settings.Timers.add_job(item);
   }
   close();
 }
 
-api.Settings.Cron.jobs.on(data => {
+api.Settings.Timers.jobs.on(data => {
   timers.value = data.jobs;
 }, {init: true})
 

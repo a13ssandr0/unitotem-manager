@@ -1,4 +1,11 @@
 === CURRENT WORK ===
+Panel observation (from the user, 2026-10-13): the LG touchscreen was on and showing the right page the next morning, so it either was never
+switched off by our tests or woke up and worked. The PC attached to it reboots every night at midnight, which may have
+powered the panel up again. Not investigated further.
+Timers: the system crontab is gone. Timers are data in /etc/unitotem/timers.json (utils/models/timers.py), schedules are
+evaluated with croniter, an asyncio task fires them at each minute boundary (utils/system/timer_actions.py). The API
+namespace is now Settings/Timers. Legacy crontab lines are imported once and left in place.
+
 Debian packaging (stage 2 done, verified in a clean trixie container: `apt install` of all debs resolves, CEF + Qt import,
 manager answers /health). Source package builds four binaries: unitotem-manager (all, system python, no venv),
 unitotem-viewer (all), python3-cefpython3 (any, from vendor/cefpython-wheels, patchelf RUNPATH, no dh_python3 because it
