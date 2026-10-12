@@ -4,7 +4,11 @@
 #
 #   tools/build-debs.sh third-party     # python3-fastapi-login, python3-sdbus-networkmanager
 #   tools/build-debs.sh main            # unitotem-manager, unitotem-viewer, python3-cefpython3, plymouth-theme-unitotem
+#   tools/build-debs.sh cefpython       # only python3-cefpython3 (the one architecture-dependent package), no npm
 #   tools/build-debs.sh all
+#
+# PLATFORM=linux/arm64 builds for arm64 under qemu-user; the arch-all packages are the same on every architecture, so
+# `PLATFORM=linux/arm64 tools/build-debs.sh cefpython` is all an arm64 target needs. Wheel: vendor/cefpython-wheels/.
 #
 # The container is amd64. arm64 packages are built the same way on an arm64 machine (or under qemu).
 set -e
@@ -19,6 +23,7 @@ apt-get update -qq
 apt-get install -y -qq --no-install-recommends build-essential devscripts debhelper dh-python dh-sequence-python3 pybuild-plugin-pyproject \
     python3-all nodejs npm python3-pytest python3-pip python3-poetry-core python3-setuptools lintian fakeroot ca-certificates >/dev/null
 WHAT='"$WHAT"'
+touch /tmp/started
 
 build_third_party() {
     name="$1"; pypi="$2"; version="$3"
@@ -52,10 +57,23 @@ case "$WHAT" in
         build_third_party python-sdbus-networkmanager sdbus-networkmanager 2.0.0
         ;;
 esac
+build_cefpython() {
+    # Architecture-dependent package only: nothing of the web UI is built, and only the wheel for this architecture is
+    # copied (the wheels are hundreds of MB each, slow to copy under qemu)
+    rm -rf /tmp/build/cef; mkdir -p /tmp/build/cef/vendor/cefpython-wheels
+    cp -a /src/debian /tmp/build/cef/debian
+    cp /src/vendor/cefpython-wheels/cefpython3-*-cp313-*-linux_$(uname -m).whl /tmp/build/cef/vendor/cefpython-wheels/
+    cd /tmp/build/cef
+    apt-get build-dep -y -qq --arch-only . >/dev/null
+    dpkg-buildpackage -us -uc -B
+    cp ../python3-cefpython3_*.deb /out/
+}
+
 case "$WHAT" in main|all) build_main ;; esac
+case "$WHAT" in cefpython) build_cefpython ;; esac
 
 echo "=== lintian"
 cd /out
-for deb in python3-*.deb unitotem*.deb plymouth-*.deb; do echo "--- $deb"; lintian --info --display-info "$deb" 2>&1 | head -30 || true; done
+for deb in $(find /out -newer /tmp/started -name "*.deb"); do echo "--- $deb"; lintian --info --display-info "$deb" 2>&1 | head -30 || true; done
 '
 ls -la "$REPO/dist"

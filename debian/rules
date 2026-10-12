@@ -17,13 +17,13 @@ override_dh_builddeb:
 	dh_builddeb -- -Zgzip
 
 # Needs network access for npm: the front end is not packaged by Debian.
-override_dh_auto_build:
+override_dh_auto_build-indep:
 	cd webui && npm ci && npm run build
 
 # The tests need cron and a writable /etc/unitotem, which a build chroot does not have: see debian/tests
 override_dh_auto_test:
 
-override_dh_auto_install:
+override_dh_auto_install-indep:
 	# core: the orchestrator, complete on its own
 	install -d $(SHARE)/plugins
 	cp -r manager/api manager/routers manager/templates manager/utils manager/resources manager/static $(SHARE)/
@@ -36,12 +36,6 @@ override_dh_auto_install:
 	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -name __pycache__ -type d -prune -exec rm -rf {} +
 	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -name requirements.txt -delete
 	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -type f ! -name '*.sh' -exec chmod 644 {} +
-	# python3-cefpython3: unpack the wheel (it is already a dist-packages layout)
-	WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$(PYTAG)-*.whl 2>/dev/null | head -1); \
-	test -n "$$WHEEL" || { echo "No cefpython3 wheel for $(PYTAG) in $(CEF_WHEEL_DIR)" >&2; exit 1; }; \
-	install -d $(CEF); python3 -m zipfile -e "$$WHEEL" $(CEF)
-	# The wheel was built with an RUNPATH pointing into the CI machine; the helper finds its libraries beside itself
-	patchelf --set-rpath '$$ORIGIN' $(CEF)/cefpython3/subprocess
 	# plymouth theme
 	install -d debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem
 	cp -r plymouth/unitotem/. debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem/
@@ -49,29 +43,41 @@ override_dh_auto_install:
 	# launcher
 	install -D -m 755 debian/unitotem-manager.sh debian/unitotem-manager/usr/sbin/unitotem-manager
 
+
+override_dh_auto_install-arch:
+	# python3-cefpython3: unpack the wheel (it is already a dist-packages layout)
+	WHEEL=$$(ls $(CEF_WHEEL_DIR)/cefpython3-*-$(PYTAG)-*-linux_$(shell uname -m).whl 2>/dev/null | head -1); \
+	test -n "$$WHEEL" || { echo "No cefpython3 wheel for $(PYTAG) $(shell uname -m) in $(CEF_WHEEL_DIR)" >&2; exit 1; }; \
+	install -d $(CEF); python3 -m zipfile -e "$$WHEEL" $(CEF)
+	# The wheel was built with an RUNPATH pointing into the CI machine; the helper finds its libraries beside itself
+	patchelf --set-rpath '$$ORIGIN' $(CEF)/cefpython3/subprocess
+
+# python3-cefpython3 is left alone on purpose (see below), so dh_python3 must not run on any arch package either
+override_dh_python3-arch:
+
 # Bytecode for the private module directory; dependencies are listed by hand, imports are lazy in places.
 # python3-cefpython3 is left alone on purpose: dh_python3 would rename libcef.so & co. with an ABI tag, and CEF
 # loads them by their plain names.
-override_dh_python3:
+override_dh_python3-indep:
 	dh_python3 -p unitotem-manager /usr/share/unitotem-manager
 	dh_python3 -p unitotem-node /usr/share/unitotem-manager/plugins/unitotem_node
 	dh_python3 -p unitotem-viewer /usr/share/unitotem-manager/plugins/unitotem_viewer
 
 # The shipped CEF libraries carry debug info nothing reads: libcef.so is 465 MB unstripped, 252 MB stripped.
-override_dh_strip:
+override_dh_strip-arch:
 	dh_strip --no-automatic-dbgsym
 
-override_dh_dwz:
+override_dh_dwz-arch:
 	dh_dwz --no-dwz-multifile -Xcefpython3
 
-override_dh_installsystemd:
+override_dh_installsystemd-indep:
 	dh_installsystemd -p unitotem-manager --name=unitotem-manager unitotem-manager.service
 
 # CEF's own libraries (libvulkan, libEGL...) are shipped beside it and resolved through RPATH
-override_dh_shlibdeps:
+override_dh_shlibdeps-arch:
 	dh_shlibdeps -p python3-cefpython3 -l$(CURDIR)/$(CEF)/cefpython3 -- --ignore-missing-info
 
 # netplan refuses to be quiet about a configuration file readable by others
-override_dh_fixperms:
+override_dh_fixperms-indep:
 	dh_fixperms
 	chmod 600 debian/unitotem-node/etc/netplan/01-unitotem-nm.yaml
