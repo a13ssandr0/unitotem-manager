@@ -1,0 +1,5 @@
+python-sdbus-networkmanager (2.0.0-0unitotem1) unstable; urgency=medium
+
+  * Package for the UniTotem repository (Debian does not ship it).
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Mon, 12 Oct 2026 21:43:48 +0200

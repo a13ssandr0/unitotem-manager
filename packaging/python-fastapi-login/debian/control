@@ -1,0 +1,24 @@
+Source: python-fastapi-login
+Section: python
+Priority: optional
+Maintainer: Alessandro Campolo <campolo.alex@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               dh-sequence-python3,
+               pybuild-plugin-pyproject,
+               python3-all,
+               python3-poetry-core,
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/MushroomMaula/fastapi_login
+Testsuite: autopkgtest-pkg-pybuild
+
+Package: python3-fastapi-login
+Architecture: all
+Depends: ${python3:Depends}, ${misc:Depends}
+Description: Flask-Login like user session management for FastAPI
+ FastAPI-Login manages the user session of a FastAPI application. It reads a
+ JSON Web Token from a cookie or a header, loads the user it belongs to
+ through a function the application provides, and redirects or rejects the
+ requests of users who are not logged in.
+ .
+ Packaged in the UniTotem repository because Debian does not ship it.
