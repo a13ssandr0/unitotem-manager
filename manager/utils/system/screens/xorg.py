@@ -8,6 +8,7 @@ output name, so it follows (see webview/controller.py).
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -103,9 +104,35 @@ async def set_power(name: str, on: bool, known: Optional[XOutput] = None):
         raise RuntimeError((result.stderr or result.stdout).strip() or f'xrandr exited with {result.returncode}')
 
 
+def _dpms_sync(on):
+    """Talks to the X server directly (python-xlib, DPMS extension): no xset binary, and failures land in our own log.
+    `on` None only applies the policy."""
+    from Xlib import X, display
+    from Xlib.ext import dpms as xdpms
+    try:
+        d = display.Display()
+    except Exception as exc:
+        raise RuntimeError(f'cannot open the X display: {exc}') from exc
+    try:
+        if not d.has_extension('DPMS'):
+            raise RuntimeError('the X server has no DPMS extension')
+        # Zero timeouts so no automatic blanking timer is ever armed: the screen is switched by timers and commands only
+        d.dpms_enable()
+        d.dpms_set_timeouts(0, 0, 0)
+        d.set_screen_saver(0, 0, X.DontPreferBlanking, X.DefaultExposures)
+        if on is not None:
+            d.dpms_force_level(xdpms.DPMSModeOn if on else xdpms.DPMSModeOff)
+        d.sync()
+    finally:
+        d.close()
+
+
 async def dpms(on: bool):
-    """Blank or wake the whole X screen. Zero timeouts first so no automatic blanking timer is ever armed."""
-    for cmd in (['xset', '+dpms'], ['xset', 'dpms', '0', '0', '0'], ['xset', 'dpms', 'force', 'on' if on else 'off']):
-        result = await run(cmd, timeout=5)
-        if result.returncode != 0:
-            raise RuntimeError((result.stderr or result.stdout).strip() or 'xset failed')
+    """Blank or wake the whole X screen."""
+    await asyncio.to_thread(_dpms_sync, on)
+
+
+async def dpms_policy():
+    """The viewer owns the display policy: applied at start instead of inheriting whatever the X session left (the
+    default timeouts blank the output after ten minutes)."""
+    await asyncio.to_thread(_dpms_sync, None)

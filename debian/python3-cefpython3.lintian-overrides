@@ -5,3 +5,4 @@ python3-cefpython3: embedded-library libjpeg [usr/lib/python3/dist-packages/cefp
 python3-cefpython3: embedded-library libjsoncpp [usr/lib/python3/dist-packages/cefpython3/libcef.so]
 python3-cefpython3: embedded-library openjpeg [usr/lib/python3/dist-packages/cefpython3/libcef.so]
 python3-cefpython3: embedded-library srtp [usr/lib/python3/dist-packages/cefpython3/libcef.so]
+python3-cefpython3: embedded-library tiff [usr/lib/python3/dist-packages/cefpython3/libcef.so]
