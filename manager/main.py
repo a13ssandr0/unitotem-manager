@@ -298,6 +298,11 @@ async def screens_at_start():
                            probing=control.probing())
 
     try:
+        from utils.system.screens import xorg
+        try:
+            await xorg.dpms_policy()
+        except Exception as exc:
+            logger.warning('Cannot apply the DPMS policy: {}', exc)
         await control.wake_all(on_done=broadcast)
         await control.probe(on_done=broadcast)
     except Exception:
