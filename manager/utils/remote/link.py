@@ -23,7 +23,7 @@ from typing import Awaitable, Callable, Optional
 from loguru import logger
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
-from websockets.exceptions import ConnectionClosed, InvalidStatus, WebSocketException
+from websockets.exceptions import ConnectionClosed, InvalidMessage, InvalidStatus, WebSocketException
 
 from api.commons import SHUTDOWN_EVENT
 from utils.models.command_line import cmdargs
@@ -85,6 +85,7 @@ class LinkServer:
         self.remote_ws = remote_ws
         self.changed = changed
         self._server = None
+        self._ctx: Optional[ssl.SSLContext] = None
         self._sockets: dict[str, LinkSocket] = {}
         # set by utils.remote.transfer: receives the control messages of a client (text with a "link" key, or bytes)
         self.on_control: Optional[Callable[[Peer, LinkSocket, object], Awaitable]] = None
@@ -103,7 +104,7 @@ class LinkServer:
         rm = RemoteManager.get_instance()
         if self._server is not None or rm.role != 'server':
             return
-        ctx = server_context(rm.ensure_identity(), rm.identity_key, rm.trusted_client_certs())
+        ctx = self._ctx = server_context(rm.ensure_identity(), rm.identity_key, rm.trusted_client_certs())
         try:
             self._server = await serve(self._handle, str(cmdargs.bind_link), cmdargs.port_link, ssl=ctx,
                                        process_request=self._process_request, max_size=MAX_MESSAGE, compression=None)
@@ -113,8 +114,14 @@ class LinkServer:
             return
         logger.info('Listening for paired clients on port {}', cmdargs.port_link)
 
+    def pin(self, cert_pem: str):
+        """A client was just paired: let its certificate through without restarting the listener (which would drop the
+        clients that are connected). Removing one needs `reload`."""
+        if self._ctx is not None:
+            self._ctx.load_verify_locations(cadata=cert_pem)
+
     async def stop(self):
-        server, self._server = self._server, None
+        server, self._server, self._ctx = self._server, None, None
         if server is not None:
             server.close()          # also closes the connections: nobody is left talking to a context that is going away
             await server.wait_closed()
@@ -272,6 +279,9 @@ class ClientUplink:
                 code = e.response.status_code
                 # 403: the server answers but does not (or no longer) know this node
                 self._set('rejected' if code == 403 else 'unreachable', f'The server answered HTTP {code}')
+            except InvalidMessage:
+                # what a server that refuses our certificate in the handshake looks like from here: it hangs up
+                self._set('rejected', 'The server does not accept this node: it may have been unpaired there')
             except ssl.SSLCertVerificationError as e:
                 logger.error('The server at {} does not present the certificate it was paired with: {}', rm.server_ip, e)
                 self._set('unreachable', 'The server presented a certificate that is not the paired one')
