@@ -56,6 +56,9 @@ def show_payload(asset: Asset, window_id: int, page: int = 0) -> dict:
         # Meaningful for video and audio only, the page ignores them for everything else
         volume=asset.volume,
         muted=asset.muted,
+        # Web pages only; the page ignores them for every other container
+        zoom=asset.zoom,
+        allow_pinch_zoom=asset.allow_pinch_zoom,
     )
 
 

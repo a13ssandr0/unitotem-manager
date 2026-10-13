@@ -35,7 +35,7 @@ export interface Api {
     /** [requires: scheduler] */
     delete_playlist: ApiCall<{ playlist_id: string }>
     /** [requires: scheduler] */
-    edit_asset: ApiCall<{ uuid: string; playlist_id?: null | string; name?: null | string; url?: null | string; duration?: null | number; fit?: 0 | 1 | 2 | null; bg_color?: null | string; ena_date?: null | string; dis_date?: null | string; enabled?: boolean | null; volume?: null | number; muted?: boolean | null }>
+    edit_asset: ApiCall<{ uuid: string; playlist_id?: null | string; name?: null | string; url?: null | string; duration?: null | number; fit?: 0 | 1 | 2 | null; bg_color?: null | string; ena_date?: null | string; dis_date?: null | string; enabled?: boolean | null; volume?: null | number; muted?: boolean | null; zoom?: null | number; allow_pinch_zoom?: boolean | null }>
     /** [requires: scheduler] */
     files: ApiCall<Record<string, never>>
     /** [requires: scheduler] */

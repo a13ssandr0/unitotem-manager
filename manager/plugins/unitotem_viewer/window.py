@@ -181,7 +181,8 @@ class WebviewWindow(QMainWindow):
     # ── commands sent by the manager via WebSocket ────────────────────────
 
     def show_asset(self, src: str, container: int, fit: int, bg_color: str,
-                   volume: float = 1.0, muted: bool = False):
+                   volume: float = 1.0, muted: bool = False, zoom: float = 1.0,
+                   allow_pinch_zoom: bool = False):
         """
         Display an asset.
 
@@ -193,11 +194,16 @@ class WebviewWindow(QMainWindow):
         # page probes the URL and decides for itself (see show() in
         # boot-screen.html). Falling back to 'boot' here instead, as this used
         # to, made such an asset invisible - the logo just stayed up.
+        # Whatever arrives (an older or remote manager, a hand-edited file) is clamped here, the page divides by it
+        try:
+            zoom = min(5.0, max(0.25, float(zoom)))
+        except (TypeError, ValueError):
+            zoom = 1.0
         cont = _CONTAINERS[container] if 0 <= container < len(_CONTAINERS) else None
         fit_s = _FIT_NAMES[fit] if 0 <= fit < len(_FIT_NAMES) else 'contain'
         self._cef.execute_js(
             f'show({json.dumps(src)}, {json.dumps(cont)}, {json.dumps(fit_s)}, {json.dumps(bg_color)}, '
-            f'{json.dumps(volume)}, {json.dumps(muted)})'
+            f'{json.dumps(volume)}, {json.dumps(muted)}, {json.dumps(zoom)}, {json.dumps(bool(allow_pinch_zoom))})'
         )
 
     def set_audio_output(self, device: Optional[str]):

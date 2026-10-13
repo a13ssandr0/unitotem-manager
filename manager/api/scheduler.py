@@ -222,7 +222,9 @@ class Scheduler(WSAPIBase):
              dis_date: Optional[FutureDatetime] = None,
              enabled: Optional[bool] = None,
              volume: Optional[float] = None,
-             muted: Optional[bool] = None):
+             muted: Optional[bool] = None,
+             zoom: Optional[float] = None,
+             allow_pinch_zoom: Optional[bool] = None):
         am = playlists_manager.get(playlist_id)
         asset = am[uuid]
 
@@ -250,6 +252,10 @@ class Scheduler(WSAPIBase):
             asset.volume = volume
         if muted is not None and asset.muted != muted:
             asset.muted = muted
+        if zoom is not None and asset.zoom != zoom:
+            asset.zoom = zoom
+        if allow_pinch_zoom is not None and asset.allow_pinch_zoom != allow_pinch_zoom:
+            asset.allow_pinch_zoom = allow_pinch_zoom
         if enabled is not None and asset.enabled != enabled:
             asset.enabled = enabled
             # Enabling or disabling changes what should be on screen right now,
