@@ -70,6 +70,10 @@ class Plugin:
     request_quit: Optional[Callable[[], None]] = None
     # Extra facts the core may ask for: audio_outputs() -> list of {'name', 'description'}
     audio_outputs: Optional[Callable[[], list[dict]]] = None
+    # The operating-system account the web terminal logs in to (separate from the web users): its name, or None when
+    # the machine has none, and a way to set its password (True if it was set). Used by the first-access setup.
+    os_account: Optional[Callable[[], Optional[str]]] = None
+    set_os_password: Optional[Callable[[str], Awaitable[bool]]] = None
 
 
 loaded: list[Plugin] = []

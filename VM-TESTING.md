@@ -21,7 +21,7 @@ Related: `unitotem-system/debian-kiosk.md` documents the kiosk image itself.
 | IP | **192.168.122.50**, fixed |
 | Web UI | **https://192.168.122.50/** — real default ports, no forwarding |
 | SSH | `root` / `unitotem` (key-based after bootstrap) |
-| Login | `admin` / `admin` (created on first run) |
+| Login | `admin` / `admin` on the long-lived VM (nothing ships a default password any more: a fresh node is unclaimed, see "First access" in CLAUDE.md; set a test account with `echo PASS | unitotem-manager --create-admin NAME` as root, service stopped) |
 | Disk images | `/var/tmp/unitotem-vm/` |
 | Keys, XML, logs | `unitotem-system/work/vm-test/` (gitignored) |
 

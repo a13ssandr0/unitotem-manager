@@ -34,6 +34,7 @@ from routers.error import http_exception_handler
 from routers.login import LOGMAN, NotAuthenticatedException, login_redirect
 from templates import get_vite_assets, public_asset_files, templates
 from utils._logging import Logger
+from utils.claim import claim_manager
 from utils.models.command_line import cmdargs
 from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager, remote_manager
@@ -120,7 +121,7 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
         logger.warning('Rejected non-local request for /unitotem-{} from {}',
                        page, request.client.host if request.client else 'unknown')
         raise HTTPException(status_code=404)
-    context = {'wifi': None}
+    context = {'wifi': None, 'claim_code': claim_manager.display_code()}
     for _plugin, hook in plugins.each('first_boot_context'):
         context.update(await hook())
     return templates.TemplateResponse(request, f'{page}.html.j2', context)
@@ -154,6 +155,7 @@ async def pdf_view(request: Request):
 
 
 WWW.include_router(routers.login.router)
+WWW.include_router(routers.setup.router)
 WWW.include_router(routers.websocket.remote.router)
 WWW.include_router(routers.websocket.web_ui.router)
 # Before the scheduler router, which ends in a catch-all that requires a session
@@ -219,8 +221,10 @@ except FileNotFoundError:
 try:
     user_manager.load()
 except FileNotFoundError:
-    logger.warning('Users configuration file not found. Creating default user "admin" with password "admin".')
-    user_manager.add_user('admin', 'admin', {'admin'})
+    logger.warning('Users configuration file not found: this node has no accounts and starts unclaimed.')
+# Nothing ships with a password: without an administrator the node waits for the first-access setup (utils/claim.py),
+# and shows the claim code on its screen and in its log
+claim_manager.arm()
 
 try:
     remote_manager.get_instance()
