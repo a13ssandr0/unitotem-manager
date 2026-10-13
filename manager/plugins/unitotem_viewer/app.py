@@ -37,6 +37,7 @@ from utils.models.viewer import viewer_settings
 from utils.system.gpu import detect_gpu
 
 from .boot import stop_boot_splash
+from .cdp import Cdp
 from .splash import show_splashes
 from .window import WebviewWindow
 import utils.ready as ready
@@ -288,6 +289,9 @@ class WebviewApp:
         self._next_id = 0
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
         self._ws = None
+        self._cdp: Optional[Cdp] = None
+        self._text_focus: dict[int, dict[str, Optional[str]]] = {}      # window -> frames with a text field focused
+        self._keyboard_wanted: dict[int, bool] = {}
 
         # One fullscreen window per currently-connected screen (zero screens
         # means zero windows: the app must be able to start without any and
@@ -474,7 +478,35 @@ class WebviewApp:
 
     def _ws_thread_main(self):
         asyncio.set_event_loop(self._ws_loop)
+        self._cdp = Cdp(CDP_PORT, self._on_focus_changed)
+        self._cdp.on_binding('utKey', self._on_keyboard_key)
+        self._ws_loop.create_task(self._cdp.run(asyncio.Event()))
         self._ws_loop.run_until_complete(self._ws_client())
+
+    # ── focus in the pages and the on-screen keyboard (see cdp.py), on the websocket thread ──
+
+    def _on_focus_changed(self, window: int, frame: str, on: bool, kind: Optional[str]):
+        # Every frame of the page reports for itself, and when the focus moves from a field in one frame to a field in
+        # another the two reports can arrive in either order: the window has a text field focused if any frame says so.
+        frames = self._text_focus.setdefault(window, {})
+        if on:
+            frames[frame] = kind
+        else:
+            frames.pop(frame, None)
+        focused = bool(frames)
+        if self._keyboard_wanted.get(window) == focused:
+            return
+        self._keyboard_wanted[window] = focused
+        logger.debug('Window {}: text field focus {} ({})', window, focused, kind)
+        kind_now = next(iter(frames.values()), None)
+        js = f'window.utKeyboard && window.utKeyboard.focusChanged({json.dumps(focused)}, {json.dumps(kind_now)})'
+        asyncio.ensure_future(self._cdp.evaluate(window, js))
+
+    async def _on_keyboard_key(self, window: int, data: dict):
+        if 'text' in data:
+            await self._cdp.insert_text(window, str(data['text']))
+        elif 'key' in data:
+            await self._cdp.press(window, str(data['key']))
 
     async def _ws_client(self):
         import websockets
