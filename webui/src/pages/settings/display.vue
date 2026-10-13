@@ -126,12 +126,14 @@
       </div>
     </v-card>
     <ScreenControl />
+    <TouchMapping />
   </div>
 </template>
 
 <script setup>
 import {api} from '@/api'
 import ScreenControl from '@/components/ScreenControl.vue'
+import TouchMapping from '@/components/TouchMapping.vue'
 import {computed, ref, watch} from 'vue'
 import {useTheme} from 'vuetify'
 

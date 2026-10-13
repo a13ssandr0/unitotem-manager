@@ -4,6 +4,7 @@ from typing import Optional
 import aiohttp
 
 from unitotem_node.api.display_screens import Screens
+from unitotem_node.api.display_touch import Touch
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast
 from utils.models.user import UserPerms
@@ -26,6 +27,8 @@ def _vm() -> WebviewManager:
 class Display(WSAPIBase):
     # Settings/Display/Screens/*: kept in its own module so this one stays small, the path is the same
     Screens = Screens
+    # Settings/Display/Touch/*: which output each touch screen is mapped to
+    Touch = Touch
 
     def displays(self, viewer_id: Optional[str] = None):
         if viewer_id:

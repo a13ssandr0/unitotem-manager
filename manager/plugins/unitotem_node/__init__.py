@@ -54,7 +54,20 @@ def on_startup(loop):
             except asyncio.TimeoutError:
                 pass
 
+    async def touch_at_start():
+        """Map every touch screen to its output now, and again whenever one (or a screen) appears or goes away."""
+        from .system.touch_service import touch_service
+
+        async def broadcast():
+            await WS.broadcast('Settings/Display/Touch/devices', **touch_service.snapshot())
+
+        try:
+            await touch_service.start(broadcast)
+        except Exception:
+            logger.exception('Touch mapping start-up failed')
+
     loop.create_task(screens_at_start(), name='screens_at_start')
+    loop.create_task(touch_at_start(), name='touch_at_start')
     loop.create_task(run_timers(), name='timers')
     loop.create_task(update_watch(), name='update_watch')
 
@@ -78,6 +91,8 @@ async def first_boot_context() -> dict:
 
 
 async def on_shutdown():
+    from .system.touch_service import touch_service
+    touch_service.stop()
     from .system.network.hotspot import stop_hotspot
     await stop_hotspot()
 
