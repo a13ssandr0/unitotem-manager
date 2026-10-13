@@ -97,9 +97,6 @@ class CefWidget(QWidget):
         # raises TypeError (wrong arg count) - it was never actually
         # exercised until this call started firing.
         cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
-        # the browser child is created 1px short of the widget (measured 3839x2159 on a 3840x2160 window)
-        QTimer.singleShot(300, self._sync_browser_size)
-
     def execute_js(self, js: str):
         if self.browser:
             self.browser.ExecuteJavascript(js)
