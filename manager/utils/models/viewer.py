@@ -6,12 +6,14 @@ those describe *what* is shown and *where*, this one describes how the local
 browser itself behaves, and it applies to every window of this node.
 """
 import json
+import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from loguru import logger
-from typing import Literal
+from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from utils.models.command_line import cmdargs
 
@@ -24,6 +26,104 @@ class KeyboardSettings(BaseModel, validate_assignment=True):
                              'bottom-left', 'bottom', 'bottom-right'] = 'bottom-right'
     # a layout of simple-keyboard-layouts ('english', 'italian', 'german'...)
     layout: str = Field(default='english', pattern=r'^[A-Za-z]{2,32}$')
+
+
+# Idle times are clamped, not refused: a zero or a huge number must never leave a screen unusable
+IDLE_MIN_SECONDS = 5
+IDLE_MAX_SECONDS = 24 * 3600
+REFRESH_MIN_SECONDS = 10
+REFRESH_MAX_SECONDS = 7 * 24 * 3600
+MAX_SCHEDULES = 24
+MAX_URL_LENGTH = 2048
+# one cron field: digits, lists, ranges, steps, names (jan, mon...), '*', '?' and the L/W/# extensions of croniter
+_CRON_FIELD_RE = re.compile(r'^[0-9A-Za-z*/,\-?#]{1,64}$')
+
+
+def _clamp(value, low: int, high: int) -> int:
+    try:
+        return min(high, max(low, int(value)))
+    except (TypeError, ValueError):
+        raise ValueError(f'{value!r} is not a number of seconds')
+
+
+def normalize_schedule(expression: str) -> str:
+    """One cron-style schedule (minute hour day-of-month month day-of-week) in its canonical spelling, or ValueError.
+
+    The structure is checked here, which needs nothing but the standard library, because the core also runs on a server
+    without the viewer; where croniter is installed (every machine with a viewer) the values are checked as well.
+    """
+    if not isinstance(expression, str):
+        raise ValueError(f'{expression!r} is not a schedule')
+    fields = expression.split()
+    if len(fields) != 5 or any(not _CRON_FIELD_RE.match(f) for f in fields):
+        raise ValueError(f'{expression!r} is not a schedule of five fields (minute hour day month weekday)')
+    normalized = ' '.join(fields)
+    try:
+        from croniter import croniter
+    except ImportError:
+        return normalized
+    if not croniter.is_valid(normalized):
+        raise ValueError(f'{expression!r} is not a valid schedule')
+    return normalized
+
+
+class ScreensaverSettings(BaseModel, validate_assignment=True):
+    """An interactive window (a touch panel): it shows `home_url` indefinitely and, after `idle_timeout` seconds
+    without activity, the playlist of the window is played on top of it as a screensaver. Off unless asked for."""
+    enabled: bool = False
+    home_url: str = ''
+    idle_timeout: int = 120
+
+    @field_validator('home_url', mode='before')
+    @classmethod
+    def _url(cls, v):
+        v = '' if v is None else str(v).strip()
+        if not v:
+            return ''
+        parts = urlsplit(v)
+        if (len(v) > MAX_URL_LENGTH or parts.scheme.lower() not in ('http', 'https') or not parts.hostname
+                or any(c.isspace() or ord(c) < 32 for c in v)):
+            raise ValueError('The home page must be an http or https address')
+        return v
+
+    @field_validator('idle_timeout', mode='before')
+    @classmethod
+    def _timeout(cls, v):
+        return _clamp(v, IDLE_MIN_SECONDS, IDLE_MAX_SECONDS)
+
+    @model_validator(mode='after')
+    def _needs_a_page(self):
+        if self.enabled and not self.home_url:
+            raise ValueError('The screensaver needs a home page')
+        return self
+
+
+class RefreshSettings(BaseModel, validate_assignment=True):
+    """Programmable reload of a web page shown indefinitely (a window without a screensaver): after `refresh_after_idle`
+    seconds without activity and/or at the minutes matching one of `refresh_schedules`. Off unless asked for."""
+    refresh_after_idle: Optional[int] = None
+    refresh_schedules: list[str] = []
+
+    @field_validator('refresh_after_idle', mode='before')
+    @classmethod
+    def _idle(cls, v):
+        if v is None or v == '' or v == 0:
+            return None
+        return _clamp(v, REFRESH_MIN_SECONDS, REFRESH_MAX_SECONDS)
+
+    @field_validator('refresh_schedules', mode='before')
+    @classmethod
+    def _refresh_schedules(cls, v):
+        if v is None:
+            return []
+        if not isinstance(v, (list, tuple)) or len(v) > MAX_SCHEDULES:
+            raise ValueError(f'At most {MAX_SCHEDULES} schedules are allowed')
+        seen = []
+        for expression in v:
+            expression = normalize_schedule(expression)
+            if expression not in seen:
+                seen.append(expression)
+        return seen
 
 
 class ViewerSettings(BaseModel, validate_assignment=True):
@@ -40,6 +140,10 @@ class ViewerSettings(BaseModel, validate_assignment=True):
 
     # The on-screen keyboard of each window, keyed like the audio outputs
     keyboards: dict[str, KeyboardSettings] = {}
+
+    # Touch panels, keyed like the audio outputs: the screensaver over a home page, and the refresh of a plain page
+    screensavers: dict[str, ScreensaverSettings] = {}
+    refreshes: dict[str, RefreshSettings] = {}
 
     @staticmethod
     def _filepath() -> Path:
