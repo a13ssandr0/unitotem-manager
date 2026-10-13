@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import List, Optional
 
 from api.ws.endpoints import WSAPIBase
 from api.ws.responses import WSBroadcast, WSResponse
@@ -23,6 +23,7 @@ def _first_error(error: ValidationError) -> str:
 
 
 class Viewers(WSAPIBase):
+    # note: a method called `list` shadows the builtin in annotations here, hence typing.List
 
     def list(self):
         return WSBroadcast(
@@ -91,9 +92,8 @@ class Viewers(WSAPIBase):
 
     def set_screensaver(self, viewer_id: str, window_id: int, enabled: bool,
                         home_url: str = '', idle_timeout: int = 120):
-        """Makes a window interactive: it shows `home_url` (http or https) indefinitely and plays its playlist as a
-        screensaver after `idle_timeout` seconds (5 s to 24 h) without a touch or a key; the first touch ends the
-        screensaver and is not passed to the page."""
+        """Makes a window interactive: home page (http or https) shown indefinitely, playlist as a screensaver after
+        idle_timeout seconds (5 s to 24 h) without a touch or a key; the first touch ends it and is not passed on."""
         try:
             settings = ScreensaverSettings(enabled=enabled, home_url=home_url, idle_timeout=idle_timeout)
         except ValidationError as e:
@@ -116,9 +116,9 @@ class Viewers(WSAPIBase):
         return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
     def set_refresh(self, viewer_id: str, window_id: int, refresh_after_idle: Optional[int] = None,
-                    refresh_schedules: Optional[list[str]] = None):
-        """Reloads the web page of a window after `refresh_after_idle` seconds without activity (10 s to 7 days, empty
-        for never) and/or at the minutes matching any of `refresh_schedules` (five-field cron expressions)."""
+                    refresh_schedules: Optional[List[str]] = None):
+        """When a window reloads its web page: after refresh_after_idle seconds without activity (10 s to 7 days, empty
+        for never) and/or at the minutes matching any of refresh_schedules (five-field cron expressions)."""
         try:
             settings = RefreshSettings(refresh_after_idle=refresh_after_idle, refresh_schedules=refresh_schedules or [])
         except ValidationError as e:
