@@ -59,16 +59,6 @@ def show_splashes(screens) -> list[Splash]:
     return splashes
 
 
-def stop_boot_splash():
-    """Ends the separate splash process the boot started (see the module docstring), if there is one."""
-    import os
-    import shutil
-    import subprocess
-    if shutil.which('systemctl') and os.path.isdir('/run/systemd/system'):
-        subprocess.Popen(['systemctl', 'stop', '--no-block', 'unitotem-splash.service'],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
 def _wait_for_x(timeout: float = 120.0) -> bool:
     """The X socket and the cookie the manager's session writes for it, both needed before Qt can connect."""
     import os

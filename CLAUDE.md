@@ -204,7 +204,7 @@ windows. `TimeoutStartSec=300`.
 On a slow board the manager needs many seconds just to import its dependencies, so the very first frame comes from a
 separate tiny process: `unitotem-splash.service` (shipped by unitotem-viewer, After=start-xorg.service) runs
 `plugins/unitotem_viewer/splash.py` as a plain script that imports nothing but Qt (it must stay free of imports from the
-rest of UniTotem), sends its own READY=1 and is stopped by the viewer (`systemctl stop --no-block`) once the viewer's own
+rest of UniTotem), sends its own READY=1 and is stopped by the viewer (a D-Bus `StopUnit` call to systemd) once the viewer's own
 splash, which looks the same, is showing.
 
 
@@ -557,3 +557,6 @@ the VM-specific ones.
 - **Do not strip blank lines from `debian/control`**: they separate the stanzas ("duplicate field Package found").
 - **The unit tests need a root-writable `/etc/unitotem`** (the settings objects create their files at import), so
   they run in `debian/tests` (autopkgtest) against the installed packages, not during the build.
+- **Talk to systemd through its own interfaces, never by running its commands**: `sd_notify` (sdnotify) for READY, D-Bus
+  (python-sdbus: logind, hostnamed, systemd1 `StopUnit`) for everything else, signals (SIGTERM) for stopping a service.
+  No `subprocess` call to `systemctl`/`loginctl`/`hostnamectl`.
