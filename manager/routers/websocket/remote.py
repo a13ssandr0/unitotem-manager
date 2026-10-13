@@ -1,4 +1,3 @@
-import json
 from traceback import format_exc
 
 from fastapi import APIRouter
@@ -7,9 +6,10 @@ from loguru import logger
 from starlette import status
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from api.ws.endpoints import REMOTE_WS
 from utils import constants as const
-from api.ws.endpoints import REMOTE_WS, WS
-from utils.models.remote import RemoteManager
+from utils.remote import viewers
+from utils.remote.service import service
 
 router = APIRouter()
 
@@ -18,82 +18,32 @@ _LOCAL_HOSTS = {'127.0.0.1', '::1', 'localhost'}
 
 @router.websocket("/remote")
 async def remote_websocket(websocket: WebSocket):
-    remote_manager = RemoteManager.get_instance()
-
-    is_local = websocket.client and websocket.client.host in _LOCAL_HOSTS
-
-    # Refuse remote webviews when this instance is in client mode,
-    # but still allow local Qt webview connections.
-    # this means that this instance is running in client/slave mode
-    # and someone is trying either to connect from another client or
-    # +----------------------+ is trying to be funny and
-    # |                      | discover what happens
-    # |    OOOOOOOOO         | when the snake eats itself!
-    # |    O  *    O         |
-    # |    O  X    O         |
-    # |    OOOO    O         |
-    # |            O         |
-    # |            O         |
-    # +----------------------+
-    if remote_manager.server_ip and not is_local:
+    """The viewer of THIS node. Only from the machine itself: the viewers of other nodes are the clients paired with this
+    one and reach it on the mutual-TLS link (utils/remote/link.py), where a certificate nobody paired never gets this far.
+    Anything else knocking here from the network is refused - this used to accept any host on the LAN, which could
+    register fake viewers and read every command sent to the real ones."""
+    if not websocket.client or websocket.client.host not in _LOCAL_HOSTS:
+        logger.warning('Refused a viewer connection from {}', websocket.client.host if websocket.client else 'unknown')
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
-
-    if not websocket.client or 'instance_id' not in websocket.headers:
-        return
+    if 'instance_id' not in websocket.headers:
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
     instance_id = websocket.headers['instance_id']
     await REMOTE_WS.connect(websocket, user=instance_id)
-
-    # Register webview with WebviewManager
-    webview_info = {
-        'ip': websocket.client.host,
-        'port': websocket.headers.get('port', const.default_port_secure),
-        'hostname': websocket.headers.get('hostname', instance_id),
-        'screens': [],
-        'windows': [],
-    }
-    try:
-        from webview.controller import WebviewManager
-        vm = WebviewManager.get_instance()
-        vm.register_webview(instance_id, webview_info)
-        await WS.broadcast('Viewers/list',
-                           viewers=vm.get_webviews(),
-                           assignments=vm.get_assignments())
-    except RuntimeError:
-        vm = None
-
-    if not is_local:
-        remote_manager.clients[instance_id] = {
-            'ip': websocket.client.host,
-            'port': websocket.headers.get('port', const.default_port_secure),
-            'hostname': websocket.headers.get('hostname', instance_id),
-        }
-        remote_manager.save()
+    await viewers.viewer_connected(instance_id, websocket.client.host,
+                                   viewers.parse_port(websocket.headers.get('port'), const.default_port_secure),
+                                   websocket.headers.get('hostname', instance_id))
 
     while True:
         try:
             raw = await websocket.receive_text()
-            try:
-                msg = json.loads(raw)
-                target = msg.pop('target', None)
-                if target == 'WebviewInfo' and vm:
-                    # Webview sends its screen/window configuration
-                    vm.update_webview_info(instance_id, msg)
-                    await WS.broadcast('Viewers/list',
-                                       viewers=vm.get_webviews(),
-                                       assignments=vm.get_assignments())
-            except json.JSONDecodeError:
-                logger.debug('Non-JSON message from webview: {}', raw)
+            await viewers.viewer_message(instance_id, raw)
+            # a client node: the windows of this machine belong to the server it is paired with, which has to know them
+            await service.uplink.forward(raw)
         except WebSocketDisconnect:
             REMOTE_WS.disconnect(websocket, user=instance_id)
-            if vm:
-                vm.unregister_webview(instance_id)
-                await WS.broadcast('Viewers/list',
-                                   viewers=vm.get_webviews(),
-                                   assignments=vm.get_assignments())
-            if not is_local and instance_id in remote_manager.clients:
-                del remote_manager.clients[instance_id]
-                remote_manager.save()
+            await viewers.viewer_gone(instance_id)
+            await service.uplink.viewer_gone()
             break
         except Exception:
             logger.error(format_exc())

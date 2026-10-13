@@ -150,14 +150,12 @@ export interface Api {
       wireless_networks: ApiCall<Record<string, never>>
     }
     Remote: {
-      /** [requires: admin] */
-      disconnect_client: ApiCall<{ client: string }>
-      /** State of the RSA signing key: missing, generating or ready [requires: admin] */
+      /** State of the RSA key that signs the commands for the viewer: missing, generating or ready [requires: admin] */
       key_status: ApiCall<Record<string, never>>
-      /** [requires: admin] */
+      /** How this node is paired: its role and identity, and its clients (server) or its server (client). [requires: admin] */
       mode: ApiCall<Record<string, never>>
-      /** [requires: admin] */
-      set_mode: ApiCall<{ remote_server: null | string; remote_port?: null | number }>
+      /** Let a paired client connect again or, with enabled=False, refuse it (and drop it now) without unpairing it. [requires: admin] */
+      set_client_enabled: ApiCall<{ client_id: string; enabled: boolean }>
     }
     Security: {
       /** [requires: admin] */

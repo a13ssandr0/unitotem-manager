@@ -60,15 +60,30 @@ def _reset_users():
 # ── pairing with other nodes (the keys and certificates exchanged at pairing time) ──
 
 def _export_remote():
-    return RemoteManager.get_instance().model_dump()
+    """The identity of this node (certificate and private key), the certificates pinned at pairing time and the role.
+    The archive is as secret as the keys inside it."""
+    RemoteManager.get_instance().ensure_identity()      # a backup taken before the first pairing still carries the identity
+    return RemoteManager.get_instance().model_dump(mode='json')
 
 
 def _restore_remote(data, _version):
-    RemoteManager(**data).save()
+    RemoteManager.restore(data)
+    _remote_changed()
 
 
 def _reset_remote():
-    RemoteManager().save()
+    RemoteManager.reset()
+    _remote_changed()
+
+
+def _remote_changed():
+    """The listener / the connection to the server were built from the old state: rebuild them from the new one"""
+    import asyncio
+    from utils.remote.service import service
+    try:
+        asyncio.get_running_loop().create_task(service.apply_role())
+    except RuntimeError:
+        pass        # no loop: the next start reads the new state anyway
 
 
 # ── uploaded files ───────────────────────────────────────────────────────────
