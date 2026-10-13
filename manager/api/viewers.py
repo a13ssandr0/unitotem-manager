@@ -26,6 +26,7 @@ def _first_error(error: ValidationError) -> str:
 class Viewers(WSAPIBase):
     # note: a method called `list` shadows the builtin in annotations here, hence typing.List
 
+    @UserPerms.requires.scheduler
     def list(self):
         return WSBroadcast(
             viewers=_vm().get_webviews(),
@@ -33,12 +34,14 @@ class Viewers(WSAPIBase):
             assignments=_vm().get_assignments(),
         )
 
+    @UserPerms.requires.scheduler
     def assign_playlist(self, viewer_id: str, window_id: int, playlist_id: str):
         """Put one window on one playlist. A window shows a single playlist,
         while a playlist may drive as many windows as wanted."""
         _vm().assign(viewer_id, window_id, playlist_id)
         return self.list()
 
+    @UserPerms.requires.scheduler
     def unassign_playlist(self, viewer_id: str, window_id: int):
         _vm().unassign(viewer_id, window_id)
         return self.list()
@@ -54,7 +57,7 @@ class Viewers(WSAPIBase):
         asyncio.create_task(_vm().remove_window(viewer_id, window_id))
         return WSBroadcast()
 
-    @UserPerms.requires.admin
+    @UserPerms.requires.scheduler
     def set_audio_output(self, viewer_id: str, window_id: int, device: Optional[str] = None):
         """Where a window plays its sound: the description of one of the outputs of its host, None for the default."""
         async def apply():
@@ -88,7 +91,7 @@ class Viewers(WSAPIBase):
         return WSBroadcast(self.keyboard, viewer_id=viewer_id, window_id=window_id, enabled=enabled,
                            button_position=button_position, layout=layout)
 
-    @UserPerms.requires.admin
+    @UserPerms.requires.scheduler
     def screensaver(self, viewer_id: str, window_id: int):
         """The interactive mode of a window: its home page and the idle time after which the playlist is played over it."""
         try:
@@ -97,7 +100,7 @@ class Viewers(WSAPIBase):
             return WSResponse(error=str(e))
         return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
-    @UserPerms.requires.admin
+    @UserPerms.requires.scheduler
     def set_screensaver(self, viewer_id: str, window_id: int, enabled: bool,
                         home_url: str = '', idle_timeout: int = 120):
         """Makes a window interactive: home page (http or https) shown indefinitely, playlist as a screensaver after
@@ -115,7 +118,7 @@ class Viewers(WSAPIBase):
         asyncio.create_task(apply())
         return WSBroadcast(self.screensaver, viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
-    @UserPerms.requires.admin
+    @UserPerms.requires.scheduler
     def refresh(self, viewer_id: str, window_id: int):
         """When the web page of a window is reloaded (a window without a screensaver)."""
         try:
@@ -124,7 +127,7 @@ class Viewers(WSAPIBase):
             return WSResponse(error=str(e))
         return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
-    @UserPerms.requires.admin
+    @UserPerms.requires.scheduler
     def set_refresh(self, viewer_id: str, window_id: int, refresh_after_idle: Optional[int] = None,
                     refresh_schedules: Optional[List[str]] = None):
         """When a window reloads its web page: after refresh_after_idle seconds without activity (10 s to 7 days, empty
@@ -142,6 +145,7 @@ class Viewers(WSAPIBase):
         asyncio.create_task(apply())
         return WSBroadcast(self.refresh, viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
+    @UserPerms.requires.scheduler
     def audio_outputs(self, viewer_id: str):
         """The outputs a window of this viewer can choose from. Only this node's own sound devices are known: a
         remote viewer reports none yet, so its windows can only use the default."""

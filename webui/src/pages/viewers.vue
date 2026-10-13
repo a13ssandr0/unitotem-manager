@@ -69,7 +69,7 @@
                 </v-select>
               </td>
             </tr>
-            <tr>
+            <tr v-if="canConfigureKeyboard">
               <td class="playlist-col">
                 <div class="d-flex align-center ga-2">
                   <v-icon size="small" color="primary">mdi-keyboard</v-icon>
@@ -216,7 +216,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { api } from '@/api'
+import { api, canCall } from '@/api'
 
 const viewersMap = ref({})    // instance_id → viewer info
 const playlists = api.Scheduler.playlists.use({pick: 'playlists', initial: []})
@@ -276,6 +276,9 @@ async function toggle(playlistId, win) {
 }
 
 // Requests the current state on (re)connect
+// The keyboard of a panel is configuration of the panel, for administrators only: the row is not shown to anyone else
+const currentUser = api.Settings.Security.current_user.use()
+const canConfigureKeyboard = computed(() => canCall('Viewers/set_keyboard', currentUser.value))
 const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
 const keyboardLayouts = ['english', 'italian', 'german', 'french', 'spanish', 'brazilian', 'russian', 'polish', 'czech',
   'greek', 'turkish', 'ukrainian']
