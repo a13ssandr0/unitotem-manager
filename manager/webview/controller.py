@@ -10,7 +10,7 @@ from loguru import logger
 from api.commons import SHUTDOWN_EVENT
 from utils.models.assets import Asset, AssetsManager, idle_asset
 from utils.models.command_line import cmdargs
-from utils.models.viewer import viewer_settings
+from utils.models.viewer import KeyboardSettings, viewer_settings
 
 if TYPE_CHECKING:
     from api.ws.wsmanager import WSManager
@@ -344,6 +344,11 @@ class WebviewManager:
                 if device:
                     asyncio.create_task(self.send_webview_command(
                         instance_id, 'SetAudioOutput', window_id=window_id, device=device))
+                # and what its on-screen keyboard is like
+                keyboard = viewer_settings.keyboards.get(self._audio_key(instance_id, screen_name))
+                if keyboard:
+                    asyncio.create_task(self.send_webview_command(
+                        instance_id, 'SetKeyboard', window_id=window_id, **keyboard.model_dump()))
             playlist_id = self._assignments.get((instance_id, screen_name)) if screen_name else None
             loop = self._loops.get(playlist_id) if playlist_id else None
             if loop:
@@ -588,6 +593,24 @@ class WebviewManager:
                 window['audio_output'] = device
         await self.send_webview_command(webview_id, 'SetAudioOutput', window_id=window_id, device=device)
 
+    def get_keyboard(self, webview_id: str, window_id: int) -> KeyboardSettings:
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        return viewer_settings.keyboards.get(self._audio_key(webview_id, screen_name), KeyboardSettings())
+
+    async def set_keyboard(self, webview_id: str, window_id: int, settings: KeyboardSettings):
+        """Sets the on-screen keyboard of one window, kept per screen like the audio output."""
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        viewer_settings.keyboards[self._audio_key(webview_id, screen_name)] = settings
+        viewer_settings.save()
+        for window in self._webviews.get(webview_id, {}).get('windows', []):
+            if window.get('window_id') == window_id:
+                window['keyboard'] = settings.model_dump()
+        await self.send_webview_command(webview_id, 'SetKeyboard', window_id=window_id, **settings.model_dump())
+
     async def set_flip(self, webview_id: str, window_id: int, flip: int):
         if webview_id in self._webviews:
             windows = self._webviews[webview_id].get('windows', [])
@@ -614,7 +637,9 @@ class WebviewManager:
                 **info,
                 'windows': [
                     {**w, 'assigned_playlist': self._assignments.get((vid, w.get('screen_name'))),
-                     'audio_output': viewer_settings.audio_outputs.get(self._audio_key(vid, w.get('screen_name')))}
+                     'audio_output': viewer_settings.audio_outputs.get(self._audio_key(vid, w.get('screen_name'))),
+                     'keyboard': viewer_settings.keyboards.get(
+                         self._audio_key(vid, w.get('screen_name')), KeyboardSettings()).model_dump()}
                     for w in info.get('windows', [])
                 ],
             }

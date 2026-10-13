@@ -75,3 +75,14 @@ def test_no_default_route_means_not_connected(tmp_path):
     route.write_text(HEADER + 'wlan0\t0001A8C0\t00000000\t0001\t0\t0\t600\t00FFFFFF\t0\t0\t0\n')
     assert default_interface(str(route)) is None
     assert default_interface(str(tmp_path / 'missing')) is None
+
+
+def test_keyboard_settings_are_validated_and_off_by_default():
+    from pydantic import ValidationError
+
+    from utils.models.viewer import KeyboardSettings
+    default = KeyboardSettings()
+    assert (default.enabled, default.button_position, default.layout) == (False, 'bottom-right', 'english')
+    for bad in ({'button_position': 'middle'}, {'layout': '../../etc'}, {'layout': ''}):
+        with pytest.raises(ValidationError):
+            KeyboardSettings(**bad)

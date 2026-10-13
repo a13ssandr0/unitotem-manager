@@ -6,6 +6,7 @@ from api.ws.responses import WSBroadcast, WSResponse
 
 from utils.models.playlists import playlists_manager
 import utils.plugins as plugins
+from utils.models.viewer import KeyboardSettings
 from webview.controller import WebviewManager
 
 
@@ -52,6 +53,27 @@ class Viewers(WSAPIBase):
                 pass
         asyncio.create_task(apply())
         return None
+
+    def keyboard(self, viewer_id: str, window_id: int):
+        """The on-screen keyboard of a window."""
+        try:
+            settings = _vm().get_keyboard(viewer_id, window_id)
+        except KeyError as e:
+            return WSResponse(error=str(e))
+        return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
+
+    def set_keyboard(self, viewer_id: str, window_id: int, enabled: bool,
+                     button_position: str = 'bottom-right', layout: str = 'english'):
+        """Turns the on-screen keyboard of a window on or off, and says where its button is and which layout it has."""
+        async def apply():
+            try:
+                await _vm().set_keyboard(viewer_id, window_id, KeyboardSettings(
+                    enabled=enabled, button_position=button_position, layout=layout))
+            except KeyError:
+                pass
+        asyncio.create_task(apply())
+        return WSBroadcast(self.keyboard, viewer_id=viewer_id, window_id=window_id, enabled=enabled,
+                           button_position=button_position, layout=layout)
 
     def audio_outputs(self, viewer_id: str):
         """The outputs a window of this viewer can choose from. Only this node's own sound devices are known: a

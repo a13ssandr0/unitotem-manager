@@ -69,6 +69,7 @@ export default defineConfig({
       input: {
         main: './src/main.js',
         pdf: './src/pdf-view.js',
+        keyboard: './src/keyboard.js',
         // altre entry point per pagine specifiche
       }
     }

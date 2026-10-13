@@ -903,7 +903,10 @@ WAS OPEN, superseded - assignment per viewer instead of per window.
     and a maximum size and ALWAYS clamped inside the screen (position and size re-checked on every move, resize, screen
     change and rotation; the title/handle can never leave the screen, and there is always a way to close it): assume the
     worst possible user. Keys are delivered to the X server (XTEST) so they reach any page, cross-origin iframes included.
-    Open question: appear by itself when a text field gets focus, or only from a button.
+    DECIDED: appears by itself on a text field focus AND has a button; can be disabled; the button's position is configurable.
+    DONE (2026-10-13, verified on the VM against a cross-origin iframe with real mouse events through DevTools: opens on
+    focus, types, keeps the focus, closes on blur, dragged far outside it stays inside, shrunk it stops at the minimum).
+    NOT verified: with a real touch screen; rotated/flipped windows; password/number layouts; remote viewers.
 
 
 === API REVIEW (2026-10-11) ===

@@ -9,9 +9,21 @@ import json
 from pathlib import Path
 
 from loguru import logger
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from utils.models.command_line import cmdargs
+
+
+class KeyboardSettings(BaseModel, validate_assignment=True):
+    """The on-screen keyboard of one window (a touch panel): off unless asked for."""
+    enabled: bool = False
+    # where the button that opens it is, on the screen
+    button_position: Literal['top-left', 'top', 'top-right', 'left', 'right',
+                             'bottom-left', 'bottom', 'bottom-right'] = 'bottom-right'
+    # a layout of simple-keyboard-layouts ('english', 'italian', 'german'...)
+    layout: str = Field(default='english', pattern=r'^[A-Za-z]{2,32}$')
 
 
 class ViewerSettings(BaseModel, validate_assignment=True):
@@ -25,6 +37,9 @@ class ViewerSettings(BaseModel, validate_assignment=True):
     # Where each window sends its sound: "<viewer id>|<screen name>" -> output description, absent for the default.
     # Keyed on the screen like the playlist assignments, so it survives unplugging and replugging a monitor.
     audio_outputs: dict[str, str] = {}
+
+    # The on-screen keyboard of each window, keyed like the audio outputs
+    keyboards: dict[str, KeyboardSettings] = {}
 
     @staticmethod
     def _filepath() -> Path:

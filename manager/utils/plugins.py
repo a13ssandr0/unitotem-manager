@@ -53,8 +53,9 @@ class Plugin:
     name: str
     # (module, class, prefix) as taken by WebSocketAPI.import_class
     api: Sequence[tuple[str, str, Optional[str]]] = ()
-    # included before the core's catch-all route, in this order
-    routers: Sequence[APIRouter] = ()
+    # Returns the routers to include, before the core's catch-all route and in this order. A function, not the routers
+    # themselves: they usually import the core's login, which itself needs the API that is being built while plugins load.
+    routers: Optional[Callable[[], Sequence[APIRouter]]] = None
     backup: Sequence[BackupPart] = ()
     # called once the event loop exists and the core's managers are loaded; may create tasks on `loop`
     on_startup: Optional[Callable[[Any], None]] = None
