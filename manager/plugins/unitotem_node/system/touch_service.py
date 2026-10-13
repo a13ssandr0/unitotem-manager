@@ -112,12 +112,11 @@ class TouchService:
         devices = [{
             'key': d.key, 'name': d.name, 'vendor': d.vendor, 'product': d.product, 'serial': d.serial,
             'output': touch_map.mapping.get(d.key), 'connected': True,
-            'mapped': not touch.close_enough(d.matrix, touch.IDENTITY),
         } for d in self.devices]
         for key, output in touch_map.mapping.items():
             if key not in live:
                 devices.append({'key': key, 'name': key.split('|')[0], 'vendor': None, 'product': None,
-                                'serial': None, 'output': output, 'connected': False, 'mapped': False})
+                                'serial': None, 'output': output, 'connected': False})
         return {
             'devices': devices,
             'outputs': [{'name': o.name, 'x': o.x, 'y': o.y, 'width': o.width, 'height': o.height,

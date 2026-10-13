@@ -205,7 +205,7 @@ class XTouch:
         self.root = self.d.screen().root
         if not self.d.has_extension('XInputExtension'):
             raise RuntimeError('the X server has no XInput extension')
-        self.xi_major = self.d.get_extension_major(xinput.extname)
+        self.xi_major = self.d.display.get_extension_major(xinput.extname)
         self.d.xinput_query_version()
         self.has_randr = self.d.has_extension('RANDR')
         self._atoms: dict[str, int] = {}
