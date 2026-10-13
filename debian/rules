@@ -78,6 +78,7 @@ override_dh_dwz-arch:
 
 override_dh_installsystemd-indep:
 	dh_installsystemd -p unitotem-manager --name=unitotem-manager unitotem-manager.service
+	dh_installsystemd -p unitotem-viewer --name=unitotem-splash
 
 # CEF's own libraries (libvulkan, libEGL...) are shipped beside it and resolved through RPATH
 override_dh_shlibdeps-arch:

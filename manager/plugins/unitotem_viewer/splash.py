@@ -4,6 +4,11 @@ The first thing on a screen: a black frame with the UniTotem wordmark and a ring
 CEF takes seconds to start (much longer on an SD card) and nothing can be painted by it before that, so the boot splash
 of the system would have to wait for it. This frame is on screen within a second of the viewer starting; it is closed
 once the browser has taken over. It is static on purpose: the thread that would animate it is the one busy starting CEF.
+
+The module is also a program (`unitotem-splash.service`): started as soon as X is up, it imports nothing but Qt, so the
+frame is on screen within a second or two even on a slow board, long before the manager has finished importing its own
+dependencies. The viewer stops it once its own splash is showing, so there is no gap between the two. It must therefore
+stay free of imports from the rest of UniTotem: it is run as a plain script, not as part of the plugin package.
 """
 from pathlib import Path
 
@@ -52,3 +57,60 @@ def show_splashes(screens) -> list[Splash]:
         splash.show()
     QApplication.processEvents()
     return splashes
+
+
+def stop_boot_splash():
+    """Ends the separate splash process the boot started (see the module docstring), if there is one."""
+    import os
+    import shutil
+    import subprocess
+    if shutil.which('systemctl') and os.path.isdir('/run/systemd/system'):
+        subprocess.Popen(['systemctl', 'stop', '--no-block', 'unitotem-splash.service'],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _wait_for_x(timeout: float = 120.0) -> bool:
+    """The X socket and the cookie the manager's session writes for it, both needed before Qt can connect."""
+    import os
+    import time
+    number = os.environ.get('DISPLAY', ':0').split(':', 1)[-1].split('.', 1)[0]
+    auth = os.environ.get('XAUTHORITY')
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if os.path.exists(f'/tmp/.X11-unix/X{number}') and (auth is None or os.path.exists(auth)):
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def main() -> int:
+    import signal
+    import sys
+
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+
+    if not _wait_for_x():
+        print('unitotem-splash: no X display', file=sys.stderr)
+        return 1
+    app = QApplication(sys.argv[:1])
+    splashes = show_splashes(app.screens())
+    try:
+        from sdnotify import SystemdNotifier
+        SystemdNotifier().notify('READY=1')
+    except ImportError:
+        pass
+    # Python only runs its signal handlers while it executes bytecode, which a Qt loop does not do by itself
+    signal.signal(signal.SIGTERM, lambda *_: app.quit())
+    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    tick = QTimer()
+    tick.timeout.connect(lambda: None)
+    tick.start(200)
+    app.exec()
+    for splash in splashes:
+        splash.close()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
