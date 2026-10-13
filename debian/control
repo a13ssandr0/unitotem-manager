@@ -140,6 +140,7 @@ Depends: ${python3:Depends},
          python3-pyside6.qtcore,
          python3-pyside6.qtgui,
          python3-pyside6.qtwidgets,
+         python3-sdbus,
          unitotem-manager (= ${source:Version}),
          unitotem-node (= ${source:Version}),
 Description: Fullscreen viewer window for UniTotem
