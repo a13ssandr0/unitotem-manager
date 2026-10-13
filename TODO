@@ -894,7 +894,7 @@ WAS OPEN, superseded - assignment per viewer instead of per window.
   viewers, multi-output offsets, video/audio/PDF/image assets inside the screensaver overlay, the new Vue controls clicked
   through in a browser, apply-at-boot ordering after a full VM boot. Open questions: should "Automatic" map a single-output node
   by itself; should refresh also apply to the home page of an interactive window; should a window with a home page but no
-  playlist show the "no assets" page instead of nothing; does the Viewers/* setters need a capability (none today); the X
+  playlist show the "no assets" page instead of nothing; DECIDED by the user: the Viewers/* settings (keyboard, screensaver, refresh, audio output, windows) are administrative, admin only, now explicit with @UserPerms.requires.admin (assign_playlist/list are admin by default too: should a scheduler user be able to assign playlists to windows?); the X
   restart does not reconnect the touch listener on a node without the viewer; Viewers page setKeyboard merges from possibly
   stale local state; no "reload home page" button.
 
