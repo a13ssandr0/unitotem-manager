@@ -6,7 +6,9 @@ from api.ws.responses import WSBroadcast, WSResponse
 
 from utils.models.playlists import playlists_manager
 import utils.plugins as plugins
-from utils.models.viewer import KeyboardSettings
+from pydantic import ValidationError
+
+from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings
 from webview.controller import WebviewManager
 
 
@@ -14,6 +16,10 @@ def _vm() -> WebviewManager:
     # deferred: WebviewManager is initialized in main.py, after this module
     # has already been imported and instantiated by the WebSocketAPI registry
     return WebviewManager.get_instance()
+
+
+def _first_error(error: ValidationError) -> str:
+    return error.errors()[0]['msg'].removeprefix('Value error, ')
 
 
 class Viewers(WSAPIBase):
@@ -74,6 +80,57 @@ class Viewers(WSAPIBase):
         asyncio.create_task(apply())
         return WSBroadcast(self.keyboard, viewer_id=viewer_id, window_id=window_id, enabled=enabled,
                            button_position=button_position, layout=layout)
+
+    def screensaver(self, viewer_id: str, window_id: int):
+        """The interactive mode of a window: its home page and the idle time after which the playlist is played over it."""
+        try:
+            settings = _vm().get_screensaver(viewer_id, window_id)
+        except KeyError as e:
+            return WSResponse(error=str(e))
+        return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
+
+    def set_screensaver(self, viewer_id: str, window_id: int, enabled: bool,
+                        home_url: str = '', idle_timeout: int = 120):
+        """Makes a window interactive: it shows `home_url` (http or https) indefinitely and plays its playlist as a
+        screensaver after `idle_timeout` seconds (5 s to 24 h) without a touch or a key; the first touch ends the
+        screensaver and is not passed to the page."""
+        try:
+            settings = ScreensaverSettings(enabled=enabled, home_url=home_url, idle_timeout=idle_timeout)
+        except ValidationError as e:
+            return WSResponse(error=_first_error(e))
+
+        async def apply():
+            try:
+                await _vm().set_screensaver(viewer_id, window_id, settings)
+            except KeyError:
+                pass
+        asyncio.create_task(apply())
+        return WSBroadcast(self.screensaver, viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
+
+    def refresh(self, viewer_id: str, window_id: int):
+        """When the web page of a window is reloaded (a window without a screensaver)."""
+        try:
+            settings = _vm().get_refresh(viewer_id, window_id)
+        except KeyError as e:
+            return WSResponse(error=str(e))
+        return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
+
+    def set_refresh(self, viewer_id: str, window_id: int, refresh_after_idle: Optional[int] = None,
+                    refresh_schedules: Optional[list[str]] = None):
+        """Reloads the web page of a window after `refresh_after_idle` seconds without activity (10 s to 7 days, empty
+        for never) and/or at the minutes matching any of `refresh_schedules` (five-field cron expressions)."""
+        try:
+            settings = RefreshSettings(refresh_after_idle=refresh_after_idle, refresh_schedules=refresh_schedules or [])
+        except ValidationError as e:
+            return WSResponse(error=_first_error(e))
+
+        async def apply():
+            try:
+                await _vm().set_refresh(viewer_id, window_id, settings)
+            except KeyError:
+                pass
+        asyncio.create_task(apply())
+        return WSBroadcast(self.refresh, viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
     def audio_outputs(self, viewer_id: str):
         """The outputs a window of this viewer can choose from. Only this node's own sound devices are known: a

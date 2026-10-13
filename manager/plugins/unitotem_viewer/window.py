@@ -181,13 +181,14 @@ class WebviewWindow(QMainWindow):
     # ── commands sent by the manager via WebSocket ────────────────────────
 
     def show_asset(self, src: str, container: int, fit: int, bg_color: str,
-                   volume: float = 1.0, muted: bool = False):
+                   volume: float = 1.0, muted: bool = False, idle: bool = False):
         """
         Display an asset.
 
         container: index into ['boot','web','image','video','audio'] (= media_type + 1)
         fit:       FitEnum int value → 'contain' | 'cover' | 'fill'
         bg_color:  CSS colour string e.g. 'rgb(0,0,0)'
+        idle:      there is nothing to play (the idle page): a screensaver has nothing to show
         """
         # A negative index means the media type is unknown: pass null so the
         # page probes the URL and decides for itself (see show() in
@@ -197,7 +198,7 @@ class WebviewWindow(QMainWindow):
         fit_s = _FIT_NAMES[fit] if 0 <= fit < len(_FIT_NAMES) else 'contain'
         self._cef.execute_js(
             f'show({json.dumps(src)}, {json.dumps(cont)}, {json.dumps(fit_s)}, {json.dumps(bg_color)}, '
-            f'{json.dumps(volume)}, {json.dumps(muted)})'
+            f'{json.dumps(volume)}, {json.dumps(muted)}, {json.dumps(idle)})'
         )
 
     def set_audio_output(self, device: Optional[str]):
