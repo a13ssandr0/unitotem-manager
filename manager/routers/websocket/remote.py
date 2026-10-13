@@ -7,11 +7,15 @@ from starlette import status
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from api.ws.endpoints import REMOTE_WS
+from routers import pairing
 from utils import constants as const
 from utils.remote import viewers
 from utils.remote.service import service
 
 router = APIRouter()
+# The endpoints other nodes call to pair (not websockets, but part of the same feature, and this router is the one
+# main.py includes before the scheduler's catch-all)
+router.include_router(pairing.router)
 
 _LOCAL_HOSTS = {'127.0.0.1', '::1', 'localhost'}
 

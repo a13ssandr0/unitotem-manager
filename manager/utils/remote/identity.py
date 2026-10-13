@@ -52,6 +52,10 @@ def cert_der(cert: Union[str, bytes]) -> bytes:
         raise ValueError(f'Not a certificate: {e}') from e
 
 
+def der_to_pem(der: bytes) -> str:
+    return x509.load_der_x509_certificate(der).public_bytes(serialization.Encoding.PEM).decode()
+
+
 def fingerprint(cert: Union[str, bytes]) -> str:
     """SHA-256 of the DER certificate, lowercase hex: what pairing pins and what the user is asked to compare."""
     return hashlib.sha256(cert_der(cert)).hexdigest()
