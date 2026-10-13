@@ -12,6 +12,10 @@ export interface Api {
     poweroff: ApiCall<Record<string, never>>
     /** [requires: power] */
     reboot: ApiCall<Record<string, never>>
+    /** Suspend now and wake up at `wake_at`, a date and time (YYYY-MM-DDTHH:MM) in the node's own local time. [requires: power] */
+    suspend: ApiCall<{ wake_at: string }>
+    /** Whether this node can suspend and wake itself up, and if not why (shown by the web UI before offering it). [requires: power] */
+    suspend_support: ApiCall<Record<string, never>>
   }
   Scheduler: {
     /** [requires: scheduler] */
@@ -175,11 +179,11 @@ export interface Api {
     }
     Timers: {
       /** Every field of the schedule is required: a missing one would otherwise mean '*'. [requires: admin] */
-      add_job: ApiCall<{ command: string; minute: string; hour: string; day_of_month: string; month: string; day_of_week: string; output?: null | string; mechanism?: string }>
+      add_job: ApiCall<{ command: string; minute: string; hour: string; day_of_month: string; month: string; day_of_week: string; output?: null | string; mechanism?: string; wake?: null | string }>
       /** [requires: admin] */
       delete_job: ApiCall<{ uuid: string }>
       /** [requires: admin] */
-      edit_job: ApiCall<{ uuid: string; command?: string; minute?: any; hour?: any; day_of_month?: any; month?: any; day_of_week?: any; output?: null | string; mechanism?: null | string }>
+      edit_job: ApiCall<{ uuid: string; command?: string; minute?: any; hour?: any; day_of_month?: any; month?: any; day_of_week?: any; output?: null | string; mechanism?: null | string; wake?: null | string }>
       /** [requires: admin] */
       jobs: ApiCall<Record<string, never>>
       /** [requires: admin] */

@@ -17,6 +17,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScreenControl: typeof import('./src/components/ScreenControl.vue')['default']
+    SuspendDialog: typeof import('./src/components/SuspendDialog.vue')['default']
     TerminalWindow: typeof import('./src/components/TerminalWindow.vue')['default']
     TouchMapping: typeof import('./src/components/TouchMapping.vue')['default']
     WindowTaskbar: typeof import('./src/components/WindowTaskbar.vue')['default']

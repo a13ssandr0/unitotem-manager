@@ -17,6 +17,9 @@
       <v-btn v-if="allowed('Power/reboot')" icon @click="rebootDialog = true">
         <v-icon>mdi-restart</v-icon>
       </v-btn>
+      <v-btn v-if="allowed('Power/suspend')" icon title="Suspend and wake up later" @click="suspendDialog = true">
+        <v-icon>mdi-power-sleep</v-icon>
+      </v-btn>
       <v-btn v-if="allowed('Power/poweroff')" icon @click="powerOffDialog = true">
         <v-icon>mdi-power</v-icon>
       </v-btn>
@@ -112,6 +115,8 @@
       </v-card>
     </v-dialog>
 
+    <SuspendDialog v-if="allowed('Power/suspend')" v-model="suspendDialog" />
+
     <v-snackbar v-model="errorSnack" color="error" :timeout="8000" multi-line>
       {{ errorText }}
     </v-snackbar>
@@ -132,6 +137,7 @@ import {useDisplay, useTheme} from 'vuetify'
 import {useRoute, useRouter} from 'vue-router'
 import TerminalWindow from '@/components/TerminalWindow.vue'
 import WindowTaskbar from '@/components/WindowTaskbar.vue'
+import SuspendDialog from '@/components/SuspendDialog.vue'
 import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, onApi, send} from '@/api'
 
 const theme = useTheme()
@@ -175,6 +181,7 @@ const {lgAndUp} = useDisplay()
 const drawer = ref(lgAndUp.value)
 const rebootDialog = ref(false)
 const powerOffDialog = ref(false)
+const suspendDialog = ref(false)
 
 const hostname = ref(window.__INITIAL_STATE__.hostname)
 // The terminal is offered by the node plugin: a server without it has no terminal to open
