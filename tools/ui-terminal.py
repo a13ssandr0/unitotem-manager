@@ -117,9 +117,14 @@ async def main(args):
             state = await cdp.eval("""(() => { const w = document.querySelector('.floating-window');
               const item = document.querySelector('.window-taskbar .taskbar-item'); const bar = document.querySelector('.window-taskbar');
               return {hidden: getComputedStyle(w).visibility === 'hidden', chip: item ? item.innerText.trim() : null,
-                      bottom: bar ? Math.round(bar.getBoundingClientRect().bottom) == innerHeight : false} })()""")
+                      bottom: bar ? Math.round(bar.getBoundingClientRect().bottom) == innerHeight : false,
+                      // the drawer and the page end above the bar, nothing runs underneath it
+                      clear: bar ? (() => { const d = document.querySelector('.v-navigation-drawer'), m = document.querySelector('.v-main');
+                        return (!d || parseFloat(getComputedStyle(d).paddingBottom) >= bar.getBoundingClientRect().height - 1) &&
+                               (!m || parseFloat(getComputedStyle(m).paddingBottom) >= bar.getBoundingClientRect().height - 1) })() : false} })()""")
             check('minimising hides the window and lists it in a taskbar at the bottom',
                   state['hidden'] and state['chip'] == 'shell-title-test' and state['bottom'])
+            check('the drawer and the page end above the taskbar', state['clear'])
             await cdp.eval("document.querySelector('.window-taskbar .taskbar-item').click()")
             await asyncio.sleep(0.6)
             visible = await cdp.eval("getComputedStyle(document.querySelector('.floating-window')).visibility") == 'visible'

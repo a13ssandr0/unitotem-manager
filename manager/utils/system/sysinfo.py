@@ -6,6 +6,7 @@ from natsort import natsorted
 from psutil import boot_time, sensors_battery, sensors_fans, virtual_memory
 
 from utils.system.cpu import cpu_times_percent
+from utils.system.machine import machine_info
 from utils.system.lsblk import lsblk
 from utils.system.sensors import sensors_temperatures
 
@@ -61,6 +62,7 @@ def get_disks():
 
 def get_sysinfo():
     return dict(
+            **machine_info(),
             uptime=get_uptime(),
             cpu=get_cpu(),
             vmem=virtual_memory()._asdict(),

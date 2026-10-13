@@ -73,3 +73,14 @@ const frontId = computed(() => {
   font-size: 16px !important;
 }
 </style>
+
+<style>
+/* The bar is not a Vuetify layout item (those do not register reliably for a bar that comes and goes): the navigation
+   drawer (its last row, the footer text, stays visible) and the page leave room for it through the variable the component sets while it is shown. */
+.v-navigation-drawer {
+  padding-bottom: var(--taskbar-height, 0px);
+}
+.v-main {
+  padding-bottom: calc(var(--v-layout-bottom, 0px) + var(--taskbar-height, 0px)) !important;
+}
+</style>
