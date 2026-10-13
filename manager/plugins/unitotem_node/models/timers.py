@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -20,10 +21,11 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from utils.models.command_line import cmdargs
 from unitotem_node.models.screen_control import MechanismChoice, OUTPUT_NAME_RE
+from unitotem_node.system import wake
 
-ACTIONS = ('pwr', 'reb')
+ACTIONS = ('pwr', 'reb', 'sus')
 SCREEN_ACTIONS = ('scr_on', 'scr_off')
-Action = Literal['pwr', 'reb', 'scr_on', 'scr_off']
+Action = Literal['pwr', 'reb', 'sus', 'scr_on', 'scr_off']
 _LEGACY_MARK = 'unitotem:-)'
 
 
@@ -38,6 +40,9 @@ class Timer(BaseModel, validate_assignment=True):
     enabled: bool = True
     output: Optional[str] = None
     mechanism: MechanismChoice = 'auto'
+    # 'sus' only: the schedule (five cron fields in one string) of the NEXT wake-up, evaluated after the suspend time.
+    # Optional with a default so that a timers.json written before this existed still loads (rollback keeps working).
+    wake: Optional[str] = None
 
     @field_validator('minute', 'hour', 'day_of_month', 'month', 'day_of_week', mode='before')
     @classmethod
@@ -47,10 +52,23 @@ class Timer(BaseModel, validate_assignment=True):
             raise ValueError(f'{v!r} is not a schedule field')    # one field must stay one field
         return v
 
+    @field_validator('wake', mode='after')
+    @classmethod
+    def _wake(cls, v):
+        if v is None:
+            return v
+        v = ' '.join(v.split())
+        if len(v.split()) != 5 or not croniter.is_valid(v):
+            raise ValueError(f'{v!r} is not a valid wake-up schedule (five fields, e.g. "0 7 * * *")')
+        return v
+
     @model_validator(mode='after')
     def _check(self):
         if not croniter.is_valid(self.expression):
             raise ValueError(f'{self.expression!r} is not a valid schedule')
+        if self.action == 'sus':
+            if not self.wake:
+                raise ValueError('A suspend timer needs the schedule of its wake-up')
         if self.action in SCREEN_ACTIONS:
             if not self.output or not OUTPUT_NAME_RE.match(self.output):
                 raise ValueError(f'{self.output!r} is not an output name')
@@ -63,8 +81,18 @@ class Timer(BaseModel, validate_assignment=True):
     def matches(self, when) -> bool:
         return croniter.match(self.expression, when)
 
+    def next_wake(self) -> dict:
+        """For the UI: when this suspend timer will next sleep and wake, or why that cannot work."""
+        try:
+            suspend_at = wake.next_occurrence(self.expression, time.time())
+            return {'next_suspend': suspend_at, 'next_wake': wake.plan_wake(self.wake, suspend_at), 'wake_problem': None}
+        except wake.WakeError as exc:
+            return {'next_suspend': None, 'next_wake': None, 'wake_problem': str(exc)}
+
     def serialize(self) -> dict:
         return {
+            **(self.next_wake() if self.action == 'sus' else {}),
+            'wake': self.wake if self.action == 'sus' else None,
             'uuid': self.uuid,
             'command': self.action,
             'output': self.output if self.action in SCREEN_ACTIONS else None,

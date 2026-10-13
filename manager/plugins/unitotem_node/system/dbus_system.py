@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from socket import gethostname
 
 import sdbus
-from sdbus import DbusInterfaceCommonAsync, dbus_method_async, dbus_property_async
+from sdbus import DbusInterfaceCommonAsync, dbus_method_async, dbus_property_async, dbus_signal_async
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -43,9 +43,23 @@ class _Logind(DbusInterfaceCommonAsync, interface_name='org.freedesktop.login1.M
     @dbus_method_async(result_signature='s')
     async def can_power_off(self) -> str: ...
 
+    @dbus_method_async('b')
+    async def suspend(self, interactive: bool) -> None: ...
+
+    @dbus_method_async(result_signature='s')
+    async def can_suspend(self) -> str: ...
+
+    @dbus_signal_async('b')
+    def prepare_for_sleep(self) -> bool:
+        """True just before the system goes to sleep, False right after it woke up."""
+        raise NotImplementedError
+
 
 def _get_logind(bus) -> _Logind:
     return _Logind.new_proxy('org.freedesktop.login1', '/org/freedesktop/login1', bus)
+
+
+get_logind = _get_logind        # for code that keeps its own bus open (signal subscriptions)
 
 
 async def system_reboot():
@@ -66,6 +80,17 @@ async def can_reboot() -> bool:
 async def can_poweroff() -> bool:
     with _system_bus() as bus:
         return (await _get_logind(bus).can_power_off()) == 'yes'
+
+
+async def system_suspend():
+    with _system_bus() as bus:
+        await _get_logind(bus).suspend(False)
+
+
+async def can_suspend() -> str:
+    """logind's answer, verbatim: 'yes', 'no', 'na' (not supported) or 'challenge' (would need authentication)."""
+    with _system_bus() as bus:
+        return await _get_logind(bus).can_suspend()
 
 
 # ── hostnamed ──────────────────────────────────────────────────────────────
