@@ -77,6 +77,7 @@ class Terminal:
         self.username = username
         self.loop = asyncio.get_running_loop()
         self.output: asyncio.Queue[bytes | None] = asyncio.Queue()
+        self.last_output = b''
         self.master = -1
         self.slave = -1
         self.proc: asyncio.subprocess.Process | None = None
@@ -114,6 +115,7 @@ class Terminal:
         except (BlockingIOError, OSError):
             return        # woken with nothing to read; the end of a login is detected by `supervise`
         if data:
+            self.last_output = data[-1:]
             self.output.put_nowait(data)
 
     async def pump_output(self):
@@ -157,6 +159,9 @@ class Terminal:
                     quick = 0
                 logger.info('login for {} ended before anybody logged in (status {}): starting it again',
                             self.username, proc.returncode)
+                if self.last_output not in (b'\n', b'\r', b''):
+                    # login's own message ("timed out after 60 seconds") has no end of line: the new prompt would follow it
+                    self.output.put_nowait(b'\r\n')
                 await self.start_login()
         except Exception:
             logger.exception('Terminal supervisor of {} failed', self.username)
