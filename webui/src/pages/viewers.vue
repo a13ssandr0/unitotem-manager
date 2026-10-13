@@ -69,6 +69,29 @@
                 </v-select>
               </td>
             </tr>
+            <tr>
+              <td class="playlist-col">
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="small" color="primary">mdi-keyboard</v-icon>
+                  <div>
+                    <div class="font-weight-medium">On-screen keyboard</div>
+                    <div class="text-caption text-medium-emphasis">For touch screens: opens by itself on a text field, or from its button</div>
+                  </div>
+                </div>
+              </td>
+              <td v-for="win in windows" :key="win.key" class="text-center">
+                <div class="d-flex flex-column ga-2 align-center">
+                  <v-switch :model-value="win.keyboard.enabled" label="Enabled" density="compact" hide-details color="primary"
+                            @update:model-value="v => setKeyboard(win, {enabled: !!v})"></v-switch>
+                  <v-select :items="keyboardPositions" :model-value="win.keyboard.button_position" label="Button position"
+                            density="compact" variant="outlined" hide-details min-width="160" :disabled="!win.keyboard.enabled"
+                            @update:model-value="v => setKeyboard(win, {button_position: v})"></v-select>
+                  <v-select :items="keyboardLayouts" :model-value="win.keyboard.layout" label="Layout"
+                            density="compact" variant="outlined" hide-details min-width="160" :disabled="!win.keyboard.enabled"
+                            @update:model-value="v => setKeyboard(win, {layout: v})"></v-select>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </v-table>
       </v-col>
@@ -174,6 +197,7 @@ const windows = computed(() =>
       height: win.height,
       assigned_playlist: win.assigned_playlist,
       audio_output: win.audio_output,
+      keyboard: {enabled: false, button_position: 'bottom-right', layout: 'english', ...win.keyboard},
     }))
   )
 )
@@ -200,6 +224,12 @@ async function toggle(playlistId, win) {
 }
 
 // Requests the current state on (re)connect
+const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
+const keyboardLayouts = ['english', 'italian', 'german', 'french', 'spanish', 'brazilian', 'russian', 'polish', 'czech',
+  'greek', 'turkish', 'ukrainian']
+function setKeyboard(win, patch) {
+  api.Viewers.set_keyboard({viewer_id: win.viewer_id, window_id: win.window_id, ...win.keyboard, ...patch})
+}
 const audioOutputs = ref({})   // viewer id -> outputs its windows can use
 
 const outputItems = (win) => [

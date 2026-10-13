@@ -359,6 +359,22 @@
     }
 
     /**
+     * The on-screen keyboard of a touch panel (webui/src/keyboard.js, served by the manager). Its settings are put in
+     * window.__utKeyboardConfig by the viewer, over the DevTools connection, and this is called afterwards - or the
+     * settings were there first and this runs when the page has loaded. It is loaded only once it is enabled.
+     */
+    let keyboardLoad = null;
+    function applyKeyboard() {
+      const cfg = window.__utKeyboardConfig;
+      if (!cfg) return;
+      if (!keyboardLoad) {
+        if (!cfg.enabled) return;
+        keyboardLoad = import(cfg.module);
+      }
+      keyboardLoad.then(() => window.utKeyboard.configure(cfg)).catch(e => { keyboardLoad = null; console.error('keyboard', e); });
+    }
+
+    /**
      * Called by the Python viewer via CEF ExecuteJavascript.
      * orientation: 0=0deg, 1=90deg, 2=180deg, 3=270deg (clockwise)
      */
@@ -440,6 +456,7 @@
         wrap.style.transform = '';
       }, { once: true });
     }
+    applyKeyboard();
   </script>
 </body>
 </html>

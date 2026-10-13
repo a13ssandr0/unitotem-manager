@@ -151,9 +151,9 @@ BACKUP = (
 )
 
 
-def _router():
+def _routers():
     from .terminal import router
-    return router
+    return (router,)
 
 
 PLUGIN = Plugin(
@@ -166,7 +166,7 @@ PLUGIN = Plugin(
         ('unitotem_node.api.updater', 'Update', 'Settings'),
         ('unitotem_node.api.display', 'Display', 'Settings'),
     ),
-    routers=(_router(),),
+    routers=_routers,
     backup=BACKUP,
     on_startup=on_startup,
     on_first_boot=on_first_boot,

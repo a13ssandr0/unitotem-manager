@@ -157,8 +157,8 @@ WWW.include_router(routers.login.router)
 WWW.include_router(routers.websocket.remote.router)
 WWW.include_router(routers.websocket.web_ui.router)
 # Before the scheduler router, which ends in a catch-all that requires a session
-for _plugin, _routers in plugins.each('routers'):
-    for _router in _routers:
+for _plugin, _factory in plugins.each('routers'):
+    for _router in _factory():
         WWW.include_router(_router)
 WWW.include_router(routers.backup.router)
 WWW.include_router(routers.scheduler.router)
