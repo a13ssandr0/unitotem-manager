@@ -290,6 +290,7 @@ class WebviewApp:
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
         self._ws = None
         self._cdp: Optional[Cdp] = None
+        self._keyboard_config: dict[int, dict] = {}     # window -> settings of its on-screen keyboard
         self._text_focus: dict[int, dict[str, Optional[str]]] = {}      # window -> frames with a text field focused
         self._keyboard_wanted: dict[int, bool] = {}
 
@@ -478,7 +479,7 @@ class WebviewApp:
 
     def _ws_thread_main(self):
         asyncio.set_event_loop(self._ws_loop)
-        self._cdp = Cdp(CDP_PORT, self._on_focus_changed)
+        self._cdp = Cdp(CDP_PORT, self._on_focus_changed, self._on_page_ready)
         self._cdp.on_binding('utKey', self._on_keyboard_key)
         self._ws_loop.create_task(self._cdp.run(asyncio.Event()))
         self._ws_loop.run_until_complete(self._ws_client())
@@ -501,6 +502,21 @@ class WebviewApp:
         kind_now = next(iter(frames.values()), None)
         js = f'window.utKeyboard && window.utKeyboard.focusChanged({json.dumps(focused)}, {json.dumps(kind_now)})'
         asyncio.ensure_future(self._cdp.evaluate(window, js))
+
+    def _on_page_ready(self, window: int):
+        asyncio.ensure_future(self._apply_keyboard(window))
+
+    async def _apply_keyboard(self, window: int):
+        """Hands the keyboard settings of a window to its page. Safe to call before the page has loaded (it applies
+        them itself when it has) and again whenever they change."""
+        config = self._keyboard_config.get(window)
+        if config is None or self._cdp is None:
+            return
+        from templates import get_vite_assets
+        from urllib.parse import urlparse
+        module = f'https://{urlparse(self.manager_url).netloc}{get_vite_assets("src/keyboard.js")["js"]}'
+        settings = json.dumps({**config, 'module': module})
+        await self._cdp.evaluate(window, f'window.__utKeyboardConfig = {settings}; window.applyKeyboard && window.applyKeyboard();')
 
     async def _on_keyboard_key(self, window: int, data: dict):
         if 'text' in data:
@@ -593,6 +609,12 @@ class WebviewApp:
                 volume   = data.get('volume', 1.0),
                 muted    = data.get('muted', False),
             )
+        elif target == 'SetKeyboard' and win:
+            self._keyboard_config[data['window_id']] = {
+                'enabled': bool(data.get('enabled')), 'button_position': data.get('button_position', 'bottom-right'),
+                'layout': data.get('layout', 'english')}
+            if self._ws_loop is not None:
+                asyncio.run_coroutine_threadsafe(self._apply_keyboard(data['window_id']), self._ws_loop)
         elif target == 'SetAudioOutput' and win:
             win.set_audio_output(data.get('device'))
         elif target == 'SetBounds' and win:

@@ -208,6 +208,16 @@ rest of UniTotem), sends its own READY=1 and is stopped by the viewer (a D-Bus `
 splash, which looks the same, is showing.
 
 
+## On-screen keyboard (touch panels)
+Per window (`Viewers/set_keyboard`, kept per screen in viewer_settings.json, off by default): enabled, the position of the
+button that opens it, a layout. It opens by itself when a text field gets the focus in ANY frame of the page and closes when
+the focus leaves (unless the visitor opened it with the button). Pieces: `plugins/unitotem_viewer/cdp.py` (the viewer's
+DevTools connection: injects a focus watcher into every frame, cross-origin ones included, which are separate targets,
+and delivers text with `Input.insertText` and keys with `Input.dispatchKeyEvent`), `webui/src/keyboard.js` (simple-keyboard
+UI drawn inside the page's rotated container, loaded by `boot-screen.html` on demand), and the window id in the page address
+(`boot-screen.html?window=N`), which is how a DevTools target is tied to a window. The keyboard can be moved and resized
+but is clamped inside the screen and to a minimum size after every gesture, every size change and every rotation.
+
 # Rules
 
 Everything above describes *what* UniTotem must do. This section describes *how* to work on it.
@@ -560,3 +570,13 @@ the VM-specific ones.
 - **Talk to systemd through its own interfaces, never by running its commands**: `sd_notify` (sdnotify) for READY, D-Bus
   (python-sdbus: logind, hostnamed, systemd1 `StopUnit`) for everything else, signals (SIGTERM) for stopping a service.
   No `subprocess` call to `systemctl`/`loginctl`/`hostnamectl`.
+
+- **A plugin's routers must be returned by a function, not built at import.** `Plugin.routers` is a callable: a router module
+  imports `routers.login`, which needs the API that is being built while the plugins load; importing it from the plugin's
+  `__init__` worked or failed depending on which module was imported first (the API types generator hit it, the manager did not).
+- **Do not rely on the exports of a Vite entry chunk**: an app build drops them. `keyboard.js` publishes `window.utKeyboard`
+  instead, and the page that loads it calls that.
+- **Moving and resizing something inside the viewer page cannot use interact.js and the like**: the page's content can be
+  rotated and flipped with CSS and those libraries do not follow a transformed parent; `keyboard.js` converts the pointer
+  movement itself (`toLayer`).
+- **With `--disable-web-security` Chromium wants `--user-data-dir`**, otherwise it logs an error and ignores the switch.

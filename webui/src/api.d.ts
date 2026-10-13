@@ -203,12 +203,16 @@ export interface Api {
     assign_playlist: ApiCall<{ viewer_id: string; window_id: number; playlist_id: string }>
     /** The outputs a window of this viewer can choose from. Only this node's own sound devices are known: a [requires: admin] */
     audio_outputs: ApiCall<{ viewer_id: string }>
+    /** The on-screen keyboard of a window. [requires: admin] */
+    keyboard: ApiCall<{ viewer_id: string; window_id: number }>
     /** [requires: admin] */
     list: ApiCall<Record<string, never>>
     /** [requires: admin] */
     remove_window: ApiCall<{ viewer_id: string; window_id: number }>
     /** Where a window plays its sound: the description of one of the outputs of its host, None for the default. [requires: admin] */
     set_audio_output: ApiCall<{ viewer_id: string; window_id: number; device?: null | string }>
+    /** Turns the on-screen keyboard of a window on or off, and says where its button is and which layout it has. [requires: admin] */
+    set_keyboard: ApiCall<{ viewer_id: string; window_id: number; enabled: boolean; button_position?: string; layout?: string }>
     /** [requires: admin] */
     unassign_playlist: ApiCall<{ viewer_id: string; window_id: number }>
   }
