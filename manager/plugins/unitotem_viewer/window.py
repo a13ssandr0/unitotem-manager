@@ -175,7 +175,8 @@ class WebviewWindow(QMainWindow):
         super().show()
         # embed_browser() needs a valid, visible X11 window handle
         if self._cef.browser is None:
-            self._cef.embed_browser(_BOOT_URL, self._content_width, self._content_height)
+            # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to
+            self._cef.embed_browser(f'{_BOOT_URL}?window={self._window_id}', self._content_width, self._content_height)
 
     # ── commands sent by the manager via WebSocket ────────────────────────
 
