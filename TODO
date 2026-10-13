@@ -897,18 +897,16 @@ NOT VERIFIED: interactions in a real browser (only page loads via tools/ui-smoke
 playlists and drag-and-drop reorder have never been exercised.
 
 === NEXT ===
-Decided, in order:
-1. Updates page, as specified in CLAUDE.md: xterm.js console, daily
-   background check, navbar hint. The apt/dpkg frontend rework goes with it -
-   a design study exists (pty + APT::Status-Fd + debconf passthrough,
-   dropping sudo entirely), and its stage 0 is a small bug fix, because the
-   current non-interactive invocation does not merely default prompts, it
-   fails hard on a conffile prompt and leaves the package unconfigured.
-2. Last-screen detection via python-xlib in a thread, listening for RandR
-   events (option a above). Adds a dependency, so it needs a venv rebuild in
-   the VM and a .deb rebuild for real installs.
-3. Compute the image backdrop colour in the backend (see the CORS entry).
-4. The remaining playback tests (VM-TESTING.md section 7, item 7).
+(rewritten 2026-10-13; the previous list - Updates page, last-screen detection, backdrop colour - is done)
+1. Close the packaging loop with unitotem-system: dev5 debs on a full image with the separate splash unit
+   (unitotem-splash.service), Plymouth ending on its READY; measure on the Pi how long after X it shows.
+2. Install the debs on the test VM instead of rsync, run autopkgtest for real, browser smoke test of the backup page.
+3. First access without a default password (PLANNED, "Remote terminal"): setup wizard with a claim code on the totem
+   screen; remove the admin:admin fallback (utils/backup.py `_reset_users`, main.py first start).
+4. VNC on demand; suspend with scheduled wake-up (rtcwake); re-measure PAM time on a Pi; the desktop-style web UI.
+5. A real off command for the LG panel; GPIO display power; the remaining playback tests (VM-TESTING.md sec. 7).
+6. Backlog ideas below that are still open: command-execution confirmations, screensaver for touch panels, RSS feed
+   reader, custom image background, custom scripts, D-Bus notifications in the UI, offline service worker, cage/Wayland.
 
 === BACKLOG ===
 <!-- Settings/Network/wifi-scan -->
@@ -948,6 +946,7 @@ Show confirmation on command execution (success popup/notification)
 
 <!-- Add image fitting method for images not matching screen ratio -->
 
+<!-- DONE: Audio answers available=false without PulseAudio; edit_asset takes `enabled` as optional
 Fix pulseaudio missing fatal error
 Fix asset edit error
 --------
@@ -971,12 +970,17 @@ enabled
   Missing required argument [type=missing_argument, input_value=ArgsKwargs((), {'name': '...568c4f3ec786dbb331df2'}), input_type=ArgsKwargs]
     For further information visit https://errors.pydantic.dev/2.11/v/missing_argument
 ---------
+-->
 
+<!-- DONE: uploads live in /var/lib/unitotem/uploaded
 Change default uploaded folder location
+-->
 Set ssl certificate readable by unitotem user
+<!-- DONE: admind was removed (the manager runs as root, DBus used directly); screen hotplug is event-driven
 Create autostart script for unitotem-admind
 Create dbus rule for user unitotem
 Handle screen hotplug
+-->
 
 Use cage on wayland https://github.com/cage-kiosk/cage
 
@@ -985,19 +989,18 @@ Screensaver for touch panels
 <!-- Allow Multiuser -->
 <!-- Create a server that controls multiple clients -->
 
+<!-- DONE: CEC, DDC/CI, WOL and serial exist (see PLANNED and SCREEN-CONTROL-PLAN.md); GPIO is NOT done and stays as an idea: "Display power control via GPIO"
 Add display power control:
 - CEC
 - DDC/CI (Only poweroff)
 - GPIO
 - Serial
+-->
 
 RTC Wakeup (https://www.mythtv.org/wiki/ACPI_Wakeup)
 
 
 RSS feed reader
-Switch to fontawesome
-# https://fontawesome.com/download
-Handle electron window resize (needed?)
 Allow customization of image background
 Python libmagic https://github.com/ahupp/python-magic
 Custom scripts
