@@ -37,6 +37,7 @@ from utils._logging import Logger
 from utils.models.command_line import cmdargs
 from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager, remote_manager
+from utils.remote.service import service as remote_service
 from utils.models.user import user_manager
 from utils.storage.uploadmanager import upload_manager
 from utils.system.lsblk import start_fs_usage_cache
@@ -184,6 +185,10 @@ logger.debug('Got event loop {}', id(loop))
 async def _shutdown():
     if not SHUTDOWN_EVENT.is_set():
         SHUTDOWN_EVENT.set()
+        try:
+            await asyncio.wait_for(remote_service.stop(), 5)
+        except Exception:
+            logger.exception('The link with the other nodes did not shut down cleanly')
         for _plugin, hook in plugins.each('on_shutdown'):
             try:
                 await hook()
@@ -222,13 +227,11 @@ except FileNotFoundError:
     logger.warning('Users configuration file not found. Creating default user "admin" with password "admin".')
     user_manager.add_user('admin', 'admin', {'admin'})
 
-try:
-    remote_manager.get_instance()
-except FileNotFoundError:
+if not cmdargs.remote_file.exists():
     # the RSA signing key is generated lazily at the first signature,
-    # here we only create the default remote connection configuration
+    # here we only create the default remote connection configuration (and the identity of the node)
     logger.info("Creating default remote connection configuration")
-    remote_manager.save()
+    remote_manager.ensure_identity()
 
 # APT_THREAD.start()
 
@@ -254,9 +257,8 @@ webview_manager.load_assignments()
 
 # ── async tasks ───────────────────────────────────────────────────────────
 
-if remote_manager.server_ip:
-    loop.create_task(api.generators['Settings/Remote/_Remote__connect_to_server'].__original_func__(
-            remote_manager.server_ip, remote_manager.server_port), name='remote_control')
+# The listener for paired clients (server role) or the connection to the server (client role)
+loop.create_task(remote_service.start(), name='remote_service')
 
 
 async def info_loop(_ws: WSManager, waiter: asyncio.Event):
@@ -315,7 +317,7 @@ loop.create_task(_serve_www(), name='server')
 
 # With a local viewer, READY is its first frame on screen (it ends the boot splash); otherwise it is the server answering
 _gui = next((hook for _plugin, hook in plugins.each('run_gui')), None)
-_viewer_will_notify = bool(_gui and not cmdargs.no_gui and not remote_manager.server_ip)
+_viewer_will_notify = bool(_gui and not cmdargs.no_gui and not remote_manager.is_paired_client)
 
 
 async def _ready_when_serving():
