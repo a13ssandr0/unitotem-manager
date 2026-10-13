@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 
 from api.commons import SHUTDOWN_EVENT
-from utils.models.assets import Asset, AssetsManager, idle_asset
+from utils.models.assets import Asset, AssetsManager, first_boot, idle_asset, no_assets
 from utils.models.command_line import cmdargs
-from utils.models.viewer import KeyboardSettings, viewer_settings
+from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings, viewer_settings
 
 if TYPE_CHECKING:
     from api.ws.wsmanager import WSManager
@@ -56,6 +56,8 @@ def show_payload(asset: Asset, window_id: int, page: int = 0) -> dict:
         # Meaningful for video and audio only, the page ignores them for everything else
         volume=asset.volume,
         muted=asset.muted,
+        # Nothing to play (no enabled asset, no playlist): a screensaver has nothing to show on top of its home page
+        idle=asset is no_assets or asset is first_boot,
     )
 
 
@@ -349,6 +351,16 @@ class WebviewManager:
                 if keyboard:
                     asyncio.create_task(self.send_webview_command(
                         instance_id, 'SetKeyboard', window_id=window_id, **keyboard.model_dump()))
+                # whether it is a touch panel with a screensaver, and whether its page is reloaded now and then
+                key = self._audio_key(instance_id, screen_name)
+                saver = viewer_settings.screensavers.get(key)
+                if saver and saver.enabled:
+                    asyncio.create_task(self.send_webview_command(
+                        instance_id, 'SetScreensaver', window_id=window_id, **saver.model_dump()))
+                refresh = viewer_settings.refreshes.get(key)
+                if refresh and (refresh.refresh_after_idle or refresh.refresh_schedules):
+                    asyncio.create_task(self.send_webview_command(
+                        instance_id, 'SetRefresh', window_id=window_id, **refresh.model_dump()))
             playlist_id = self._assignments.get((instance_id, screen_name)) if screen_name else None
             loop = self._loops.get(playlist_id) if playlist_id else None
             if loop:
@@ -611,6 +623,42 @@ class WebviewManager:
                 window['keyboard'] = settings.model_dump()
         await self.send_webview_command(webview_id, 'SetKeyboard', window_id=window_id, **settings.model_dump())
 
+    def get_screensaver(self, webview_id: str, window_id: int) -> ScreensaverSettings:
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        return viewer_settings.screensavers.get(self._audio_key(webview_id, screen_name), ScreensaverSettings())
+
+    async def set_screensaver(self, webview_id: str, window_id: int, settings: ScreensaverSettings):
+        """Makes one window interactive (a home page, the playlist as its screensaver) or plain again."""
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        viewer_settings.screensavers[self._audio_key(webview_id, screen_name)] = settings
+        viewer_settings.save()
+        for window in self._webviews.get(webview_id, {}).get('windows', []):
+            if window.get('window_id') == window_id:
+                window['screensaver'] = settings.model_dump()
+        await self.send_webview_command(webview_id, 'SetScreensaver', window_id=window_id, **settings.model_dump())
+
+    def get_refresh(self, webview_id: str, window_id: int) -> RefreshSettings:
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        return viewer_settings.refreshes.get(self._audio_key(webview_id, screen_name), RefreshSettings())
+
+    async def set_refresh(self, webview_id: str, window_id: int, settings: RefreshSettings):
+        """Sets when the web page of one window is reloaded."""
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        viewer_settings.refreshes[self._audio_key(webview_id, screen_name)] = settings
+        viewer_settings.save()
+        for window in self._webviews.get(webview_id, {}).get('windows', []):
+            if window.get('window_id') == window_id:
+                window['refresh'] = settings.model_dump()
+        await self.send_webview_command(webview_id, 'SetRefresh', window_id=window_id, **settings.model_dump())
+
     async def set_flip(self, webview_id: str, window_id: int, flip: int):
         if webview_id in self._webviews:
             windows = self._webviews[webview_id].get('windows', [])
@@ -639,7 +687,11 @@ class WebviewManager:
                     {**w, 'assigned_playlist': self._assignments.get((vid, w.get('screen_name'))),
                      'audio_output': viewer_settings.audio_outputs.get(self._audio_key(vid, w.get('screen_name'))),
                      'keyboard': viewer_settings.keyboards.get(
-                         self._audio_key(vid, w.get('screen_name')), KeyboardSettings()).model_dump()}
+                         self._audio_key(vid, w.get('screen_name')), KeyboardSettings()).model_dump(),
+                     'screensaver': viewer_settings.screensavers.get(
+                         self._audio_key(vid, w.get('screen_name')), ScreensaverSettings()).model_dump(),
+                     'refresh': viewer_settings.refreshes.get(
+                         self._audio_key(vid, w.get('screen_name')), RefreshSettings()).model_dump()}
                     for w in info.get('windows', [])
                 ],
             }
