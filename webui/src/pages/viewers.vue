@@ -92,6 +92,56 @@
                 </div>
               </td>
             </tr>
+            <tr>
+              <td class="playlist-col">
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="small" color="primary">mdi-gesture-tap</v-icon>
+                  <div>
+                    <div class="font-weight-medium">Interactive screen</div>
+                    <div class="text-caption text-medium-emphasis">Shows a home page; the playlist plays over it as a screensaver when nobody touches the screen, and the first touch ends it</div>
+                  </div>
+                </div>
+              </td>
+              <td v-for="win in windows" :key="win.key" class="text-center">
+                <div class="d-flex flex-column ga-2 align-center">
+                  <v-switch :model-value="saverOn(win)" label="Enabled" density="compact" hide-details color="primary"
+                            @update:model-value="v => setScreensaver(win, {enabled: !!v})"></v-switch>
+                  <template v-if="saverOn(win)">
+                    <v-text-field :model-value="win.screensaver.home_url" label="Home page" placeholder="https://"
+                                  density="compact" variant="outlined" hide-details min-width="200"
+                                  @change="e => setScreensaver(win, {home_url: e.target.value}, true)"></v-text-field>
+                    <v-text-field :model-value="win.screensaver.idle_timeout" label="Idle time (s)" type="number" min="5"
+                                  max="86400" density="compact" variant="outlined" hide-details min-width="160"
+                                  @change="e => setScreensaver(win, {idle_timeout: Number(e.target.value)}, true)"></v-text-field>
+                  </template>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="playlist-col">
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="small" color="primary">mdi-refresh-auto</v-icon>
+                  <div>
+                    <div class="font-weight-medium">Page refresh</div>
+                    <div class="text-caption text-medium-emphasis">Reloads a web page shown for a long time, when idle and/or at given times</div>
+                  </div>
+                </div>
+              </td>
+              <td v-for="win in windows" :key="win.key" class="text-center">
+                <div v-if="win.screensaver.enabled" class="text-caption text-medium-emphasis">
+                  Not used on an interactive screen
+                </div>
+                <div v-else class="d-flex flex-column ga-2 align-center">
+                  <v-text-field :model-value="win.refresh.refresh_after_idle" label="After idle (s)" type="number" min="10"
+                                placeholder="never" density="compact" variant="outlined" hide-details min-width="160"
+                                @change="e => setRefresh(win, {refresh_after_idle: e.target.value ? Number(e.target.value) : null})"></v-text-field>
+                  <v-textarea :model-value="win.refresh.refresh_schedules.join('\n')" label="At times" rows="2" auto-grow
+                              placeholder="0 6 * * *" density="compact" variant="outlined" min-width="200"
+                              hint="minute hour day month weekday, one per line" persistent-hint
+                              @change="e => setRefresh(win, {refresh_schedules: e.target.value.split('\n').map(l => l.trim()).filter(Boolean)})"></v-textarea>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </v-table>
       </v-col>
@@ -198,6 +248,8 @@ const windows = computed(() =>
       assigned_playlist: win.assigned_playlist,
       audio_output: win.audio_output,
       keyboard: {enabled: false, button_position: 'bottom-right', layout: 'english', ...win.keyboard},
+      screensaver: {enabled: false, home_url: '', idle_timeout: 120, ...win.screensaver},
+      refresh: {refresh_after_idle: null, refresh_schedules: [], ...win.refresh},
     }))
   )
 )
@@ -230,6 +282,31 @@ const keyboardLayouts = ['english', 'italian', 'german', 'french', 'spanish', 'b
 function setKeyboard(win, patch) {
   api.Viewers.set_keyboard({viewer_id: win.viewer_id, window_id: win.window_id, ...win.keyboard, ...patch})
 }
+
+// What the server refuses (a bad address, a bad schedule) is reported by the page's error banner and leaves the settings
+// as they were: asking for them again puts the fields back to the real state.
+// The server refuses an enabled screensaver without a home page, so the switch alone only opens the fields
+const saverDraft = ref({})
+const saverOn = win => win.screensaver.enabled || !!saverDraft.value[win.key]
+function setScreensaver(win, patch, resync = false) {
+  const {enabled, home_url, idle_timeout} = {...win.screensaver, enabled: saverOn(win), ...patch}
+  saverDraft.value = {...saverDraft.value, [win.key]: enabled && !home_url}
+  if (enabled && !home_url) return
+  api.Viewers.set_screensaver({viewer_id: win.viewer_id, window_id: win.window_id, enabled, home_url, idle_timeout})
+  if (resync) setTimeout(() => api.Viewers.screensaver({viewer_id: win.viewer_id, window_id: win.window_id}), 500)
+}
+function setRefresh(win, patch) {
+  const {refresh_after_idle, refresh_schedules} = {...win.refresh, ...patch}
+  api.Viewers.set_refresh({viewer_id: win.viewer_id, window_id: win.window_id, refresh_after_idle, refresh_schedules})
+  setTimeout(() => api.Viewers.refresh({viewer_id: win.viewer_id, window_id: win.window_id}), 500)
+}
+function updateWindow(msg, key, value) {
+  const win = viewersMap.value[msg.viewer_id]?.windows?.find(w => w.window_id === msg.window_id)
+  if (win) win[key] = value
+}
+api.Viewers.screensaver.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'screensaver', settings))
+api.Viewers.refresh.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'refresh', settings))
+
 const audioOutputs = ref({})   // viewer id -> outputs its windows can use
 
 const outputItems = (win) => [

@@ -2,3 +2,4 @@
 # cefpython3 has no PyPI release (see debian/rules)
 PySide6-Essentials>=6.4.0
 sdbus
+croniter

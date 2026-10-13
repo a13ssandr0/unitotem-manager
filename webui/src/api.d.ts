@@ -215,12 +215,20 @@ export interface Api {
     keyboard: ApiCall<{ viewer_id: string; window_id: number }>
     /** [requires: admin] */
     list: ApiCall<Record<string, never>>
+    /** When the web page of a window is reloaded (a window without a screensaver). [requires: admin] */
+    refresh: ApiCall<{ viewer_id: string; window_id: number }>
     /** [requires: admin] */
     remove_window: ApiCall<{ viewer_id: string; window_id: number }>
+    /** The interactive mode of a window: its home page and the idle time after which the playlist is played over it. [requires: admin] */
+    screensaver: ApiCall<{ viewer_id: string; window_id: number }>
     /** Where a window plays its sound: the description of one of the outputs of its host, None for the default. [requires: admin] */
     set_audio_output: ApiCall<{ viewer_id: string; window_id: number; device?: null | string }>
     /** Turns the on-screen keyboard of a window on or off, and says where its button is and which layout it has. [requires: admin] */
     set_keyboard: ApiCall<{ viewer_id: string; window_id: number; enabled: boolean; button_position?: string; layout?: string }>
+    /** When a window reloads its web page: after refresh_after_idle seconds without activity (10 s to 7 days, empty [requires: admin] */
+    set_refresh: ApiCall<{ viewer_id: string; window_id: number; refresh_after_idle?: null | number; refresh_schedules?: (string)[] | null }>
+    /** Makes a window interactive: home page (http or https) shown indefinitely, playlist as a screensaver after [requires: admin] */
+    set_screensaver: ApiCall<{ viewer_id: string; window_id: number; enabled: boolean; home_url?: string; idle_timeout?: number }>
     /** [requires: admin] */
     unassign_playlist: ApiCall<{ viewer_id: string; window_id: number }>
   }

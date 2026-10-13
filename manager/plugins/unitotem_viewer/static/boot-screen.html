@@ -168,6 +168,26 @@
       border: none;
     }
 
+    /* Interactive mode (touch panel with a screensaver): the home page is the base layer and the content of the
+       playlist - everything inside #stage - is an overlay on top of it, hidden until the window has been idle.
+       body[data-saver] is "on" while the home page is showing and "up" while the screensaver is. The shield above
+       everything catches the first touch, which ends the screensaver and goes no further; it stays for a moment after
+       it so the mouse events a touch is followed by do not reach the page either. The on-screen keyboard layer
+       (keyboard.js, z-index at the maximum) stays above the home page but is hidden under the screensaver.
+       Without the attribute none of this applies and #stage is a plain wrapper. */
+    #stage { position: relative; width: 100%; height: 100%; }
+    #home-frame { display: none; border: none; position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+    #shield { display: none; position: absolute; inset: 0; z-index: 20; touch-action: none; background: transparent; }
+    body[data-saver] #home-frame { display: block; }
+    body[data-saver] #stage {
+      position: absolute; inset: 0; z-index: 10;
+      background-color: rgb(0, 0, 0);
+      visibility: hidden; pointer-events: none;
+    }
+    body[data-saver="up"] #stage { visibility: visible; pointer-events: auto; }
+    body[data-saver="up"] #shield, body[data-shield] #shield { display: block; }
+    body[data-saver="up"] #ut-kbd-layer { visibility: hidden; }
+
     #image-display {
       object-position: center;
     }
@@ -183,25 +203,34 @@
 <body>
   <main id="content-root">
     <div id="orient-intro">
-      <div id="boot-screen" class="container">
-        <div class="glow">
-          <span class="loader">UniT&nbsp;&nbsp;tem</span>
-          <span class="loader halo" aria-hidden="true">UniT&nbsp;&nbsp;tem</span>
+      <!-- the home page of an interactive window; the sandbox keeps it from navigating this page away -->
+      <iframe  id="home-frame"
+               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+               allowfullscreen></iframe>
+
+      <div id="stage">
+        <div id="boot-screen" class="container">
+          <div class="glow">
+            <span class="loader">UniT&nbsp;&nbsp;tem</span>
+            <span class="loader halo" aria-hidden="true">UniT&nbsp;&nbsp;tem</span>
+          </div>
+        </div>
+
+        <iframe  id="web-frame"     class="container"
+                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                 allowfullscreen></iframe>
+
+        <img     id="image-display" class="container" alt="">
+
+        <video   id="video-display" class="container"
+                 autoplay loop playsinline></video>
+
+        <div     id="audio-display" class="container">
+          <audio id="audio-player" autoplay loop></audio>
         </div>
       </div>
 
-      <iframe  id="web-frame"     class="container"
-               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-               allowfullscreen></iframe>
-
-      <img     id="image-display" class="container" alt="">
-
-      <video   id="video-display" class="container"
-               autoplay loop playsinline></video>
-
-      <div     id="audio-display" class="container">
-        <audio id="audio-player" autoplay loop></audio>
-      </div>
+      <div id="shield"></div>
     </div>
   </main>
 
@@ -215,6 +244,12 @@
       video: document.getElementById('video-display'),
       audio: document.getElementById('audio-display'),
     };
+
+    // What is behind the content: the page body, and the stage that covers the home page in interactive mode
+    function setBackdrop(colour) {
+      document.body.style.backgroundColor = colour;
+      document.getElementById('stage').style.backgroundColor = colour;
+    }
 
     function hideAll() {
       for (const el of Object.values(containers)) {
@@ -269,7 +304,7 @@
         const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
         const colour = `rgb(${r},${g},${b})`;
         img.style.backgroundColor = colour;
-        document.body.style.backgroundColor = colour;
+        setBackdrop(colour);
       } catch (err) {
         // A cross-origin image taints the canvas and getImageData throws;
         // black is the documented default, so just keep it.
@@ -333,10 +368,14 @@
       document.documentElement.style.touchAction = touch;
     }
 
-    async function show(src, container, fit, bg_color, volume, muted, zoom, allowPinch) {
+    // What the stage shows, for the screensaver (nothing to play: boot logo, or the "no assets" page of an idle window)
+    let current = null;
+
+    async function show(src, container, fit, bg_color, volume, muted, zoom, allowPinch, idle) {
       if (!container) container = await detectContainer(src);
 
-      document.body.style.backgroundColor = bg_color || 'rgb(0,0,0)';
+      current = {src, container, idle: !!idle};
+      setBackdrop(bg_color || 'rgb(0,0,0)');
       hideAll();
 
       const el = containers[container];
@@ -370,7 +409,7 @@
           el.src = src;
           applyAudio(el, volume, muted);
           el.load();
-          el.play().catch(() => {});
+          if (stageVisible()) el.play().catch(() => {}); else el.pause();    // pause() cancels the autoplay
           break;
         }
 
@@ -380,10 +419,110 @@
           audio.src = src;
           applyAudio(audio, volume, muted);
           audio.load();
-          audio.play().catch(() => {});
+          if (stageVisible()) audio.play().catch(() => {}); else audio.pause();
           break;
         }
       }
+    }
+
+
+    /**
+     * Interactive mode (a touch panel): the settings arrive in window.__utSaverConfig, put there by the viewer over the
+     * DevTools connection, followed by a call to applySaver() - or they were there first and this runs when the page has
+     * loaded, so the order does not matter. {enabled, home_url, idle_timeout}; the timeout is kept by the viewer, which
+     * calls showSaver() when the window has been idle (activity inside the cross-origin home page can only be seen from
+     * outside, see cdp.py).
+     */
+    const saver = {on: false, up: false};
+    const homeFrame = document.getElementById('home-frame');
+    const shield = document.getElementById('shield');
+    let graceTimer = null, graceLimit = null;
+
+    function stageVisible() { return !saver.on || saver.up; }
+
+    // The sound of the playlist must not play under the home page
+    function syncMedia() {
+      for (const [key, el] of [['video', document.getElementById('video-display')],
+                               ['audio', document.getElementById('audio-player')]]) {
+        if (!el.getAttribute('src')) continue;
+        if (stageVisible() && current && current.container === key) el.play().catch(() => {}); else el.pause();
+      }
+    }
+
+    function applySaver() {
+      const cfg = window.__utSaverConfig;
+      if (!cfg) return;
+      if (cfg.enabled && cfg.home_url) {
+        saver.on = true;
+        saver.up = false;
+        document.body.dataset.saver = 'on';
+        if (homeFrame.dataset.url !== cfg.home_url) {
+          homeFrame.dataset.url = cfg.home_url;
+          homeFrame.src = cfg.home_url;
+        }
+      } else {
+        saver.on = saver.up = false;
+        delete document.body.dataset.saver;
+        delete document.body.dataset.shield;
+        if (homeFrame.dataset.url) {
+          delete homeFrame.dataset.url;
+          homeFrame.src = 'about:blank';
+        }
+      }
+      syncMedia();
+    }
+
+    /** Called by the viewer when the window has been idle. Returns whether the screensaver is now up. */
+    function showSaver() {
+      if (!saver.on || saver.up || !current || current.container === 'boot' || current.idle) return false;
+      saver.up = true;
+      document.body.dataset.saver = 'up';
+      syncMedia();
+      // the focus may be in the home page, where keys would go on arriving: take it
+      try { if (document.activeElement) document.activeElement.blur(); window.focus(); } catch (e) {}
+      return true;
+    }
+
+    function endGrace() {
+      clearTimeout(graceTimer);
+      clearTimeout(graceLimit);
+      graceTimer = graceLimit = null;
+      delete document.body.dataset.shield;
+    }
+
+    /** Whatever touches the shield or the keyboard while the screensaver is up ends it and goes no further. */
+    function onShield(ev, ends) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (saver.up && ends) {
+        saver.up = false;
+        document.body.dataset.saver = 'on';
+        document.body.dataset.shield = '1';
+        syncMedia();
+        graceLimit = setTimeout(endGrace, 1500);     // however long a finger stays down
+        try { utSaver(JSON.stringify({event: 'dismissed'})); } catch (e) {}
+      }
+      if (document.body.dataset.shield) {
+        // the shield outlives the touch by a moment: the mouse events that follow it must not reach the page
+        clearTimeout(graceTimer);
+        graceTimer = setTimeout(endGrace, 400);
+      }
+    }
+    for (const type of ['pointerdown', 'touchstart', 'mousedown', 'wheel'])
+      shield.addEventListener(type, ev => onShield(ev, true), {passive: false});
+    for (const type of ['pointermove', 'pointerup', 'pointercancel', 'touchmove', 'touchend', 'touchcancel',
+                        'mousemove', 'mouseup', 'click', 'dblclick', 'contextmenu'])
+      shield.addEventListener(type, ev => onShield(ev, false), {passive: false});
+    document.addEventListener('keydown', ev => { if (saver.up) onShield(ev, true); }, true);
+
+    /**
+     * Called by the viewer on a schedule, or when the window has been idle: reloads the web page on the stage.
+     * Interactive windows are left alone and so is anything that is not a page. Returns whether it did.
+     */
+    function refreshPage() {
+      if (saver.on || !current || current.container !== 'web' || current.idle) return false;
+      containers.web.src = current.src;
+      return true;
     }
 
     /**
@@ -485,6 +624,7 @@
       }, { once: true });
     }
     applyKeyboard();
+    applySaver();
   </script>
 </body>
 </html>
