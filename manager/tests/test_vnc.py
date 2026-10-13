@@ -191,6 +191,11 @@ def test_sweep_kills_only_a_process_that_belongs_to_the_session(tmp_path):
     assert not mine.exists() and not other.exists()
 
 
+def test_servers_are_hashable_by_identity_for_the_set_of_live_sessions():
+    a, b = VncServer(binary='x'), VncServer(binary='x')
+    assert len({a, b}) == 2
+
+
 # ── who gets in ──────────────────────────────────────────────────────────────
 
 class FakeSocket:
