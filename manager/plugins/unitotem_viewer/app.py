@@ -36,7 +36,8 @@ from utils.browser import user_agent
 from utils.models.viewer import viewer_settings
 from utils.system.gpu import detect_gpu
 
-from .splash import show_splashes, stop_boot_splash
+from .boot import stop_boot_splash
+from .splash import show_splashes
 from .window import WebviewWindow
 import utils.ready as ready
 
