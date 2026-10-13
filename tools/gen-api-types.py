@@ -17,6 +17,10 @@ sys.path.insert(0, str(ROOT / 'manager'))
 # importing the API builds the upload manager, which wants an event loop and its folder
 asyncio.set_event_loop(asyncio.new_event_loop())
 pathlib.Path.mkdir = lambda *a, **k: None
+# ... and the folder is not created (see above): measure the root filesystem instead of failing on a dev host
+import shutil  # noqa: E402
+_disk_usage = shutil.disk_usage
+shutil.disk_usage = lambda path: _disk_usage(path if pathlib.Path(path).exists() else '/')
 
 from api.ws.endpoints import api  # noqa: E402
 
