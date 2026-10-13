@@ -66,6 +66,8 @@ def on_startup(loop):
         except Exception:
             logger.exception('Touch mapping start-up failed')
 
+    from .system import vnc
+    vnc.sweep_stale()       # a screen capture left behind by a manager that was killed
     loop.create_task(screens_at_start(), name='screens_at_start')
     loop.create_task(touch_at_start(), name='touch_at_start')
     loop.create_task(run_timers(), name='timers')
@@ -91,6 +93,8 @@ async def first_boot_context() -> dict:
 
 
 async def on_shutdown():
+    from . import vnc
+    await vnc.stop_all()
     from .system.touch_service import touch_service
     touch_service.stop()
     from .system.network.hotspot import stop_hotspot
@@ -186,7 +190,8 @@ BACKUP = (
 
 def _routers():
     from .terminal import router
-    return (router,)
+    from .vnc import router as vnc_router
+    return (router, vnc_router)
 
 
 PLUGIN = Plugin(
@@ -198,6 +203,7 @@ PLUGIN = Plugin(
         ('unitotem_node.api.power', 'Power', None),
         ('unitotem_node.api.updater', 'Update', 'Settings'),
         ('unitotem_node.api.display', 'Display', 'Settings'),
+        ('unitotem_node.api.vnc', 'Vnc', None),
     ),
     routers=_routers,
     backup=BACKUP,
