@@ -218,6 +218,21 @@ UI drawn inside the page's rotated container, loaded by `boot-screen.html` on de
 (`boot-screen.html?window=N`), which is how a DevTools target is tied to a window. The keyboard can be moved and resized
 but is clamped inside the screen and to a minimum size after every gesture, every size change and every rotation.
 
+## Touch panels
+Everything per window and per screen, off by default, kept in viewer_settings.json (core) or touch_map.json (node):
+- **Touch-to-screen mapping** (node plugin, `system/touch.py` + `touch_service.py`, Display page): touch devices are tied to an
+  output by a stable identity (`name|vendor:product|serial`, never the X device id) through the Coordinate Transformation
+  Matrix (output position, size and rotation), applied at start and on XI2 hierarchy / RandR events, no polling.
+- **Screensaver** (`Viewers/set_screensaver`): a window can have a home page shown indefinitely; after an idle timeout the
+  playlist plays as an overlay, the first touch dismisses it and is consumed (a shield keeps compat mouse events from
+  clicking through). Activity inside the cross-origin home page is reported by a script injected into every frame
+  (cdp.py), the idle timer is one asyncio timer (idle.py). No overlay when there is nothing to play.
+- **Refresh** (`Viewers/set_refresh`): for windows without the screensaver, reload the page after an idle time and/or at
+  cron-style times (croniter, minute-boundary task); the iframe src is set again.
+- **Zoom** (per asset, web pages): `zoom` 0.25-5 changes the page's layout viewport (iframe sized 100/zoom % and scaled),
+  and `allow_pinch_zoom` (default off) decides whether the visitor can pinch (touch-action on the iframe).
+- **On-screen keyboard**: see above.
+
 # Rules
 
 Everything above describes *what* UniTotem must do. This section describes *how* to work on it.
@@ -580,3 +595,21 @@ the VM-specific ones.
   rotated and flipped with CSS and those libraries do not follow a transformed parent; `keyboard.js` converts the pointer
   movement itself (`toLayer`).
 - **With `--disable-web-security` Chromium wants `--user-data-dir`**, otherwise it logs an error and ignores the switch.
+- **A new `git worktree` for an agent starts from the stale `main`; the project lives on `dev`**: `git reset --hard dev` first
+  (merge the result back into `dev`, never `main`).
+- **The test VM is shared when several agents work: `tools/vm-deploy` rsyncs with `--delete`**, silently removing another
+  agent's code (it shows as the misleading websocket error "Invalid command", which `web_ui.py` gives for any KeyError).
+  Run deploy, test and restore under `flock /tmp/unitotem-vm.lock`, and never `pkill` by name on the VM: kill by PID.
+- **`Input.synthesizePinchGesture` bypasses `touch-action`** and gives a false "pinch works"; test pinch with
+  `Input.dispatchTouchEvent`. `visualViewport.scale` of the viewer page survives `Page.reload` (reset it with
+  `Emulation.setPageScaleFactor`).
+- **Setting an iframe's `src` to its current URL reloads it**, cross-origin included. A DevTools binding is a window
+  global: page functions must not reuse its name (`utSaver`, `utKey`, `utFocus`, `utActivity`).
+- **Chromium's `autoplay` restarts playback on `load()`**: pause media after `load()` when the stage is hidden.
+- **python-xlib**: `get_extension_major` is on `Display.display`; `Display.screen()` is stale after a RandR change (use
+  `root.get_geometry()`); Xlib can have read events during a round trip so `add_reader` will not fire for them (drain the
+  queue); `struct input_event` is `qqHHi` on 64-bit (uinput).
+- **In `api/viewers.py` the method named `list` shadows the builtin inside the class**: under Python 3.14 `list[str]` in a
+  signature there raises (use `typing.List`).
+- **`requests.post('/auth/token')` follows the 303**: read the cookie with `allow_redirects=False`. Assets added with
+  `Scheduler/add_url_assets` are disabled by default.
