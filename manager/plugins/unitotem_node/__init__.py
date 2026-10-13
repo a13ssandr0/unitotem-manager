@@ -158,11 +158,29 @@ def _reset_timers():
     timer_manager.save()
 
 
+def _export_touch():
+    from .models.touch_map import touch_map
+    return dict(touch_map.mapping)
+
+
+def _restore_touch(mapping, _version):
+    from .models.touch_map import TouchMap, touch_map
+    touch_map.mapping = TouchMap(mapping=mapping).mapping       # validated like any other write
+    touch_map.save()
+
+
+def _reset_touch():
+    from .models.touch_map import touch_map
+    touch_map.mapping = {}
+    touch_map.save()
+
+
 BACKUP = (
     BackupPart('hostname', 'Hostname', lambda: socket.gethostname(), _restore_hostname),
     BackupPart('audio', 'Default audio device', _export_audio, _restore_audio),
     BackupPart('netplan', 'Network (netplan)', _export_netplan, _restore_netplan),
     BackupPart('timers', 'Timers', _export_timers, _restore_timers, _reset_timers),
+    BackupPart('touch', 'Touch screen mapping', _export_touch, _restore_touch, _reset_touch),
 )
 
 
