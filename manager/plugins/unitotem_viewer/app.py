@@ -608,6 +608,8 @@ class WebviewApp:
                 bg_color = data.get('bg_color', 'rgb(0,0,0)'),
                 volume   = data.get('volume', 1.0),
                 muted    = data.get('muted', False),
+                zoom     = data.get('zoom', 1.0),
+                allow_pinch_zoom = data.get('allow_pinch_zoom', False),
             )
         elif target == 'SetKeyboard' and win:
             self._keyboard_config[data['window_id']] = {

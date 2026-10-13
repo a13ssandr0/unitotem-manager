@@ -54,6 +54,11 @@ class Asset(BaseModel, validate_assignment=True):
     # Per-asset volume of the asset's own sound (video and audio only), independent from the system volume
     volume: float = Field(default=1.0, ge=0.0, le=1.0)
     muted: bool = False
+    # Web pages only: browser-style zoom of the page (the layout viewport changes, it is not just magnified), and whether
+    # the visitor of a touch panel may pinch-zoom it. Both are optional in the saved files (the previous version ignores
+    # unknown fields, and a file written by it simply gets the defaults).
+    zoom: float = Field(default=1.0, ge=0.25, le=5.0, allow_inf_nan=False)
+    allow_pinch_zoom: bool = False
     # A PDF is shown one page at a time and `duration` is how long each page stays up
     pages: int = Field(default=1, ge=1)
     media_type: MediaType = MediaType.undefined

@@ -283,6 +283,21 @@
               </div>
               <div class="text-caption text-medium-emphasis">Volume of this asset only, independent of the system volume.</div>
             </v-col>
+            <v-col cols="12" v-if="isWebPage(newUrlItem)">
+              <div class="d-flex align-center">
+                <v-icon class="me-3">mdi-magnify-plus-outline</v-icon>
+                <v-slider v-model="newUrlItem.zoom" min="25" max="500" step="5" hide-details density="compact"
+                          label="Zoom" class="flex-grow-1"></v-slider>
+                <v-text-field v-model.number="newUrlItem.zoom" type="number" min="25" max="500" step="5" suffix="%"
+                              variant="outlined" density="compact" hide-details style="max-width: 7.5rem" class="ml-4"
+                              :rules="[v => (v >= 25 && v <= 500) || '25-500']"></v-text-field>
+                <v-btn icon="mdi-restore" variant="text" density="comfortable" title="Reset zoom"
+                       :disabled="newUrlItem.zoom === 100" @click="newUrlItem.zoom = 100"></v-btn>
+              </div>
+              <div class="text-caption text-medium-emphasis">Zoom of the page, as a browser's zoom: the page is laid out for a smaller screen.</div>
+              <v-switch v-model="newUrlItem.allowPinchZoom" label="Allow pinch zoom (touch panels)" color="primary"
+                        hide-details density="compact"></v-switch>
+            </v-col>
             <v-col cols="12">
               <div class="text-subtitle-2 mb-2">Object fit (only for images and videos)</div>
               <div class="d-flex justify-space-between">
@@ -494,6 +509,9 @@ const openSettings = () => {
 
 const hasSound = (item) => item.media_type === 2 || item.media_type === 3 || item.media_type === undefined || item.media_type === -1;
 
+// A web page, or something whose type is not known yet (the viewer then probes it and may well show a page)
+const isWebPage = (item) => item.media_type === 0 || item.media_type === undefined || item.media_type === -1;
+
 const openNewPlaylistDialog = () => {
   newPlaylistName.value = '';
   showNewPlaylistDialog.value = true;
@@ -651,6 +669,8 @@ const openAddUrlDialog = () => {
     disableDate: null,
     volume: 100,
     muted: false,
+    zoom: 100,
+    allowPinchZoom: false,
     media_type: undefined
   };
   previousDuration.value = defaultDuration.value;
@@ -677,6 +697,8 @@ const openEditDialog = (item) => {
     disableDate: item.dis_date,
     volume: Math.round((item.volume ?? 1) * 100),
     muted: item.muted ?? false,
+    zoom: Math.round((item.zoom ?? 1) * 100),
+    allowPinchZoom: item.allow_pinch_zoom ?? false,
     media_type: item.media_type
   };
 
@@ -708,7 +730,10 @@ const saveUrlItem = () => {
     ena_date: newUrlItem.value.enableDate,
     dis_date: newUrlItem.value.disableDate,
     volume: newUrlItem.value.volume / 100,
-    muted: newUrlItem.value.muted
+    muted: newUrlItem.value.muted,
+    // A cleared or out-of-range field never reaches the server as such (it would refuse the whole edit)
+    zoom: Math.min(5, Math.max(0.25, (Number(newUrlItem.value.zoom) || 100) / 100)),
+    allow_pinch_zoom: newUrlItem.value.allowPinchZoom
   };
 
   if (isEditing.value) {
