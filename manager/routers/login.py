@@ -4,7 +4,8 @@ __all__ = [
     "LoginForm",
     "LOGMAN",
     "NotAuthenticatedException",
-    "require_perm"
+    "require_perm",
+    "session_cookie"
 ]
 
 import time
@@ -24,6 +25,7 @@ from starlette.responses import Response
 
 import utils.constants as const
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
+from utils.claim import claim_manager
 from utils.environment import environ
 from utils.models.remote import RemoteManager
 from utils.models.user import User, user_manager
@@ -36,6 +38,9 @@ class NotAuthenticatedException(Exception):
 
 async def login_redirect(request, exc):
     logger.error(exc)
+    # A node without an administrator has nobody to log in: the only way forward is the setup
+    if claim_manager.unclaimed:
+        return RedirectResponse('/setup')
     return RedirectResponse('/login?src=' + quote_plus(request.scope.get('path', '/')))
 
 
@@ -81,6 +86,14 @@ def require_perm(perm: str):
 
     return dependency
 
+def session_cookie(response: Response, username: str, remember: bool):
+    """Puts the session cookie of `username` on a response (a week if `remember`, else until the browser closes)."""
+    access_token = LOGMAN.create_access_token(data={'sub': username, 'cre': time.monotonic()})
+    response.set_cookie(key=LOGMAN.cookie_name, value=access_token,
+                        httponly=True, samesite='strict', secure=True,
+                        max_age=int(LOGMAN.default_expiry.total_seconds()) if remember else None)
+
+
 router = APIRouter()
 
 
@@ -90,11 +103,8 @@ async def login(data: LoginForm = Depends()):
         logger.error("Invalid credentials for user {}", data.username)
         raise InvalidCredentialsException
     logger.success("User {} logged in", data.username)
-    access_token = LOGMAN.create_access_token(data={'sub': data.username, 'cre': time.monotonic()})
     resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
-    resp.set_cookie(key=LOGMAN.cookie_name, value=access_token,
-                    httponly=True, samesite='strict', secure=True,
-                    max_age=int(LOGMAN.default_expiry.total_seconds()) if data.remember_me else None)
+    session_cookie(resp, data.username, data.remember_me)
     return resp
 
 
@@ -107,10 +117,12 @@ async def get_public_key():
 
 @router.get("/login/users")
 async def get_users() -> list[str]:
-    return list(user_manager.users())
+    return list(user_manager.users()) if claim_manager.is_claimed() else []
 
 @router.get('/login')
 async def login_page(request: Request, src: Optional[str] = '/'):
+    if claim_manager.unclaimed:
+        return RedirectResponse('/setup')
     try:
         await LOGMAN(request)
         # why are you trying to access login page from an authenticated session?
