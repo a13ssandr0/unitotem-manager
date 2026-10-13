@@ -22,6 +22,7 @@ import socket
 import ssl
 import threading
 import subprocess
+from datetime import datetime
 from base64 import b64decode, b64encode
 from hashlib import sha256
 from typing import Optional
@@ -38,6 +39,7 @@ from utils.system.gpu import detect_gpu
 
 from .boot import stop_boot_splash
 from .cdp import Cdp
+from .idle import IdleWatch, schedule_due, seconds_to_next_minute
 from .splash import show_splashes
 from .window import WebviewWindow
 import utils.ready as ready
@@ -293,6 +295,10 @@ class WebviewApp:
         self._keyboard_config: dict[int, dict] = {}     # window -> settings of its on-screen keyboard
         self._text_focus: dict[int, dict[str, Optional[str]]] = {}      # window -> frames with a text field focused
         self._keyboard_wanted: dict[int, bool] = {}
+        # touch panels, all of it on the websocket thread: settings per window, and the idle logic that uses them
+        self._saver_config: dict[int, dict] = {}
+        self._refresh_config: dict[int, dict] = {}
+        self._watches: dict[int, IdleWatch] = {}
 
         # One fullscreen window per currently-connected screen (zero screens
         # means zero windows: the app must be able to start without any and
@@ -367,7 +373,12 @@ class WebviewApp:
             win = self.windows.pop(window_id, None)
             if win is not None:
                 win.close()
+            self._forget_window(window_id)
         self._notify_screens_changed()
+
+    def _forget_window(self, window_id: int):
+        if self._ws_loop is not None:
+            self._ws_loop.call_soon_threadsafe(self._drop_window, window_id)
 
     def _new_window(self, **geometry) -> WebviewWindow:
         win = WebviewWindow(**geometry)
@@ -481,7 +492,10 @@ class WebviewApp:
         asyncio.set_event_loop(self._ws_loop)
         self._cdp = Cdp(CDP_PORT, self._on_focus_changed, self._on_page_ready)
         self._cdp.on_binding('utKey', self._on_keyboard_key)
+        self._cdp.on_binding('utActivity', self._on_activity)
+        self._cdp.on_binding('utSaver', self._on_saver_event)
         self._ws_loop.create_task(self._cdp.run(asyncio.Event()))
+        self._ws_loop.create_task(self._refresh_scheduler())
         self._ws_loop.run_until_complete(self._ws_client())
 
     # ── focus in the pages and the on-screen keyboard (see cdp.py), on the websocket thread ──
@@ -505,6 +519,10 @@ class WebviewApp:
 
     def _on_page_ready(self, window: int):
         asyncio.ensure_future(self._apply_keyboard(window))
+        asyncio.ensure_future(self._apply_saver(window))
+        watch = self._watches.get(window)
+        if watch:
+            watch.reset()       # a page that has just loaded is not showing a screensaver
 
     async def _apply_keyboard(self, window: int):
         """Hands the keyboard settings of a window to its page. Safe to call before the page has loaded (it applies
@@ -517,6 +535,76 @@ class WebviewApp:
         module = f'https://{urlparse(self.manager_url).netloc}{get_vite_assets("src/keyboard.js")["js"]}'
         settings = json.dumps({**config, 'module': module})
         await self._cdp.evaluate(window, f'window.__utKeyboardConfig = {settings}; window.applyKeyboard && window.applyKeyboard();')
+
+    # ── touch panels: screensaver over a home page, scheduled refresh (see idle.py), on the websocket thread ──
+
+    async def _apply_saver(self, window: int):
+        """Hands the interactive-mode settings of a window to its page, like the keyboard's: safe at any moment."""
+        config = self._saver_config.get(window)
+        if config is None or self._cdp is None:
+            return
+        await self._cdp.evaluate(window, f'window.__utSaverConfig = {json.dumps(config)}; '
+                                         f'window.applySaver && window.applySaver();')
+
+    async def _set_touch_settings(self, window: int, saver: Optional[dict] = None, refresh: Optional[dict] = None):
+        if saver is not None:
+            self._saver_config[window] = saver
+            await self._apply_saver(window)
+        if refresh is not None:
+            self._refresh_config[window] = refresh
+        self._configure_watch(window)
+
+    def _configure_watch(self, window: int):
+        saver = self._saver_config.get(window, {})
+        refresh = self._refresh_config.get(window, {})
+        watch = self._watches.get(window)
+        if watch is None:
+            watch = self._watches[window] = IdleWatch(lambda: self._show_saver(window),
+                                                      lambda: self._refresh_page(window))
+        interactive = bool(saver.get('enabled') and saver.get('home_url'))
+        watch.configure(saver.get('idle_timeout') if interactive else None, refresh.get('refresh_after_idle'))
+
+    def _drop_window(self, window: int):
+        self._saver_config.pop(window, None)
+        self._refresh_config.pop(window, None)
+        watch = self._watches.pop(window, None)
+        if watch:
+            watch.close()
+
+    async def _show_saver(self, window: int) -> bool:
+        """Puts the playlist on top of the home page. False when the page has nothing to show."""
+        if self._cdp is None:
+            return False
+        shown = bool(await self._cdp.call(window, 'showSaver()'))
+        logger.debug('Window {}: idle, screensaver {}', window, 'up' if shown else 'has nothing to show')
+        return shown
+
+    async def _refresh_page(self, window: int):
+        if self._cdp is not None and await self._cdp.call(window, 'refreshPage()'):
+            logger.info('Window {}: page reloaded', window)
+
+    def _on_activity(self, window: int, _data: dict):
+        watch = self._watches.get(window)
+        if watch:
+            watch.activity()
+
+    def _on_saver_event(self, window: int, data: dict):
+        watch = self._watches.get(window)
+        if watch and data.get('event') == 'dismissed':
+            watch.dismissed()
+
+    async def _refresh_scheduler(self):
+        """Reloads, at the start of each minute that matches a schedule, the page of every window that has one. Sleeps
+        to the minute boundary like the timers of the node plugin (no polling); a missed minute is not made up."""
+        while True:
+            await asyncio.sleep(seconds_to_next_minute(datetime.now()))
+            try:
+                when = datetime.now().replace(second=0, microsecond=0)
+                for window, config in list(self._refresh_config.items()):
+                    if schedule_due(config.get('refresh_schedules') or [], when):
+                        asyncio.ensure_future(self._refresh_page(window))
+            except Exception:
+                logger.exception('Scheduled refresh failed')
 
     async def _on_keyboard_key(self, window: int, data: dict):
         if 'text' in data:
@@ -610,7 +698,16 @@ class WebviewApp:
                 muted    = data.get('muted', False),
                 zoom     = data.get('zoom', 1.0),
                 allow_pinch_zoom = data.get('allow_pinch_zoom', False),
+                idle     = data.get('idle', False),
             )
+        elif target == 'SetScreensaver' and win and self._ws_loop is not None:
+            asyncio.run_coroutine_threadsafe(self._set_touch_settings(window_id, saver={
+                'enabled': bool(data.get('enabled')), 'home_url': data.get('home_url', ''),
+                'idle_timeout': data.get('idle_timeout', 120)}), self._ws_loop)
+        elif target == 'SetRefresh' and win and self._ws_loop is not None:
+            asyncio.run_coroutine_threadsafe(self._set_touch_settings(window_id, refresh={
+                'refresh_after_idle': data.get('refresh_after_idle'),
+                'refresh_schedules': data.get('refresh_schedules') or []}), self._ws_loop)
         elif target == 'SetKeyboard' and win:
             self._keyboard_config[data['window_id']] = {
                 'enabled': bool(data.get('enabled')), 'button_position': data.get('button_position', 'bottom-right'),
@@ -634,4 +731,5 @@ class WebviewApp:
         elif target == 'RemoveWindow' and win:
             win.close()
             del self.windows[window_id]
+            self._forget_window(window_id)
             self._notify_screens_changed()
