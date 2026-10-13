@@ -7,7 +7,8 @@ physically at the device, the setup asks for a CLAIM CODE that the node shows wh
 read it:
 
 - on the totem screen (the first-boot and "no assets" pages of the local viewer, over a loopback-only event stream);
-- in the log, at WARNING level (journald keeps warnings), and in a root-only file, for a node without a screen.
+- in the journal as a warning (see `_new_code` for why that takes a priority prefix), and in a root-only file, for a
+  node without a screen.
 
 The code is never sent to a client over the network. Wrong codes are rate-limited globally (not per address: the
 attacker may have many), compared in constant time, and the code is replaced by a new one after too many failures.
@@ -19,6 +20,7 @@ from __future__ import annotations
 import hmac
 import os
 import secrets
+import sys
 import threading
 import time
 from pathlib import Path
@@ -127,9 +129,13 @@ class ClaimManager:
         self._code = generate_code()
         self._failures = 0
         self._write_file()
-        logger.warning('This node is not set up yet. To create the administrator open the setup page of this node '
-                       'and enter the claim code {} (also written to {}, readable by root only)',
-                       pretty(self._code), self.code_file)
+        message = ('This node is not set up yet. To create the administrator open the setup page of this node '
+                   f'and enter the claim code {pretty(self._code)} (also written to {self.code_file}, readable by root only)')
+        logger.warning(message)
+        # Under systemd every line written to stderr is stored at priority "info", which the kiosk's journald discards
+        # (MaxLevelStore=warning): the sd-daemon(3) "<4>" prefix is what makes this one a warning that is kept.
+        if os.environ.get('JOURNAL_STREAM'):
+            print(f'<4>{message}', file=sys.stderr, flush=True)
 
     def _disarm(self):
         self._code = None
