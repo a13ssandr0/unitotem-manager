@@ -276,6 +276,13 @@ class WebviewApp:
         self._bridge.command_received.connect(self._handle_command)
         self._bridge.quit_requested.connect(self.qt_app.quit)
 
+        # A window that is moved or resized (by the manager, the window manager or a screen changing mode) is reported
+        # like a screen being plugged: the layout shown in the web UI follows it. Debounced, a resize is a burst of events.
+        self._geometry_timer = QTimer()
+        self._geometry_timer.setSingleShot(True)
+        self._geometry_timer.setInterval(100)
+        self._geometry_timer.timeout.connect(self._notify_screens_changed)
+
         self.windows: dict[int, WebviewWindow] = {}
         self._screen_windows: dict[QScreen, int] = {}
         self._next_id = 0
@@ -335,7 +342,7 @@ class WebviewApp:
             # Not a real output - see _is_placeholder(). Nothing to show it on.
             return -1
         geom = screen.geometry()
-        win = WebviewWindow(
+        win = self._new_window(
             window_id=self._next_id,
             screen=screen,
             x=geom.x(), y=geom.y(),
@@ -356,6 +363,11 @@ class WebviewApp:
             if win is not None:
                 win.close()
         self._notify_screens_changed()
+
+    def _new_window(self, **geometry) -> WebviewWindow:
+        win = WebviewWindow(**geometry)
+        win.on_geometry_changed = self._geometry_timer.start
+        return win
 
     def _notify_screens_changed(self):
         """
@@ -399,7 +411,7 @@ class WebviewApp:
             return -1
         screen  = screens[min(screen_index, len(screens) - 1)]
         geom    = screen.geometry()
-        win = WebviewWindow(
+        win = self._new_window(
             window_id=self._next_id,
             screen=screen,
             x=x or geom.x(),
