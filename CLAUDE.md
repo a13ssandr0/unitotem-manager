@@ -232,6 +232,7 @@ Everything per window and per screen, off by default, kept in viewer_settings.js
 - **Zoom** (per asset, web pages): `zoom` 0.25-5 changes the page's layout viewport (iframe sized 100/zoom % and scaled),
   and `allow_pinch_zoom` (default off) decides whether the visitor can pinch (touch-action on the iframe).
 - **On-screen keyboard**: see above.
+The `Viewers/*` settings are administrative: admin capability only (explicit `@UserPerms.requires.admin`), not the scheduler one.
 
 # Rules
 

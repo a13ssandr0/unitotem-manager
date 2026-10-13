@@ -6,6 +6,7 @@ from api.ws.responses import WSBroadcast, WSResponse
 
 from utils.models.playlists import playlists_manager
 import utils.plugins as plugins
+from utils.models.user import UserPerms
 from pydantic import ValidationError
 
 from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings
@@ -42,15 +43,18 @@ class Viewers(WSAPIBase):
         _vm().unassign(viewer_id, window_id)
         return self.list()
 
+    @UserPerms.requires.admin
     def add_window(self, viewer_id: str, display: int = 0,
                   x: int = 0, y: int = 0, width: int = 1920, height: int = 1080):
         asyncio.create_task(_vm().add_window(viewer_id, display, x, y, width, height))
         return WSBroadcast()
 
+    @UserPerms.requires.admin
     def remove_window(self, viewer_id: str, window_id: int):
         asyncio.create_task(_vm().remove_window(viewer_id, window_id))
         return WSBroadcast()
 
+    @UserPerms.requires.admin
     def set_audio_output(self, viewer_id: str, window_id: int, device: Optional[str] = None):
         """Where a window plays its sound: the description of one of the outputs of its host, None for the default."""
         async def apply():
@@ -61,6 +65,7 @@ class Viewers(WSAPIBase):
         asyncio.create_task(apply())
         return None
 
+    @UserPerms.requires.admin
     def keyboard(self, viewer_id: str, window_id: int):
         """The on-screen keyboard of a window."""
         try:
@@ -69,6 +74,7 @@ class Viewers(WSAPIBase):
             return WSResponse(error=str(e))
         return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
+    @UserPerms.requires.admin
     def set_keyboard(self, viewer_id: str, window_id: int, enabled: bool,
                      button_position: str = 'bottom-right', layout: str = 'english'):
         """Turns the on-screen keyboard of a window on or off, and says where its button is and which layout it has."""
@@ -82,6 +88,7 @@ class Viewers(WSAPIBase):
         return WSBroadcast(self.keyboard, viewer_id=viewer_id, window_id=window_id, enabled=enabled,
                            button_position=button_position, layout=layout)
 
+    @UserPerms.requires.admin
     def screensaver(self, viewer_id: str, window_id: int):
         """The interactive mode of a window: its home page and the idle time after which the playlist is played over it."""
         try:
@@ -90,6 +97,7 @@ class Viewers(WSAPIBase):
             return WSResponse(error=str(e))
         return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
+    @UserPerms.requires.admin
     def set_screensaver(self, viewer_id: str, window_id: int, enabled: bool,
                         home_url: str = '', idle_timeout: int = 120):
         """Makes a window interactive: home page (http or https) shown indefinitely, playlist as a screensaver after
@@ -107,6 +115,7 @@ class Viewers(WSAPIBase):
         asyncio.create_task(apply())
         return WSBroadcast(self.screensaver, viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
+    @UserPerms.requires.admin
     def refresh(self, viewer_id: str, window_id: int):
         """When the web page of a window is reloaded (a window without a screensaver)."""
         try:
@@ -115,6 +124,7 @@ class Viewers(WSAPIBase):
             return WSResponse(error=str(e))
         return WSBroadcast(viewer_id=viewer_id, window_id=window_id, **settings.model_dump())
 
+    @UserPerms.requires.admin
     def set_refresh(self, viewer_id: str, window_id: int, refresh_after_idle: Optional[int] = None,
                     refresh_schedules: Optional[List[str]] = None):
         """When a window reloads its web page: after refresh_after_idle seconds without activity (10 s to 7 days, empty
