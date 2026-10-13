@@ -87,6 +87,14 @@ export interface Api {
         /** The speaker volume of a monitor over DDC/CI, 0 to 100. [requires: audio] */
         set_volume: ApiCall<{ name: string; volume: number }>
       }
+      Touch: {
+        /** Touch screens found on the X server with their output (None: automatic), the remembered ones that are not [requires: admin] */
+        devices: ApiCall<Record<string, never>>
+        /** Drop the mapping of a device that is not plugged in any more. [requires: admin] */
+        forget: ApiCall<{ key: string }>
+        /** Map a touch screen, by its stable identity, to an output; None goes back to automatic (the whole screen). [requires: admin] */
+        set_output: ApiCall<{ key: string; output?: null | string }>
+      }
       /** Whether the viewer displays assets whose certificate does not [requires: admin] */
       allow_insecure_certs: ApiCall<Record<string, never>>
       /** Size of a window, shown in the navbar of every page. */
