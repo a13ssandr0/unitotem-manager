@@ -65,6 +65,9 @@ export default defineConfig({
     assetsDir: 'assets',
     manifest: 'manifest.json',
     emptyOutDir: true,
+    // noVNC uses top-level await (WebCodecs feature detection), which needs a recent target; the browsers of the
+    // administrators and CEF 147 all have it
+    target: 'esnext',
     rollupOptions: {
       input: {
         main: './src/main.js',

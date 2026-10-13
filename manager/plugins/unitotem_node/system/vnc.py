@@ -33,7 +33,9 @@ from .screens.xorg import XOutput
 # Where the per-session directories live. /run is a tmpfs: a crash cannot leave anything behind after a reboot.
 RUNTIME_ROOT = Path('/run/unitotem-vnc')
 MAX_SESSIONS = 2                # every one captures the screen continuously
-IDLE_TIMEOUT = 15 * 60          # seconds without the user doing anything in the window
+# seconds without the user doing anything in the window; the variable exists so that a test on a real node does not
+# have to wait a quarter of an hour
+IDLE_TIMEOUT = int(os.environ.get('UNITOTEM_VNC_IDLE_TIMEOUT', 15 * 60))
 FRAME_RATE = 20                 # the default is 60: a kiosk with a software compositor cannot afford that
 BINARY_NAMES = ('x0vncserver', 'X0tigervnc')
 BINARY_FALLBACKS = ('/usr/bin/x0vncserver', '/usr/bin/X0tigervnc')
@@ -106,7 +108,7 @@ class IdleWatch:
         return self.remaining() <= 0
 
 
-@dataclass
+@dataclass(eq=False)        # kept in a set of live sessions: identity, not field equality
 class VncServer:
     """One server, one directory, one socket."""
     binary: str

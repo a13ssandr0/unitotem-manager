@@ -7,6 +7,9 @@
       <v-btn v-if="hasTerminal" icon title="Terminal" @click="terminalOpen = true">
         <v-icon>mdi-console</v-icon>
       </v-btn>
+      <v-btn v-if="hasTerminal" icon title="Watch the screen" @click="vncOpen = true">
+        <v-icon>mdi-monitor-eye</v-icon>
+      </v-btn>
       <v-btn v-if="updateInfo?.available && allowed('Settings/Update/status')" icon to="/settings/updates"
              :title="`Update available: ${updateInfo.version ?? ''}`">
         <v-badge dot color="red"><v-icon>mdi-update</v-icon></v-badge>
@@ -30,7 +33,7 @@
         </template>
         <v-list>
           <v-list-item>
-            <v-btn prepend-icon="mdi-logout" variant="text" :href="'/logout'" @click="terminalOpen = false">
+            <v-btn prepend-icon="mdi-logout" variant="text" :href="'/logout'" @click="terminalOpen = false; vncOpen = false">
               Logout
             </v-btn>
           </v-list-item>
@@ -87,6 +90,7 @@
 
     <WindowTaskbar />
     <TerminalWindow v-if="hasTerminal" v-model="terminalOpen" />
+    <VncWindow v-if="hasTerminal" v-model="vncOpen" />
 
     <v-dialog v-model="rebootDialog" max-width="fit-content">
       <v-card class="pa-2 pb-0 rounded-lg">
@@ -131,6 +135,7 @@ import {onMounted, onUnmounted, ref, computed, watch} from 'vue'
 import {useDisplay, useTheme} from 'vuetify'
 import {useRoute, useRouter} from 'vue-router'
 import TerminalWindow from '@/components/TerminalWindow.vue'
+import VncWindow from '@/components/VncWindow.vue'
 import WindowTaskbar from '@/components/WindowTaskbar.vue'
 import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, onApi, send} from '@/api'
 
@@ -177,7 +182,7 @@ const rebootDialog = ref(false)
 const powerOffDialog = ref(false)
 
 const hostname = ref(window.__INITIAL_STATE__.hostname)
-// The terminal is offered by the node plugin: a server without it has no terminal to open
+// The terminal and the view of the screen are offered by the node plugin: a server without it has neither to open
 const hasNode = Boolean(window.__INITIAL_STATE__.plugins?.includes('node'))
 const hasTerminal = computed(() => hasNode && logged_user.value.perms?.includes('admin'))
 const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
@@ -200,9 +205,11 @@ const tabs = ref([
 ])
 
 const terminalOpen = ref(false)
+const vncOpen = ref(false)
 // The server logs a user out (password changed): close what holds a session before leaving
 onApi('logout', () => {
   terminalOpen.value = false
+  vncOpen.value = false
   window.location.href = '/logout'
 })
 // Updates are offered by the node plugin: without it there is nothing to ask
