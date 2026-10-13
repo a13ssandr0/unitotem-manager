@@ -1,0 +1,17 @@
+[Unit]
+Description=UniTotem boot splash
+# X is started by the image (start-xorg.service); the program also waits for its socket and cookie itself
+After=start-xorg.service
+
+[Service]
+# Ready when the first frame is on screen: this is what the boot splash of the system can end on. The viewer stops the
+# service once its own splash is showing.
+Type=notify
+NotifyAccess=main
+TimeoutStartSec=120
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/run/unitotem-x11.auth
+ExecStart=/usr/bin/python3 /usr/share/unitotem-manager/plugins/unitotem_viewer/splash.py
+
+[Install]
+WantedBy=multi-user.target

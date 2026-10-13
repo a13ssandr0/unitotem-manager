@@ -36,7 +36,7 @@ from utils.browser import user_agent
 from utils.models.viewer import viewer_settings
 from utils.system.gpu import detect_gpu
 
-from .splash import show_splashes
+from .splash import show_splashes, stop_boot_splash
 from .window import WebviewWindow
 import utils.ready as ready
 
@@ -161,6 +161,7 @@ class WebviewApp:
 
         # The first frame goes up before CEF starts, which takes seconds: the boot splash of the system ends on it
         self._splashes = show_splashes(self._real_screens())
+        stop_boot_splash()      # ours is up: hand over from the one the boot started on its own
         ready.ready('first frame on screen')
 
         # CEF's default profile dir is under $HOME/.config, which on the

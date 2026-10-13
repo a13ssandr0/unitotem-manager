@@ -201,6 +201,11 @@ Backup, restore and reset work on *parts* (`utils/backup.py`, `BackupPart`): the
 The service is `Type=notify`: `utils/ready.py` sends READY=1 when the first frame of the viewer is on screen (an early
 Qt splash, before CEF starts, so the system's boot splash can end), or when the web server answers if there are no local
 windows. `TimeoutStartSec=300`.
+On a slow board the manager needs many seconds just to import its dependencies, so the very first frame comes from a
+separate tiny process: `unitotem-splash.service` (shipped by unitotem-viewer, After=start-xorg.service) runs
+`plugins/unitotem_viewer/splash.py` as a plain script that imports nothing but Qt (it must stay free of imports from the
+rest of UniTotem), sends its own READY=1 and is stopped by the viewer (`systemctl stop --no-block`) once the viewer's own
+splash, which looks the same, is showing.
 
 
 # Rules
