@@ -20,7 +20,7 @@ def _vm():
         return None
 
 
-async def _publish(vm):
+async def publish(vm):
     from api.ws.endpoints import WS
     await WS.broadcast('Viewers/list', viewers=vm.get_webviews(), assignments=vm.get_assignments())
 
@@ -30,7 +30,7 @@ async def viewer_connected(instance_id: str, ip: str, port: int, hostname: str):
     if vm is None:
         return
     vm.register_webview(instance_id, {'ip': ip, 'port': port, 'hostname': hostname, 'screens': [], 'windows': []})
-    await _publish(vm)
+    await publish(vm)
 
 
 async def viewer_message(instance_id: str, raw: str) -> bool:
@@ -44,7 +44,7 @@ async def viewer_message(instance_id: str, raw: str) -> bool:
     vm = _vm()
     if target == 'WebviewInfo' and vm:
         vm.update_webview_info(instance_id, msg)
-        await _publish(vm)
+        await publish(vm)
         return True
     return False
 
@@ -53,7 +53,7 @@ async def viewer_gone(instance_id: str):
     vm = _vm()
     if vm:
         vm.unregister_webview(instance_id)
-        await _publish(vm)
+        await publish(vm)
 
 
 EMPTY_INFO = json.dumps({'target': 'WebviewInfo', 'screens': [], 'windows': []})
