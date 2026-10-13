@@ -232,5 +232,9 @@ export interface Api {
     /** [requires: scheduler] */
     unassign_playlist: ApiCall<{ viewer_id: string; window_id: number }>
   }
+  Vnc: {
+    /** The outputs that can be watched on their own, and whether the VNC server is installed at all. [requires: admin] */
+    outputs: ApiCall<Record<string, never>>
+  }
 }
 export const api: Api
