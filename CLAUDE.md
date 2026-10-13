@@ -232,7 +232,9 @@ Everything per window and per screen, off by default, kept in viewer_settings.js
 - **Zoom** (per asset, web pages): `zoom` 0.25-5 changes the page's layout viewport (iframe sized 100/zoom % and scaled),
   and `allow_pinch_zoom` (default off) decides whether the visitor can pinch (touch-action on the iframe).
 - **On-screen keyboard**: see above.
-The `Viewers/*` settings are administrative: admin capability only (explicit `@UserPerms.requires.admin`), not the scheduler one.
+`Viewers/*` permissions (decided with the user, one by one): the scheduler capability covers what a window shows (`list`,
+`assign_playlist`, `unassign_playlist`, screensaver, refresh, per-window audio output); admin only the configuration of the panel
+and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The web UI hides the keyboard row from non-admins.
 
 # Rules
 
