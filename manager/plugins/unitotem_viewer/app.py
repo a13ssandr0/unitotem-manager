@@ -288,6 +288,7 @@ class WebviewApp:
 
         self.windows: dict[int, WebviewWindow] = {}
         self._screen_windows: dict[QScreen, int] = {}
+        self._screen_geometry: dict[QScreen, object] = {}   # last geometry seen per screen (QRect)
         self._next_id = 0
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
         self._ws = None
@@ -362,13 +363,32 @@ class WebviewApp:
         win.show()
         self.windows[self._next_id] = win
         self._screen_windows[screen] = self._next_id
+        window_id = self._next_id
         self._next_id += 1
+        # There is no window manager on the kiosk, so nothing else makes a window follow its screen when the screen's
+        # mode or rotation changes at runtime (xrandr): without this it stays at the old size, clipped or leaving a
+        # strip of bare root window that touches fall into.
+        self._screen_geometry[screen] = geom
+        screen.geometryChanged.connect(lambda new, s=screen: self._on_screen_geometry(s, new))
         self._notify_screens_changed()
-        return self._next_id - 1
+        return window_id
+
+    def _on_screen_geometry(self, screen: QScreen, new_geometry):
+        """Resize the window that covers `screen` to its new geometry. A window that was given other bounds (a custom
+        layout set from the web UI) is left alone: only one that filled the screen follows it."""
+        old = self._screen_geometry.get(screen)
+        self._screen_geometry[screen] = new_geometry
+        win = self.windows.get(self._screen_windows.get(screen, -1))
+        if win is None or old is None:
+            return
+        current = win.geometry()
+        if (current.x(), current.y(), current.width(), current.height()) == (old.x(), old.y(), old.width(), old.height()):
+            win.set_bounds(new_geometry.x(), new_geometry.y(), new_geometry.width(), new_geometry.height())
 
     def _on_screen_removed(self, screen: QScreen):
         """Close the window associated with a screen that just disconnected."""
         window_id = self._screen_windows.pop(screen, None)
+        self._screen_geometry.pop(screen, None)
         if window_id is not None:
             win = self.windows.pop(window_id, None)
             if win is not None:
