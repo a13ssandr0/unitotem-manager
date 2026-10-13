@@ -118,6 +118,22 @@ function toLayer(dx, dy) {
   }
 }
 
+// A button of the keyboard must not take the focus from the field being typed in, so its touchstart is cancelled (see
+// build()); and a cancelled touchstart also cancels the click a tap would turn into, which made these buttons dead under a
+// real finger (found on the test VM, invisible with synthesized mouse events). So the tap is taken from pointer events,
+// which are not affected: a press and a release on the same button.
+function onTap(button, action) {
+  let pressed = false
+  button.addEventListener('pointerdown', () => { pressed = true })
+  button.addEventListener('pointerleave', () => { pressed = false })
+  button.addEventListener('pointercancel', () => { pressed = false })
+  button.addEventListener('pointerup', () => {
+    if (!pressed) return
+    pressed = false
+    action()
+  })
+}
+
 function drag(handle, onMove) {
   handle.addEventListener('pointerdown', event => {
     if (event.target.closest('button')) return
@@ -197,7 +213,7 @@ function build() {
   toggle.id = 'ut-kbd-toggle'
   toggle.textContent = '⌨'
   toggle.setAttribute('aria-label', 'Keyboard')
-  toggle.addEventListener('click', () => setOpen(!open, true))
+  onTap(toggle, () => setOpen(!open, true))
 
   panel = document.createElement('div')
   panel.id = 'ut-kbd-panel'
@@ -208,7 +224,7 @@ function build() {
   closeButton.id = 'ut-kbd-close'
   closeButton.textContent = '✕'
   closeButton.setAttribute('aria-label', 'Close the keyboard')
-  closeButton.addEventListener('click', () => setOpen(false))
+  onTap(closeButton, () => setOpen(false))
   header.appendChild(closeButton)
   body = document.createElement('div')
   body.id = 'ut-kbd-body'
