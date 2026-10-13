@@ -144,6 +144,18 @@ class WebviewWindow(QMainWindow):
 
         self._cef = CefWidget(self)
         self.setCentralWidget(self._cef)
+        # set by the application: called when the window is moved or resized
+        self.on_geometry_changed = None
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.on_geometry_changed:
+            self.on_geometry_changed()
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        if self.on_geometry_changed:
+            self.on_geometry_changed()
 
     def closeEvent(self, event):
         # Qt delivers a close event only to the widget close() was called on,

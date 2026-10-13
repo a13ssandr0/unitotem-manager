@@ -884,6 +884,28 @@ WAS OPEN, superseded - assignment per viewer instead of per window.
 - Desktop-style web UI (windows for settings/terminal/preview/VNC): option A, window manager in the current Vue
   app, gradually; prerequisite is the client API (webui/src/api.js, prototype done on the Updates page).
 
+- (2026-10-13, from the user) Window resize detection: DONE. A viewer window that is moved or resized (by anyone: the
+  manager, a window manager, a mode change) reports it like a screen being plugged (debounced 100 ms) and the layout
+  is pushed to the web UI as Viewers/list. Verified on the VM by resizing a window from X: the push carried 1000x700.
+- Touch panels (2026-10-13, from the user, design below is mine, not yet confirmed or started):
+  * Touch-to-screen mapping: each touch input device is assigned to an output (Display page), stored in the manager and
+    reapplied when a device or a screen appears (rotation included), through XInput's map-to-output (`xinput`, package
+    xinput) or the Coordinate Transformation Matrix property.
+  * The scheduler becomes the SCREENSAVER of an interactive panel: a window has a "home page" it shows indefinitely and,
+    after an idle timeout, the scheduler plays as an overlay on top of it; the first touch dismisses the overlay and is not
+    passed to the page underneath. Idle = no input on that window (XInput2 events hit-tested against the window geometry,
+    since the pages in the iframe are cross-origin and cannot be asked). Per window: home page, timeout, on/off.
+  * A page without a screensaver (no scheduler overlay): programmable refresh after a timeout or at given times
+    (same cron-style schedules and croniter as the timers).
+  * Zoom: a `zoom` factor per asset in the scheduler (CEF zoom level), and a per-asset switch to allow or forbid the
+    visitor's pinch zoom on touch panels (touch-action on the iframe, which is intersected with the page's own).
+  * On-screen keyboard for touch: a floating, always-on-top window that does not take focus, resizable between a minimum
+    and a maximum size and ALWAYS clamped inside the screen (position and size re-checked on every move, resize, screen
+    change and rotation; the title/handle can never leave the screen, and there is always a way to close it): assume the
+    worst possible user. Keys are delivered to the X server (XTEST) so they reach any page, cross-origin iframes included.
+    Open question: appear by itself when a text field gets focus, or only from a button.
+
+
 === API REVIEW (2026-10-11) ===
 DONE: API follows the user's naming convention (snake_case, one function per job, reads named after the state,
 mutations broadcast under the getter's target, network under Settings/Network, default duration under Scheduler).
