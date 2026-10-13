@@ -2,13 +2,14 @@
   <v-container fluid>
     <v-row>
       <v-col cols="12" v-if="info">
-        <p class="text-h6">Uptime: {{ info.uptime }}</p>
+        <h2 class="text-h5">{{ info.machine || 'This device' }}</h2>
+        <p class="text-subtitle-1 text-medium-emphasis">Uptime: {{ info.uptime }}</p>
       </v-col>
     </v-row>
     <v-row>
       <v-col cols="12" md="6" lg="4">
         <v-card class="mb-6">
-          <v-card-title>CPU</v-card-title>
+          <v-card-title>CPU<span v-if="info?.cpu_name" class="text-medium-emphasis"> ({{ info.cpu_name }})</span></v-card-title>
           <v-card-text>
             <canvas ref="cpuChartCanvas" style="min-height: 400px;"></canvas>
           </v-card-text>
