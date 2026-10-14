@@ -19,6 +19,7 @@ declare module 'vue' {
     ScreenControl: typeof import('./src/components/ScreenControl.vue')['default']
     TerminalWindow: typeof import('./src/components/TerminalWindow.vue')['default']
     TouchMapping: typeof import('./src/components/TouchMapping.vue')['default']
+    VncWindow: typeof import('./src/components/VncWindow.vue')['default']
     WindowTaskbar: typeof import('./src/components/WindowTaskbar.vue')['default']
   }
 }
