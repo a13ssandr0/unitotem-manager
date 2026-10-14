@@ -15,11 +15,13 @@ from loguru import logger
 from api.ws.endpoints import REMOTE_WS, WS
 from utils.models.command_line import cmdargs
 from utils.models.remote import RemoteManager
+from utils.remote import bundle, pairing, transfer, viewers
 from utils.remote import identity as ident
-from utils.remote import pairing
 from utils.remote.discovery import AVAILABLE as DISCOVERY_AVAILABLE, Announcer, Browser
-from utils.remote.link import ClientUplink, LinkServer
+from utils.remote.link import ClientUplink, LinkServer, control_frame
 from utils.remote.pairing import PairingError, PairRequest, PairRequests, RateLimiter
+from utils.remote.transfer import Channel, Receiver, TransferError, receive_bundle, send_bundle
+from utils.storage.uploadmanager import upload_manager
 
 PENDING_SERVER_TTL = 600
 
@@ -43,6 +45,14 @@ class RemoteService:
         self.limit_adopt = RateLimiter(6, 60)
         self.limit_request = RateLimiter(6, 60)
         self._push_task: Optional[asyncio.Task] = None
+        # the control traffic of the transfers: one channel per live connection
+        self._channels: dict[object, Channel] = {}
+        self._committed: set[str] = set()
+        self._migrating = False
+        self.notice: Optional[str] = None       # the last thing that went wrong that the page should say
+        self.link.on_control = self._server_control
+        self.uplink.on_control = self._client_control
+        self.uplink.on_connected = self._uplink_connected
 
     @property
     def rm(self) -> RemoteManager:
@@ -54,6 +64,8 @@ class RemoteService:
         """Bring up whatever the saved role needs. Never raises: remote control failing must not take the node with it."""
         try:
             self.rm.ensure_identity()
+            transfer.clean_stale(self._stage_root)
+            self._load_committed()
             await self.apply_role()
         except Exception:
             logger.exception('Remote control did not start, the node keeps running on its own')
@@ -74,11 +86,23 @@ class RemoteService:
             if rm.is_paired_client:
                 self.pending_server = None
                 await self.announcer.stop()
+                # the windows of this machine belong to the server now: the local scheduler must stop driving them
+                await viewers.viewer_gone(bundle.LOCAL_VIEWER)
                 self.uplink.start()
             else:
                 await self.uplink.stop()
                 await self.announcer.start(rm.node_id, gethostname(), cmdargs.port_secure, cmdargs.port_link)
+        if not rm.is_paired_client:
+            await self._attach_local_viewer()
         self.changed()
+
+    async def _attach_local_viewer(self):
+        """This node drives its own windows: introduce the viewer to the local scheduler (again, if it was connected
+        while the node belonged to a server and so was kept away from it)."""
+        info = self.uplink.last_info
+        if info:
+            await viewers.viewer_connected(bundle.LOCAL_VIEWER, '127.0.0.1', cmdargs.port_secure, gethostname())
+            await viewers.viewer_message(bundle.LOCAL_VIEWER, info)
 
     async def stop(self):
         await self.uplink.stop()
@@ -129,6 +153,7 @@ class RemoteService:
         if hello['node_id'] == rm.node_id:
             raise PairingError('That is this very node')
 
+        self._reset_committed()
         # pinned first: the client connects the moment it accepts, and must find the door open
         peer = rm.pin_client(hello['cert'], hello['name'], host, hello['web_port'])
         self.link.pin(hello['cert'])
@@ -144,7 +169,6 @@ class RemoteService:
             await self.link.reload()
             raise
         self.requests.remove(peer.id)
-        self.browser.found.pop(peer.id, None)
         logger.success('Adopted {} ({})', peer.name, host)
         self.changed()
 
@@ -216,6 +240,8 @@ class RemoteService:
         rm.server_id = ident.node_id(cert)
         rm.server_name = pairing.clean_name(body.get('name'))
         rm.server_cert = cert
+        rm.migrate_on_connect = True
+        self._reset_committed()
         rm.save()
         logger.success('Adopted by the server {} ({})', rm.server_name, ip)
         asyncio.get_running_loop().create_task(self.apply_role())
@@ -260,26 +286,173 @@ class RemoteService:
         rm.save()
         await self.apply_role()
 
-    async def unpair_client(self, client_id: str):
+    async def unpair_client(self, client_id: str, force: bool = False):
+        """Unpair a client. Its playlists and uploads go back to it first (what only it was showing is removed here
+        afterwards, what anything else uses stays); if that cannot be done nothing changes, unless `force`, which
+        forgets the client without moving anything (the client is offline, or broken)."""
         rm = self.rm
         peer = rm.peers.get(client_id)
         if peer is None:
             raise PairingError('Unknown client')
+        sock = self.link.socket_of(client_id)
+        if sock is not None:
+            try:
+                await self._hand_back(peer, sock)
+            except (TransferError, ConnectionError) as e:
+                if not force:
+                    raise PairingError(f'The content could not be moved to the client, nothing was changed: {e}') from None
+                logger.warning('Unpairing {} without moving its content: {}', peer.name, e)
+        elif not force:
+            raise PairingError('The client is offline, so its content cannot be moved to it. Unpair it anyway '
+                               'to forget it and keep the content here.')
         await self.link.disconnect(client_id, reason='Unpaired by the server')
         rm.forget_client(client_id)
         await self.link.reload()        # the certificate leaves the listener for good
+        self._reset_committed()
         logger.info('Unpaired {}', peer.name)
         self.changed()
 
+    async def _hand_back(self, peer, sock):
+        plan = bundle.plan_for(peer.id)
+        channel = self._channel_for(sock, sock.ws.send, peer)
+        if plan.playlists:
+            manifest = await bundle.build_manifest(plan, scope='leave:' + peer.id)
+            await send_bundle(channel, manifest, upload_manager.folder)
+            await bundle.remove_handed_over(plan, peer.id)
+        await sock.ws.send(control_frame(link='unpaired'))
+
     async def forget_server(self):
-        """Leave the server this node belongs to, without anything else (see the transfer for the version that takes the
-        playlists along): the node goes back to being an unpaired client."""
+        """Leave the server without anything moving (the server is gone, or does not answer): the node is standalone
+        again, with whatever it has locally."""
         rm = self.rm
         for field in ('server_ip', 'server_link_port', 'server_id', 'server_name', 'server_cert'):
             setattr(rm, field, None)
         rm.server_port = cmdargs.port_secure
+        rm.migrate_on_connect = False
+        rm.role = 'server'
+        self._reset_committed()
         rm.save()
         await self.apply_role()
+
+    async def leave_server(self):
+        """Ask the server to let this node go: it sends back what this node's windows were showing and unpairs us."""
+        if not self.uplink.connected:
+            raise PairingError('Not connected to the server: use "Forget the server" to leave without moving anything')
+        await self.uplink.send(control_frame(link='leave-request'))
+
+    # ── transfers ─────────────────────────────────────────────────────────
+
+    @property
+    def _stage_root(self):
+        return upload_manager.folder.parent / 'transfer'
+
+    def _load_committed(self):
+        import json
+        try:
+            self._committed = set(json.loads((self._stage_root / 'committed.json').read_text()))
+        except (OSError, ValueError):
+            self._committed = set()
+
+    def _reset_committed(self):
+        """A transfer id is only meant to recognise a retry of the same attempt. Every change of who is paired with
+        whom starts a new story: the same content moving again later is a new transfer, not a repetition."""
+        self._committed.clear()
+        try:
+            (self._stage_root / 'committed.json').unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def _remember_committed(self, tid: str):
+        import json
+        self._committed.add(tid)
+        try:
+            self._stage_root.mkdir(parents=True, exist_ok=True)
+            (self._stage_root / 'committed.json').write_text(json.dumps(sorted(self._committed)[-100:]))
+        except OSError:
+            logger.warning('Cannot record the transfer {} as applied', tid)
+
+    def _receiver(self, viewer_id: str) -> Receiver:
+        async def apply(manifest, staged):
+            await bundle.apply_bundle(manifest, staged, viewer_id)
+            self._remember_committed(manifest['id'])
+
+        return Receiver(self._stage_root, upload_manager.folder, apply, self._committed)
+
+    def _channel_for(self, key, send, peer=None) -> Channel:
+        channel = self._channels.get(key)
+        if channel is None:
+            if len(self._channels) > 16:        # connections that are gone
+                for old in list(self._channels)[:8]:
+                    self._channels.pop(old).close()
+            channel = self._channels[key] = Channel(send)
+            viewer_id = peer.id if peer else bundle.LOCAL_VIEWER
+            channel.on_begin = lambda ch, first: receive_bundle(ch, first, self._receiver(viewer_id))
+            channel.on_other = (lambda msg: self._server_other(peer, msg)) if peer else self._client_other
+        return channel
+
+    async def _server_control(self, peer, sock, raw):
+        await self._channel_for(sock, sock.ws.send, peer).dispatch(raw)
+
+    async def _client_control(self, raw):
+        ws = self.uplink._ws
+        if ws is not None:
+            await self._channel_for(ws, ws.send).dispatch(raw)
+
+    async def _server_other(self, peer, msg: dict):
+        if msg.get('link') == 'leave-request':
+            async def leave():
+                try:
+                    await self.unpair_client(peer.id)
+                except PairingError as e:
+                    sock = self.link.socket_of(peer.id)
+                    if sock is not None:
+                        await sock.ws.send(control_frame(link='leave-refused', reason=str(e)[:300]))
+
+            asyncio.get_running_loop().create_task(leave(), name='leave')
+
+    async def _client_other(self, msg: dict):
+        kind = msg.get('link')
+        if kind == 'unpaired':
+            logger.success('The server released this node')
+            await self.forget_server()
+        elif kind == 'leave-refused':
+            self.notice = str(msg.get('reason') or 'The server refused')[:300]
+            self.changed()
+
+    def _uplink_connected(self):
+        if self.rm.migrate_on_connect and not self._migrating:
+            asyncio.get_running_loop().create_task(self._migrate(), name='migrate')
+
+    async def _migrate(self):
+        """Just adopted: move what this node has to the server, restoring which of its windows play which playlist."""
+        rm = self.rm
+        self._migrating = True
+        try:
+            if bundle.is_empty():
+                rm.migrate_on_connect = False
+                rm.save()
+                return
+            ws = self.uplink._ws
+            if ws is None:
+                return
+            channel = self._channel_for(ws, ws.send)
+            manifest = await bundle.build_manifest(bundle.plan_everything(), scope='adopt:' + rm.node_id)
+            await send_bundle(channel, manifest, upload_manager.folder)
+            await bundle.remove_everything()
+            rm.migrate_on_connect = False
+            rm.save()
+            self.notice = None
+            logger.success('The content of this node is on the server now')
+        except (TransferError, ConnectionError) as e:
+            # nothing was removed here: it will be tried again the next time the connection comes up
+            self.notice = f'The content could not be moved to the server: {e}'
+            logger.error(self.notice)
+        except Exception:
+            logger.exception('Moving the content to the server failed')
+            self.notice = 'The content could not be moved to the server (see the log)'
+        finally:
+            self._migrating = False
+            self.changed()
 
     # ── state for the web UI ──────────────────────────────────────────────
 
@@ -294,7 +467,7 @@ class RemoteService:
             'link_port': cmdargs.port_link if self.link.running else None,
             'discovery': DISCOVERY_AVAILABLE,
             'clients': [], 'discovered': [], 'requests': [],
-            'server': None, 'pairing': None,
+            'server': None, 'pairing': None, 'notice': self.notice, 'migrating': self._migrating,
         }
         if rm.role == 'server':
             out['clients'] = [{

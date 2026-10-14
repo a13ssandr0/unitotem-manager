@@ -57,6 +57,8 @@ class RemoteManager(BaseModel, validate_assignment=True, arbitrary_types_allowed
     server_id: Optional[str] = None
     server_name: Optional[str] = None
     server_cert: Optional[str] = None  # PEM, pinned
+    # just adopted: the playlists and uploads of this node still have to move to the server (kept until they have)
+    migrate_on_connect: bool = False
 
     # server side: the clients paired with this node
     peers: 'dict[str, Peer]' = Field(default_factory=dict)
