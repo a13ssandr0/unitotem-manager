@@ -203,8 +203,10 @@ Qt splash, before CEF starts, so the system's boot splash can end), or when the 
 windows. `TimeoutStartSec=300`.
 On a slow board the manager needs many seconds just to import its dependencies, so the very first frame comes from a
 separate tiny process: `unitotem-splash.service` (shipped by unitotem-viewer, After=start-xorg.service) runs
-`plugins/unitotem_viewer/splash.py` as a plain script that imports nothing but Qt (it must stay free of imports from the
-rest of UniTotem), sends its own READY=1 and is stopped by the viewer (a D-Bus `StopUnit` call to systemd) once the viewer's own
+`plugins/unitotem_viewer/bootsplash.py`, a plain script that uses only python-xlib and Pillow (NO Qt: importing PySide6 takes
+seconds on a Pi 4 and the screen stays black meanwhile; measured on the VM: visible 0.12 s after it starts). It must stay free of
+imports from the rest of UniTotem, sends its own READY=1 and is stopped by the viewer (a D-Bus `StopUnit` call to systemd) once
+the viewer's own Qt splash (splash.py), which looks the same, is showing once the viewer's own
 splash, which looks the same, is showing.
 
 
