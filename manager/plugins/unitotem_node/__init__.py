@@ -19,7 +19,7 @@ UPDATE_CHECK_INTERVAL = 24 * 3600
 def on_startup(loop):
     from api.commons import SHUTDOWN_EVENT
     from api.ws.endpoints import WS
-    from .system import updater
+    from .system import suspend, updater
     from .system.screens import control, xorg
     from .system.timer_actions import run_timers
 
@@ -71,6 +71,7 @@ def on_startup(loop):
     loop.create_task(screens_at_start(), name='screens_at_start')
     loop.create_task(touch_at_start(), name='touch_at_start')
     loop.create_task(run_timers(), name='timers')
+    loop.create_task(suspend.watch_sleep(), name='sleep_watch')
     loop.create_task(update_watch(), name='update_watch')
 
 
