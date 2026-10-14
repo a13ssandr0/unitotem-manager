@@ -1,4 +1,15 @@
 === CURRENT WORK ===
+2026-10-14 merged into dev, all verified as stated in each entry below: first access without a default password (claim code, /setup,
+--create-admin), VNC on demand, suspend with scheduled wake (a REAL S3 suspend + RTC wake worked on the VM), real-touch tests
+(uinput) of mapping/screensaver/keyboard/zoom with two fixes (window follows screen mode, keyboard buttons under a finger), Info
+page (machine model, CPU name), taskbar spacing. IN PROGRESS: remote control (mutual TLS pairing, discovery, adoption, data
+transfer) by an agent in a worktree; not merged yet.
+OPEN QUESTIONS (answers needed from the user): which OS account the terminal should use on the real image (setup sets root's today);
+should the password policy also apply to Security.add_user / change password; should the claim code also show over normal
+playback; is a global claim lockout acceptable; VNC: does a visible window count as activity, is tigervnc a Depends instead of a
+Recommends, should the watched screen show an indicator, a cursor in control mode; suspend: is a 7-day maximum right (the VM RTC
+holds under 24 h), should refused/skipped suspends raise a notification; unverified: timers loop and screens after a REAL resume,
+PrepareForSleep against the real logind, the Vue dialogs in a browser, VNC/claim box on the real CEF window, second output.
 Packaging by role is done and verified: the 3.0.0~dev5 debs (unitotem-manager core, unitotem-node, unitotem-viewer,
 unitotem metapackage, python3-cefpython3, plymouth-theme-unitotem) build lintian-clean in a trixie container
 (`tools/build-debs.sh all`, ~7 min, needs network for npm) and each role was installed in a clean container and booted:

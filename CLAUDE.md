@@ -236,6 +236,22 @@ Everything per window and per screen, off by default, kept in viewer_settings.js
 `assign_playlist`, `unassign_playlist`, screensaver, refresh, per-window audio output); admin only the configuration of the panel
 and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The web UI hides the keyboard row from non-admins.
 
+## First access, VNC, suspend
+- **First access (no default password)**: a node with no admin user is UNCLAIMED (`utils/claim.py`): every page goes to `/setup`,
+  which asks for a claim code shown on the totem's screen (first-boot and no-assets pages, updated through a loopback-only SSE
+  stream), written to `/var/lib/unitotem/claim-code` (0600) and logged for a headless node, plus the new admin's name and
+  password (policy in `utils/passwords.py`). Wrong codes are rate limited (global lockout, new code after 10 failures),
+  `/setup` is a 404 once claimed, two simultaneous claims have one winner. A reset of the users part returns to unclaimed.
+  `unitotem-manager --create-admin NAME` (root only, service stopped) is the recovery path. There is NO admin/admin anywhere.
+  The setup can also set the OS password the terminal's `login` uses (node plugin hooks `os_account`/`set_os_password`).
+- **VNC on demand** (node plugin `vnc.py`, `system/vnc.py`, VncWindow.vue): TigerVNC `x0vncserver` on a UNIX socket only (no TCP
+  port), view-only enforced by the server, control an explicit per-session switch, started when the window opens and stopped on
+  close/drop/idle/shutdown, admin only, `/vnc` websocket bridge with Origin check. Debian binary is `/usr/bin/X0tigervnc`.
+- **Suspend with scheduled wake** (node plugin `system/{wake,rtc,suspend}.py`, timer action `sus`, `Power/suspend`): the alarm is
+  written to `/sys/class/rtc/rtcN/wakealarm` (UTC epoch whatever /etc/adjtime says; clear first, read back), then logind
+  `Suspend` over D-Bus; refused with a reason when there is no usable RTC / wakeup / CanSuspend; resume is the logind
+  `PrepareForSleep(False)` signal. `MinuteClock` in timer_actions.py is the clock-jump policy of the timers loop.
+
 # Rules
 
 Everything above describes *what* UniTotem must do. This section describes *how* to work on it.
@@ -616,3 +632,17 @@ the VM-specific ones.
   signature there raises (use `typing.List`).
 - **`requests.post('/auth/token')` follows the 303**: read the cookie with `allow_redirects=False`. Assets added with
   `Scheduler/add_url_assets` are disabled by default.
+- **`logger.warning()` never reaches the journal on the kiosk**: the unit's stderr is stored at priority INFO and journald keeps
+  only warnings. A line that must survive needs the sd-daemon `<4>` prefix (only when `JOURNAL_STREAM` is set), as claim.py does.
+- **croniter 6.0 is wrong across DST with timezone-aware datetimes**: feed it naive local times and use `.timestamp()`.
+- **RTC alarms**: the kernel takes UTC epoch seconds; overwriting a pending alarm gives EIO (clear first); an alarm in the past
+  is silently accepted and sets nothing (read back); many RTCs cannot hold an alarm 24 h or more ahead. asyncio sleeps on the
+  monotonic clock, which does not run during suspend: a wall-clock loop needs a wake-up on resume.
+- **Touch input under a real finger**: a `touchstart` preventDefault also cancels the click, so anything on the on-screen keyboard
+  must use pointer events (CDP mouse tests hid this). There is no window manager: a screen mode/rotation change does not resize
+  the Qt window or CEF's X child by itself (the viewer follows `QScreen.geometryChanged` now). Test real touch with a uinput
+  multitouch device (`struct input_event` is `qqHHi`), the X pointer position is the X-level oracle.
+- **Vuetify layout items do not register reliably for an element that comes and goes**: the window taskbar leaves room through
+  `--taskbar-height` (padding on the drawer and the page), not `v-footer app`.
+- **A `@dataclass` with default `eq=True` is unhashable**: in a set it gave a 500 on a websocket upgrade before accept.
+- **Never run first-access/reset tests on the shared VM without backing up users.json**: use a throwaway container.
