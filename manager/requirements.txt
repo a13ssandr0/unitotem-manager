@@ -1,6 +1,7 @@
 # Python dependencies of the core. The plugins list their own: plugins/*/requirements.txt
 Pillow
 websockets>=12.0
+zeroconf
 PyJWT
 python-dateutil
 pypdf
@@ -14,6 +15,7 @@ jinja2
 loguru
 natsort
 psutil
+cryptography
 pycryptodomex
 pydantic-extra-types
 pydantic

@@ -27,7 +27,6 @@ import utils.constants as const
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
 from utils.claim import claim_manager
 from utils.environment import environ
-from utils.models.remote import RemoteManager
 from utils.models.user import User, user_manager
 from utils.system.ip import default_ipv4
 
@@ -106,13 +105,6 @@ async def login(data: LoginForm = Depends()):
     resp = RedirectResponse(data.src, status_code=status.HTTP_303_SEE_OTHER)
     session_cookie(resp, data.username, data.remember_me)
     return resp
-
-
-@router.get("/remote/public_key")
-async def get_public_key():
-    # asking for the public key implies signatures are about to be verified:
-    # generate the key pair now if it does not exist yet
-    return Response(RemoteManager.get_signing_key().public_key().exportKey(), media_type="text/plain")
 
 
 @router.get("/login/users")

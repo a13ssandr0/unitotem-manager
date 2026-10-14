@@ -19,6 +19,10 @@ class CommandLineArgs(BaseSettings, cli_parse_args=True, frozen=True):
     port: int = Field(default=80, gt=0, lt=65535)
     bind_secure: IPv4Address = IPv4Address("0.0.0.0")
     port_secure: int = Field(default=443, gt=0, lt=65535)
+    # Mutual-TLS port of the link between a server and its clients (see utils/remote): certificates pinned at pairing time
+    # are the only way in, unlike port_secure which any browser can reach
+    bind_link: IPv4Address = IPv4Address("0.0.0.0")
+    port_link: int = Field(default=4443, gt=0, lt=65535)
     assets_file: Path = Path('/etc/unitotem/assets.json')
     users_file: Path = Path('/etc/unitotem/users.json')
     remote_file: Path = Path('/etc/unitotem/remote.json')
