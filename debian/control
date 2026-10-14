@@ -123,11 +123,12 @@ Depends: ${python3:Depends},
          python3-qrcode,
          python3-sdbus-networkmanager,
          python3-xlib,
-Recommends: alsa-utils, ddcutil, v4l-utils
+Recommends: alsa-utils, ddcutil, tigervnc-scraping-server, v4l-utils
 Description: UniTotem integration with the machine it runs on
  Network (NetworkManager through netplan), audio, displays and screen power
  (DDC, CEC, Wake-on-LAN, serial), reboot and power-off, timers, system
- updates, a terminal in the web interface and the hotspot of the first boot.
+ updates, a terminal and a view of the screen in the web interface and the
+ hotspot of the first boot.
  .
  Install it on every machine that is a totem; leave it out of a server that
  only orchestrates.
