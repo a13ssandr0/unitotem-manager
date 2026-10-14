@@ -15,6 +15,7 @@ Rather than trusting the adjtime flag alone we MEASURE the shift (RTC reading mi
 alarm; the flag is only used to say what shift is plausible, and a clock that is neither on UTC nor on local time (or
 that drifted by minutes) is refused instead of being trusted to wake the node at a wrong time.
 """
+import errno
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -145,10 +146,11 @@ def arm(rtc: Rtc, wake_epoch: float, now: Optional[float] = None) -> int:
         # EINVAL is what the kernel answers for an alarm in the past or one this RTC cannot hold (too far away)
         clear_quietly(rtc)
         ahead = wake_epoch - now
-        hint = (' Many real-time clocks can only hold an alarm less than 24 hours ahead (measured on the test VM: '
-                'EIO for anything at or beyond a day); schedule an earlier wake-up.' if ahead >= 20 * 3600 else '')
-        raise SuspendRefused(f'{rtc.name} refused the wake-up alarm for {datetime.fromtimestamp(wake_epoch):%Y-%m-%d %H:%M} '
-                             f'({exc.strerror or exc}).{hint}') from exc
+        # the errno name, not strerror(): that one is translated to the language of the system
+        reason = errno.errorcode.get(exc.errno, str(exc.errno)) if exc.errno else str(exc)
+        hint = (' Many real-time clocks can only hold an alarm less than 24 hours ahead (the CMOS RTC of the test VM '
+                'refuses anything a day or more away); schedule an earlier wake-up.' if ahead >= 20 * 3600 else '')
+        raise SuspendRefused(f'{rtc.name} refused a wake-up alarm {ahead / 3600:.0f} hours ahead ({reason}).{hint}') from exc
     if rtc.current_alarm() != alarm:
         clear_quietly(rtc)
         raise SuspendRefused(f'{rtc.name} did not keep the wake-up alarm (wrote {alarm}, read back '
