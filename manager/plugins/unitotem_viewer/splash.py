@@ -27,8 +27,10 @@ class Splash(QWidget):
         self.setCursor(Qt.CursorShape.BlankCursor)
         family = QFontDatabase.applicationFontFamilies(QFontDatabase.addApplicationFont(str(_FONT)))
         self._family = family[0] if family else 'sans-serif'
+        self.painted = False
 
     def paintEvent(self, _event):
+        self.painted = True
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), Qt.GlobalColor.black)
@@ -47,11 +49,20 @@ class Splash(QWidget):
         painter.drawArc(QRectF((self.width() - size) / 2, height * 0.62, size, size), 90 * 16, -270 * 16)
 
 
-def show_splashes(screens) -> list[Splash]:
-    """One per screen, painted before this returns."""
+def show_splashes(screens, timeout: float = 3.0) -> list[Splash]:
+    """One per screen, ON SCREEN with their pixels painted before this returns: whoever called asks for the previous frame
+    to be removed right after, and showing a window is not painting it (on a slow board the first paint comes several event
+    loop turns after the window is mapped, and the gap between the two frames is a black screen)."""
+    import time
     from PySide6.QtWidgets import QApplication
     splashes = [Splash(screen) for screen in screens]
     for splash in splashes:
         splash.show()
+    deadline = time.monotonic() + timeout
+    while not all(splash.painted for splash in splashes) and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.005)
+    for splash in splashes:
+        splash.repaint()            # synchronous, in case the first paint was only scheduled
     QApplication.processEvents()
     return splashes
