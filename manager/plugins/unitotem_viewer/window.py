@@ -5,10 +5,11 @@ CEF renders directly to an X11 child window (via SetAsChild / winId()),
 so Wayland must be backed by XWayland (QT_QPA_PLATFORM=xcb).
 """
 import json
+import logging
 from typing import Optional
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPalette, QScreen
 from PySide6.QtWidgets import QMainWindow, QWidget, QSizePolicy
 
@@ -21,6 +22,9 @@ except ImportError:
 _CONTAINERS = ['boot', 'web', 'image', 'video', 'audio']
 # FitEnum value → CSS object-fit name
 _FIT_NAMES  = ['contain', 'cover', 'fill']
+
+logger = logging.getLogger(__name__)
+_x_display = None   # second X connection, opened on first use (see CefWidget._sync_browser_size)
 
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
 
@@ -93,7 +97,6 @@ class CefWidget(QWidget):
         # raises TypeError (wrong arg count) - it was never actually
         # exercised until this call started firing.
         cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
-
     def execute_js(self, js: str):
         if self.browser:
             self.browser.ExecuteJavascript(js)
@@ -102,6 +105,30 @@ class CefWidget(QWidget):
         super().resizeEvent(event)
         if self.browser:
             cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
+            # OnSize reads the widget's X11 geometry through its own connection, and at this point Qt has not flushed
+            # the resize to the server yet: the browser kept its old size when the screen changed mode or rotated
+            # (measured: window 2160x3840, CEF child still 3840x2160). Ask again once the resize has been applied.
+            QTimer.singleShot(0, self._sync_browser_size)
+            QTimer.singleShot(100, self._sync_browser_size)
+
+    def _sync_browser_size(self):
+        """Make the browser's own X11 window as big as this widget. cefpython's OnSize does not do it on Linux (the
+        child keeps the size it was created with), so the child is resized directly over a second X connection."""
+        if not self.browser:
+            return
+        cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
+        try:
+            from Xlib import display
+            global _x_display
+            if _x_display is None:
+                _x_display = display.Display()
+            handle = self.browser.GetWindowHandle()
+            if handle:
+                _x_display.create_resource_object('window', handle).configure(width=max(self.width(), 1),
+                                                                              height=max(self.height(), 1))
+                _x_display.flush()
+        except Exception as exc:
+            logger.warning('could not resize the browser window: %s', exc)
 
     def focusInEvent(self, event):
         super().focusInEvent(event)
