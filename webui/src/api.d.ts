@@ -154,14 +154,34 @@ export interface Api {
       wireless_networks: ApiCall<Record<string, never>>
     }
     Remote: {
+      /** Pair with an unpaired client. `fingerprint` is the one the user confirmed: if the device presents another [requires: admin] */
+      adopt: ApiCall<{ host: string; port: number; fingerprint: string }>
+      /** Accept a client that asked to be adopted. [requires: admin] */
+      approve_request: ApiCall<{ client_id: string }>
+      /** Turn this node into a client: unpaired, it announces itself on the network so that a server can adopt it, and [requires: admin] */
+      become_client: ApiCall<Record<string, never>>
+      /** Back to a server (the default). A client that belongs to a server has to leave it first. [requires: admin] */
+      become_server: ApiCall<Record<string, never>>
       /** [requires: admin] */
-      disconnect_client: ApiCall<{ client: string }>
-      /** State of the RSA signing key: missing, generating or ready [requires: admin] */
+      cancel_pairing: ApiCall<Record<string, never>>
+      /** Leave the server without moving anything (it is gone or does not answer; it keeps this node as an offline [requires: admin] */
+      forget_server: ApiCall<Record<string, never>>
+      /** State of the RSA key that signs the commands for the viewer: missing, generating or ready [requires: admin] */
       key_status: ApiCall<Record<string, never>>
-      /** [requires: admin] */
+      /** Leave the server this node belongs to: the server sends back what this node's screens were showing. [requires: admin] */
+      leave_server: ApiCall<Record<string, never>>
+      /** How this node is paired: its role and identity, and its clients (server) or its server (client). [requires: admin] */
       mode: ApiCall<Record<string, never>>
+      /** Look at a device before adopting it. The answer carries the fingerprint of its certificate: the user compares [requires: admin] */
+      probe: ApiCall<{ host: string; port?: number }>
       /** [requires: admin] */
-      set_mode: ApiCall<{ remote_server: null | string; remote_port?: null | number }>
+      reject_request: ApiCall<{ client_id: string }>
+      /** Ask the server at this address to adopt this node; its administrator has to approve. [requires: admin] */
+      request_pairing: ApiCall<{ server_ip: string; server_port?: number }>
+      /** Let a paired client connect again or, with enabled=False, refuse it (and drop it now) without unpairing it. [requires: admin] */
+      set_client_enabled: ApiCall<{ client_id: string; enabled: boolean }>
+      /** Unpair a client: what its screens were showing goes back to it (and is removed here if nothing else uses it), [requires: admin] */
+      unpair_client: ApiCall<{ client_id: string; force?: boolean }>
     }
     Security: {
       /** [requires: admin] */
