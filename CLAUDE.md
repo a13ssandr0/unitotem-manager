@@ -252,6 +252,16 @@ and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The w
   `Suspend` over D-Bus; refused with a reason when there is no usable RTC / wakeup / CanSuspend; resume is the logind
   `PrepareForSleep(False)` signal. `MinuteClock` in timer_actions.py is the clock-jump policy of the timers loop.
 
+## Remote control (server/client)
+Implemented in `utils/remote/` (identity, tls, link, service, discovery, pairing, transfer, bundle, viewers), `api/remote.py`,
+`routers/pairing.py`, the Remote page. Every node has a self-signed ECDSA identity (backed up, restore checks key/cert match);
+pairing PINS the peer's certificate on both sides. The link is a websocket over TLS 1.3 with mutual authentication on a SEPARATE
+port (`cmdargs.port_link`, 4443), served by the `websockets` library because hypercorn does not expose the peer certificate;
+`/remote` on 443 is loopback only. An unpaired client announces itself over mDNS (zeroconf), servers list it and adopt it after
+the user compares the certificate fingerprint; manual pairing by address works from both sides. Adopting moves the client's
+playlists and uploads to the server (streamed, hash-checked, all-or-nothing); unpairing returns what the client showed and
+removes from the server only what nothing else uses (`plan_leave`). All Remote functions are admin only.
+
 # Rules
 
 Everything above describes *what* UniTotem must do. This section describes *how* to work on it.
@@ -646,3 +656,10 @@ the VM-specific ones.
   `--taskbar-height` (padding on the drawer and the page), not `v-footer app`.
 - **A `@dataclass` with default `eq=True` is unhashable**: in a set it gave a 500 on a websocket upgrade before accept.
 - **Never run first-access/reset tests on the shared VM without backing up users.json**: use a throwaway container.
+- **Hypercorn does not expose the TLS peer certificate**: pinning needs a listener that does (`websockets` server, port 4443).
+  A certificate cannot be removed from a live `ssl.SSLContext` (unpairing reloads the listener and checks the fingerprint per
+  connection). TLS 1.3 reports a refused client certificate to the client as an invalid HTTP response (`InvalidMessage`).
+- **Do not pop zeroconf entries by hand** (no new "added" event fires on re-announce): filter in the view. mDNS and reaching the
+  libvirt VM from a container need `docker --network host`.
+- **A regex ending in `$` accepts a trailing newline**: use `fullmatch` for anything that crosses a trust boundary.
+- **Uploading a file with an unknown mime type returns 500** (`Asset.media_type` is None): known, unrelated to remote control.

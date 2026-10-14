@@ -2,9 +2,10 @@
 2026-10-14 merged into dev, all verified as stated in each entry below: first access without a default password (claim code, /setup,
 --create-admin), VNC on demand, suspend with scheduled wake (a REAL S3 suspend + RTC wake worked on the VM), real-touch tests
 (uinput) of mapping/screensaver/keyboard/zoom with two fixes (window follows screen mode, keyboard buttons under a finger), Info
-page (machine model, CPU name), taskbar spacing. IN PROGRESS: remote control (mutual TLS pairing, discovery, adoption, data
-transfer) by an agent in a worktree; not merged yet.
-OPEN QUESTIONS (answers needed from the user): which OS account the terminal should use on the real image (setup sets root's today);
+page (machine model, CPU name), taskbar spacing. Remote control (pinned mutual TLS on port 4443, mDNS discovery, adoption with fingerprint confirmation, playlist/upload
+transfer both ways, Remote page) is merged too: verified between the VM and a container (host networking), NOT verified: the client
+viewer's pixels, the approval click path in the UI, behind a firewall blocking 4443, multi-GB transfers.
+OPEN QUESTIONS (answers needed from the user): remote: is TCP 4443 acceptable on the image (firewall); should a paired client be re-adoptable with client-side approval (refused today: unpair first); after unpair a node becomes a standalone SERVER; an offline unpair needs `force` and leaves content on the server (a deferred unpair is possible); per-window audio/keyboard/screensaver settings are not transferred;  which OS account the terminal should use on the real image (setup sets root's today);
 should the password policy also apply to Security.add_user / change password; should the claim code also show over normal
 playback; is a global claim lockout acceptable; VNC: does a visible window count as activity, is tigervnc a Depends instead of a
 Recommends, should the watched screen show an indicator, a cursor in control mode; suspend: is a 7-day maximum right (the VM RTC
