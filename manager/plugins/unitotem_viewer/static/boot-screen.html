@@ -625,6 +625,15 @@
     }
     applyKeyboard();
     applySaver();
+
+    // The viewer keeps its own splash over this window until this page has really drawn a frame: the browser's first paint
+    // is not ours (it can be white), so a fixed delay would show it. Two animation frames are the first one that is on
+    // screen. Told through the DevTools binding utFrame, or when the viewer attaches after the fact (it asks for the flag).
+    window.__utFramed = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.__utFramed = true;
+      if (typeof utFrame === 'function') utFrame('{}');
+    }));
   </script>
 </body>
 </html>

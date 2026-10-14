@@ -56,6 +56,7 @@ except ImportError:
 # underlying data chrome://gpu and Electron's old app.getGPUFeatureStatus()
 # both surface. Not a secret; just needs to not collide with anything else.
 CDP_PORT = 9223
+SPLASH_MAX_MS = 20000
 
 
 class _Bridge(QObject):
@@ -65,6 +66,8 @@ class _Bridge(QObject):
     # emitted from the asyncio thread on a real shutdown, since with
     # quitOnLastWindowClosed disabled nothing else makes exec() return.
     quit_requested = Signal()
+    # A window's page has drawn its first frame (from the DevTools connection, on the asyncio thread)
+    first_frame = Signal(int)
 
 
 class WebviewApp:
@@ -164,7 +167,8 @@ class WebviewApp:
         self.qt_app.setApplicationName('UniTotem')
 
         # The first frame goes up before CEF starts, which takes seconds: the boot splash of the system ends on it
-        self._splashes = show_splashes(self._real_screens())
+        screens = self._real_screens()
+        self._splashes = dict(zip(screens, show_splashes(screens)))      # screen -> its splash
         stop_boot_splash()      # ours is up: hand over from the one the boot started on its own
         ready.ready('first frame on screen')
 
@@ -185,6 +189,11 @@ class WebviewApp:
         switches = {
             'no-proxy-server'  : '',
             'disable-extensions': '',
+            # Our own splash lies over a window until its page has drawn, and Chromium stops painting (and running
+            # animation frames) in a window another window covers: the page would never draw, and the splash never go.
+            'disable-backgrounding-occluded-windows': '',
+            'disable-renderer-backgrounding': '',
+            'disable-features': 'CalculateNativeWinOcclusion,NativeWindowOcclusion',
             # Allow videos and audio to auto-play without user interaction
             'autoplay-policy'  : 'no-user-gesture-required',
             'remote-debugging-address': '127.0.0.1',
@@ -278,6 +287,7 @@ class WebviewApp:
         self._bridge = _Bridge()
         self._bridge.command_received.connect(self._handle_command)
         self._bridge.quit_requested.connect(self.qt_app.quit)
+        self._bridge.first_frame.connect(self._on_first_frame)
 
         # A window that is moved or resized (by the manager, the window manager or a screen changing mode) is reported
         # like a screen being plugged: the layout shown in the web UI follows it. Debounced, a resize is a burst of events.
@@ -306,6 +316,10 @@ class WebviewApp:
         # keep running, picking up screens as they're connected below).
         for screen in self._real_screens():
             self._open_window_for_screen(screen)
+        # Windows are mapped above the splashes, and until its page has drawn a window shows the browser's own first paint,
+        # which can be white: the splash goes back on top and stays there until _on_first_frame
+        for splash in self._splashes.values():
+            splash.raise_()
         self.qt_app.screenAdded.connect(self._open_window_for_screen)
         self.qt_app.screenRemoved.connect(self._on_screen_removed)
 
@@ -418,10 +432,21 @@ class WebviewApp:
         if self._ws_loop is not None and self._ws is not None:
             asyncio.run_coroutine_threadsafe(self._send_webview_info(self._ws), self._ws_loop)
 
-    def _close_splashes(self):
-        for splash in self._splashes:
-            splash.close()
-        self._splashes = []
+    def _close_splashes(self, screens=None):
+        """Closes the splash of those screens (all of them by default)."""
+        for screen in list(self._splashes if screens is None else screens):
+            splash = self._splashes.pop(screen, None)
+            if splash is not None:
+                splash.close()
+
+    def _on_first_frame(self, window_id: int):
+        """The page of a window has drawn: its splash has done its job."""
+        logger.debug("Window {}: first frame drawn", window_id)
+        for screen, wid in self._screen_windows.items():
+            if wid == window_id:
+                self._close_splashes([screen])
+                return
+        self._close_splashes()      # a window we cannot place: do not leave a splash behind
 
     def request_quit(self):
         """
@@ -485,8 +510,9 @@ class WebviewApp:
         # found. Not the way out either: external_message_pump and
         # multi_threaded_message_loop, both dead ends on Linux (see CLAUDE.md).
         cef_timer.start(10)
-        # the browser has had time to paint its first page: the splash has done its job
-        QTimer.singleShot(1500, self._close_splashes)
+        # Normally each splash goes when its window's page has drawn a frame (see _on_first_frame); this is only the
+        # safety net, a splash must never stay for good
+        QTimer.singleShot(SPLASH_MAX_MS, self._close_splashes)
 
         # cef.MessageLoopWork is a C-extension function: PySide6 can invoke it
         # as a slot without ever entering CPython's bytecode eval loop, which
@@ -512,6 +538,7 @@ class WebviewApp:
         asyncio.set_event_loop(self._ws_loop)
         self._cdp = Cdp(CDP_PORT, self._on_focus_changed, self._on_page_ready)
         self._cdp.on_binding('utKey', self._on_keyboard_key)
+        self._cdp.on_binding('utFrame', lambda window, _data: self._bridge.first_frame.emit(window))
         self._cdp.on_binding('utActivity', self._on_activity)
         self._cdp.on_binding('utSaver', self._on_saver_event)
         self._ws_loop.create_task(self._cdp.run(asyncio.Event()))
@@ -539,6 +566,8 @@ class WebviewApp:
 
     def _on_page_ready(self, window: int):
         asyncio.ensure_future(self._apply_keyboard(window))
+        # the page may have drawn before we were attached: ask
+        asyncio.ensure_future(self._cdp.evaluate(window, "window.__utFramed && typeof utFrame === 'function' && utFrame('{}')"))
         asyncio.ensure_future(self._apply_saver(window))
         watch = self._watches.get(window)
         if watch:

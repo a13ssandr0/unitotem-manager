@@ -665,3 +665,10 @@ the VM-specific ones.
   libvirt VM from a container need `docker --network host`.
 - **A regex ending in `$` accepts a trailing newline**: use `fullmatch` for anything that crosses a trust boundary.
 - **Uploading a file with an unknown mime type returns 500** (`Asset.media_type` is None): known, unrelated to remote control.
+- **Chromium stops painting a window that another window covers, so a splash over a CEF window starves it**: the page never draws
+  (not even requestAnimationFrame) and the splash never goes. The viewer disables occlusion handling
+  (`disable-backgrounding-occluded-windows`, `disable-renderer-backgrounding`, `disable-features=...NativeWindowOcclusion`), keeps
+  the Qt splash on top of each window and closes it when that window's page reports a drawn frame (`utFrame` binding, two animation
+  frames); `SPLASH_MAX_MS` is only the safety net.
+- **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
+  have moved (the DevTools binding dispatch did). Assert the pattern is there.
