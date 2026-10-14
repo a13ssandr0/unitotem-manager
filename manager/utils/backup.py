@@ -16,7 +16,8 @@ import utils.plugins as plugins
 from utils.models.assets import AssetsManager
 from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager
-from utils.models.user import UserPerms, user_manager
+from utils.claim import claim_manager
+from utils.models.user import user_manager
 from utils.plugins import BackupPart
 from utils.storage.uploadmanager import upload_manager
 
@@ -50,11 +51,14 @@ def _reset_playlists():
 def _restore_users(data, _version):
     user_manager.__init__(**data)
     user_manager.save()
+    claim_manager.arm()         # a backup without an administrator leaves the node unclaimed
 
 
 def _reset_users():
+    """No users at all: the node goes back to the unclaimed state, with a new claim code (never a default account)."""
     user_manager.root.clear()
-    user_manager.add_user('admin', 'admin', {UserPerms.admin})
+    user_manager.save()
+    claim_manager.arm()
 
 
 # ── pairing with other nodes (the keys and certificates exchanged at pairing time) ──
