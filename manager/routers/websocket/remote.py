@@ -34,14 +34,16 @@ async def remote_websocket(websocket: WebSocket):
 
     instance_id = websocket.headers['instance_id']
     await REMOTE_WS.connect(websocket, user=instance_id)
-    await viewers.viewer_connected(instance_id, websocket.client.host,
-                                   viewers.parse_port(websocket.headers.get('port'), const.default_port_secure),
-                                   websocket.headers.get('hostname', instance_id))
+    if not service.rm.is_paired_client:
+        await viewers.viewer_connected(instance_id, websocket.client.host,
+                                       viewers.parse_port(websocket.headers.get('port'), const.default_port_secure),
+                                       websocket.headers.get('hostname', instance_id))
 
     while True:
         try:
             raw = await websocket.receive_text()
-            await viewers.viewer_message(instance_id, raw)
+            if not service.rm.is_paired_client:         # a client's windows are driven by its server, not by this node
+                await viewers.viewer_message(instance_id, raw)
             # a client node: the windows of this machine belong to the server it is paired with, which has to know them
             await service.uplink.forward(raw)
         except WebSocketDisconnect:

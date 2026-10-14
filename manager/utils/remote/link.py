@@ -203,6 +203,7 @@ class ClientUplink:
         self._ws = None
         self._last_info: Optional[str] = None       # what the local viewer last said about its windows
         self.on_control: Optional[Callable[[object], Awaitable]] = None
+        self.on_connected: Optional[Callable[[], None]] = None
 
     def _set(self, state: str, error: Optional[str] = None):
         if (state, error) != (self.state, self.error):
@@ -212,6 +213,10 @@ class ClientUplink:
     @property
     def connected(self) -> bool:
         return self.state == 'connected'
+
+    @property
+    def last_info(self) -> Optional[str]:
+        return self._last_info
 
     def start(self):
         if self._task is None or self._task.done():
@@ -271,6 +276,8 @@ class ClientUplink:
                     logger.success('Connected to the server {}', rm.server_ip)
                     if self._last_info:
                         await ws.send(self._last_info)
+                    if self.on_connected:
+                        self.on_connected()
                     async for raw in ws:
                         await self._on_message(raw)
             except asyncio.CancelledError:

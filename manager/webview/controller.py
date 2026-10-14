@@ -563,6 +563,31 @@ class WebviewManager:
             self._idle_windows.add((webview_id, window_id))
             asyncio.create_task(self._send_idle(webview_id, window_id))
 
+    def assign_screen(self, webview_id: str, screen_name: str, playlist_id: str):
+        """Assign a playlist to an output by name, whether or not its window exists right now (the content that came with
+        a node being paired or unpaired: its windows keep playing the same thing, as soon as they are there)."""
+        self._assignments[(webview_id, screen_name)] = playlist_id
+        self._save_assignments()
+        self._restore_assignments(webview_id)
+
+    def drop_viewer_assignments(self, webview_id: str, idle: bool = True):
+        """Forget what every window of a viewer was assigned to (the viewer is leaving for good); its windows, if
+        they are still connected, go to the idle page unless `idle` is False (they are being driven by somebody else
+        already, and must not be told anything)."""
+        for window_id, screen_name in self._windows_of(webview_id):
+            if screen_name is not None and (webview_id, screen_name) in self._assignments:
+                if idle:
+                    self.unassign(webview_id, window_id)
+                else:
+                    loop = self._loops.get(self._assignments.pop((webview_id, screen_name)))
+                    if loop:
+                        loop.unassign(webview_id, window_id)
+        for key in [k for k in self._assignments if k[0] == webview_id]:
+            del self._assignments[key]
+        self._pending_window_assignments.pop(webview_id, None)
+        self._legacy_assignments.pop(webview_id, None)
+        self._save_assignments()
+
     def get_assignment(self, webview_id: str, window_id: int) -> Optional[str]:
         screen_name = self._screen_of(webview_id, window_id)
         return self._assignments.get((webview_id, screen_name)) if screen_name else None
