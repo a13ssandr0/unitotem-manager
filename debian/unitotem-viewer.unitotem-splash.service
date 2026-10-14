@@ -11,7 +11,7 @@ NotifyAccess=main
 TimeoutStartSec=120
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/run/unitotem-x11.auth
-ExecStart=/usr/bin/python3 /usr/share/unitotem-manager/plugins/unitotem_viewer/splash.py
+ExecStart=/usr/bin/python3 /usr/share/unitotem-manager/plugins/unitotem_viewer/bootsplash.py
 
 [Install]
 WantedBy=multi-user.target
