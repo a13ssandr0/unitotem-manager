@@ -73,10 +73,12 @@ class Remote(WSAPIBase):
     def reject_request(self, client_id: str):
         _service().reject(client_id)
 
-    async def unpair_client(self, client_id: str):
-        """Forget a client: it is disconnected and its certificate is no longer accepted."""
+    async def unpair_client(self, client_id: str, force: bool = False):
+        """Unpair a client: what its screens were showing goes back to it (and is removed here if nothing else uses it),
+        then its certificate is no longer accepted. `force` forgets a client that cannot receive its content (offline,
+        broken): the content stays here."""
         try:
-            await _service().unpair_client(client_id)
+            await _service().unpair_client(client_id, force)
         except PairingError as e:
             return WSResponse(error=str(e))
         return None
@@ -94,9 +96,17 @@ class Remote(WSAPIBase):
     def cancel_pairing(self):
         _service().cancel_pairing()
 
+    async def leave_server(self):
+        """Leave the server this node belongs to: the server sends back what this node's screens were showing."""
+        try:
+            await _service().leave_server()
+        except PairingError as e:
+            return WSResponse(error=str(e))
+        return None
+
     async def forget_server(self):
-        """Leave the server this node belongs to (the server may not know: it keeps the client as offline until
-        somebody unpairs it there)."""
+        """Leave the server without moving anything (it is gone or does not answer; it keeps this node as an offline
+        client until somebody unpairs it there). This node becomes a standalone one with what it has locally."""
         await _service().forget_server()
 
     async def set_client_enabled(self, client_id: str, enabled: bool):
