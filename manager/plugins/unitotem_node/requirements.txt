@@ -1,4 +1,6 @@
 # Python dependencies of the unitotem_node plugin, on top of ../../requirements.txt
+# The screen-in-the-browser feature needs no Python library: the VNC server is the system package tigervnc-scraping-server
+# (see debian/control) and the websocket bridge is plain asyncio.
 croniter
 packaging
 pulsectl
