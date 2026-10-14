@@ -30,6 +30,7 @@ Build-Depends-Indep: dh-python,
                      python3-pytest,
                      python3-aiofiles,
                      python3-aiohttp,
+                     python3-cryptography,
                      python3-croniter,
                      python3-dateutil,
                      python3-dotenv,
@@ -60,6 +61,7 @@ Build-Depends-Indep: dh-python,
                      python3-websockets,
                      python3-werkzeug,
                      python3-xlib,
+                     python3-zeroconf,
 Standards-Version: 4.7.0
 Homepage: https://github.com/a13ssandr0/unitotem-manager
 Rules-Requires-Root: no
@@ -72,6 +74,7 @@ Depends: ${python3:Depends},
          openssl,
          python3-aiofiles,
          python3-aiohttp,
+         python3-cryptography,
          python3-dateutil,
          python3-dotenv,
          python3-fastapi,
@@ -96,6 +99,7 @@ Depends: ${python3:Depends},
          python3-watchdog,
          python3-websockets,
          python3-werkzeug,
+         python3-zeroconf,
 Recommends: unitotem-node
 Description: Orchestrator for UniTotem kiosks
  UniTotem plays playlists of images, videos, PDF documents and web pages on
