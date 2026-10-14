@@ -15,6 +15,11 @@
       >
         <template v-slot:item.command="{ item }">
           {{ getActionTitle(item.command) }}<span v-if="item.output" class="text-medium-emphasis"> ({{ item.output }})</span>
+          <div v-if="item.command === 'sus'" class="text-caption">
+            <span class="text-medium-emphasis">wakes at: {{ item.wake }}</span>
+            <div v-if="item.next_wake" class="text-medium-emphasis">next: sleeps {{ formatEpoch(item.next_suspend) }}, wakes {{ formatEpoch(item.next_wake) }}</div>
+            <div v-else class="text-error">{{ item.wake_problem }}</div>
+          </div>
         </template>
         <template v-slot:item.month="{ item }">
           {{ getMonthTitle(item.month) }}
@@ -64,6 +69,13 @@
                   :hint="editedItem.known === false ? 'Set outside UniTotem: only the schedule can be changed' : undefined"
                   :persistent-hint="editedItem.known === false"
                 ></v-select>
+              </v-col>
+              <v-col cols="12" v-if="editedItem.command === 'sus'">
+                <v-alert v-if="support && !support.available" type="warning" variant="tonal" density="compact"
+                         title="This node cannot suspend and wake itself up">{{ support.reason }}</v-alert>
+                <v-text-field v-else v-model="editedItem.wake" label="Wake up at (schedule)" variant="outlined"
+                              hint="Five cron fields, minute hour day-of-month month day-of-week, e.g. 0 7 * * 1-5. The wake-up is its next occurrence after the node went to sleep, on the node's local time."
+                              persistent-hint></v-text-field>
               </v-col>
               <v-col cols="12" sm="6" v-if="isScreenAction(editedItem.command)">
                 <v-combobox v-model="editedItem.output" :items="outputNameList" label="Screen" variant="outlined"
@@ -158,6 +170,7 @@ const headers = ref([
 const commands = [
   { title: 'Shutdown', value: 'pwr' },
   { title: 'Reboot', value: 'reb' },
+  { title: 'Suspend (and wake up later)', value: 'sus' },
   { title: 'Switch screen on', value: 'scr_on' },
   { title: 'Switch screen off', value: 'scr_off' },
 ];
@@ -170,6 +183,8 @@ const mechanismItems = [
   { title: 'Wake-on-LAN', value: 'wol' },
   { title: 'Serial', value: 'serial' },
 ];
+const support = api.Power.suspend_support.use({init: true})
+const formatEpoch = (epoch) => new Date(epoch * 1000).toLocaleString()
 const outputNames = api.Settings.Display.Screens.screens.use({pick: 'screens', initial: []});
 const outputNameList = computed(() => outputNames.value.map(s => s.name));
 
@@ -217,6 +232,7 @@ const defaultItem = {
   day_of_week: daysOfWeek[0].value,
   output: null,
   mechanism: 'auto',
+  wake: '0 7 * * *',
 };
 
 // Filled from Settings/Timers/getJobs. Starts empty: it used to be seeded with a
@@ -276,6 +292,10 @@ function save() {
   const item = { ...editedItem.value };
   delete item.enabled;
   delete item.known;
+  delete item.next_wake;
+  delete item.next_suspend;
+  delete item.wake_problem;
+  if (item.command !== 'sus') delete item.wake;
   if (!isScreenAction(item.command)) {
     // only screen timers have an output and a mechanism
     delete item.output;
