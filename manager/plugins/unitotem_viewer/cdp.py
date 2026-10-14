@@ -191,6 +191,7 @@ class Cdp:
         await self._send('Runtime.addBinding', {'name': 'utActivity'}, session)
         if kind == 'page':
             await self._send('Runtime.addBinding', {'name': 'utKey'}, session)
+            await self._send('Runtime.addBinding', {'name': 'utFrame'}, session)
             await self._send('Runtime.addBinding', {'name': 'utSaver'}, session)
         await self._send('Page.enable', session=session)
         await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': FOCUS_SCRIPT + ACTIVITY_SCRIPT}, session)
@@ -219,7 +220,7 @@ class Cdp:
         data = json.loads(payload)
         if name == 'utFocus':
             self._on_focus(window, session, bool(data.get('on')), data.get('type'))
-        elif name in ('utKey', 'utSaver', 'utActivity') and (name == 'utActivity' or info['type'] == 'page'):
+        elif name in ('utKey', 'utSaver', 'utActivity', 'utFrame') and (name == 'utActivity' or info['type'] == 'page'):
             # utActivity comes from every frame, the others from the page of the window only
             handler = self._handlers.get(name)
             if handler:
