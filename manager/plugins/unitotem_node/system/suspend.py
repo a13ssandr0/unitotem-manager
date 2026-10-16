@@ -18,6 +18,7 @@ from typing import Awaitable, Callable, Optional
 import sdbus
 from loguru import logger
 
+from utils.notifications import notifications
 from unitotem_node.system import dbus_system, rtc, wake
 from unitotem_node.system.rtc import SuspendRefused
 
@@ -28,6 +29,20 @@ _lock = asyncio.Lock()
 _armed: Optional[rtc.Rtc] = None
 last_refusal: Optional[dict] = None         # {'reason': str, 'when': epoch, 'timer': uuid or None}, for the web UI
 _tasks: set[asyncio.Task] = set()
+
+# One notification for "the suspend timer does not work": raised when a TIMER's suspend is refused (somebody asking by
+# hand gets the reason in their own dialog) or skipped, resolved by the next suspend that works.
+NOTIFY_KEY = 'suspend.problem'
+
+
+def notify_problem(title: str, reason: str):
+    notifications.notify(NOTIFY_KEY, 'warning', title, reason, source='timers', audience='admin',
+                         link='/settings/timers')
+
+
+def notify_refused(reason: str, timer: Optional[str]):
+    if timer is not None:
+        notify_problem('The node did not go to sleep', reason)
 
 
 async def _check_logind():
@@ -72,9 +87,11 @@ async def suspend_until(wake_epoch: float, timer: Optional[str] = None):
             rtc.arm(found, wake_epoch)
         except (SuspendRefused, wake.WakeError) as exc:
             last_refusal = {'reason': str(exc), 'when': time.time(), 'timer': timer}
+            notify_refused(str(exc), timer)
             raise SuspendRefused(str(exc)) from exc
         _armed = found
         last_refusal = None
+        notifications.resolve(NOTIFY_KEY)
         logger.info('Suspending, wake-up armed on {} for {} ({} s from now)', found.name,
                     time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(wake_epoch)), int(wake_epoch - now))
         try:
@@ -83,6 +100,7 @@ async def suspend_until(wake_epoch: float, timer: Optional[str] = None):
             rtc.clear_quietly(found)
             _armed = None
             last_refusal = {'reason': f'The suspend request failed: {exc}', 'when': time.time(), 'timer': timer}
+            notify_refused(last_refusal['reason'], timer)
             raise SuspendRefused(f'The suspend request failed: {exc}') from exc
 
 
@@ -93,6 +111,7 @@ async def suspend_with_schedule(wake_expression: str, timer: Optional[str] = Non
         epoch = wake.plan_wake(wake_expression, time.time())
     except wake.WakeError as exc:
         last_refusal = {'reason': str(exc), 'when': time.time(), 'timer': timer}
+        notify_refused(str(exc), timer)
         raise SuspendRefused(str(exc)) from exc
     await suspend_until(epoch, timer)
 

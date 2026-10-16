@@ -574,3 +574,76 @@ def test_check_reach_reports_a_clock_that_cannot_hold_the_alarm(tmp_path, monkey
     monkeypatch.setattr(rtc.Rtc, 'alarm_file', property(lambda self: Limited()))
     with pytest.raises(SuspendRefused, match='24 hours'):
         rtc.check_reach(found, 30 * 3600, NOW)
+
+
+# ── notifications ────────────────────────────────────────────────────────────
+
+def raised():
+    from utils.notifications import notifications
+    return [n for n in notifications.snapshot(['admin']) if n['source'] == 'timers']
+
+
+def test_a_refused_timer_suspend_raises_one_admin_notification_and_a_good_one_resolves_it(machine):
+    machine['answer'] = 'no'
+    for _ in range(2):
+        with pytest.raises(SuspendRefused):
+            asyncio.run(suspend.suspend_until(time.time() + 3600, timer='abc'))
+    [one] = raised()
+    assert one['level'] == 'warning' and one['audience'] == 'admin' and 'CanSuspend: no' in one['text']
+    machine['answer'] = 'yes'
+    asyncio.run(suspend.suspend_until(time.time() + 3600, timer='abc'))
+    assert raised() == []
+
+
+def test_a_refusal_asked_by_hand_is_not_a_notification(machine):
+    machine['answer'] = 'no'
+    with pytest.raises(SuspendRefused):
+        asyncio.run(suspend.suspend_until(time.time() + 3600))
+    assert raised() == []
+
+
+def test_a_bad_wake_schedule_and_a_failed_request_are_notified_too(machine):
+    with pytest.raises(SuspendRefused):
+        asyncio.run(suspend.suspend_with_schedule('not a schedule', 'abc'))
+    assert len(raised()) == 1
+    machine['fail'] = 'Access denied'
+    with pytest.raises(SuspendRefused):
+        asyncio.run(suspend.suspend_until(time.time() + 3600, timer='abc'))
+    [one] = raised()
+    assert 'Access denied' in one['text']
+
+
+def test_a_suspend_skipped_after_a_resume_is_notified():
+    from unitotem_node.models.timers import timer_manager
+    t = Timer(action='sus', minute='59', hour='6', day_of_month='*', month='*', day_of_week='*', wake='0 8 * * *')
+    saved, timer_manager.timers = timer_manager.timers, {t.uuid: t}
+    clock = timer_actions.MinuteClock(at('2026-10-14 22:00:05'))
+    ran = []
+
+    async def fake(timer):
+        ran.append(timer)
+
+    try:
+        asyncio.run(timer_actions.run_due(clock.minutes(at('2026-10-15 07:00:41'), True), fake))
+    finally:
+        timer_manager.timers = saved
+    assert ran == []
+    [one] = raised()
+    assert '06:59' in one['text']
+
+
+def test_update_availability_follows_the_checks():
+    from unitotem_node.system import updater
+    from utils.notifications import notifications
+    saved = dict(updater.availability)
+    try:
+        updater.record({'supported': True, 'available': True, 'version': '9.9.9'})
+        [one] = notifications.snapshot(['admin'])
+        assert one['title'] == 'Update available' and '9.9.9' in one['text']
+        assert notifications.snapshot(['scheduler']) == []
+        updater.record({'supported': True, 'error': 'no network'})       # a failed check changes nothing
+        assert len(notifications.snapshot(['admin'])) == 1
+        updater.record({'supported': True, 'available': False})
+        assert notifications.snapshot(['admin']) == []
+    finally:
+        updater.availability.update(saved)

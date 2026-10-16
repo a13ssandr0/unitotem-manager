@@ -77,6 +77,10 @@ async def run_due(minutes: list[tuple[datetime, bool]], executor=None):
         for timer in timer_manager.due(minute):
             if caught_up and timer.action == 'sus':
                 logger.info('Timer {} ({}) was due at {} while asleep: not suspending late', timer.uuid, timer.action, minute)
+                from unitotem_node.system import suspend
+                suspend.notify_problem('The node did not go to sleep', f'The suspend timer was due at '
+                                       f'{minute:%Y-%m-%d %H:%M} while the machine was asleep or stalled, and a suspend is '
+                                       f'never made up late.')
                 continue
             logger.info('Running timer {} ({}){}', timer.uuid, timer.action, ' (caught up)' if caught_up else '')
             try:
