@@ -240,15 +240,15 @@ and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The w
 
 ## First access, VNC, suspend
 - **First access (no default password)**: a node with no admin user is UNCLAIMED (`utils/claim.py`): every page goes to `/setup`,
-  which asks for a claim code shown on the totem's screen (first-boot and no-assets pages, updated through a loopback-only SSE
-  stream), written to `/var/lib/unitotem/claim-code` (0600) and logged for a headless node, plus the new admin's name and
+  which asks for a claim code shown on the totem's screen as an OVERLAY over whatever the window plays (pushed in-process by the viewer to each
+  window page through DevTools, `#claim-overlay` in boot-screen.html, never over a network socket), written to `/var/lib/unitotem/claim-code` (0600) and logged for a headless node, plus the new admin's name and
   password (policy in `utils/passwords.py`). Wrong codes are rate limited (global lockout, new code after 10 failures),
   `/setup` is a 404 once claimed, two simultaneous claims have one winner. A reset of the users part returns to unclaimed.
   `unitotem-manager --create-admin NAME` (root only, service stopped) is the recovery path. There is NO admin/admin anywhere.
   The setup can also set the OS password the terminal's `login` uses (node plugin hooks `os_account`/`set_os_password`).
 - **VNC on demand** (node plugin `vnc.py`, `system/vnc.py`, VncWindow.vue): TigerVNC `x0vncserver` on a UNIX socket only (no TCP
   port), view-only enforced by the server, control an explicit per-session switch, started when the window opens and stopped on
-  close/drop/idle/shutdown, admin only, `/vnc` websocket bridge with Origin check. Debian binary is `/usr/bin/X0tigervnc`.
+  close/drop/shutdown (no idle timeout by default, `UNITOTEM_VNC_IDLE_TIMEOUT` switches one on), admin only, `/vnc` websocket bridge with Origin check. Debian binary is `/usr/bin/X0tigervnc`.
 - **Suspend with scheduled wake** (node plugin `system/{wake,rtc,suspend}.py`, timer action `sus`, `Power/suspend`): the alarm is
   written to `/sys/class/rtc/rtcN/wakealarm` (UTC epoch whatever /etc/adjtime says; clear first, read back), then logind
   `Suspend` over D-Bus; refused with a reason when there is no usable RTC / wakeup / CanSuspend; resume is the logind
@@ -672,3 +672,6 @@ the VM-specific ones.
   frames); `SPLASH_MAX_MS` is only the safety net.
 - **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
   have moved (the DevTools binding dispatch did). Assert the pattern is there.
+- **Password policy is opt-in** for the passwords an administrator sets (`security.json`, `Security/set_password_policy`, switch on
+  the Users page); the first account (setup, `--create-admin`) always follows it. Terminal account stays root (user decision).
+- **The claim code overlay uses a container-derived unit (`--u`)**, not vw/vh: the rotated page's body does not follow them.
