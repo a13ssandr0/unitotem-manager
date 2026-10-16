@@ -230,6 +230,9 @@ class Cdp:
 
     # ── what the viewer asks for ──────────────────────────────────────────
 
+    def windows(self) -> list[int]:
+        return list(self._pages)
+
     async def evaluate(self, window: int, expression: str):
         session = self._pages.get(window)
         if session:

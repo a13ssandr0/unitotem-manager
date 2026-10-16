@@ -4,13 +4,11 @@ First access: the setup page that turns an unclaimed node into one with an admin
 `/setup` exists only while the node is unclaimed and is a 404 forever after. Everything else the node serves is
 unreachable meanwhile: the login redirect points here (routers/login.py) and the API has nobody to authenticate.
 """
-import asyncio
-import json
 from platform import freedesktop_os_release as os_release, node as gethostname
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -32,10 +30,6 @@ class SetupRequest(BaseModel):
     password: str = Field(max_length=passwords.MAX_LENGTH * 4)
     os_password: Literal['same', 'different', 'skip'] = 'skip'
     os_password_value: Optional[str] = Field(default=None, max_length=passwords.MAX_LENGTH * 4)
-
-
-def _loopback(request: Request) -> bool:
-    return request.client is not None and request.client.host in ('127.0.0.1', '::1')
 
 
 def _os_account() -> Optional[str]:
@@ -101,30 +95,3 @@ async def setup(data: SetupRequest):
     response = JSONResponse({'ok': True, 'os_password': os_result, 'os_account': os_account})
     session_cookie(response, data.username, remember=True)
     return response
-
-
-@router.get('/unitotem-claim/events')
-async def claim_events(request: Request):
-    """
-    What the totem screen shows about the claim, as server-sent events: the state when the page connects and again
-    every time it changes (a new code after too many wrong ones, or the node being claimed). Loopback only: the code
-    is for whoever stands at the device, never for the network.
-    """
-    if not _loopback(request):
-        raise HTTPException(status_code=404)
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue()
-    unsubscribe = claim_manager.subscribe(lambda state: loop.call_soon_threadsafe(queue.put_nowait, state))
-
-    async def stream():
-        try:
-            yield f'data: {json.dumps(claim_manager.state())}\n\n'
-            while True:
-                try:
-                    yield f'data: {json.dumps(await asyncio.wait_for(queue.get(), 25))}\n\n'
-                except asyncio.TimeoutError:
-                    yield ': keepalive\n\n'        # lets a dead connection be noticed
-        finally:
-            unsubscribe()
-
-    return StreamingResponse(stream(), media_type='text/event-stream', headers={'Cache-Control': 'no-store'})

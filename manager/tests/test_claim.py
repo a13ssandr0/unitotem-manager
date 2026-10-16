@@ -271,3 +271,10 @@ def test_bad_usernames_are_refused(name):
 @pytest.mark.parametrize('name', ['admin', 'Boss', 'a.b-c_d', 'x' * 32, '7up'])
 def test_good_usernames_are_accepted(name):
     assert not passwords.validate_username(name)
+
+
+def test_the_screen_payload_follows_the_state(manager):
+    payload = manager.screen_payload("10.0.0.5")
+    assert payload == {"code": manager.display_code(), "url": "https://10.0.0.5/setup"}
+    manager.claim(manager.display_code(), "boss", GOOD)
+    assert manager.screen_payload("10.0.0.5") is None       # claimed: the overlay goes away
