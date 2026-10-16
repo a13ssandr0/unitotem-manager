@@ -10,10 +10,7 @@
       <v-btn v-if="hasTerminal" icon title="Watch the screen" @click="vncOpen = true">
         <v-icon>mdi-monitor-eye</v-icon>
       </v-btn>
-      <v-btn v-if="updateInfo?.available && allowed('Settings/Update/status')" icon to="/settings/updates"
-             :title="`Update available: ${updateInfo.version ?? ''}`">
-        <v-badge dot color="red"><v-icon>mdi-update</v-icon></v-badge>
-      </v-btn>
+      <NotificationMenu />
       <v-btn icon @click="cycleTheme">
         <v-icon>{{ themeIcon }}</v-icon>
       </v-btn>
@@ -143,6 +140,7 @@ import TerminalWindow from '@/components/TerminalWindow.vue'
 import VncWindow from '@/components/VncWindow.vue'
 import WindowTaskbar from '@/components/WindowTaskbar.vue'
 import SuspendDialog from '@/components/SuspendDialog.vue'
+import NotificationMenu from '@/components/NotificationMenu.vue'
 import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, onApi, send} from '@/api'
 
 const theme = useTheme()
@@ -219,7 +217,8 @@ onApi('logout', () => {
   vncOpen.value = false
   window.location.href = '/logout'
 })
-// Updates are offered by the node plugin: without it there is nothing to ask
+// Updates are offered by the node plugin: without it there is nothing to ask. The navbar hint is a notification now
+// (see NotificationMenu); this only feeds the dot next to the Updates entry of the menu
 const updateInfo = api.Settings.Update.availability.use({pick: 'availability', init: hasNode})
 
 const allowed = (needs) => canCall(needs, logged_user.value)
