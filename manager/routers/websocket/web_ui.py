@@ -64,4 +64,4 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception:
             await WS.send(websocket, 'error', error='Exception', extra=format_exc())
             logger.error(format_exc())
-    WS.disconnect(websocket)
+    WS.disconnect(websocket, user.name)

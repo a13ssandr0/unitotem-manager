@@ -15,6 +15,7 @@ from loguru import logger
 from api.ws.endpoints import REMOTE_WS, WS
 from utils.models.command_line import cmdargs
 from utils.models.remote import RemoteManager
+from utils.notifications import notifications
 from utils.remote import bundle, pairing, transfer, viewers
 from utils.remote import identity as ident
 from utils.remote.discovery import AVAILABLE as DISCOVERY_AVAILABLE, Announcer, Browser
@@ -50,6 +51,8 @@ class RemoteService:
         self._committed: set[str] = set()
         self._migrating = False
         self.notice: Optional[str] = None       # the last thing that went wrong that the page should say
+        self._seen: set[str] = set()            # clients that were connected during this run
+        self._offline_keys: set[str] = set()    # notifications raised for clients that went away
         self.link.on_control = self._server_control
         self.uplink.on_control = self._client_control
         self.uplink.on_connected = self._uplink_connected
@@ -69,6 +72,9 @@ class RemoteService:
             await self.apply_role()
         except Exception:
             logger.exception('Remote control did not start, the node keeps running on its own')
+            notifications.notify('remote.start', 'error', 'Remote control did not start',
+                                 'The node keeps running on its own. The log has the details.', source='remote',
+                                 audience='admin', link='/settings/remote')
 
     async def apply_role(self):
         """(Re)start the right half for the current role, after the role or the set of paired nodes changed."""
@@ -499,8 +505,48 @@ class RemoteService:
         return [name for name in list(WS.active_users)
                 if WS.active_users[name] and (user := user_manager.get_user(name)) and user.has_perm.admin]
 
+    def _sync_notifications(self):
+        """What the Remote page shows, as far as it needs somebody to act: requests waiting for approval, a client that
+        was connected and went away, a server that cannot be reached. Derived from the state every time it changes, so
+        each one resolves itself when the situation does (nothing is raised for a client that never connected during
+        this run: right after a boot every known client is offline until it reconnects)."""
+        rm = self.rm
+        link = '/settings/remote'
+        requests = self.requests.all() if rm.role == 'server' else []
+        if requests:
+            names = ', '.join(r.name for r in requests[:5]) + (' and more' if len(requests) > 5 else '')
+            notifications.notify('remote.pair-requests', 'info', 'Devices ask to be paired',
+                                 f'{len(requests)} waiting for approval: {names}', source='remote', audience='admin',
+                                 link=link)
+        else:
+            notifications.resolve('remote.pair-requests')
+
+        connected = self.link.connected() if rm.role == 'server' else set()
+        self._seen |= connected
+        wanted = set()
+        for peer in rm.peers.values() if rm.role == 'server' else ():
+            if peer.enabled and peer.id in self._seen and peer.id not in connected:
+                key = f'remote.client-offline.{peer.id}'
+                wanted.add(key)
+                notifications.notify(key, 'warning', 'A client is not connected', f'{peer.name} ({peer.ip}) went away.',
+                                     source='remote', audience='admin', link=link)
+        for key in self._offline_keys - wanted:
+            notifications.resolve(key)
+        self._offline_keys = wanted
+
+        if rm.is_paired_client and self.uplink.state in ('rejected', 'unreachable'):
+            why = 'The server does not accept this node' if self.uplink.state == 'rejected' else 'The server cannot be reached'
+            notifications.notify('remote.server', 'warning', why, f'{rm.server_name} ({rm.server_ip})',
+                                 source='remote', audience='admin', link=link)
+        else:
+            notifications.resolve('remote.server')
+
     def changed(self):
         """Something the Remote page shows is different now: push it to every open page (no polling, no request)."""
+        try:
+            self._sync_notifications()
+        except Exception:
+            logger.exception('Cannot update the remote control notifications')
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
