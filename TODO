@@ -1,4 +1,9 @@
 === CURRENT WORK ===
+2026-10-16 DECIDED with the user: terminal account stays root; password policy opt-in (done); remote: no re-adoption, standalone server after
+unpair, offline unpair needs force; claim lockout stays global; claim code overlay over playback (done); VNC: no idle timeout, no
+indicator on the watched screen; suspend: 7 days max + a persistent notification when refused/skipped (notification center in progress,
+it is a missing spec item). Still unanswered/untouched: tigervnc Recommends vs Depends (left Recommends), cursor in VNC control mode,
+transfer of per-window settings with playlists, refresh for home pages, a window with a home page and no playlist, touch "Automatic".
 Boot screen (verified on a real Raspberry Pi 4, image 2026.10.16): Plymouth, ~2 s black at X's modeset, then our logo frame continuously
 (bootsplash.py with python-xlib+Pillow, then the viewer's Qt splash held over each window until its page reports a drawn frame),
 zero white frames; what remains is the black before Plymouth (firmware+kernel) and X's own start. The "first frame drawn" line was seen
