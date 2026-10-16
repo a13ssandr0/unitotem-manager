@@ -578,6 +578,7 @@
         box.classList.add('on');
       } else {
         box.classList.remove('on');
+        document.getElementById('claim-code').textContent = '';     // nothing of the code is left in the page
       }
     }
     window.applyClaim = applyClaim;
