@@ -264,6 +264,15 @@ the user compares the certificate fingerprint; manual pairing by address works f
 playlists and uploads to the server (streamed, hash-checked, all-or-nothing); unpairing returns what the client showed and
 removes from the server only what nothing else uses (`plan_leave`). All Remote functions are admin only.
 
+## Notifications
+`utils/notifications.py` is the ONLY way to raise one: `notifications.notify(key, level, title, text, source=, audience=, link=)` and
+`resolve(key)` (plugins import the core, never the opposite). Same key and same content does nothing (a dismissed one stays
+dismissed), changed content updates it and makes it unread again. Audience = the capability that may see it (`admin` for anything
+about the machine or the network). `link` must be a path of the web UI. State is in `/var/lib/unitotem/notifications.json` (not
+in the backup, compatible with the previous version). API `Notifications/list|mark_read|dismiss|dismiss_all`, pushed per user
+because the list differs per capability; dismiss is global. UI: the bell in the top bar. Producers: suspend refused/skipped,
+update available, remote control (pairing requests, client gone, server unreachable), plugin load failure.
+
 # Rules
 
 Everything above describes *what* UniTotem must do. This section describes *how* to work on it.
@@ -675,3 +684,6 @@ the VM-specific ones.
 - **Password policy is opt-in** for the passwords an administrator sets (`security.json`, `Security/set_password_policy`, switch on
   the Users page); the first account (setup, `--create-admin`) always follows it. Terminal account stays root (user decision).
 - **The claim code overlay uses a container-derived unit (`--u`)**, not vw/vh: the rotated page's body does not follow them.
+- **`WS.disconnect` needs the user**, or `active_users` keeps dead sockets. `/remote/*` refuses loopback senders: test a pairing
+  request from another host. A hidden `v-badge` stays in the DOM with its text and a `v-menu`'s content stays after the first
+  opening: test the computed display / `aria-expanded`. The scratchpad directory is shared between agents: prefix your files.
