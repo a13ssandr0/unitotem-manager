@@ -144,8 +144,9 @@ async def vnc(websocket: WebSocket):
     idle = IdleWatch()
     tasks = [asyncio.create_task(_to_server(websocket, writer, idle)),
              asyncio.create_task(_to_browser(websocket, reader)),
-             asyncio.create_task(_watch_idle(idle)),
              asyncio.create_task(_server_exit(server))]
+    if idle.timeout > 0:
+        tasks.append(asyncio.create_task(_watch_idle(idle)))
     reason = 'The connection was lost'
     try:
         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)

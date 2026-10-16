@@ -190,6 +190,10 @@ export interface Api {
       current_user: ApiCall<Record<string, never>>
       /** [requires: admin] */
       delete_user: ApiCall<{ username: string }>
+      /** Whether the password policy is enforced for the passwords an administrator sets, and what it asks. */
+      password_policy: ApiCall<Record<string, never>>
+      /** Opt in or out of enforcing the password policy when users are created or their password changes. [requires: admin] */
+      set_password_policy: ApiCall<{ enforce: boolean }>
       /** [requires: admin] */
       set_user_password: ApiCall<{ username: string; password: string }>
       /** [requires: admin] */

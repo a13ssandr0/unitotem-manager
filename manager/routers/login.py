@@ -149,6 +149,10 @@ async def logout():
 
 @router.post("/api/settings/set_passwd")
 async def set_pass(request: Request, response: Response, password: str, user: User = Depends(LOGMAN)):
+    from utils import passwords
+    from utils.models.security import security_settings
+    if security_settings.enforce_password_policy and (problems := passwords.validate_password(password, user.name)):
+        raise HTTPException(status_code=422, detail=problems)
     user_manager.change_password(user.name, password)
     if 'Referer' in request.headers:
         response.headers['location'] = request.headers['Referer']
