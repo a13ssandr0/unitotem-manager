@@ -122,12 +122,12 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
         logger.warning('Rejected non-local request for /unitotem-{} from {}',
                        page, request.client.host if request.client else 'unknown')
         raise HTTPException(status_code=404)
-    context = {'wifi': None, 'claim_code': claim_manager.display_code()}
+    context = {'wifi': None}
     for _plugin, hook in plugins.each('first_boot_context'):
         try:
             context.update(await hook())
         except Exception:
-            # The page must still show the welcome message and the claim code when the hotspot cannot be queried
+            # The page must still show the welcome message when the hotspot cannot be queried
             logger.exception('Plugin {} could not provide the first-boot context', _plugin.name)
     return templates.TemplateResponse(request, f'{page}.html.j2', context)
 
