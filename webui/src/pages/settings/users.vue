@@ -38,6 +38,14 @@
           </tr>
           </tbody>
         </v-table>
+        <v-card-text class="pt-2">
+          <v-switch :model-value="passwordPolicy.enforced" color="primary" density="compact" hide-details
+                    label="Enforce the password policy when creating users or changing passwords"
+                    @update:model-value="v => api.Settings.Security.set_password_policy({enforce: !!v})"></v-switch>
+          <ul v-if="passwordPolicy.enforced" class="text-caption text-medium-emphasis ml-8">
+            <li v-for="rule in passwordPolicy.rules" :key="rule">{{ rule }}</li>
+          </ul>
+        </v-card-text>
       </v-card>
     </div>
 
@@ -147,6 +155,9 @@ const confirmPassword = ref('')
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 const selectedUser = ref(null)
+
+// Opt-in: the first account of a node always follows the policy, the ones made later only when this is on
+const passwordPolicy = api.Settings.Security.password_policy.use({initial: {enforced: false, rules: []}})
 
 const users = ref({})
 

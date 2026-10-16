@@ -61,6 +61,25 @@ def _reset_users():
     claim_manager.arm()
 
 
+# ── security settings ────────────────────────────────────────────────────────
+
+def _export_security():
+    from utils.models.security import security_settings
+    return security_settings.model_dump()
+
+
+def _restore_security(data, _version):
+    from utils.models.security import SecuritySettings, security_settings
+    security_settings.enforce_password_policy = SecuritySettings(**data).enforce_password_policy
+    security_settings.save()
+
+
+def _reset_security():
+    from utils.models.security import security_settings
+    security_settings.enforce_password_policy = False
+    security_settings.save()
+
+
 # ── pairing with other nodes (the keys and certificates exchanged at pairing time) ──
 
 def _export_remote():
@@ -112,6 +131,7 @@ def _reset_files():
 CORE_PARTS = [
     BackupPart('playlists', 'Playlists', _export_playlists, _restore_playlists, _reset_playlists),
     BackupPart('users', 'Users', lambda: json.loads(user_manager.model_dump_json()), _restore_users, _reset_users),
+    BackupPart('security', 'Security settings', _export_security, _restore_security, _reset_security),
     BackupPart('remote', 'Pairing and certificates', _export_remote, _restore_remote, _reset_remote),
     BackupPart('uploads', 'Uploaded files', None, None, _reset_files, _export_files, _restore_files,
                optional_in_backup=True),
