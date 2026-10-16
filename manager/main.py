@@ -297,6 +297,11 @@ async def generate_signing_key():
 loop.create_task(generate_signing_key(), name='rsa_keygen')
 
 
+# Whatever raises or resolves a notification, from any thread, reaches the open pages through this
+from api.notifications import push_all as _push_notifications  # noqa: E402
+from utils.notifications import notifications  # noqa: E402
+notifications.bind(loop, _push_notifications)
+
 for _plugin, hook in plugins.each('on_startup'):
     hook(loop)
 

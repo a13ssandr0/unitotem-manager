@@ -7,6 +7,16 @@ export type ApiCall<P> = ((args?: P) => void) & {
   use(options?: { pick?: string; init?: boolean; initial?: any }): import('vue').Ref<any>
 }
 export interface Api {
+  Notifications: {
+    /** Remove notifications from the list, for everybody. */
+    dismiss: ApiCall<{ ids: (string)[] }>
+    /** Remove every notification this user can see. */
+    dismiss_all: ApiCall<Record<string, never>>
+    /** The notifications this user may see, newest first (pushed again to every page whenever they change). */
+    list: ApiCall<Record<string, never>>
+    /** Mark notifications as read (they stop counting in the badge). */
+    mark_read: ApiCall<{ ids: (string)[] }>
+  }
   Power: {
     /** [requires: power] */
     poweroff: ApiCall<Record<string, never>>
