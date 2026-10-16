@@ -1,4 +1,5 @@
 === CURRENT WORK ===
+Notification center merged (bell, badge, producers: suspend refused/skipped, update available, remote control, plugin load failure). Open: dismissal is global (could be per user); a manual suspend refusal does not notify (the dialog shows it); stale pairing-request notification until the next change.
 2026-10-16 DECIDED with the user: terminal account stays root; password policy opt-in (done); remote: no re-adoption, standalone server after
 unpair, offline unpair needs force; claim lockout stays global; claim code overlay over playback (done); VNC: no idle timeout, no
 indicator on the watched screen; suspend: 7 days max + a persistent notification when refused/skipped (notification center in progress,
