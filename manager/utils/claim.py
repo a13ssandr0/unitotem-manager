@@ -6,7 +6,8 @@ A node starts without accounts: nothing ships with a default password. As long a
 physically at the device, the setup asks for a CLAIM CODE that the node shows where only somebody standing at it can
 read it:
 
-- on the totem screen (the first-boot and "no assets" pages of the local viewer, over a loopback-only event stream);
+- on the totem screen: an overlay on every window of the local viewer, above whatever it plays, pushed to the viewer
+  in-process through `subscribe` (see WebviewApp._apply_claim); no network stream carries the code;
 - in the journal as a warning (see `_new_code` for why that takes a priority prefix), and in a root-only file, for a
   node without a screen.
 
@@ -113,6 +114,12 @@ class ClaimManager:
 
     def state(self) -> dict:
         return {'claimed': self.is_claimed(), 'code': self.display_code()}
+
+    def screen_payload(self, host: str) -> Optional[dict]:
+        """What the overlay of the local viewer shows while the node is unclaimed: the code and where to enter it.
+        None once the node is claimed. Handed to the viewer in-process, never to anything that is not loopback."""
+        code = self.display_code()
+        return {'code': code, 'url': f'https://{host}/setup'} if code else None
 
     # ── arming: a code exists exactly while the node is unclaimed ─────────────────
 
