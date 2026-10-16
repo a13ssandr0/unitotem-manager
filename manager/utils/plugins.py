@@ -24,6 +24,8 @@ from typing import Any, Awaitable, Callable, Optional, Sequence, Union
 from fastapi import APIRouter
 from loguru import logger
 
+from utils.notifications import notifications
+
 PLUGINS_DIR = Path(__file__).resolve().parent.parent / 'plugins'
 
 Maybe = Union[None, Awaitable[None]]
@@ -94,7 +96,11 @@ def load(directory: Path = PLUGINS_DIR) -> list[Plugin]:
                 raise TypeError('PLUGIN is not a utils.plugins.Plugin')
         except Exception:
             logger.exception('Plugin {} failed to load, continuing without it', info.name)
+            notifications.notify(f'plugin.{info.name}', 'error', f'Part "{info.name}" did not start',
+                                 'It failed to load and the node runs without it. The log has the details.',
+                                 source='plugins', audience='admin')
             continue
+        notifications.resolve(f'plugin.{info.name}')
         loaded.append(plugin)
         logger.info('Loaded plugin {}', plugin.name)
     return loaded

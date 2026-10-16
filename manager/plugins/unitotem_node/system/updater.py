@@ -9,6 +9,8 @@ from typing import Any
 
 from loguru import logger
 
+from utils.notifications import notifications
+
 UPDATER = '/usr/sbin/unitotem-update'
 
 # Documented exit codes; every one has a meaning, none is a generic error.
@@ -100,4 +102,12 @@ def record(result: dict[str, Any]) -> bool:
            'checked_at': int(time.time())}
     changed = (new['available'], new['version']) != (availability['available'], availability['version'])
     availability.update(new)
+    # Every successful check, not only a change: the notification outlives a restart, and the first check after the
+    # update was installed is what removes it
+    if new['available']:
+        notifications.notify('update.available', 'info', 'Update available',
+                             f"Version {new['version'] or '(unknown)'} can be installed.", source='updates',
+                             audience='admin', link='/settings/updates')
+    else:
+        notifications.resolve('update.available')
     return changed

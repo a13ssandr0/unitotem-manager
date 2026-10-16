@@ -33,3 +33,13 @@ def read_text(name: str) -> str:
 
 def read_bytes(name: str) -> bytes:
     return (FIXTURES / name).read_bytes()
+
+
+@pytest.fixture(autouse=True)
+def _notifications_in_tmp(tmp_path, monkeypatch):
+    """Code under test raises notifications (a refused suspend, a failed plugin): never into the real /var/lib/unitotem."""
+    from utils.notifications import notifications
+    monkeypatch.setattr(notifications, 'path', tmp_path / 'notifications.json')
+    monkeypatch.setattr(notifications, '_items', [])
+    monkeypatch.setattr(notifications, '_loaded', True)
+    monkeypatch.setattr(notifications, '_loop', None)
