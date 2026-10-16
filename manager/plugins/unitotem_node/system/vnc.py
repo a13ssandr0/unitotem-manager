@@ -33,9 +33,10 @@ from .screens.xorg import XOutput
 # Where the per-session directories live. /run is a tmpfs: a crash cannot leave anything behind after a reboot.
 RUNTIME_ROOT = Path('/run/unitotem-vnc')
 MAX_SESSIONS = 2                # every one captures the screen continuously
-# seconds without the user doing anything in the window; the variable exists so that a test on a real node does not
-# have to wait a quarter of an hour
-IDLE_TIMEOUT = int(os.environ.get('UNITOTEM_VNC_IDLE_TIMEOUT', 15 * 60))
+# Seconds without the user doing anything in the window before the session is closed; 0 (the default, decided with the user)
+# means never: a session lasts as long as the window is open, and ends when it is closed, the connection drops, the server
+# dies or the manager stops. The variable switches the limit on (a test, or a node whose owner wants it).
+IDLE_TIMEOUT = int(os.environ.get('UNITOTEM_VNC_IDLE_TIMEOUT', 0))
 FRAME_RATE = 20                 # the default is 60: a kiosk with a software compositor cannot afford that
 BINARY_NAMES = ('x0vncserver', 'X0tigervnc')
 BINARY_FALLBACKS = ('/usr/bin/x0vncserver', '/usr/bin/X0tigervnc')
