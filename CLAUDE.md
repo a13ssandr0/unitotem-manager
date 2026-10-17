@@ -693,6 +693,12 @@ the VM-specific ones.
   it must never fall back to the stock wheel. CEF is built locally (no CI); NEVER delete the build tree (sources, objects, ninja state) on your own, success or failure:
   it makes every rebuild incremental (hours saved) and is kept until the user says it can go. The `build/` dir of the submodule is root-owned when Docker made it:
   delete it with a throwaway container mounting that one path, not sudo. Wheels are not in git (`vendor/cefpython-wheels`, ignored).
+- **Cross-compile everything that can be cross-compiled** (user rule, 2026-10-17): before ANY compilation (C/C++, Python extensions, wheels,
+  packages, image parts) first ask whether it can be cross-built from the x86 host (cross gcc/clang, sysroot, multiarch, `dpkg-cross`,
+  `--host-arch`), and write down the answer. Choosing QEMU/binfmt emulation is almost certainly the wrong choice; use it only for
+  what must execute target code (debootstrap second stage, postinst scripts, tests) and say why.
+- **Codecs are essential on a kiosk: every build ships H.264/AAC** (`proprietary_codecs=true ffmpeg_branding=Chrome`), no exception, no
+  "temporary" stock wheel.
 - **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
   have moved (the DevTools binding dispatch did). Assert the pattern is there.
 - **Password policy is opt-in** for the passwords an administrator sets (`security.json`, `Security/set_password_policy`, switch on
