@@ -202,7 +202,7 @@ The service is `Type=notify`: `utils/ready.py` sends READY=1 when the first fram
 Qt splash, before CEF starts, so the system's boot splash can end), or when the web server answers if there are no local
 windows. `TimeoutStartSec=300`.
 On a slow board the manager needs many seconds just to import its dependencies, so the very first frame comes from a
-separate tiny process: `unitotem-splash.service` (shipped by unitotem-viewer, After=start-xorg.service) runs
+separate tiny process: `unitotem-splash.service` (shipped by unitotem-viewer, started in parallel with the X server: it warms up, then waits for the socket) runs
 `plugins/unitotem_viewer/bootsplash.py`, a plain script that uses only python-xlib and Pillow (NO Qt: importing PySide6 takes
 seconds on a Pi 4 and the screen stays black meanwhile; measured on the VM: visible 0.12 s after it starts). It must stay free of
 imports from the rest of UniTotem, sends its own READY=1 and is stopped by the viewer (a D-Bus `StopUnit` call to systemd) once
@@ -682,6 +682,12 @@ the VM-specific ones.
 - **The boot picture is ONE picture in three places** (Plymouth theme, `bootsplash.py`, the viewer page): `bootsplash.py` draws the theme's own
   PNGs (`plymouth/unitotem/{wordmark,spinner}-<w>.png`, copied by debian/rules into the viewer's `static/bootsplash`) with the theme's
   geometry and 1 turn/s; change the artwork in `plymouth/generate-assets.py` only. The theme shows no status line.
+- **A white frame before the page (measured on a Pi and on the VM with a 48x48 corner sampler of the root window, ~900k samples/45 s)** had
+  two causes: a window is mapped above the splash and unpainted until the event loop runs (the browser takes ~150 ms to create inside
+  `show()`: the splash is raised and flushed from `WebviewWindow.on_mapped`, before that), and the splash left when the page had
+  *drawn* a frame, which software compositing puts on the window a moment later (`PRESENT_MS`). Pinning black in CEF/Qt was not enough.
+- **`bootsplash.py` starts in parallel with X**: it imports and decodes every PNG first (`warm_up`), then waits for the socket and
+  connects with a short retry; no `After=start-xorg.service`.
 - **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
   have moved (the DevTools binding dispatch did). Assert the pattern is there.
 - **Password policy is opt-in** for the passwords an administrator sets (`security.json`, `Security/set_password_policy`, switch on
