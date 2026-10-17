@@ -1,7 +1,7 @@
 [Unit]
 Description=UniTotem boot splash
-# X is started by the image (start-xorg.service); the program also waits for its socket and cookie itself
-After=start-xorg.service
+# Started in parallel with the X server on purpose: the program loads everything it needs first and then waits for the X
+# socket and cookie itself, so the first frame is drawn the moment X accepts clients
 
 [Service]
 # Ready when the first frame is on screen: this is what the boot splash of the system can end on. The viewer stops the

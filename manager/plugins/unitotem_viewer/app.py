@@ -58,6 +58,7 @@ except ImportError:
 # both surface. Not a secret; just needs to not collide with anything else.
 CDP_PORT = 9223
 SPLASH_MAX_MS = 20000
+PRESENT_MS = 300     # from the page's first drawn frame to the splash leaving
 
 
 class _Bridge(QObject):
@@ -319,8 +320,7 @@ class WebviewApp:
             self._open_window_for_screen(screen)
         # Windows are mapped above the splashes, and until its page has drawn a window shows the browser's own first paint,
         # which can be white: the splash goes back on top and stays there until _on_first_frame
-        for splash in self._splashes.values():
-            splash.raise_()
+        self._raise_splashes()
         self.qt_app.screenAdded.connect(self._open_window_for_screen)
         self.qt_app.screenRemoved.connect(self._on_screen_removed)
 
@@ -418,6 +418,7 @@ class WebviewApp:
     def _new_window(self, **geometry) -> WebviewWindow:
         win = WebviewWindow(**geometry)
         win.on_geometry_changed = self._geometry_timer.start
+        win.on_mapped = self._raise_splashes
         return win
 
     def _notify_screens_changed(self):
@@ -433,6 +434,11 @@ class WebviewApp:
         if self._ws_loop is not None and self._ws is not None:
             asyncio.run_coroutine_threadsafe(self._send_webview_info(self._ws), self._ws_loop)
 
+    def _raise_splashes(self):
+        for splash in self._splashes.values():
+            splash.raise_()
+        self.qt_app.sync()      # to the X server now: the window below is unpainted until the event loop runs
+
     def _close_splashes(self, screens=None):
         """Closes the splash of those screens (all of them by default)."""
         for screen in list(self._splashes if screens is None else screens):
@@ -445,7 +451,9 @@ class WebviewApp:
         logger.debug("Window {}: first frame drawn", window_id)
         for screen, wid in self._screen_windows.items():
             if wid == window_id:
-                self._close_splashes([screen])
+                # the page has drawn, which is not the same as being on the screen: with software compositing the frame
+                # reaches the window a moment later, and the splash must not leave before (a white flash otherwise)
+                QTimer.singleShot(PRESENT_MS, lambda s=screen: self._close_splashes([s]))
                 return
         self._close_splashes()      # a window we cannot place: do not leave a splash behind
 
