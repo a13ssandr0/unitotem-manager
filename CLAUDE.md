@@ -246,6 +246,13 @@ and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The w
   UniTotem made, otherwise just leaves the group. users.json holds ONLY the capabilities (no password any more). root is admin.
   The backup of the users part carries each account's `/etc/shadow` hash (`chpasswd --encrypted` on restore); an archive from before has no
   recoverable password and is skipped. Wrong password costs ~2.4 s on the VM / ~3.3 s on a Pi 4 (pam_faildelay), a right one 0.12 s / 0.3 s.
+- **Accounts and OTA (decided with the user, 2026-10-17)**: `passwd/shadow/group/gshadow` are in the `/etc` overlay and an OTA gives the new slot the
+  image's own files, so without work root's password reverts to the image default and the web accounts vanish. Decision: the OTA engine
+  (unitotem-system, `migrate-etc-overlay`) MERGES identity files (image base + root's hash + local accounts uid >= 1000 + their memberships),
+  validated, atomic, falling back to the plain image files on ANY failure, never touching the old slot (spec sent to that session). Rejected:
+  UniTotem-only users (Home Assistant style: the GUI password and the SSH/terminal one would differ and the second never changes), whole-file
+  whitelisting (freezes the image's system accounts), systemd userdb (tested: record with a hash is not resolvable by passwd, PAM auth failed),
+  libnss-extrausers (works with PAM but needs the package, own writer, root stays in the overlay). Never end up locked out of a device.
 - **A session ends only by an event, never by a re-check**: the websocket is authenticated once (`/ws`, `/terminal`, `/vnc`) and kept for good; the
   SERVER closes it (`utils/sessions.py`, close 1008 `Not Authenticated`) when the password of the account changes, the account is deleted or
   the users are restored/reset, and the page just reloads on that close (-> login). Cookies carry a session id (`sid`) and issue time (`at`);

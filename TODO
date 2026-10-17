@@ -1,4 +1,6 @@
 === CURRENT WORK ===
+2026-10-17 WAITING on unitotem-system: identity merge at OTA (spec sent). Until it exists a root password change and every web-created account is lost
+at the first update (root goes back to the image default). Do not ship the PAM login to real nodes before that is verified with a real A/B cycle.
 2026-10-17 DONE (user decision): claim code and --create-admin removed; accounts are PAM/system accounts (group unitotem), setup page keeps the
 first-admin creation, welcome screen until an admin exists, users (with shadow hashes) in the backup; Qt splash draws the Plymouth picture.
 Verified on the VM (login test:test 0.12 s, wrong 2.4 s; setup 200/422/409/404; backup round trip of the hash; welcome -> No Assets without
