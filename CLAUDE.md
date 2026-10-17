@@ -239,13 +239,18 @@ Everything per window and per screen, off by default, kept in viewer_settings.js
 and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The web UI hides the keyboard row from non-admins.
 
 ## First access, VNC, suspend
-- **First access (no default password)**: a node with no admin user is UNCLAIMED (`utils/claim.py`): every page goes to `/setup`,
-  which asks for a claim code shown on the totem's screen as an OVERLAY over whatever the window plays (pushed in-process by the viewer to each
-  window page through DevTools, `#claim-overlay` in boot-screen.html, never over a network socket), written to `/var/lib/unitotem/claim-code` (0600) and logged for a headless node, plus the new admin's name and
-  password (policy in `utils/passwords.py`). Wrong codes are rate limited (global lockout, new code after 10 failures),
-  `/setup` is a 404 once claimed, two simultaneous claims have one winner. A reset of the users part returns to unclaimed.
-  `unitotem-manager --create-admin NAME` (root only, service stopped) is the recovery path. There is NO admin/admin anywhere.
-  The setup can also set the OS password the terminal's `login` uses (node plugin hooks `os_account`/`set_os_password`).
+- **Accounts = operating-system accounts (user decision, 2026-10-17)**: the web login is PAM (`utils/osusers.py`, python-pam, service
+  `unitotem-manager` = `/etc/pam.d/unitotem-manager`, `login` as a stand-in when missing), and only root and members of the group
+  `unitotem` get in (`pwd`/`grp`, checked at login and on every request, so removing the account/group ends the session). Creating a user in
+  the UI runs `useradd` (no home, nologin shell, GECOS `UniTotem user`) + `chpasswd` (secret on stdin); deleting deletes only accounts
+  UniTotem made, otherwise just leaves the group. users.json holds ONLY the capabilities (no password any more). root is admin.
+  The backup of the users part carries each account's `/etc/shadow` hash (`chpasswd --encrypted` on restore); an archive from before has no
+  recoverable password and is skipped. Wrong password costs ~2.4 s on the VM / ~3.3 s on a Pi 4 (pam_faildelay), a right one 0.12 s / 0.3 s.
+- **First access (no claim code, no default password)**: with no administrator account that can log in (`user_manager.has_admin()`, root does
+  not count) every page goes to `/setup` (name + password, policy of `utils/passwords.py`, creates the system account), a 404 afterwards;
+  two simultaneous setups have one winner (asyncio lock). The totem shows the WELCOME screen (gradient, address, hotspot QR) meanwhile,
+  `idle_asset()` is `first_boot` until an admin exists and `WebviewManager.refresh_idle()` switches the windows when setup completes. There
+  is NO admin/admin. The claim code and `--create-admin` were removed on purpose: "too protective".
 - **VNC on demand** (node plugin `vnc.py`, `system/vnc.py`, VncWindow.vue): TigerVNC `x0vncserver` on a UNIX socket only (no TCP
   port), view-only enforced by the server, control an explicit per-session switch, started when the window opens and stopped on
   close/drop/shutdown (no idle timeout by default, `UNITOTEM_VNC_IDLE_TIMEOUT` switches one on), admin only, `/vnc` websocket bridge with Origin check. Debian binary is `/usr/bin/X0tigervnc`.
@@ -710,7 +715,6 @@ the VM-specific ones.
   have moved (the DevTools binding dispatch did). Assert the pattern is there.
 - **Password policy is opt-in** for the passwords an administrator sets (`security.json`, `Security/set_password_policy`, switch on
   the Users page); the first account (setup, `--create-admin`) always follows it. Terminal account stays root (user decision).
-- **The claim code overlay uses a container-derived unit (`--u`)**, not vw/vh: the rotated page's body does not follow them.
 - **`WS.disconnect` needs the user**, or `active_users` keeps dead sockets. `/remote/*` refuses loopback senders: test a pairing
   request from another host. A hidden `v-badge` stays in the DOM with its text and a `v-menu`'s content stays after the first
   opening: test the computed display / `aria-expanded`. The scratchpad directory is shared between agents: prefix your files.

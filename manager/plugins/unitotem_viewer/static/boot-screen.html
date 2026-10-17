@@ -188,23 +188,6 @@
     body[data-saver="up"] #shield, body[data-shield] #shield { display: block; }
     body[data-saver="up"] #ut-kbd-layer { visibility: hidden; }
 
-    /* The claim code of a node that has no administrator yet (applyClaim() below): a box in the corner, above the
-       playback, the home page, the screensaver and its shield, below the keyboard layer. Inside #orient-intro, so it
-       turns and flips with the content; sized from --u (1% of the shorter side of that container, set from script)
-       because vw/vh do not follow a rotated body. It takes no touch: the content stays usable around and under it. */
-    #claim-overlay {
-      display: none; position: absolute; right: calc(var(--u, 10px) * 2); bottom: calc(var(--u, 10px) * 2);
-      max-width: calc(var(--u, 10px) * 60); z-index: 2147483000; pointer-events: none; text-align: center;
-      padding: calc(var(--u, 10px) * 1.5) calc(var(--u, 10px) * 2.5); box-sizing: border-box;
-      background: rgba(0, 0, 0, 0.8); border: calc(var(--u, 10px) * 0.3) solid #fff;
-      border-radius: calc(var(--u, 10px) * 1.5); color: #fff; font-family: sans-serif;
-    }
-    #claim-overlay.on { display: block; }
-    #claim-overlay .title { font-size: calc(var(--u, 10px) * 2.6); margin: 0 0 calc(var(--u, 10px) * 0.6); }
-    #claim-overlay .code { font-size: calc(var(--u, 10px) * 6); font-weight: 700; font-family: monospace;
-                           letter-spacing: calc(var(--u, 10px) * 0.4); }
-    #claim-overlay .hint { font-size: calc(var(--u, 10px) * 1.9); margin: calc(var(--u, 10px) * 0.6) 0 0; }
-
     #image-display {
       object-position: center;
     }
@@ -248,12 +231,6 @@
       </div>
 
       <div id="shield"></div>
-
-      <div id="claim-overlay">
-        <p class="title">Set up this device</p>
-        <div class="code" id="claim-code"></div>
-        <p class="hint">Open <b id="claim-url"></b> from another device<br>and enter this code to create the administrator.</p>
-      </div>
     </div>
   </main>
 
@@ -563,32 +540,6 @@
       }
       keyboardLoad.then(() => window.utKeyboard.configure(cfg)).catch(e => { keyboardLoad = null; console.error('keyboard', e); });
     }
-
-    /**
-     * The claim code, while the node has no administrator. The viewer puts it in window.__utClaim ({code, url}, or null
-     * once the node is claimed) over the DevTools connection and calls this; a page that loads later finds it there.
-     * Only text is ever inserted. The overlay lives outside every iframe, so nothing that is shown can reach it.
-     */
-    function applyClaim() {
-      const cfg = window.__utClaim;
-      const box = document.getElementById('claim-overlay');
-      if (cfg && cfg.code) {
-        document.getElementById('claim-code').textContent = cfg.code;
-        document.getElementById('claim-url').textContent = cfg.url || '';
-        box.classList.add('on');
-      } else {
-        box.classList.remove('on');
-        document.getElementById('claim-code').textContent = '';     // nothing of the code is left in the page
-      }
-    }
-    window.applyClaim = applyClaim;
-    {
-      const intro = document.getElementById('orient-intro');
-      const setUnit = () => intro.style.setProperty('--u', Math.min(intro.clientWidth, intro.clientHeight) / 100 + 'px');
-      new ResizeObserver(setUnit).observe(intro);
-      setUnit();
-    }
-    applyClaim();
 
     /**
      * Called by the Python viewer via CEF ExecuteJavascript.

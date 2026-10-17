@@ -34,7 +34,6 @@ from PySide6.QtGui import QScreen
 from PySide6.QtWidgets import QApplication
 
 from utils import constants as const
-from utils.claim import claim_manager
 from utils.browser import user_agent
 from utils.models.viewer import viewer_settings
 from utils.system.gpu import EXPECTS_COMPOSITING, detect_gpu
@@ -579,9 +578,6 @@ class WebviewApp:
         self._cdp.on_binding('utActivity', self._on_activity)
         self._cdp.on_binding('utSaver', self._on_saver_event)
         self._ws_loop.create_task(self._cdp.run(asyncio.Event()))
-        # The claim code is pushed to the pages the moment it changes (any thread calls the listener)
-        claim_manager.subscribe(lambda _state: self._ws_loop.call_soon_threadsafe(
-            lambda: asyncio.ensure_future(self._apply_claim())))
         self._ws_loop.create_task(self._refresh_scheduler())
         self._ws_loop.run_until_complete(self._ws_client())
 
@@ -609,7 +605,6 @@ class WebviewApp:
         # the page may have drawn before we were attached: ask
         asyncio.ensure_future(self._cdp.evaluate(window, "window.__utFramed && typeof utFrame === 'function' && utFrame('{}')"))
         asyncio.ensure_future(self._apply_saver(window))
-        asyncio.ensure_future(self._apply_claim(window))
         watch = self._watches.get(window)
         if watch:
             watch.reset()       # a page that has just loaded is not showing a screensaver
@@ -625,18 +620,6 @@ class WebviewApp:
         module = f'https://{urlparse(self.manager_url).netloc}{get_vite_assets("src/keyboard.js")["js"]}'
         settings = json.dumps({**config, 'module': module})
         await self._cdp.evaluate(window, f'window.__utKeyboardConfig = {settings}; window.applyKeyboard && window.applyKeyboard();')
-
-    async def _apply_claim(self, window: Optional[int] = None):
-        """Shows, updates or removes the claim code overlay of a page (of every window when none is given). The code
-        goes to the page through the DevTools connection of this process only. Safe at any moment: a page that loads
-        later asks for it itself."""
-        if self._cdp is None:
-            return
-        from utils.system.ip import default_ipv4
-        payload = claim_manager.screen_payload(default_ipv4() or self.hostname)
-        js = f'window.__utClaim = {json.dumps(payload)}; window.applyClaim && window.applyClaim();'
-        for target in ([window] if window is not None else self._cdp.windows()):
-            await self._cdp.evaluate(target, js)
 
     # ── touch panels: screensaver over a home page, scheduled refresh (see idle.py), on the websocket thread ──
 

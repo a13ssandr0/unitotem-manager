@@ -2,7 +2,7 @@ from os import urandom
 from typing import Any, Self
 
 from loguru import logger
-from pydantic import Field, ModelWrapValidatorHandler, PrivateAttr, ValidationError, model_validator
+from pydantic import Field, ModelWrapValidatorHandler, ValidationError, model_validator
 from pydantic_settings import BaseSettings
 
 from utils.models.command_line import cmdargs
@@ -15,7 +15,6 @@ class Environment(BaseSettings, env_file=cmdargs.envfile, frozen=True):
     instance_id: str = Field(default_factory=lambda: urandom(16).hex())
     hotspot_uuid: str = Field(default_factory=lambda: urandom(16).hex())
 
-    _unitotem_first_boot: bool = PrivateAttr(True)
 
     # noinspection PyNestedDecorators
     @model_validator(mode='wrap')

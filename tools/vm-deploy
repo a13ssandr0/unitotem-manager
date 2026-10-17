@@ -41,6 +41,17 @@ rsync -a --delete --info=stats1 \
     "$REPO/manager/requirements.txt" \
     "$VM_USER@$VM_HOST:$VM_APP_DIR/"
 
+# The boot picture: the packages copy the theme's PNGs next to bootsplash.py (debian/rules), a source tree does not have them
+# there (the rsync above just deleted them), and the Qt splash and bootsplash.py both read them.
+# shellcheck disable=SC2086
+rsync -a --rsync-path="$VM_RSYNC_PATH" -e "ssh $VM_SSH_OPTS" \
+    --include 'wordmark-*.png' --include 'spinner-*.png' --exclude '*' \
+    "$REPO/plymouth/unitotem/" \
+    "$VM_USER@$VM_HOST:$VM_APP_DIR/plugins/unitotem_viewer/static/bootsplash/" 2>/dev/null \
+    || { ssh $VM_SSH_OPTS "$VM_USER@$VM_HOST" "mkdir -p $VM_APP_DIR/plugins/unitotem_viewer/static/bootsplash" \
+         && rsync -a --rsync-path="$VM_RSYNC_PATH" -e "ssh $VM_SSH_OPTS" --include 'wordmark-*.png' --include 'spinner-*.png' --exclude '*' \
+         "$REPO/plymouth/unitotem/" "$VM_USER@$VM_HOST:$VM_APP_DIR/plugins/unitotem_viewer/static/bootsplash/"; }
+
 if [ "$RESTART" = 1 ]; then
     # shellcheck disable=SC2086
     ssh $VM_SSH_OPTS "$VM_USER@$VM_HOST" 'systemctl restart unitotem-manager'

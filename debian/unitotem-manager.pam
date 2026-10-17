@@ -1,0 +1,4 @@
+# Web interface login: the accounts and passwords of the system, for the members of the group unitotem and root.
+# (the group check is made by the manager, utils/osusers.py)
+@include common-auth
+@include common-account

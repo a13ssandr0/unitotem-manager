@@ -8,7 +8,6 @@ from starlette.requests import Request
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from api.ws.permissions import APIPermissionError
-from utils.claim import claim_manager
 from utils.models.user import User, user_manager
 from api.ws.endpoints import WS, handle_call
 from api.ws.responses import WSBroadcast, WSMulticast, WSResponse
@@ -37,7 +36,7 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             data: dict[str, Any] = await websocket.receive_json()
             # The users were reset while this page was open: nobody is logged in any more, whatever the cookie says
-            if claim_manager.unclaimed or user_manager.get_user(user.name) is None:
+            if user_manager.get_user(user.name) is None:
                 await websocket.close(1008, 'Not Authenticated')
                 break
             t = data.pop('target')

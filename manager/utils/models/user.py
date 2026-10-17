@@ -9,8 +9,8 @@ from typing import Callable, Coroutine
 from loguru import logger
 from pydantic import BaseModel, RootModel, field_serializer, field_validator
 from pydantic_core.core_schema import SerializerFunctionWrapHandler
-from werkzeug.security import check_password_hash, generate_password_hash
 
+from utils import osusers
 from utils.models.command_line import cmdargs
 
 warnings.filterwarnings(
@@ -66,7 +66,8 @@ class UserPerms(str, Enum):
 
 
 class UserData(BaseModel, validate_assignment=True):
-    password: str
+    """What a user may do in UniTotem. The password is the operating system's (PAM, see utils/osusers.py): a `password`
+    left by the previous version is ignored and no longer written."""
     permissions: set[UserPerms]
 
     # noinspection PyNestedDecorators
@@ -99,6 +100,8 @@ class UserManager(RootModel):
     __callback = None
 
     def __getitem__(self, username: str) -> UserData:
+        if username not in self.root:
+            return UserData(permissions=set())
         return self.root.__getitem__(username)
 
     def __setitem__(self, username: str, value: UserData):
@@ -106,43 +109,57 @@ class UserManager(RootModel):
         self.callback()
         self.save()
 
-    def __delitem__(self, username: str):
-        self.root.__delitem__(username)
-        self.callback()
-        self.save()
-
     def __len__(self) -> int:
-        return self.root.__len__()
+        return len(self.users())
 
     def __contains__(self, username: str):
-        return self.root.__contains__(username)
+        return username in self.users()
 
     def users(self):
-        return self.root.keys()
+        """Every account that can log in with a capability record: the ones in users.json and the members of the group
+        that were added to it by hand (they have no capability until an administrator gives them some)."""
+        return [*(name for name in self.root if osusers.exists(name)),
+                *(name for name in osusers.members() if name not in self.root)]
 
     def items(self):
-        return self.root.items()
+        return [(name, self.root.get(name) or UserData(permissions=set())) for name in self.users()]
 
     def add_user(self, username: str, password: str, permissions: set[UserPerms] = None):
-        if permissions is None:
-            permissions = set()
-        self[username] = UserData(password=generate_password_hash(password), permissions=permissions)
+        """Creates the system account (raises osusers.OSUserError) and its capabilities."""
+        osusers.create_user(username, password)
+        self[username] = UserData(permissions=permissions or set())
 
     def get_user(self, username: str):
-        return User(username, self.root[username].permissions) if username in self.root else None
+        """The user, if the account is root or in the group `unitotem` (so deleting it from the system or from the group
+        ends its sessions); root is an administrator."""
+        if not osusers.may_login(username):
+            return None
+        if username in self.root:
+            return User(username, self.root[username].permissions)
+        return User(username, {UserPerms.admin} if username == 'root' else set())
+
+    def has_admin(self) -> bool:
+        """An administrator who can log in exists (root does not count: a node always has root, and this decides whether
+        the first-access setup is still to be done)."""
+        return any(UserPerms.admin in data.permissions and name != 'root' and osusers.may_login(name)
+                   for name, data in self.root.items())
 
     def change_password(self, username: str, password: str):
-        self.root[username].password = generate_password_hash(password)
+        osusers.set_password(username, password)
+
+    def change_perms(self, username: str, permissions: set[UserPerms]):
+        self.root.setdefault(username, UserData(permissions=set())).permissions = permissions
         self.callback()
         self.save()
 
-    def change_perms(self, username: str, permissions: set[UserPerms]):
-        self.root[username].permissions = permissions
+    def delete_user(self, username: str):
+        osusers.remove_user(username)
+        self.root.pop(username, None)
         self.callback()
         self.save()
 
     def authenticate(self, username: str, password: str):
-        return username in self.root and check_password_hash(self.root[username].password, password)
+        return osusers.authenticate(username, password)
 
     def set_callback(self, callback: Callable[[dict[str, UserData]], Coroutine]):
         self.__callback = callback
@@ -158,6 +175,7 @@ class UserManager(RootModel):
     def save(self):
         with open(cmdargs.users_file, 'w') as f:
             json.dump(self.model_dump(), f, indent=4)
+        cmdargs.users_file.chmod(0o600)
 
 
 user_manager = UserManager()

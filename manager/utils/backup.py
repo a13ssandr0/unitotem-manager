@@ -12,11 +12,13 @@ import inspect
 import json
 from typing import Optional
 
+from loguru import logger
+
 import utils.plugins as plugins
+from utils import osusers
 from utils.models.assets import AssetsManager
 from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager
-from utils.claim import claim_manager
 from utils.models.user import user_manager
 from utils.plugins import BackupPart
 from utils.storage.uploadmanager import upload_manager
@@ -48,17 +50,39 @@ def _reset_playlists():
 
 # ── users ────────────────────────────────────────────────────────────────────
 
+def _export_users():
+    """Each user with its capabilities and the password as the system keeps it (the hash of /etc/shadow, never the
+    password): the archive is as sensitive as the node's private keys."""
+    return {name: {'permissions': sorted(data.permissions), 'shadow': osusers.password_hash(name)}
+            for name, data in user_manager.items()}
+
+
 def _restore_users(data, _version):
-    user_manager.__init__(**data)
+    """Recreates the accounts (system user, group, password) and their capabilities. An account of an archive from
+    before the users were the system's has no recoverable password and is skipped: if that leaves no administrator
+    the node asks for the first-access setup."""
+    restored = {}
+    for name, entry in data.items():
+        shadow = entry.get('shadow')
+        if not shadow:
+            logger.warning('The backup has no password for the user {}: not restored', name)
+            continue
+        try:
+            osusers.restore_user(name, shadow)
+        except osusers.OSUserError as e:
+            logger.error('Cannot restore the user {}: {}', name, e)
+            continue
+        restored[name] = {'permissions': entry.get('permissions', [])}
+    user_manager.__init__(**restored)
     user_manager.save()
-    claim_manager.arm()         # a backup without an administrator leaves the node unclaimed
 
 
 def _reset_users():
-    """No users at all: the node goes back to the unclaimed state, with a new claim code (never a default account)."""
+    """No users at all: the accounts UniTotem made are deleted, and the node waits for the first-access setup."""
+    for name in list(user_manager.users()):
+        osusers.remove_user(name)
     user_manager.root.clear()
     user_manager.save()
-    claim_manager.arm()
 
 
 # ── security settings ────────────────────────────────────────────────────────
@@ -130,7 +154,7 @@ def _reset_files():
 
 CORE_PARTS = [
     BackupPart('playlists', 'Playlists', _export_playlists, _restore_playlists, _reset_playlists),
-    BackupPart('users', 'Users', lambda: json.loads(user_manager.model_dump_json()), _restore_users, _reset_users),
+    BackupPart('users', 'Users', _export_users, _restore_users, _reset_users),
     BackupPart('security', 'Security settings', _export_security, _restore_security, _reset_security),
     BackupPart('remote', 'Pairing and certificates', _export_remote, _restore_remote, _reset_remote),
     BackupPart('uploads', 'Uploaded files', None, None, _reset_files, _export_files, _restore_files,

@@ -34,7 +34,6 @@ from routers.error import http_exception_handler
 from routers.login import LOGMAN, NotAuthenticatedException, login_redirect
 from templates import get_vite_assets, public_asset_files, templates
 from utils._logging import Logger
-from utils.claim import claim_manager
 from utils.models.command_line import cmdargs
 from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager, remote_manager
@@ -230,10 +229,7 @@ except FileNotFoundError:
 try:
     user_manager.load()
 except FileNotFoundError:
-    logger.warning('Users configuration file not found: this node has no accounts and starts unclaimed.')
-# Nothing ships with a password: without an administrator the node waits for the first-access setup (utils/claim.py),
-# and shows the claim code on its screen and in its log
-claim_manager.arm()
+    logger.warning('Users configuration file not found: no account yet, the first access sets up the administrator.')
 
 if not cmdargs.remote_file.exists():
     # the RSA signing key is generated lazily at the first signature,
