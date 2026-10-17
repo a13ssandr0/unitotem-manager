@@ -74,17 +74,22 @@ class WSManager:
     async def multicast(self, users: str|list[str], target: str, nocache=False, **kwargs):
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         if isinstance(users, str):
-            for websocket in self.active_users[users]:
-                await websocket.send_text(text)
-        else:
-            for user in users:
-                for websocket in self.active_users[user]:
-                    await websocket.send_text(text)
+            users = [users]
+        for user in users:
+            for websocket in list(self.active_users[user]):
+                await self._deliver(websocket, text)
 
     async def broadcast(self, target: str, nocache=False, **kwargs):
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
-        for connection in self.active_connections:
-            await connection.send_text(text)
+        for connection in list(self.active_connections):
+            await self._deliver(connection, text)
+
+    @staticmethod
+    async def _deliver(websocket: WebSocket, text: str):
+        try:
+            await websocket.send_text(text)
+        except RuntimeError:
+            pass        # closing: the server ended that session (utils.sessions), its handler is cleaning up
 
 
 
@@ -103,6 +108,7 @@ class WSAPIBase:
 @dataclasses.dataclass
 class Context:
     username: str
+    sid: Optional[str] = None       # the session of the caller
 
 
 def api_props(*, allowed_users, allowed_roles, **validator_kwargs):

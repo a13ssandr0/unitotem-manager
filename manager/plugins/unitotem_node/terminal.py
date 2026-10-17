@@ -29,6 +29,7 @@ from starlette.requests import Request
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from routers.login import LOGMAN, NotAuthenticatedException
+from utils import sessions
 
 router = APIRouter()
 
@@ -211,6 +212,7 @@ async def terminal(websocket: WebSocket):
         return
 
     await websocket.accept()
+    sessions.track(websocket, user.name, user.sid)
     term = Terminal(websocket, user.name)
     try:
         await term.start_login()
@@ -245,6 +247,7 @@ async def terminal(websocket: WebSocket):
     except Exception:
         logger.exception('Terminal of {} failed', user.name)
     finally:
+        sessions.untrack(websocket)
         term.closing = True
         for task in tasks:
             task.cancel()

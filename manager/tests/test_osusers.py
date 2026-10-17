@@ -129,3 +129,19 @@ def test_user_manager_lists_members_and_has_admin(system, monkeypatch, tmp_path)
     assert manager.get_user('root').perms == {UserPerms.admin}
     manager.root['alice'].permissions = {UserPerms.admin}
     assert manager.has_admin()
+
+
+def test_revoked_sessions_stop_working_except_the_kept_one(system, monkeypatch, tmp_path):
+    from utils.models import user as user_module
+    monkeypatch.setattr(user_module.cmdargs.__class__, 'users_file', tmp_path / 'users.json', raising=False)
+    manager = UserManager({'alice': {'permissions': [UserPerms.scheduler]}})
+    issued = 1000.0
+    assert manager.session_valid('alice', 'old', issued)             # nothing revoked yet
+    manager.revoke_sessions('alice', keep_sid='mine')
+    assert not manager.session_valid('alice', 'old', issued)          # another session, issued before
+    assert manager.session_valid('alice', 'mine', issued)             # the one the password was changed from
+    import time
+    assert manager.session_valid('alice', 'new', time.time() + 1)     # a login after the change
+    manager.revoke_sessions('alice')                                   # an administrator changed it: nobody is kept
+    assert not manager.session_valid('alice', 'mine', issued)
+    assert manager.session_valid('nobody', 'x', issued)               # no record, nothing to revoke

@@ -15,7 +15,7 @@ from typing import Optional
 from loguru import logger
 
 import utils.plugins as plugins
-from utils import osusers
+from utils import osusers, sessions
 from utils.models.assets import AssetsManager
 from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager
@@ -75,6 +75,7 @@ def _restore_users(data, _version):
         restored[name] = {'permissions': entry.get('permissions', [])}
     user_manager.__init__(**restored)
     user_manager.save()
+    sessions.close_soon()           # every password may be another one now: everybody logs in again
 
 
 def _reset_users():
@@ -83,6 +84,7 @@ def _reset_users():
         osusers.remove_user(name)
     user_manager.root.clear()
     user_manager.save()
+    sessions.close_soon()
 
 
 # ── security settings ────────────────────────────────────────────────────────

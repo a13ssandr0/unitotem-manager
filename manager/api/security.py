@@ -51,7 +51,7 @@ class Security(WSAPIBase):
         return self.users()
 
     @staticmethod
-    def set_user_password(username: str, password: str):
+    def set_user_password(ctx: Context, username: str, password: str):
         if username not in user_manager:
             return WSResponse(error=f"User {username} does not exist")
         if problems := _policy_problems(password, username):
@@ -61,7 +61,10 @@ class Security(WSAPIBase):
         except osusers.OSUserError as e:
             return WSResponse(error=str(e))
         logger.info(f'Password changed for {username}')
-        return WSMulticast(username, 'logout')
+        # The sessions of that user end (the server closes their sockets); when it is one's own password the session it was
+        # changed from stays, every other one ends
+        user_manager.revoke_sessions(username, keep_sid=ctx.sid if username == ctx.username else None)
+        return None
 
     def set_user_permissions(self, ctx: Context, username: str, perms: set[UserPerms]):
         if username not in user_manager:
