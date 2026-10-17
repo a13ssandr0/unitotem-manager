@@ -27,6 +27,7 @@ from starlette.requests import Request
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from routers.login import LOGMAN, NotAuthenticatedException
+from utils import sessions
 from .system import vnc as vnc_system
 from .system.screens import xorg
 from .system.vnc import IdleWatch, VncError, VncServer
@@ -139,6 +140,7 @@ async def vnc(websocket: WebSocket):
         return
 
     await websocket.accept()
+    sessions.track(websocket, user.name, user.sid)
     logger.info('{} watches the screen ({}) from {}, {}', user.name, output.name if output else 'whole desktop', peer,
                 'WITH control' if control else 'view-only')
     idle = IdleWatch()
@@ -158,6 +160,7 @@ async def vnc(websocket: WebSocket):
     finally:
         for task in tasks:
             task.cancel()
+        sessions.untrack(websocket)
         writer.close()
         _sessions.discard(server)
         await server.stop()

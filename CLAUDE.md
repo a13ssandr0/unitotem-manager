@@ -246,6 +246,11 @@ and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The w
   UniTotem made, otherwise just leaves the group. users.json holds ONLY the capabilities (no password any more). root is admin.
   The backup of the users part carries each account's `/etc/shadow` hash (`chpasswd --encrypted` on restore); an archive from before has no
   recoverable password and is skipped. Wrong password costs ~2.4 s on the VM / ~3.3 s on a Pi 4 (pam_faildelay), a right one 0.12 s / 0.3 s.
+- **A session ends only by an event, never by a re-check**: the websocket is authenticated once (`/ws`, `/terminal`, `/vnc`) and kept for good; the
+  SERVER closes it (`utils/sessions.py`, close 1008 `Not Authenticated`) when the password of the account changes, the account is deleted or
+  the users are restored/reset, and the page just reloads on that close (-> login). Cookies carry a session id (`sid`) and issue time (`at`);
+  `UserData.invalid_before/keep_sid` revoke the older ones (`SessionLoginManager`). Changing one's OWN password keeps the session it was
+  changed from (`keep_sid`) and ends all the others; an administrator changing someone else's ends all of that user's. No periodic PAM check.
 - **First access (no claim code, no default password)**: with no administrator account that can log in (`user_manager.has_admin()`, root does
   not count) every page goes to `/setup` (name + password, policy of `utils/passwords.py`, creates the system account), a 404 afterwards;
   two simultaneous setups have one winner (asyncio lock). The totem shows the WELCOME screen (gradient, address, hotspot QR) meanwhile,

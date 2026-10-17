@@ -8,7 +8,8 @@ from starlette.requests import Request
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from api.ws.permissions import APIPermissionError
-from utils.models.user import User, user_manager
+from utils import sessions
+from utils.models.user import User
 from api.ws.endpoints import WS, handle_call
 from api.ws.responses import WSBroadcast, WSMulticast, WSResponse
 from routers.login import LOGMAN, NotAuthenticatedException
@@ -29,16 +30,13 @@ async def websocket_endpoint(websocket: WebSocket):
         return
 
     await WS.connect(websocket, user.name)
+    sessions.track(websocket, user.name, user.sid)     # authenticated once, here: only the server ends it (utils/sessions.py)
     await WS.send(websocket, 'connected')
     logger.success('User {} connected', user.name)
 
     while True:
         try:
             data: dict[str, Any] = await websocket.receive_json()
-            # The users were reset while this page was open: nobody is logged in any more, whatever the cookie says
-            if user_manager.get_user(user.name) is None:
-                await websocket.close(1008, 'Not Authenticated')
-                break
             t = data.pop('target')
             try:
                 async for ret in handle_call(target=t, user=user, request_data=data):
@@ -63,4 +61,5 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception:
             await WS.send(websocket, 'error', error='Exception', extra=format_exc())
             logger.error(format_exc())
+    sessions.untrack(websocket)
     WS.disconnect(websocket, user.name)

@@ -9,6 +9,8 @@ __all__ = [
 ]
 
 import asyncio
+import dataclasses
+import secrets
 import time
 from datetime import timedelta
 from platform import freedesktop_os_release as os_release, node as gethostname
@@ -65,7 +67,18 @@ class LoginForm(OAuth2PasswordRequestForm):
         self.remember_me = remember_me
 
 
-LOGMAN = LoginManager(
+class SessionLoginManager(LoginManager):
+    """A session is the cookie's: besides the signature and the account (loaded by `user_loader`) it must not have been
+    revoked (utils/models/user.py: the password of the account changed after the cookie was issued)."""
+
+    async def _get_current_user(self, payload):
+        user = await super()._get_current_user(payload)
+        if not user_manager.session_valid(user.name, payload.get('sid'), payload.get('at')):
+            raise self.not_authenticated_exception
+        return dataclasses.replace(user, sid=payload.get('sid'))
+
+
+LOGMAN = SessionLoginManager(
         secret=environ.auth_token,
         token_url='/auth/token',
         use_cookie=True,
@@ -88,7 +101,8 @@ def require_perm(perm: str):
 
 def session_cookie(response: Response, username: str, remember: bool):
     """Puts the session cookie of `username` on a response (a week if `remember`, else until the browser closes)."""
-    access_token = LOGMAN.create_access_token(data={'sub': username, 'cre': time.monotonic()})
+    access_token = LOGMAN.create_access_token(data={'sub': username, 'cre': time.monotonic(), 'sid': secrets.token_hex(8),
+                                                    'at': time.time()})
     response.set_cookie(key=LOGMAN.cookie_name, value=access_token,
                         httponly=True, samesite='strict', secure=True,
                         max_age=int(LOGMAN.default_expiry.total_seconds()) if remember else None)
@@ -159,5 +173,6 @@ async def set_pass(request: Request, response: Response, password: str, user: Us
         user_manager.change_password(user.name, password)
     except OSUserError as e:
         raise HTTPException(status_code=422, detail=[str(e)])
+    user_manager.revoke_sessions(user.name, keep_sid=user.sid)     # every session but this one
     if 'Referer' in request.headers:
         response.headers['location'] = request.headers['Referer']

@@ -1,16 +1,17 @@
 import asyncio
 import dataclasses
 import json
+import time
 import warnings
 from collections import namedtuple
 from enum import Enum
-from typing import Callable, Coroutine
+from typing import Callable, Coroutine, Optional
 
 from loguru import logger
 from pydantic import BaseModel, RootModel, field_serializer, field_validator
 from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
-from utils import osusers
+from utils import osusers, sessions
 from utils.models.command_line import cmdargs
 
 warnings.filterwarnings(
@@ -69,6 +70,10 @@ class UserData(BaseModel, validate_assignment=True):
     """What a user may do in UniTotem. The password is the operating system's (PAM, see utils/osusers.py): a `password`
     left by the previous version is ignored and no longer written."""
     permissions: set[UserPerms]
+    # Sessions (cookies) issued before this moment are no longer valid, except the one with id `keep_sid` (the session
+    # that changed its own password). Kept here so that it survives a restart.
+    invalid_before: float = 0.0
+    keep_sid: Optional[str] = None
 
     # noinspection PyNestedDecorators
     @field_validator('permissions', mode='after')
@@ -89,6 +94,7 @@ class UserData(BaseModel, validate_assignment=True):
 class User:
     name: str
     perms: set[UserPerms]
+    sid: Optional[str] = None       # the session this object was loaded for (None outside a request)
 
     @property
     def has_perm(self):
@@ -138,6 +144,22 @@ class UserManager(RootModel):
             return User(username, self.root[username].permissions)
         return User(username, {UserPerms.admin} if username == 'root' else set())
 
+    def session_valid(self, username: str, sid: Optional[str], issued: Optional[float]) -> bool:
+        """A cookie issued at `issued` for the session `sid`: not valid any more once the account's sessions were revoked
+        (password changed), unless it is the session that was kept."""
+        data = self.root.get(username)
+        if data is None or not data.invalid_before:
+            return True
+        return (issued or 0.0) >= data.invalid_before or (sid is not None and sid == data.keep_sid)
+
+    def revoke_sessions(self, username: str, keep_sid: Optional[str] = None):
+        """End every session of the user, but `keep_sid`: cookies stop working and open sockets are closed."""
+        data = self.root.setdefault(username, UserData(permissions=set()))
+        data.invalid_before = time.time()
+        data.keep_sid = keep_sid
+        self.save()
+        sessions.close_soon(username, keep_sid)
+
     def has_admin(self) -> bool:
         """An administrator who can log in exists (root does not count: a node always has root, and this decides whether
         the first-access setup is still to be done)."""
@@ -157,6 +179,7 @@ class UserManager(RootModel):
         self.root.pop(username, None)
         self.callback()
         self.save()
+        sessions.close_soon(username)
 
     def authenticate(self, username: str, password: str):
         return osusers.authenticate(username, password)

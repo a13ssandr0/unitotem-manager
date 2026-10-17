@@ -172,7 +172,7 @@ async def handle_call(target, user, request_data):
             break
 
     if ctx_param:
-        request_data[ctx_param] = Context(username=user.name)
+        request_data[ctx_param] = Context(username=user.name, sid=user.sid)
 
     async for ret in func(**request_data):
         yield ret
