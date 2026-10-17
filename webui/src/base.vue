@@ -141,7 +141,7 @@ import VncWindow from '@/components/VncWindow.vue'
 import WindowTaskbar from '@/components/WindowTaskbar.vue'
 import SuspendDialog from '@/components/SuspendDialog.vue'
 import NotificationMenu from '@/components/NotificationMenu.vue'
-import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, onApi, send} from '@/api'
+import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, send} from '@/api'
 
 const theme = useTheme()
 const router = useRouter()
@@ -211,12 +211,6 @@ const tabs = ref([
 
 const terminalOpen = ref(false)
 const vncOpen = ref(false)
-// The server logs a user out (password changed): close what holds a session before leaving
-onApi('logout', () => {
-  terminalOpen.value = false
-  vncOpen.value = false
-  window.location.href = '/logout'
-})
 // Updates are offered by the node plugin: without it there is nothing to ask. The navbar hint is a notification now
 // (see NotificationMenu); this only feeds the dot next to the Updates entry of the menu
 const updateInfo = api.Settings.Update.availability.use({pick: 'availability', init: hasNode})
@@ -289,7 +283,9 @@ function connectWs() {
   ws.onclose = (e) => {
     connected.value = false
     if (e.reason === 'Not Authenticated') {
-      window.location.href = '/login'
+      // The server ended this session (the password changed, the account is gone): the cookie no longer works, so reloading
+      // lands on the login page. Courtesy only: the session is already closed.
+      window.location.reload()
       return
     }
     setTimeout(connectWs, 3000)
