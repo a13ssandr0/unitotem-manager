@@ -8,6 +8,7 @@ once the browser has taken over. It is static on purpose: the thread that would 
 The very first frame of the boot, before the manager has even finished importing, is a separate light program
 (bootsplash.py, unitotem-splash.service); this one takes over from it inside the viewer and looks the same.
 """
+from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget
@@ -26,7 +27,11 @@ class Splash(QWidget):
         self.setGeometry(screen.geometry())
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.painted = False
-        self._picture = self._compose(screen.geometry().width())
+        try:
+            self._picture = self._compose(screen.geometry().width())
+        except Exception as e:      # a splash must never take the viewer down: a black frame is better than none
+            logger.error('Cannot draw the boot picture ({}), showing a black frame', e)
+            self._picture = QImage()
 
     @staticmethod
     def _compose(width: int) -> QImage:
@@ -43,6 +48,8 @@ class Splash(QWidget):
         self.painted = True
         painter = QPainter(self)
         painter.fillRect(self.rect(), Qt.GlobalColor.black)
+        if self._picture.isNull():
+            return
         painter.drawImage((self.width() - self._picture.width()) // 2, (self.height() - self._picture.height()) // 2,
                           self._picture)
 

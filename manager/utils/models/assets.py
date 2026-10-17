@@ -210,13 +210,14 @@ def idle_asset() -> Asset:
     Two situations reach this: a playlist that has run out of enabled assets,
     and a window with no playlist assigned at all. They look the same to a
     person standing in front of the totem, so they must show the same thing,
-    and the first-boot precedence has to hold for both - a node that has not
-    been configured yet shows the welcome screen with the hotspot credentials,
-    which is the only way anybody can get into it (see the flag's handling in
-    utils/models/playlists.py). Kept in one function precisely so the two
-    callers cannot drift apart.
+    and the first-boot precedence has to hold for both - a node that has no
+    administrator yet shows the welcome screen (its address, and the hotspot
+    credentials, which are the only way anybody can get into a node without a
+    network), until the first-access setup creates one. Kept in one function
+    precisely so the two callers cannot drift apart.
     """
-    return first_boot if environ._unitotem_first_boot else no_assets
+    from utils.models.user import user_manager     # deferred: the user model does not need the playlists
+    return no_assets if user_manager.has_admin() else first_boot
 
 
 class AssetsManager(BaseModel, validate_assignment=True):

@@ -379,6 +379,16 @@ class WebviewManager:
                 self._idle_windows.add((instance_id, window_id))
                 asyncio.create_task(self._send_idle(instance_id, window_id))
 
+    def refresh_idle(self):
+        """The idle page changed (the node has an administrator now: the welcome screen gives way to the placeholder):
+        tell the windows that show it."""
+        for loop in self._loops.values():
+            if not loop.playlist.has_enabled():
+                for vid, wid in loop.assigned_webviews:
+                    asyncio.create_task(loop.send_current(vid, wid))
+        for vid, wid in self._idle_windows:
+            asyncio.create_task(self._send_idle(vid, wid))
+
     def update_webview_info(self, instance_id: str, info: dict):
         if instance_id in self._webviews:
             self._webviews[instance_id].update(info)

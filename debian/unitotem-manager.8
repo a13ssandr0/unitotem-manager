@@ -10,30 +10,22 @@ unitotem-viewer is installed and a display is available, one viewer window per s
 by the unitotem-manager.service unit.
 .SH OPTIONS
 .TP
-.BI \-\-create\-admin " NAME"
-Create the administrator
-.I NAME
-(or give an existing user a new password and the administrator capability), then exit. Must be run as root, with the
-service stopped. The password is asked on the terminal, or read from the standard input when it is not a terminal
-(\fBecho "$PASSWORD" | unitotem-manager --create-admin NAME\fR); it is never taken from the command line. The usual
-password rules apply. It is also the way back in when nobody can log in.
-.TP
 .B \-\-no_gui true
 Headless: run only the backend, without the local windows.
+.SH ACCOUNTS
+The accounts of the web interface are the accounts of the operating system: the user name and password are checked by PAM
+(service
+.IR unitotem-manager ),
+and only root and the members of the group
+.I unitotem
+may log in. A user created in the web interface is created on the system and added to that group; its capabilities
+(scheduler, audio, power, admin) are kept by UniTotem. The users and their passwords (as the system keeps them) are part
+of the backup.
 .SH FIRST ACCESS
-A node carries no default account or password. Until an administrator exists the node is
-.IR unclaimed :
-its web interface only offers the setup page, where the person at the device enters a claim code and chooses the
-administrator's username and password (and, optionally, the password of the operating-system account used by the
-web terminal). The claim code is shown on the screen of the device, and for a device without a screen it is logged at
-WARNING level and written to
-.I /var/lib/unitotem/claim-code
-(readable by root only, removed once the node is claimed). Resetting the users from the backup page returns the node to
-this state, with a new code.
+Until an administrator exists the web interface only offers the setup page, where the person chooses the username and
+password of the first administrator (a new system account in the group). The welcome screen of the device shows its
+address. Resetting the users from the backup page returns the node to this state.
 .SH FILES
-.TP
-.I /var/lib/unitotem/claim-code
-The claim code of an unclaimed node.
 .TP
 .I /etc/unitotem
 Configuration, playlists, users and pairing data.

@@ -7,7 +7,6 @@ from typing import Optional
 
 from loguru import logger
 
-from utils.environment import environ
 from utils.models.assets import AssetsManager
 from utils.models.command_line import cmdargs
 
@@ -114,12 +113,6 @@ class PlaylistsManager:
         return Path(cmdargs.assets_file).parent / 'playlists.json'
 
     def _save_index(self):
-        # A configuration has been written, so this node is no longer on its
-        # first boot: the welcome screen must give way to the "no assets"
-        # placeholder when a playlist runs empty. Mirrors the original
-        # behaviour, where saving or loading the configuration cleared the flag
-        # and only a reset set it again.
-        environ._unitotem_first_boot = False
         index = {
             'default': self._default_id,
             'playlists': {pid: str(am._filepath) for pid, am in self._playlists.items()}
@@ -135,8 +128,6 @@ class PlaylistsManager:
     def load(self):
         index_path = self._index_path()
         if index_path.exists():
-            # Configuration found on disk: the node has been set up before.
-            environ._unitotem_first_boot = False
             with open(index_path) as f:
                 index = json.load(f)
             self._default_id = index.get('default')
@@ -159,25 +150,15 @@ class PlaylistsManager:
         else:
             # Legacy: single assets.json → become the default playlist
             am = AssetsManager()
-            configured = True
             try:
                 am.load(cmdargs.assets_file)
             except FileNotFoundError:
                 logger.warning('No assets file found, starting with empty default playlist')
-                configured = False
             am._filepath = self._playlist_path(am.playlist_id)
             self._playlists[am.playlist_id] = am
             self._default_id = am.playlist_id
             am.save()
             self._save_index()
-            # _save_index() clears the first-boot flag, because writing a
-            # configuration normally means somebody configured the node. The
-            # write above is our own bootstrap, not an operator doing anything,
-            # so the flag has to be restored to the truth: a node with neither
-            # playlists.json nor a legacy assets.json has never been set up and
-            # must show the welcome screen with the hotspot credentials, which
-            # are the only way into a node that has no network yet.
-            environ._unitotem_first_boot = not configured
 
     def serialize(self) -> list[dict]:
         return [

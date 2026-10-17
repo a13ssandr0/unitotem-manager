@@ -1,6 +1,6 @@
 from loguru import logger
 
-from utils import passwords
+from utils import osusers, passwords
 from utils.models.security import security_settings
 from utils.models.user import UserPerms, user_manager
 from api.ws.responses import WSBroadcast, WSResponse, WSMulticast
@@ -22,7 +22,8 @@ class Security(WSAPIBase):
     @UserPerms.requires.none
     def current_user(ctx: Context):
         """The logged in user itself: every page needs it to know what to show, whatever its permissions."""
-        return WSResponse(name=ctx.username, perms=list(user_manager[ctx.username].permissions))
+        user = user_manager.get_user(ctx.username)
+        return WSResponse(name=ctx.username, perms=list(user.perms) if user else [])
 
     @staticmethod
     @UserPerms.requires.none
@@ -42,7 +43,10 @@ class Security(WSAPIBase):
             return WSResponse(error="User already exists")
         if problems := _policy_problems(password, username):
             return WSResponse(error='Password refused', extra=problems)
-        user_manager.add_user(username, password)
+        try:
+            user_manager.add_user(username, password)
+        except osusers.OSUserError as e:
+            return WSResponse(error=str(e))
         logger.info(f'Created new user: {username}')
         return self.users()
 
@@ -52,7 +56,10 @@ class Security(WSAPIBase):
             return WSResponse(error=f"User {username} does not exist")
         if problems := _policy_problems(password, username):
             return WSResponse(error='Password refused', extra=problems)
-        user_manager.change_password(username, password)
+        try:
+            user_manager.change_password(username, password)
+        except osusers.OSUserError as e:
+            return WSResponse(error=str(e))
         logger.info(f'Password changed for {username}')
         return WSMulticast(username, 'logout')
 
@@ -77,5 +84,5 @@ class Security(WSAPIBase):
         if ctx.username == username or len(user_manager) == 1:
             return WSResponse(error="Cannot delete current user")
         elif username in user_manager:
-            del user_manager[username]
+            user_manager.delete_user(username)
         return self.users()

@@ -8,6 +8,7 @@ __all__ = [
     "session_cookie"
 ]
 
+import asyncio
 import time
 from datetime import timedelta
 from platform import freedesktop_os_release as os_release, node as gethostname
@@ -25,9 +26,9 @@ from starlette.responses import Response
 
 import utils.constants as const
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
-from utils.claim import claim_manager
 from utils.environment import environ
 from utils.models.user import User, user_manager
+from utils.osusers import OSUserError
 from utils.system.ip import default_ipv4
 
 
@@ -37,8 +38,8 @@ class NotAuthenticatedException(Exception):
 
 async def login_redirect(request, exc):
     logger.error(exc)
-    # A node without an administrator has nobody to log in: the only way forward is the setup
-    if claim_manager.unclaimed:
+    # No administrator can log in yet: the only way forward is the first-access setup
+    if not user_manager.has_admin():
         return RedirectResponse('/setup')
     return RedirectResponse('/login?src=' + quote_plus(request.scope.get('path', '/')))
 
@@ -98,7 +99,8 @@ router = APIRouter()
 
 @router.post(LOGMAN.model.flows.password.tokenUrl)
 async def login(data: LoginForm = Depends()):
-    if not user_manager.authenticate(data.username, data.password):
+    # PAM can take a couple of seconds on a wrong password (pam_faildelay): not on the event loop
+    if not await asyncio.to_thread(user_manager.authenticate, data.username, data.password):
         logger.error("Invalid credentials for user {}", data.username)
         raise InvalidCredentialsException
     logger.success("User {} logged in", data.username)
@@ -109,11 +111,11 @@ async def login(data: LoginForm = Depends()):
 
 @router.get("/login/users")
 async def get_users() -> list[str]:
-    return list(user_manager.users()) if claim_manager.is_claimed() else []
+    return list(user_manager.users())
 
 @router.get('/login')
 async def login_page(request: Request, src: Optional[str] = '/'):
-    if claim_manager.unclaimed:
+    if not user_manager.has_admin():
         return RedirectResponse('/setup')
     try:
         await LOGMAN(request)
@@ -153,6 +155,9 @@ async def set_pass(request: Request, response: Response, password: str, user: Us
     from utils.models.security import security_settings
     if security_settings.enforce_password_policy and (problems := passwords.validate_password(password, user.name)):
         raise HTTPException(status_code=422, detail=problems)
-    user_manager.change_password(user.name, password)
+    try:
+        user_manager.change_password(user.name, password)
+    except OSUserError as e:
+        raise HTTPException(status_code=422, detail=[str(e)])
     if 'Referer' in request.headers:
         response.headers['location'] = request.headers['Referer']
