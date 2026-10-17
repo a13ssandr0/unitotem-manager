@@ -690,8 +690,8 @@ the VM-specific ones.
   connects with a short retry; no `After=start-xorg.service`.
 - **Every CEF build ships the proprietary codecs (H.264/AAC), always** (user rule): never build or package a wheel without
   `proprietary_codecs=true ffmpeg_branding=Chrome`; `debian/rules` takes only wheels from `vendor/cefpython-wheels` and fails when there is none,
-  it must never fall back to the stock wheel. CEF is built locally (no CI); clean the build tree only after a SUCCESSFUL build, keep it on
-  failure (sources, objects and ninja state make the retry incremental). The `build/` dir of the submodule is root-owned when Docker made it:
+  it must never fall back to the stock wheel. CEF is built locally (no CI); NEVER delete the build tree (sources, objects, ninja state) on your own, success or failure:
+  it makes every rebuild incremental (hours saved) and is kept until the user says it can go. The `build/` dir of the submodule is root-owned when Docker made it:
   delete it with a throwaway container mounting that one path, not sudo. Wheels are not in git (`vendor/cefpython-wheels`, ignored).
 - **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
   have moved (the DevTools binding dispatch did). Assert the pattern is there.
