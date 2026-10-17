@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=UniTotem
-Description=UniTotem boot splash: spinning "o" wordmark with boot status
+Description=UniTotem boot splash: spinning "o" wordmark
 ModuleName=script
 
 [script]

@@ -33,6 +33,9 @@ override_dh_auto_install-indep:
 	install -d $(NODE)/plugins $(VIEWER)/plugins
 	cp -r manager/plugins/unitotem_node $(NODE)/plugins/
 	cp -r manager/plugins/unitotem_viewer $(VIEWER)/plugins/
+	# the boot splash draws the picture of the Plymouth theme
+	install -d $(VIEWER)/plugins/unitotem_viewer/static/bootsplash
+	cp plymouth/unitotem/wordmark-*.png plymouth/unitotem/spinner-*.png $(VIEWER)/plugins/unitotem_viewer/static/bootsplash/
 	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -name __pycache__ -type d -prune -exec rm -rf {} +
 	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -name requirements.txt -delete
 	find debian/unitotem-manager debian/unitotem-node debian/unitotem-viewer -type f ! -name '*.sh' -exec chmod 644 {} +

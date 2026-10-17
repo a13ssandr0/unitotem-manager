@@ -16,12 +16,8 @@
 // either direction - verified visually lossless against Plymouth's own
 // bilinear scaler for this artwork).
 //
-// Bottom status line: fed by both Plymouth.SetUpdateStatusFunction and
-// Plymouth.SetDisplayMessageFunction. Modern systemd sends the id of every
-// unit that just finished starting (service/mount/swap) through the same
-// channel "plymouth update --status=" uses - see
-// src/core/manager.c:manager_send_unit_plymouth() in systemd - so no extra
-// forwarder service is needed to show which unit is starting.
+// No status line: the theme shows the wordmark and the ring and nothing else (unit names flashing by are noise on a
+// kiosk, and unitotem-splash, which takes over, draws the same picture).
 //
 // Only Plymouth script primitives verified against the installed script.so
 // (strings /usr/lib/*/plymouth/script.so) or already used by a real deployed
@@ -29,44 +25,6 @@
 
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
-
-// ---- Manual string helpers --------------------------------------------
-// The script language has no built-in length/split/replace: build them from
-// CharAt/SubString the same way the stock "breeze" theme does.
-
-fun string_length(s) {
-    for (i = 0; i < 512; i++) {
-        if (String(s).CharAt(i) == "")
-            return i;
-    }
-    return 512;
-}
-
-fun ends_with(s, suffix) {
-    local.slen = string_length(s);
-    local.suflen = string_length(suffix);
-    if (suflen > slen) return false;
-    return String(s).SubString(slen - suflen, suflen) == suffix;
-}
-
-fun strip_suffix(s, suffix) {
-    if (ends_with(s, suffix))
-        return String(s).SubString(0, string_length(s) - string_length(suffix));
-    return s;
-}
-
-// First colon-separated token of s (mirrors the tokenizer in the stock
-// "breeze" theme's update_status_callback).
-fun first_token(s) {
-    local.token = "";
-    for (i = 0; i < 512; i++) {
-        local.c = String(s).CharAt(i);
-        if (c == "" || c == ":")
-            return token;
-        token += c;
-    }
-    return token;
-}
 
 // ---- Multi-display sizing -----------------------------------------------
 // A script theme draws one shared scene onto a canvas sized to the largest
@@ -132,10 +90,6 @@ ring_img            = 0;
 did_initial_layout  = 0;
 frame_count         = 0;
 spin_angle          = 0;
-status_margin       = 0;
-status_font         = "Sans 16";
-status_x_base       = 0;
-status_y_base       = 0;
 
 fun layout() {
     local.screen_width  = Window.GetWidth();
@@ -184,11 +138,6 @@ fun layout() {
         ring_sprite.SetOpacity(0);
         did_initial_layout = 1;
     }
-
-    status_margin  = Math.Int(min_height * 0.0556); // 60px at 1080p, unchanged
-    status_font    = "Sans " + Math.Int(min_height * 0.01481); // 16px at 1080p
-    status_x_base  = screen_width  / 2;
-    status_y_base  = screen_height / 2 + min_height / 2 - status_margin;
 }
 layout();
 Plymouth.SetDisplayHotplugFunction(layout);
@@ -211,78 +160,3 @@ fun refresh_callback() {
     ring_sprite.SetImage(ring_img.Rotate(spin_angle));
 }
 Plymouth.SetRefreshFunction(refresh_callback);
-
-// ---- Bottom status line -------------------------------------------------
-
-status_sprite = Sprite();
-status_sprite.SetOpacity(0);
-
-fun show_status(text) {
-    if (text == "") {
-        status_sprite.SetOpacity(0);
-        return;
-    }
-    local.image = Image.Text(text, 0.7, 0.7, 0.7, 1, status_font);
-    status_sprite.SetImage(image);
-    status_sprite.SetX(status_x_base - image.GetWidth() / 2);
-    status_sprite.SetY(status_y_base);
-    status_sprite.SetZ(10);
-    status_sprite.SetOpacity(1);
-}
-
-fun update_status_callback(status) {
-    if (!status) return;
-
-    if (first_token(status) == "fsck") {
-        show_status("Checking filesystems...");
-        return;
-    }
-    if (first_token(status) == "fsckd") {
-        show_status("Checking filesystems...");
-        return;
-    }
-
-    // A plain systemd unit id (service/mount/target/device/swap): drop the
-    // unit-type suffix for readability, e.g. "NetworkManager.service" ->
-    // "NetworkManager".
-    local.label = status;
-    label = strip_suffix(label, ".service");
-    label = strip_suffix(label, ".mount");
-    label = strip_suffix(label, ".target");
-    label = strip_suffix(label, ".device");
-    label = strip_suffix(label, ".swap");
-    show_status(label);
-}
-Plymouth.SetUpdateStatusFunction(update_status_callback);
-
-fun message_callback(text) {
-    show_status(text);
-}
-Plymouth.SetDisplayMessageFunction(message_callback);
-
-fun hide_message_callback(text) {
-    show_status("");
-}
-Plymouth.SetHideMessageFunction(hide_message_callback);
-
-// ---- Password / question prompts (e.g. LUKS passphrase) ------------------
-
-fun display_password_callback(prompt, bullets) {
-    local.text = prompt;
-    if (!text) text = "Password";
-    local.dots = "";
-    for (i = 0; i < bullets; i++)
-        dots += "*";
-    show_status(text + " " + dots);
-}
-Plymouth.SetDisplayPasswordFunction(display_password_callback);
-
-fun display_question_callback(prompt, entry) {
-    show_status(prompt + " " + entry);
-}
-Plymouth.SetDisplayQuestionFunction(display_question_callback);
-
-fun display_normal_callback() {
-    show_status("");
-}
-Plymouth.SetDisplayNormalFunction(display_normal_callback);

@@ -679,6 +679,9 @@ the VM-specific ones.
   (`disable-backgrounding-occluded-windows`, `disable-renderer-backgrounding`, `disable-features=...NativeWindowOcclusion`), keeps
   the Qt splash on top of each window and closes it when that window's page reports a drawn frame (`utFrame` binding, two animation
   frames); `SPLASH_MAX_MS` is only the safety net.
+- **The boot picture is ONE picture in three places** (Plymouth theme, `bootsplash.py`, the viewer page): `bootsplash.py` draws the theme's own
+  PNGs (`plymouth/unitotem/{wordmark,spinner}-<w>.png`, copied by debian/rules into the viewer's `static/bootsplash`) with the theme's
+  geometry and 1 turn/s; change the artwork in `plymouth/generate-assets.py` only. The theme shows no status line.
 - **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
   have moved (the DevTools binding dispatch did). Assert the pattern is there.
 - **Password policy is opt-in** for the passwords an administrator sets (`security.json`, `Security/set_password_policy`, switch on
