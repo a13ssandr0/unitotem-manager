@@ -166,9 +166,15 @@ async def stop_hotspot():
             if not await nm.wireless_enabled:
                 return
 
+            iface = get_default_wireless()
+            if iface is None:
+                # no wireless interface (any more: at shutdown the device may already be gone): nothing to stop
+                logger.info('No wireless interface, no hotspot to stop')
+                return
+
             logger.info('Stopping hotspot')
 
-            netdev = NetworkDeviceWireless(await nm.get_device_by_ip_iface(get_default_wireless()), bus)
+            netdev = NetworkDeviceWireless(await nm.get_device_by_ip_iface(iface), bus)
             try:
                 await netdev.disconnect()
                 logger.info('Stopped hotspot on interface {}', await netdev.interface)

@@ -701,6 +701,10 @@ the VM-specific ones.
   `cmake --parallel`, `xargs -P`, independent builds/wheels side by side) - watch RAM (31 GB) for link steps and Docker CPU limits.
 - **Codecs are essential on a kiosk: every build ships H.264/AAC** (`proprietary_codecs=true ffmpeg_branding=Chrome`), no exception, no
   "temporary" stock wheel.
+- **Raspberry Pi graphics = ANGLE on Mesa GLES** (`pi` profile in `utils/system/gpu.py`, measured on a Pi 4): without `use-gl=angle use-angle=gles`
+  Chromium's GPU process dies at start ("GLES3 is unsupported and ES version fallback is disabled") and everything is software
+  (7 fps vs 44 fps). The viewer logs the real `glImplementationParts` at the first frame and warns (journal-visible) when a profile that
+  expects GPU compositing does not get it (`EXPECTS_COMPOSITING`, `Cdp.gpu_info`).
 - **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
   have moved (the DevTools binding dispatch did). Assert the pattern is there.
 - **Password policy is opt-in** for the passwords an administrator sets (`security.json`, `Security/set_password_policy`, switch on

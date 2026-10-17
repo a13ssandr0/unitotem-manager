@@ -233,6 +233,10 @@ class Cdp:
     def windows(self) -> list[int]:
         return list(self._pages)
 
+    async def gpu_info(self) -> dict:
+        """Chromium's own report of its graphics (SystemInfo.getInfo on the browser): feature status and GL implementation."""
+        return (await self._send('SystemInfo.getInfo')).get('gpu', {})
+
     async def evaluate(self, window: int, expression: str):
         session = self._pages.get(window)
         if session:

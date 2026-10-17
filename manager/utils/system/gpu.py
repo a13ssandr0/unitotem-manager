@@ -35,6 +35,7 @@ __all__ = [
     "detect_gpu",
     "PROFILES",
     "VERIFIED",
+    "EXPECTS_COMPOSITING",
 ]
 
 import os
@@ -121,6 +122,7 @@ class GpuProfile:
             "v4l2_decoders": self.v4l2_decoders,
             "switches": self.switches,
             "verified": self.verified,
+            "expects_compositing": self.name in EXPECTS_COMPOSITING,
         }
 
 
@@ -165,7 +167,20 @@ PROFILES: Dict[str, Dict[str, str]] = {
         "enable-features": _VAAPI_FEATURES,
     },
 
-    # V4L2 stateless/stateful decoders (Raspberry Pi and friends). No VA-API
+    # Raspberry Pi (VideoCore: vc4 display + v3d render). Chromium's own GPU process cannot start on the Pi's GLES-only Mesa
+    # ("GLES3 is unsupported and ES version fallback is disabled") and falls back to --use-gl=disabled: everything is
+    # software. ANGLE on the system Mesa GLES makes the GPU process start: compositing, rasterisation, 2d canvas and WebGL
+    # on the GPU. Measured on a Pi 4: 7 fps -> 44 fps on the animation benchmark and less CPU. The V4L2 decode features
+    # are the same as the "v4l2" profile.
+    "pi": {
+        "ignore-gpu-blocklist": "",
+        "use-gl": "angle",
+        "use-angle": "gles",
+        "enable-features": "AcceleratedVideoDecodeLinuxGL,"
+                           "AcceleratedVideoDecodeLinuxZeroCopyGL",
+    },
+
+    # V4L2 stateless/stateful decoders (other boards). No VA-API
     # driver is involved, and asking for one risks Chromium giving up on the
     # V4L2 path that does work.
     "v4l2": {
@@ -199,7 +214,17 @@ VERIFIED: Dict[str, bool] = {
     # NOT TESTED. No Raspberry Pi was available. Same standard of proof
     # applies before this may be promoted.
     "v4l2": False,
+    # Measured on a real Raspberry Pi 4 (Mesa 26.2, V3D 4.2): the GPU process starts and gpu_compositing, rasterization,
+    # 2d_canvas and webgl are "enabled" (glImplementationParts gl=egl-angle,angle=opengles). NOT measured: video decode
+    # (needs a CEF built with the proprietary codecs; the Pi 4 has H.264/HEVC V4L2 stateful decode only).
+    "pi": True,
 }
+
+# Profiles whose machine is expected to composite on the GPU: when Chromium says otherwise the viewer logs a warning.
+EXPECTS_COMPOSITING = frozenset({"nvidia", "vaapi", "v4l2", "pi"})
+
+# DRM drivers of the Raspberry Pi (display: vc4, render: v3d).
+_PI_DRM_NAMES = ("vc4", "vc4-drm", "v3d")
 
 
 def _read_drm_drivers() -> List[str]:
@@ -282,6 +307,9 @@ def detect_gpu() -> GpuProfile:
                          f"{d} with libva driver "
                          f"{next(w for w in wanted if w in va)} installed",
                          drm, va, v4l2)
+
+    if any(d in _PI_DRM_NAMES for d in drm):
+        return _make("pi", f"Raspberry Pi graphics ({', '.join(d for d in drm if d in _PI_DRM_NAMES)})", drm, va, v4l2)
 
     if v4l2:
         return _make("v4l2",
