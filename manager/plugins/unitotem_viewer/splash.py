@@ -1,5 +1,5 @@
 """
-The first thing on a screen: a black frame with the UniTotem wordmark and a ring, drawn by Qt alone.
+The first thing on a screen: the same picture as the boot (wordmark and ring), drawn by Qt.
 
 CEF takes seconds to start (much longer on an SD card) and nothing can be painted by it before that, so the boot splash
 of the system would have to wait for it. This frame is on screen within a second of the viewer starting; it is closed
@@ -8,45 +8,43 @@ once the browser has taken over. It is static on purpose: the thread that would 
 The very first frame of the boot, before the manager has even finished importing, is a separate light program
 (bootsplash.py, unitotem-splash.service); this one takes over from it inside the viewer and looks the same.
 """
-from pathlib import Path
-
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget
 
-_FONT = Path(__file__).parent / 'static' / 'NotoSans.ttf'
-_ACCENT = QColor('#FF3D00')
+from .bootsplash import artwork
 
 
 class Splash(QWidget):
+    """The picture of bootsplash.py (the Plymouth theme's own wordmark and ring, same geometry), still: the thread that
+    would turn the ring is the one busy starting CEF. Plymouth, bootsplash and this are one identical picture."""
+
     def __init__(self, screen):
         super().__init__()
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setScreen(screen)
         self.setGeometry(screen.geometry())
         self.setCursor(Qt.CursorShape.BlankCursor)
-        family = QFontDatabase.applicationFontFamilies(QFontDatabase.addApplicationFont(str(_FONT)))
-        self._family = family[0] if family else 'sans-serif'
         self.painted = False
+        self._picture = self._compose(screen.geometry().width())
+
+    @staticmethod
+    def _compose(width: int) -> QImage:
+        from PIL import Image
+        base, ring, size, centre = artwork(width)
+        picture = base.copy()
+        ring = ring.resize((size, size), Image.LANCZOS)
+        picture.alpha_composite(ring, (centre[0] - size // 2, centre[1] - size // 2))
+        rgb = picture.convert('RGB')
+        image = QImage(rgb.tobytes(), rgb.width, rgb.height, rgb.width * 3, QImage.Format.Format_RGB888)
+        return image.copy()     # owns its pixels: the bytes above are freed
 
     def paintEvent(self, _event):
         self.painted = True
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), Qt.GlobalColor.black)
-        height = self.height()
-        font = QFont(self._family)
-        font.setPixelSize(max(12, height // 10))
-        font.setWeight(QFont.Weight.Light)
-        painter.setFont(font)
-        painter.setPen(Qt.GlobalColor.white)
-        painter.drawText(QRectF(0, 0, self.width(), height), Qt.AlignmentFlag.AlignCenter, 'UniTotem')
-        # a ring under the wordmark, with the gap a spinner has
-        size = height // 14
-        pen = QPen(_ACCENT, max(2, size // 8))
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        painter.setPen(pen)
-        painter.drawArc(QRectF((self.width() - size) / 2, height * 0.62, size, size), 90 * 16, -270 * 16)
+        painter.drawImage((self.width() - self._picture.width()) // 2, (self.height() - self._picture.height()) // 2,
+                          self._picture)
 
 
 def show_splashes(screens, timeout: float = 3.0) -> list[Splash]:
