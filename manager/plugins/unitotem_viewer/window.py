@@ -173,6 +173,8 @@ class WebviewWindow(QMainWindow):
         self.setCentralWidget(self._cef)
         # set by the application: called when the window is moved or resized
         self.on_geometry_changed = None
+        # called when the window has been mapped, before its browser is created
+        self.on_mapped = None
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -200,6 +202,10 @@ class WebviewWindow(QMainWindow):
 
     def show(self):
         super().show()
+        # Mapped, not painted yet (nothing runs the event loop until the browser exists): what shows is white. The
+        # application puts its splash back on top before the browser, which takes a while to create, is embedded.
+        if self.on_mapped:
+            self.on_mapped()
         # embed_browser() needs a valid, visible X11 window handle
         if self._cef.browser is None:
             # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to

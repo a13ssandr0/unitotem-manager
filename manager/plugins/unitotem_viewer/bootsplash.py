@@ -1,7 +1,8 @@
 """
 The very first frame of a totem: what unitotem-splash.service shows from the moment the X server is up.
 
-A plain script with the lightest imports that can do the job (python-xlib, Pillow, sdnotify): no Qt. Importing PySide6 takes
+It is started in parallel with the X server (nothing orders it after it): everything that does not need X is done first (warm_up),
+then it waits for the socket and draws at once. A plain script with the lightest imports that can do the job (python-xlib, Pillow, sdnotify): no Qt. Importing PySide6 takes
 several seconds on a small board and the screen stays black for all of them, which is exactly what this frame exists to
 avoid. It draws the UniTotem wordmark and the spinning ring on every monitor, tells systemd it is ready, and stays until it is stopped:
 the viewer ends it (a D-Bus StopUnit, see boot.py) once its own splash, which looks the same, is on screen. It must stay free
@@ -39,7 +40,7 @@ def wait_for_x(timeout: float = 120.0) -> bool:
     while time.monotonic() < deadline:
         if os.path.exists(f'/tmp/.X11-unix/X{number}') and (auth is None or os.path.exists(auth)):
             return True
-        time.sleep(0.1)
+        time.sleep(0.02)
     return False
 
 
@@ -54,12 +55,34 @@ def monitors(display):
     return found or [(0, 0, display.screen().width_in_pixels, display.screen().height_in_pixels)]
 
 
+_decoded = {}
+
+
+def decoded(name: str):
+    """A PNG of the theme, decoded once: this is done before X is up, so that the first frame is only a resize away."""
+    from PIL import Image
+    if name not in _decoded:
+        _decoded[name] = Image.open(ASSETS / name).convert('RGBA')
+        _decoded[name].load()
+    return _decoded[name]
+
+
+def warm_up():
+    """Everything that does not need the X server, done while it is still starting: the imports, and the artwork of every
+    size (the screen is not known yet)."""
+    import Xlib.display, Xlib.ext.randr, Xlib.X  # noqa: F401
+    import sdnotify  # noqa: F401
+    for tier in TIERS:
+        decoded(f'wordmark-{tier}.png')
+        decoded(f'spinner-{tier}.png')
+
+
 def artwork(width: int):
     """(wordmark on black, ring, ring centre in the wordmark) for a screen this wide, scaled as the Plymouth theme does."""
     from PIL import Image
     tier = next((t for t in TIERS if t >= width), TIERS[-1])
-    mark = Image.open(ASSETS / f'wordmark-{tier}.png').convert('RGBA')
-    ring = Image.open(ASSETS / f'spinner-{tier}.png').convert('RGBA')
+    mark = decoded(f'wordmark-{tier}.png')
+    ring = decoded(f'spinner-{tier}.png')
     scale = int(width * WORDMARK_TO_SCREEN_WIDTH) / mark.width
     mark = mark.resize((int(width * WORDMARK_TO_SCREEN_WIDTH), int(mark.height * scale)), Image.LANCZOS)
     size = int(ring.width * scale / SPINNER_OVERSAMPLE)
@@ -106,12 +129,27 @@ class Splash:
         self.window.put_pil_image(self.gc, self.left + self.box[0], self.top + self.box[1], frame)
 
 
+def connect(timeout: float = 30.0):
+    """The X display, retried briefly: the socket can exist a moment before the server accepts on it."""
+    from Xlib import display as xdisplay
+    from Xlib.error import DisplayConnectionError
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return xdisplay.Display()
+        except (DisplayConnectionError, ConnectionError, OSError):
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.02)
+
+
 def main() -> int:
+    warm_up()
     if not wait_for_x():
         print('unitotem-splash: no X display', file=sys.stderr)
         return 1
-    from Xlib import X, display as xdisplay
-    display = xdisplay.Display()
+    from Xlib import X
+    display = connect()
     splashes = [Splash(display, area) for area in monitors(display)]
     for splash in splashes:
         splash.draw()
