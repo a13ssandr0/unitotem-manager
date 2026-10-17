@@ -697,6 +697,8 @@ the VM-specific ones.
   packages, image parts) first ask whether it can be cross-built from the x86 host (cross gcc/clang, sysroot, multiarch, `dpkg-cross`,
   `--host-arch`), and write down the answer. Choosing QEMU/binfmt emulation is almost certainly the wrong choice; use it only for
   what must execute target code (debootstrap second stage, postinst scripts, tests) and say why.
+- **Parallelise everything** (user rule): the host has many cores (20) that are not fast, so use all of them (`ninja -j`, `make -jN`,
+  `cmake --parallel`, `xargs -P`, independent builds/wheels side by side) - watch RAM (31 GB) for link steps and Docker CPU limits.
 - **Codecs are essential on a kiosk: every build ships H.264/AAC** (`proprietary_codecs=true ffmpeg_branding=Chrome`), no exception, no
   "temporary" stock wheel.
 - **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
