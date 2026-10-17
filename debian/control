@@ -181,6 +181,6 @@ Description: Python bindings for the Chromium Embedded Framework
 Package: plymouth-theme-unitotem
 Architecture: all
 Section: misc
-Depends: ${misc:Depends}, plymouth, plymouth-label
+Depends: ${misc:Depends}, plymouth
 Description: UniTotem boot splash theme
  Plymouth theme with the UniTotem wordmark and a rotating ring.
