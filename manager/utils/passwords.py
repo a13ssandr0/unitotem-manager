@@ -1,7 +1,7 @@
 """
 What a new administrator account may be called and which password it may have.
 
-Used by the first-access setup (utils/claim.py) and by `unitotem-manager --create-admin`; the web UI shows the same
+Used when the password policy is enforced (security.json); the web UI shows the same
 rules (`RULES`) so that the person is told before the server refuses.
 """
 import re

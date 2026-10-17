@@ -22,6 +22,7 @@ pydantic
 pydantic_settings
 pymediainfo
 python-dotenv
+python-pam
 python-multipart
 requests
 uvloop

@@ -1,4 +1,11 @@
 === CURRENT WORK ===
+2026-10-17 DONE (user decision): claim code and --create-admin removed; accounts are PAM/system accounts (group unitotem), setup page keeps the
+first-admin creation, welcome screen until an admin exists, users (with shadow hashes) in the backup; Qt splash draws the Plymouth picture.
+Verified on the VM (login test:test 0.12 s, wrong 2.4 s; setup 200/422/409/404; backup round trip of the hash; welcome -> No Assets without
+restart) and the PAM timing on the Pi 4 (0.3 s / 3.3 s). NOT done: deb with python3-pampy + /etc/pam.d + postinst group not built or
+installed anywhere yet; the Pi runs the old image (no group, no pam module); legacy users.json entries (werkzeug hashes) cannot be migrated:
+an upgraded node asks for the first access again; rollback to the previous version cannot log in (no hash in users.json).
+CEF 147 + codecs: x64 built (libcef.so with H.264/AAC), arm64 cross-build running (/var/tmp/cef-build/work/build-all.sh), then wheels 3.10-3.14.
 Notification center merged (bell, badge, producers: suspend refused/skipped, update available, remote control, plugin load failure). Open: dismissal is global (could be per user); a manual suspend refusal does not notify (the dialog shows it); stale pairing-request notification until the next change.
 2026-10-16 DECIDED with the user: terminal account stays root; password policy opt-in (done); remote: no re-adoption, standalone server after
 unpair, offline unpair needs force; claim lockout stays global; claim code overlay over playback (done); VNC: no idle timeout, no

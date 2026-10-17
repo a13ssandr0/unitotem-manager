@@ -60,11 +60,6 @@ from utils import environment
 from utils.migration import run_advancement
 run_advancement()
 
-from utils.models.command_line import cmdargs
-if cmdargs.create_admin:
-    from utils.admin_cli import create_admin
-    sys.exit(create_admin(cmdargs.create_admin, cmdargs.port_secure))
-
 try:
     # noinspection PyUnresolvedReferences
     import main

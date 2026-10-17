@@ -1,9 +1,8 @@
 from ipaddress import IPv4Address
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
-from pydantic import AliasChoices, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 from utils.constants import uploads_folder
@@ -12,9 +11,6 @@ from utils.constants import uploads_folder
 # noinspection PyDataclass
 class CommandLineArgs(BaseSettings, cli_parse_args=True, frozen=True):
     no_gui: bool = False   # headless mode: start only the backend, no local webview
-    # Recovery and automation, for root on the machine: create (or reset the password of) an administrator and exit.
-    # The password is read from the terminal, or from standard input when that is not a terminal; never from here.
-    create_admin: Optional[str] = Field(default=None, validation_alias=AliasChoices('create_admin', 'create-admin'))
     bind: IPv4Address = IPv4Address("0.0.0.0")
     port: int = Field(default=80, gt=0, lt=65535)
     bind_secure: IPv4Address = IPv4Address("0.0.0.0")

@@ -111,16 +111,6 @@ def audio_outputs() -> list[dict]:
         return []
 
 
-def os_account():
-    from .system.os_account import account
-    return account()
-
-
-async def set_os_password(password: str) -> bool:
-    from .system.os_account import set_password
-    return await set_password(password)
-
-
 # ── backup ───────────────────────────────────────────────────────────────────
 
 async def _restore_hostname(name, _version):
@@ -223,6 +213,4 @@ PLUGIN = Plugin(
     first_boot_context=first_boot_context,
     on_shutdown=on_shutdown,
     audio_outputs=audio_outputs,
-    os_account=os_account,
-    set_os_password=set_os_password,
 )

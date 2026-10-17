@@ -2,9 +2,7 @@
 Security settings of the node that are not about one user, persisted next to the users (/etc/unitotem/security.json).
 
 Today: whether the password policy (utils/passwords.py) is ENFORCED when an administrator creates a user or changes a
-password. It is opt-in, decided with the user: the first account made at the first access always follows the policy (nothing
-else protects a node that has just been claimed), but a node whose owner wants shorter passwords for its own users can have
-them.
+password. It is opt-in, decided with the user: off by default, a node whose owner wants it switches it on.
 """
 import json
 from pathlib import Path

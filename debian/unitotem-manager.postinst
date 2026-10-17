@@ -3,6 +3,11 @@ set -e
 
 case "$1" in
     configure)
+        # The group whose members (and root) may log in to the web interface: their accounts and passwords are the
+        # system's, checked by PAM (/etc/pam.d/unitotem-manager)
+        if ! getent group unitotem >/dev/null; then
+            addgroup --system unitotem
+        fi
         # Self-signed certificate for the web interface, created once and kept across upgrades (paired nodes
         # trust it). It is removed on purge only.
         if [ ! -e /etc/ssl/unitotem.pem ]; then

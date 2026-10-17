@@ -49,6 +49,7 @@ pymediainfo==7.0.1
 python-benedict==0.34.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
+python-pam==2.1.0
 python-fsutil==0.15.0
 python-multipart==0.0.20
 python-slugify==8.0.4
