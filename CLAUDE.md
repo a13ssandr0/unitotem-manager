@@ -686,6 +686,7 @@ the VM-specific ones.
   two causes: a window is mapped above the splash and unpainted until the event loop runs (the browser takes ~150 ms to create inside
   `show()`: the splash is raised and flushed from `WebviewWindow.on_mapped`, before that), and the splash left when the page had
   *drawn* a frame, which software compositing puts on the window a moment later (`PRESENT_MS`). Pinning black in CEF/Qt was not enough.
+- **The Qt splash (`splash.py`) draws the same picture too**: it calls `bootsplash.artwork()` (theme PNGs, still ring), so Plymouth -> bootsplash -> Qt splash -> page show one identical picture; it used to draw thin text and a small arc (one visible frame on a Pi).
 - **`bootsplash.py` starts in parallel with X**: it imports and decodes every PNG first (`warm_up`), then waits for the socket and
   connects with a short retry; no `After=start-xorg.service`.
 - **Every CEF build ships the proprietary codecs (H.264/AAC), always** (user rule): never build or package a wheel without
