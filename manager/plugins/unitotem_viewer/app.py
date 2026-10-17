@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 import socket
+import sys
 import ssl
 import threading
 import subprocess
@@ -36,7 +37,7 @@ from utils import constants as const
 from utils.claim import claim_manager
 from utils.browser import user_agent
 from utils.models.viewer import viewer_settings
-from utils.system.gpu import detect_gpu
+from utils.system.gpu import EXPECTS_COMPOSITING, detect_gpu
 
 from .boot import stop_boot_splash
 from .cdp import Cdp
@@ -305,6 +306,7 @@ class WebviewApp:
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
         self._ws = None
         self._cdp: Optional[Cdp] = None
+        self._gpu_checked = False
         self._keyboard_config: dict[int, dict] = {}     # window -> settings of its on-screen keyboard
         self._text_focus: dict[int, dict[str, Optional[str]]] = {}      # window -> frames with a text field focused
         self._keyboard_wanted: dict[int, bool] = {}
@@ -434,6 +436,32 @@ class WebviewApp:
         if self._ws_loop is not None and self._ws is not None:
             asyncio.run_coroutine_threadsafe(self._send_webview_info(self._ws), self._ws_loop)
 
+    def _on_frame_binding(self, window, _data):
+        self._bridge.first_frame.emit(window)
+        if not self._gpu_checked:
+            self._gpu_checked = True
+            asyncio.ensure_future(self._check_gpu())
+
+    async def _check_gpu(self):
+        """Log what Chromium really uses for graphics, and shout when a machine that should composite on its GPU does not
+        (the GPU process can fail to start and Chromium silently falls back to software)."""
+        try:
+            gpu = await self._cdp.gpu_info()
+        except Exception as e:
+            logger.warning('Cannot read the graphics status from Chromium: {}', e)
+            return
+        status = gpu.get('featureStatus', {})
+        parts = gpu.get('auxAttributes', {}).get('glImplementationParts')
+        logger.info('Graphics: compositing={} rasterization={} gl={}', status.get('gpu_compositing'),
+                    status.get('rasterization'), parts)
+        if self.gpu_profile.name in EXPECTS_COMPOSITING and status.get('gpu_compositing') != 'enabled':
+            message = (f"GPU profile '{self.gpu_profile.name}' expects hardware compositing but Chromium reports "
+                       f"gpu_compositing={status.get('gpu_compositing')} (gl={parts}): the screen is drawn by the CPU")
+            logger.warning(message)
+            if os.environ.get('JOURNAL_STREAM'):
+                # journald keeps only warnings and the unit's stderr is stored below that: the sd-daemon prefix keeps this one
+                print(f'<4>{message}', file=sys.stderr, flush=True)
+
     def _raise_splashes(self):
         for splash in self._splashes.values():
             splash.raise_()
@@ -547,7 +575,7 @@ class WebviewApp:
         asyncio.set_event_loop(self._ws_loop)
         self._cdp = Cdp(CDP_PORT, self._on_focus_changed, self._on_page_ready)
         self._cdp.on_binding('utKey', self._on_keyboard_key)
-        self._cdp.on_binding('utFrame', lambda window, _data: self._bridge.first_frame.emit(window))
+        self._cdp.on_binding('utFrame', self._on_frame_binding)
         self._cdp.on_binding('utActivity', self._on_activity)
         self._cdp.on_binding('utSaver', self._on_saver_event)
         self._ws_loop.create_task(self._cdp.run(asyncio.Event()))
