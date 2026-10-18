@@ -114,8 +114,13 @@
     </main>
 
     <div class="sysinfo">
-        <p style="font-size: 1vw; margin-block:0;">UniTotem {{ut_vers}}<br>Running on {{os_vers}}<br>IP address: {{ip_addr}}<br>Hostname: {{hostname}}</p>
+        <p style="font-size: 1vw; margin-block:0;">UniTotem {{ut_vers}}<br>Running on {{os_vers}}<br>IP address: <span id="ip">{{ip_addr}}</span><br>Hostname: {{hostname}}</p>
     </div>
+<script>
+    // the address is pushed by the manager when the network changes (DHCP can finish after this page was drawn)
+    const events = new EventSource('/unitotem-first-boot/address');
+    events.onmessage = e => { document.getElementById('ip').textContent = e.data; };
+</script>
 </body>
 
 </html>

@@ -13,7 +13,7 @@ import urllib3
 from fastapi import (Depends, FastAPI, HTTPException, Request)
 from fastapi.middleware import Middleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.routing import Mount
 from fastapi.staticfiles import StaticFiles
 from hypercorn.asyncio import serve
@@ -39,6 +39,7 @@ from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager, remote_manager
 from utils.remote.service import service as remote_service
 from utils.models.user import user_manager
+from utils.system.ip import address_changes, address_text
 from utils.storage.uploadmanager import upload_manager
 from utils.system.lsblk import start_fs_usage_cache
 from utils.system.sysinfo import get_sysinfo
@@ -129,6 +130,20 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
             # The page must still show the welcome message when the hotspot cannot be queried
             logger.exception('Plugin {} could not provide the first-boot context', _plugin.name)
     return templates.TemplateResponse(request, f'{page}.html.j2', context)
+
+
+@WWW.get("/unitotem-first-boot/address")
+async def first_boot_address(request: Request):
+    """Server-sent events for the welcome screen: the address now, then again whenever the network changes."""
+    if request.client is None or request.client.host not in ('127.0.0.1', '::1'):
+        raise HTTPException(status_code=404)
+
+    async def stream():
+        yield f'data: {address_text()}\n\n'
+        async for _ in address_changes():
+            yield f'data: {address_text()}\n\n'
+
+    return StreamingResponse(stream(), media_type='text/event-stream', headers={'Cache-Control': 'no-store'})
 
 
 @WWW.api_route("/health", methods=['GET', 'HEAD'])
