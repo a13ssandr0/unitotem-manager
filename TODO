@@ -1,4 +1,6 @@
 === CURRENT WORK ===
+2026-10-18 Desktop notifications (org.freedesktop.Notifications, user+system bus) feed the notification center: node plugin `system/desktop_notifications.py`,
+tests in tests/test_desktop_notifications.py, e2e with notify-send verified on the build server (distro sdbus). TO DO: the image needs a session bus for root so GUI apps can reach it; policy file in the node deb.
 2026-10-17 WAITING on unitotem-system: identity merge at OTA (spec sent). Until it exists a root password change and every web-created account is lost
 at the first update (root goes back to the image default). Do not ship the PAM login to real nodes before that is verified with a real A/B cycle.
 2026-10-17 DONE (user decision): claim code and --create-admin removed; accounts are PAM/system accounts (group unitotem), setup page keeps the

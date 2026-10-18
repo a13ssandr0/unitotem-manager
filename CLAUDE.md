@@ -289,6 +289,13 @@ about the machine or the network). `link` must be a path of the web UI. State is
 in the backup, compatible with the previous version). API `Notifications/list|mark_read|dismiss|dismiss_all`, pushed per user
 because the list differs per capability; dismiss is global. UI: the bell in the top bar. Producers: suspend refused/skipped,
 update available, remote control (pairing requests, client gone, server unreachable), plugin load failure.
+**Desktop notifications (org.freedesktop.Notifications)** also feed the bell: the node plugin (`system/desktop_notifications.py`) OWNS the
+well-known name on the user (session) bus and on the system bus, each only when the name is free (a desktop with its own daemon keeps it), so
+anything that runs `notify-send` is not lost on a kiosk with no daemon. Mapping: summary -> title, body (markup removed) -> text, app name ->
+source, urgency critical -> `error` else `info`, audience `admin`; `replaces_id` updates, `CloseNotification` resolves, a dismissal in the web
+UI answers the application with `NotificationClosed(reason 2)` (`notifications.listen_closed`), at most 20 per minute per application. The system
+bus needs the policy file `debian/org.unitotem.Notifications.conf` (root may own the name, anybody may send). A GUI application only reaches it
+if the manager's account has a session bus (`/run/user/0/bus`): the image must provide one (unitotem-system), otherwise only system-bus senders arrive.
 
 # Rules
 
@@ -636,6 +643,10 @@ the VM-specific ones.
 - **A router included after `routers.scheduler` is unreachable for GET.** The scheduler router ends in a catch-all
   `/{path:path}` that serves the web UI, and Starlette matches routes in order: `GET /backup` was answering the HTML page
   (the download "worked" and saved HTML). Include every router *before* it; plugin routers are included before it too.
+- **The `sdbus` wheel from PyPI (the dev `.venv`) cannot open the user bus here (`sd_bus_open_user` -> error 123, ENOMEDIUM, even with
+  `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` right): it bundles an old sd-bus; the Debian `python3-sdbus` (system libsystemd) works.** Test anything
+  that opens the user bus against the distro package (e.g. on the build server: `apt install python3-sdbus`, `dbus-run-session -- python3 ...`),
+  and run async subprocesses (`notify-send`) in such a test: a blocking `subprocess.run` in the same loop starves the D-Bus server under test.
 - **Do not parse `ip addr` (or any CLI) for facts psutil or /proc already give.** `utils/system/ip.py` was a copy of a
   Red Hat parser of `ip addr`'s text that also needed `/usr/sbin/ip`, which a minimal Debian does not have: the login page
   answered 500 on a clean install. It is now `psutil` plus the default route from `/proc/net/route`. Prefer a library
@@ -719,6 +730,7 @@ the VM-specific ones.
   it must never fall back to the stock wheel. CEF is built locally (no CI); NEVER delete the build tree (sources, objects, ninja state) on your own, success or failure:
   it makes every rebuild incremental (hours saved) and is kept until the user says it can go. The `build/` dir of the submodule is root-owned when Docker made it:
   delete it with a throwaway container mounting that one path, not sudo. Wheels are not in git (`vendor/cefpython-wheels`, ignored).
+- **The build server's scripts are in `tools/cef-server/` (README.md, `sync.sh` pushes/pulls them): edit them there, not on the server.**
 - **Builds run on the build server (`alessandro@supercompiler`, a VM with sudo, 128 cores/256 GB, `/nas` for data; was root@ in an LXC before)**: CEF from
   source is in `/nas/cef-build` (`build-all.sh`, re-runnable, as a systemd unit so a lost connection does not stop it; units do NOT survive a reboot),
   the wheels come from `tools/build-cef-wheels.sh start|status|fetch` (`tools/cef-wheels-inner.sh` inside a trixie container: x86_64 native,
