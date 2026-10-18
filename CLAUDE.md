@@ -711,6 +711,13 @@ the VM-specific ones.
   it must never fall back to the stock wheel. CEF is built locally (no CI); NEVER delete the build tree (sources, objects, ninja state) on your own, success or failure:
   it makes every rebuild incremental (hours saved) and is kept until the user says it can go. The `build/` dir of the submodule is root-owned when Docker made it:
   delete it with a throwaway container mounting that one path, not sudo. Wheels are not in git (`vendor/cefpython-wheels`, ignored).
+- **Builds run on the build server (`alessandro@supercompiler`, a VM with sudo, 128 cores/256 GB, `/nas` for data; was root@ in an LXC before)**: CEF from
+  source is in `/nas/cef-build` (`build-all.sh`, re-runnable, as a systemd unit so a lost connection does not stop it; units do NOT survive a reboot),
+  the wheels come from `tools/build-cef-wheels.sh start|status|fetch` (`tools/cef-wheels-inner.sh` inside a trixie container: x86_64 native,
+  aarch64 CROSS with gcc-aarch64-linux-gnu + multiarch, Python 3.10-3.14, version `147.0+codecs`). `python3-cefpython3` for arm64 is cross built too:
+  `TARGET_ARCH=arm64 tools/build-debs.sh cefpython` (no qemu). The checkout's `vendor/cefpython/cefpython3/` holds stale artifacts of an old local build
+  (libcef.so, cefpython_py313.so): never copy that directory into a build, only `__init__.py` (the first wheels had the wrong extension module because of it:
+  check every wheel with the ELF machine of libcef.so/subprocess/cefpython_pyXY.so). siso was OOM-killed on the 31 GB PC: that is why it moved.
 - **Cross-compile everything that can be cross-compiled** (user rule, 2026-10-17): before ANY compilation (C/C++, Python extensions, wheels,
   packages, image parts) first ask whether it can be cross-built from the x86 host (cross gcc/clang, sysroot, multiarch, `dpkg-cross`,
   `--host-arch`), and write down the answer. Choosing QEMU/binfmt emulation is almost certainly the wrong choice; use it only for
