@@ -37,8 +37,13 @@ async def setup_page(request: Request):
         raise HTTPException(status_code=404)
     load_vite_manifest.cache_clear()
     get_vite_assets.cache_clear()
+    assets = get_vite_assets('src/pages/setup.vue', is_vite_dev(request))
+    if not assets['js']:
+        # a blank page tells the person nothing: the build lacks the page (it must be a route of the web UI)
+        logger.error('The web UI build has no setup page (src/pages/setup.vue is not in manifest.json)')
+        raise HTTPException(status_code=500, detail='The setup page is missing from this build')
     return templates.TemplateResponse(request, 'base.html', {
-        'assets': get_vite_assets('src/pages/setup.vue', is_vite_dev(request)),
+        'assets': assets,
         'state': {
             'ut_vers': const.__version__,
             'os_vers': os_release()['PRETTY_NAME'],
