@@ -49,8 +49,8 @@ async def setup_page(request: Request):
             'os_vers': os_release()['PRETTY_NAME'],
             'ip_addr': reachable_ipv4(),
             'hostname': gethostname(),
-            'rules': passwords.RULES,
-            'min_length': passwords.MIN_LENGTH,
+            'rules': passwords.BASIC_RULES,
+            'min_length': passwords.BASIC_MIN_LENGTH,
             'max_length': passwords.MAX_LENGTH,
         },
     })
@@ -61,7 +61,7 @@ async def setup(data: SetupRequest):
     async with _lock:
         if user_manager.has_admin():
             raise HTTPException(status_code=404)
-        problems = passwords.validate_password(data.password, data.username)
+        problems = passwords.validate_basic(data.password) + passwords.validate_username(data.username)
         if problems:
             return JSONResponse({'detail': problems}, status_code=422)
         try:

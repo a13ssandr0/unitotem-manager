@@ -73,7 +73,6 @@ function check() {
   const problems = []
   if (!username.value.trim()) problems.push('Enter a username')
   if (password.value.length < min_length) problems.push(`The password must be at least ${min_length} characters long`)
-  if (password.value.toLowerCase() === username.value.toLowerCase()) problems.push('The password must be different from the username')
   if (password.value !== repeat.value) problems.push('The two passwords do not match')
   return problems
 }
