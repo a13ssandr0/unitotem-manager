@@ -8,7 +8,10 @@ restart) and the PAM timing on the Pi 4 (0.3 s / 3.3 s). NOT done: deb with pyth
 installed anywhere yet; the Pi runs the old image (no group, no pam module); legacy users.json entries (werkzeug hashes) cannot be migrated:
 an upgraded node asks for the first access again; rollback to the previous version cannot log in (no hash in users.json).
 2026-10-18 CEF 147 + codecs DONE on the build server: x64 + arm64 distributions, 10 wheels (cp310-314 x86_64/aarch64, `147.0+codecs`) in vendor/cefpython-wheels, python3-cefpython3 debs (amd64, arm64 cross) in dist/.
-NOT verified yet: playing H.264 with the new wheels (canPlayType on the VM, V4L2 videoDecoding on the Pi 4).
+2026-10-18 arm64 rebuilt with use_v4l2_codec=true (+use_vaapi=false; wheels + deb in dist/). Pi 4: H.264/AAC play in SOFTWARE (canPlayType probably, 720p smooth, 1080p ~15% dropped);
+V4L2 hardware decode (feature AcceleratedVideoDecoder) selects V4L2VideoDecoder and then STALLS (no frame/no error): do not enable it. Next: libcef with
+DVLOG (out/Dbg_arm64, dcheck_always_on) to see which step of the ImageProcessor/frame-pool pipeline fails, then retest on the Pi; x64 VA-API (Iris Xe "venus") untested.
+NOT verified yet: H.264 on x64 (canPlayType on the VM / venus).
 Notification center merged (bell, badge, producers: suspend refused/skipped, update available, remote control, plugin load failure). Open: dismissal is global (could be per user); a manual suspend refusal does not notify (the dialog shows it); stale pairing-request notification until the next change.
 2026-10-16 DECIDED with the user: terminal account stays root; password policy opt-in (done); remote: no re-adoption, standalone server after
 unpair, offline unpair needs force; claim lockout stays global; claim code overlay over playback (done); VNC: no idle timeout, no

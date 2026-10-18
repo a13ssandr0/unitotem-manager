@@ -507,10 +507,11 @@ the VM-specific ones.
 - **`VaapiVideoDecoder` is not a feature — passing it in `--enable-features=` is a silent no-op.**
   It only appears in Chromium's source as a decoder *name* string
   (`media/base/decoder.cc`), never as a `BASE_FEATURE`. The real gates for the VA-API/V4L2 Linux
-  decode path are `kAcceleratedVideoDecodeLinux` (on by default when `USE_VAAPI` is compiled in)
-  and `kAcceleratedVideoDecodeLinuxZeroCopyGL` (on by default) — both already enabled without
-  asking, so `--enable-features=VaapiVideoDecoder` in `unitotem-system`'s `chromium-accel` file
-  changes nothing. What actually decides whether the real decode path exists in the binary at
+  decode path are `kAcceleratedVideoDecodeLinux` (its name string is **`AcceleratedVideoDecoder`**, on by default ONLY when
+  `USE_VAAPI` is compiled in, so OFF on an arm64/V4L2-only build: it must be enabled with `--enable-features=AcceleratedVideoDecoder`,
+  measured on a Pi 4: without it no V4L2 code runs at all and `videoDecoding` stays empty), `kAcceleratedVideoDecodeLinuxGL` and
+  `kAcceleratedVideoDecodeLinuxZeroCopyGL` (on by default), so `--enable-features=VaapiVideoDecoder` in `unitotem-system`'s
+  `chromium-accel` file changes nothing. What actually decides whether the real decode path exists in the binary at
   all is a **build-time** GN arg, not a runtime switch — see the next entry.
 - **On a stock Linux build, whether hardware decode exists in the binary at all is decided by
   `use_vaapi`/`use_v4l2_codec` at GN time, and their defaults differ sharply by architecture.**
@@ -525,8 +526,15 @@ the VM-specific ones.
   "decode fails to accelerate", but the code path to try does not exist in the binary, and no
   runtime switch can bring it back. Reaching V4L2 on arm64 requires `use_v4l2_codec=true` in
   `GN_DEFINES` for that build specifically (confirmed buildable outside ChromeOS:
-  `media/gpu/chromeos/BUILD.gn` asserts only `is_linux || is_chromeos`), and the result is
-  untested — see `manager/utils/system/gpu.py`'s `VERIFIED['v4l2'] = False`.
+  `media/gpu/chromeos/BUILD.gn` asserts only `is_linux || is_chromeos`) AND `use_vaapi=false` (the two are mutually exclusive
+  and the `gn gen` of the x64 config run by `gclient_hook.py` fails on `assert(!(use_v4l2_codec && use_vaapi))` otherwise).
+  **Measured on a Pi 4 (2026-10-18, CEF 147 built with `use_v4l2_codec=true`)**: with `AcceleratedVideoDecoder` enabled Chromium picks
+  `V4L2VideoDecoder` (`kIsPlatformVideoDecoder=true`, `/dev/video10` = bcm2835-codec stateful H.264), then logs `PickDecoderOutputFormat():
+  Initializing ImageProcessor` and STALLS: no frame, no error, no fallback (`currentTime` 0, `getVideoPlaybackQuality().total` 0), and
+  `SystemInfo.getInfo` `videoDecoding` stays empty. Without the feature the same build plays H.264/AAC in software (720p30 smooth,
+  1080p30 ~15% dropped frames, 52% CPU). So never put `AcceleratedVideoDecoder` in the `pi` profile until the stall is understood.
+  A release build compiles every `DVLOG` out (that is why the log goes quiet): debug it with a `dcheck_always_on=true` libcef in its own
+  out dir (`out/Dbg_arm64` on the build server), not with the release tree.
 - **The VA-API decode blocklist (`IsBlockedDriver` in `vaapi_wrapper.cc`) only blocks
   *encoding*, never decoding**, and only for one specific case (AMD Stoney Ridge VBR). There is
   no general non-Intel decode blocklist at that layer — the NVIDIA exclusion (previous entries)
