@@ -1,0 +1,14 @@
+diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
+index 9da1741a42..52c9b513b8 100644
+--- a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
++++ b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
+@@ -827,6 +827,9 @@ V4L2StatefulVideoDecoder::EnumeratePixelLayoutCandidates(
+     VLOG(2) << "CAPTURE queue candidate format: "
+             << candidate_fourcc->ToString() << ", " << coded_size.ToString();
+   }
++  // UniTotem: NV12 first. A driver (bcm2835-codec on a Raspberry Pi 4) may list YU12 first, and the ImageProcessorFactory
++  // only picks the GL image processor (the one that converts to the renderable AR24 on the GPU) when candidates[0] is NV12.
++  std::stable_partition(candidates.begin(), candidates.end(), [](const auto& c) { return c.fourcc == Fourcc(Fourcc::NV12); });
+   return candidates;
+ }
+ 
