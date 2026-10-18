@@ -7,8 +7,8 @@
 #   tools/build-debs.sh cefpython       # only python3-cefpython3 (the one architecture-dependent package), no npm
 #   tools/build-debs.sh all
 #
-# PLATFORM=linux/arm64 builds for arm64 under qemu-user; the arch-all packages are the same on every architecture, so
-# `PLATFORM=linux/arm64 tools/build-debs.sh cefpython` is all an arm64 target needs. Wheel: vendor/cefpython-wheels/.
+# `TARGET_ARCH=arm64 tools/build-debs.sh cefpython` CROSS builds the arm64 python3-cefpython3 (arch-all packages are the same on every
+# architecture, so that is all an arm64 target needs). Wheel: vendor/cefpython-wheels/.
 #
 # The container is amd64. arm64 packages are built the same way on an arm64 machine (or under qemu).
 set -e
@@ -16,7 +16,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 WHAT="${1:-third-party}"
 mkdir -p "$REPO/dist"
 
-docker run --rm --platform "${PLATFORM:-linux/amd64}" -v "$REPO:/src:ro" -v "$REPO/dist:/out" debian:trixie sh -c '
+docker run --rm --platform "${PLATFORM:-linux/amd64}" -e TARGET_ARCH="${TARGET_ARCH:-amd64}" -v "$REPO:/src:ro" -v "$REPO/dist:/out" debian:trixie sh -c '
 set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -59,13 +59,20 @@ case "$WHAT" in
 esac
 build_cefpython() {
     # Architecture-dependent package only: nothing of the web UI is built, and only the wheel for this architecture is
-    # copied (the wheels are hundreds of MB each, slow to copy under qemu)
+    # copied (the wheels are hundreds of MB each). arm64 is CROSS built in this amd64 container (crossbuild-essential,
+    # multiarch libraries for dpkg-shlibdeps): no emulation.
+    host_cpu=x86_64; debarch=amd64
+    if [ "${TARGET_ARCH:-amd64}" = arm64 ]; then
+        host_cpu=aarch64; debarch=arm64
+        dpkg --add-architecture arm64; apt-get update -qq
+        apt-get install -y -qq --no-install-recommends crossbuild-essential-arm64 binutils-aarch64-linux-gnu >/dev/null
+    fi
     rm -rf /tmp/build/cef; mkdir -p /tmp/build/cef/vendor/cefpython-wheels
     cp -a /src/debian /tmp/build/cef/debian
-    cp /src/vendor/cefpython-wheels/cefpython3-*-cp313-*-linux_$(uname -m).whl /tmp/build/cef/vendor/cefpython-wheels/
+    cp /src/vendor/cefpython-wheels/cefpython3-*-cp313-*-linux_$host_cpu.whl /tmp/build/cef/vendor/cefpython-wheels/
     cd /tmp/build/cef
-    apt-get build-dep -y -qq --arch-only . >/dev/null
-    dpkg-buildpackage -us -uc -B
+    apt-get build-dep -y -qq -a$debarch --arch-only . >/dev/null
+    dpkg-buildpackage -us -uc -B -a$debarch
     cp ../python3-cefpython3_*.deb /out/
 }
 
