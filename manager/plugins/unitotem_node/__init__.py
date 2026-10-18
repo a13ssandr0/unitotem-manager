@@ -73,6 +73,8 @@ def on_startup(loop):
     loop.create_task(run_timers(), name='timers')
     loop.create_task(suspend.watch_sleep(), name='sleep_watch')
     loop.create_task(update_watch(), name='update_watch')
+    from .system import desktop_notifications
+    loop.create_task(desktop_notifications.serve(), name='desktop_notifications')
 
 
 # ── first boot: the hotspot that lets someone in ─────────────────────────────

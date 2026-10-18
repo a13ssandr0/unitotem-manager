@@ -111,6 +111,7 @@ class NotificationCenter:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._push: Optional[Callable[[], Awaitable[None]]] = None
         self._push_scheduled = False
+        self._closed_listeners: list[Callable[[Notification, bool], None]] = []
 
     # ── storage ──────────────────────────────────────────────────────────────
 
@@ -207,7 +208,8 @@ class NotificationCenter:
                 return False
             self._items = [i for i in self._items if i.key != key]
             self._changed()
-            return True
+        self._tell_closed(found, dismissed=False)
+        return True
 
     # ── what the pages do ────────────────────────────────────────────────────
 
@@ -234,21 +236,36 @@ class NotificationCenter:
         wanted = set(ids)
         with self._lock:
             self._load()
-            hit = [i for i in self._items if i.id in wanted and visible_to(i, perms)]
-            self._dismiss(hit)
+            hit = self._dismiss([i for i in self._items if i.id in wanted and not i.dismissed and visible_to(i, perms)])
+        self._tell_closed(hit, dismissed=True)
 
     def dismiss_all(self, perms: Iterable) -> None:
         with self._lock:
             self._load()
-            self._dismiss([i for i in self._items if not i.dismissed and visible_to(i, perms)])
+            hit = self._dismiss([i for i in self._items if not i.dismissed and visible_to(i, perms)])
+        self._tell_closed(hit, dismissed=True)
 
-    def _dismiss(self, hit: list[Notification]):
+    def _dismiss(self, hit: list[Notification]) -> list[Notification]:
         if not hit:
-            return
+            return hit
         for item in hit:
             item.dismissed = item.read = True
         self._items = [i for i in self._items if i.key or i not in hit]
         self._changed()
+        return hit
+
+    def listen_closed(self, callback: Callable[[Notification, bool], None]):
+        """`callback(notification, dismissed)` runs (in the thread that did it) when a notification leaves the list: dismissed by
+        somebody in the web UI (True) or resolved by its producer (False). It must be quick and must not raise."""
+        self._closed_listeners.append(callback)
+
+    def _tell_closed(self, items: list[Notification], dismissed: bool):
+        for item in items:
+            for callback in self._closed_listeners:
+                try:
+                    callback(item, dismissed)
+                except Exception:
+                    logger.exception('A notification listener failed')
 
     # ── pushing changes to the open pages ────────────────────────────────────
 
