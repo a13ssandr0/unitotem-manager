@@ -651,11 +651,10 @@ the VM-specific ones.
   `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` right): it bundles an old sd-bus; the Debian `python3-sdbus` (system libsystemd) works.** Test anything
   that opens the user bus against the distro package (e.g. on the build server: `apt install python3-sdbus`, `dbus-run-session -- python3 ...`),
   and run async subprocesses (`notify-send`) in such a test: a blocking `subprocess.run` in the same loop starves the D-Bus server under test.
-- **The first-boot welcome page burned the CPU because its gradient animated `background-position`** (a paint property: the whole screen is repainted
-  every frame, CPU-side on a machine with no GPU such as venus on llvmpipe before the i915 firmware). Measured in headless Chrome with SwiftShader at
-  1920x1080: old page 1216% of a core, two static gradient layers cross-faded with `opacity` in steps 77%, no gradient animation 47%. Same lesson as the boot
-  screen: only animate `opacity`/`transform`, in steps. High CPU in `cefpython3 --type=gpu-process` with no GPU (`videoDecoding` empty, llvmpipe) is
-  software rendering, not a runaway loop; first check the page for paint animations and the machine for GPU firmware.
+- **Do not touch the first-boot welcome page's look (user, 2026-10-19: "it has always worked well").** High CPU in `cefpython3 --type=gpu-process` on a
+  machine with no GPU (`videoDecoding` empty, llvmpipe: venus before the i915 firmware package) is software rendering: the fix is the GPU (firmware, driver,
+  profile in `gpu.py`), not changing the page. (A headless SwiftShader measurement showed its `background-position` animation costs ~12 cores of
+  repaint against ~0.5 with a cheaper animation; the user chose to leave the page as it is.)
 - **Do not parse `ip addr` (or any CLI) for facts psutil or /proc already give.** `utils/system/ip.py` was a copy of a
   Red Hat parser of `ip addr`'s text that also needed `/usr/sbin/ip`, which a minimal Debian does not have: the login page
   answered 500 on a clean install. It is now `psutil` plus the default route from `/proc/net/route`. Prefer a library

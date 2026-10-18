@@ -73,6 +73,18 @@ def on_startup(loop):
     loop.create_task(run_timers(), name='timers')
     loop.create_task(suspend.watch_sleep(), name='sleep_watch')
     loop.create_task(update_watch(), name='update_watch')
+    from .system import dbus_system
+
+    async def hostname_watch():
+        async def pushed(name):
+            await WS.broadcast('Settings/Network/hostname', hostname=name)
+
+        try:
+            await dbus_system.watch_hostname(pushed)
+        except Exception:
+            logger.exception('Hostname watch stopped')
+
+    loop.create_task(hostname_watch(), name='hostname_watch')
     from .system import desktop_notifications
     loop.create_task(desktop_notifications.serve(), name='desktop_notifications')
 
