@@ -1,7 +1,8 @@
 import json
 from functools import cache
 from pathlib import Path
-from platform import freedesktop_os_release as os_release, node as gethostname
+from platform import freedesktop_os_release as os_release
+from socket import gethostname     # NOT platform.node(): that one is cached for the life of the process and shows the old name after a change
 
 import jinja2
 from starlette.templating import Jinja2Templates

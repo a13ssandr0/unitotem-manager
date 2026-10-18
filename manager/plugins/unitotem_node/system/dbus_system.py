@@ -4,6 +4,7 @@ System DBus helpers: logind (power management) and hostnamed (hostname).
 Replaces subprocess calls to systemctl / hostname with proper DBus calls,
 which work without elevated privileges (governed by polkit policies).
 """
+import os
 from contextlib import contextmanager
 from socket import gethostname
 
@@ -93,6 +94,10 @@ async def can_suspend() -> str:
         return await _get_logind(bus).can_suspend()
 
 
+_ETC_HOSTS = '/etc/hosts'
+_LOOPBACK = '127.0.1.1'
+
+
 # ── hostnamed ──────────────────────────────────────────────────────────────
 
 class _Hostnamed(DbusInterfaceCommonAsync, interface_name='org.freedesktop.hostname1'):
@@ -136,7 +141,7 @@ async def set_static_hostname(name: str):
     We do it here so that 127.0.1.1 always resolves to the current hostname.
     """
     name = name.strip()[:64]
-    old = await get_hostname()
+    old = await get_hostname() or gethostname()
 
     with _system_bus() as bus:
         await _get_hostnamed(bus).set_static_hostname(name, False)
@@ -144,42 +149,79 @@ async def set_static_hostname(name: str):
     _sync_etc_hosts(old, name)
 
 
-def _sync_etc_hosts(old_hostname: str, new_hostname: str):
+def render_hosts(content: str, new_hostname: str, old_hostname: str = '') -> str:
     """
-    Replace the 127.0.1.1 line in /etc/hosts that matches old_hostname.
-    Creates the entry if it does not exist yet.
-    Requires write access to /etc/hosts (add a sudoers rule or run as root,
-    or adjust the unitotem user's /etc/hosts ownership in the installer).
+    /etc/hosts with exactly one `127.0.1.1` entry, for the new hostname. Debian's convention: the machine's own name
+    resolves to 127.0.1.1 (not to 127.0.0.1, which is `localhost`). Every other line is kept as it is, except that the
+    old name is removed from the aliases of the loopback lines (a stale alias would still resolve to this machine).
     """
-    import re
-    _ETC_HOSTS = '/etc/hosts'
-    _LOOPBACK   = '127.0.1.1'
+    lines, placed = [], False
+    for line in content.splitlines():
+        fields = line.split('#', 1)[0].split()
+        if fields and fields[0] == _LOOPBACK:
+            if not placed:
+                lines.append(f'{_LOOPBACK}\t{new_hostname}')
+                placed = True
+            continue
+        if old_hostname and old_hostname != new_hostname and fields and fields[0] in ('127.0.0.1', '::1'):
+            kept = [f for f in fields[1:] if f != old_hostname]
+            if len(kept) != len(fields) - 1:
+                line = f'{fields[0]}\t{" ".join(kept)}'
+        lines.append(line)
+    if not placed:
+        # after the IPv4 localhost line when there is one, else at the top
+        at = next((n + 1 for n, l in enumerate(lines) if l.split()[:1] == ['127.0.0.1']), 0)
+        lines.insert(at, f'{_LOOPBACK}\t{new_hostname}')
+    return '\n'.join(lines) + '\n'
 
+
+def _sync_etc_hosts(old_hostname: str, new_hostname: str, path: str = _ETC_HOSTS) -> bool:
+    """Write /etc/hosts for the new hostname (atomically, same owner and mode). False when it could not be done."""
+    from loguru import logger
     try:
-        with open(_ETC_HOSTS, 'r') as fh:
+        st = os.stat(path)
+        with open(path) as fh:
             content = fh.read()
-
-        # Replace any existing 127.0.1.1 line that references old_hostname
-        pattern = re.compile(
-            r'^' + re.escape(_LOOPBACK) + r'[ \t]+.*' + re.escape(old_hostname) + r'.*$',
-            re.MULTILINE,
-        )
-        new_line = f'{_LOOPBACK}\t{new_hostname}'
-        if pattern.search(content):
-            new_content = pattern.sub(new_line, content)
-        else:
-            # No matching line found — append one
-            new_content = content.rstrip('\n') + f'\n{new_line}\n'
-
-        with open(_ETC_HOSTS, 'w') as fh:
+        new_content = render_hosts(content, new_hostname, old_hostname)
+        if new_content == content:
+            return True
+        tmp = f'{path}.unitotem-tmp'
+        with open(tmp, 'w') as fh:
             fh.write(new_content)
-    except PermissionError:
-        # /etc/hosts is not writable by the unitotem user — log and continue.
-        # The hostname is still set correctly via hostnamed; only local DNS
-        # resolution via /etc/hosts will be stale until manually corrected.
-        from loguru import logger
-        logger.warning(
-            '/etc/hosts is not writable; {} → {} entry not updated. '
-            'Grant write access or add a sudoers rule if needed.',
-            old_hostname, new_hostname,
-        )
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chown(tmp, st.st_uid, st.st_gid)
+        os.chmod(tmp, st.st_mode & 0o7777)
+        os.replace(tmp, path)
+        return True
+    except OSError as exc:
+        # the hostname itself is set by hostnamed; only the local resolution of the new name is stale
+        logger.error('Cannot update {} for the hostname {}: {}', path, new_hostname, exc)
+        return False
+
+
+async def watch_hostname(on_change=None):
+    """
+    Keep /etc/hosts right whoever changes the hostname (this UI, `hostnamectl`, a script): hostnamed announces it with
+    a PropertiesChanged signal, so nothing polls. Also heals a mismatch present at start-up (an old release, or a
+    change made while the manager was not running). `on_change(new_hostname)` is awaited after each change.
+    """
+    from loguru import logger
+    previous = gethostname()
+    _sync_etc_hosts(previous, previous)
+    bus = sdbus.sd_bus_open_system()
+    proxy = _get_hostnamed(bus)
+    async for _interface, changed, _invalidated in proxy.properties_changed:
+        if not {'Hostname', 'StaticHostname'} & set(changed):
+            continue
+        current = gethostname()
+        if current == previous:
+            continue
+        logger.info('Hostname changed: {} -> {}', previous, current)
+        _sync_etc_hosts(previous, current)
+        previous = current
+        if on_change is not None:
+            try:
+                await on_change(current)
+            except Exception:
+                logger.exception('Hostname change callback failed')

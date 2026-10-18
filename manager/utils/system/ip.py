@@ -66,17 +66,21 @@ async def address_changes():
     sock.setblocking(False)
     sock.bind((0, RTMGRP_IPV4_IFADDR | RTMGRP_IPV4_ROUTE))
     ready = asyncio.Event()
-    loop.add_reader(sock.fileno(), ready.set)
+
+    def on_readable():
+        try:                                    # drain here: the reader is level-triggered and would fire again until then
+            while sock.recv(65536):
+                pass
+        except BlockingIOError:
+            pass
+        ready.set()
+
+    loop.add_reader(sock.fileno(), on_readable)
     try:
         while True:
             await ready.wait()
             await asyncio.sleep(0.5)            # DHCP adds the address and the route a moment apart
             ready.clear()
-            try:
-                while sock.recv(65536):
-                    pass
-            except BlockingIOError:
-                pass
             yield
     finally:
         loop.remove_reader(sock.fileno())

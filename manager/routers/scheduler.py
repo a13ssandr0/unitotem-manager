@@ -1,4 +1,5 @@
-from platform import freedesktop_os_release as os_release, node as gethostname
+from platform import freedesktop_os_release as os_release
+from socket import gethostname     # not platform.node(): it is cached and would keep the old name after a change
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from starlette import status
