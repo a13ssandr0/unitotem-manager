@@ -170,14 +170,14 @@ PROFILES: Dict[str, Dict[str, str]] = {
     # Raspberry Pi (VideoCore: vc4 display + v3d render). Chromium's own GPU process cannot start on the Pi's GLES-only Mesa
     # ("GLES3 is unsupported and ES version fallback is disabled") and falls back to --use-gl=disabled: everything is
     # software. ANGLE on the system Mesa GLES makes the GPU process start: compositing, rasterisation, 2d canvas and WebGL
-    # on the GPU. Measured on a Pi 4: 7 fps -> 44 fps on the animation benchmark and less CPU. The V4L2 decode features
-    # are the same as the "v4l2" profile.
+    # on the GPU. Measured on a Pi 4: 7 fps -> 44 fps on the animation benchmark and less CPU. NO video decode features on
+    # purpose: with CEF built with use_v4l2_codec and `AcceleratedVideoDecoder` enabled, Chromium picks V4L2VideoDecoder
+    # (bcm2835-codec) and then stalls without a frame or an error (measured on a Pi 4, 2026-10-18); without it video decodes
+    # in software (FFmpeg: 720p30 smooth, 1080p30 ~15% dropped frames). Do not add it back before that stall is understood.
     "pi": {
         "ignore-gpu-blocklist": "",
         "use-gl": "angle",
         "use-angle": "gles",
-        "enable-features": "AcceleratedVideoDecodeLinuxGL,"
-                           "AcceleratedVideoDecodeLinuxZeroCopyGL",
     },
 
     # V4L2 stateless/stateful decoders (other boards). No VA-API
@@ -215,8 +215,8 @@ VERIFIED: Dict[str, bool] = {
     # applies before this may be promoted.
     "v4l2": False,
     # Measured on a real Raspberry Pi 4 (Mesa 26.2, V3D 4.2): the GPU process starts and gpu_compositing, rasterization,
-    # 2d_canvas and webgl are "enabled" (glImplementationParts gl=egl-angle,angle=opengles). NOT measured: video decode
-    # (needs a CEF built with the proprietary codecs; the Pi 4 has H.264/HEVC V4L2 stateful decode only).
+    # 2d_canvas and webgl are "enabled" (glImplementationParts gl=egl-angle,angle=opengles). Video: H.264/AAC decode in
+    # software (FFmpegVideoDecoder) measured with the codecs build; V4L2 hardware decode stalls (see the "pi" profile).
     "pi": True,
 }
 
