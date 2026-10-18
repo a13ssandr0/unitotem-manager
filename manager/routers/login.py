@@ -13,7 +13,8 @@ import dataclasses
 import secrets
 import time
 from datetime import timedelta
-from platform import freedesktop_os_release as os_release, node as gethostname
+from platform import freedesktop_os_release as os_release
+from socket import gethostname     # not platform.node(): it is cached and would keep the old name after a change
 from typing import Optional
 from urllib.parse import quote_plus
 

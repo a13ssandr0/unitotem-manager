@@ -6,7 +6,8 @@ every other one (utils/osusers.py): the user name and password chosen here are t
 node serves is unreachable meanwhile: the login redirect points here (routers/login.py).
 """
 import asyncio
-from platform import freedesktop_os_release as os_release, node as gethostname
+from platform import freedesktop_os_release as os_release
+from socket import gethostname     # not platform.node(): it is cached and would keep the old name after a change
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
