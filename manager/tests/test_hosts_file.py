@@ -1,7 +1,7 @@
 """/etc/hosts after a hostname change: exactly one 127.0.1.1 entry, the rest untouched, written atomically."""
 import os
 
-from plugins.unitotem_node.system.dbus_system import _sync_etc_hosts, render_hosts
+from unitotem_node.system.dbus_system import _sync_etc_hosts, render_hosts
 
 DEBIAN = '127.0.0.1\tlocalhost\n127.0.1.1\told\n::1\tlocalhost ip6-localhost ip6-loopback\nff02::1 ip6-allnodes\n'
 
