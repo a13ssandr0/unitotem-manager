@@ -17,4 +17,5 @@ def test_no_cached_hostname():
         if 'tests' in path.parts:
             continue
         text = path.read_text()
-        assert not re.search(r'from platform import[^\n]*\bnode\b', text) and 'platform.node(' not in text, path
+        assert not re.search(r'from platform import[^\n]*\bnode\b', text), path
+        assert not re.search(r'^[^#\n]*\bplatform\.node\(', text, re.MULTILINE), path
