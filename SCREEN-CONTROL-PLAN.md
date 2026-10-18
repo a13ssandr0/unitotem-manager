@@ -45,7 +45,7 @@ the source-backport option was dropped in favour of the image migration.
 | 4 — hardware layer | Partly. CEC and X paths are independent and testable. The DDC code can be written and unit-tested but cannot be exercised on-image until trixie. |
 | 5 — API `Settings/Display/Screens/*` | No. DDC simply reports unavailable. |
 | 6 — Web UI | No. Renders whatever the probe reports. |
-| 7 — packaging + docs | Partly. `Recommends:` and the `i2c-dev` autoload are independent; the `debian-kiosk.md` section coordinates with the migration. |
+| 7 — packaging + docs | Partly. `Recommends:` and the `i2c-dev` autoload are independent; the `debian-unitotem.md` section coordinates with the migration. |
 
 **Keep the runtime version gate regardless.** Parse `ddcutil --version`; if < 2.0, mark
 DDC unavailable with the reason surfaced in the UI ("ddcutil 1.4.1 found, 2.0+
@@ -76,7 +76,7 @@ on DP (bus 9).
 | **Timings** | `capabilities` **31.0 s** (exit 1); `detect --brief` **5.6 s**; `getvcp --terse --bus N` **0.40 s** |
 | **Unsupported code is distinguishable** | `VCP AA ERR`, exit 1. Supported → exit 0. Bad bus → `Bus /dev/i2c-30 does not exist.`, exit 1. |
 | **No JSON mode** | No `--json` in 2.2.5. `libjansson` is linked but used only for ddcutil's internal capabilities cache. Text parsing it is. |
-| **Our own capability cache is mandatory** | The kiosk root is `ro` (`kiosk/files/fstab-amd64`: `LABEL=ROOT / ext4 defaults,noatime,ro`) and the unit sets no `HOME`, so ddcutil's `~/.cache/ddcutil` cannot be relied on — the 31 s cold cost may be paid every time. |
+| **Our own capability cache is mandatory** | The kiosk root is `ro` (`unitotem/files/fstab-amd64`: `LABEL=ROOT / ext4 defaults,noatime,ro`) and the unit sets no `HOME`, so ddcutil's `~/.cache/ddcutil` cannot be relied on — the 31 s cold cost may be paid every time. |
 
 **DDC power-on caveat:** `0xD6 <- 04/05` reliably powers a monitor down, but many
 monitors stop clocking DDC once in DPM off, so `0xD6 <- 01` never arrives. Untested (it
@@ -119,7 +119,7 @@ worse than a subprocess we can time out and kill.
   still "nothing found" regardless of exit code), but trust the exit code for open/command
   failures on the packaged tool.
 - **Which GPUs have CEC:** Raspberry Pi `vc4_hdmi` (the arm64 kiosk already force-loads
-  `vc4`/`v3d` via `/etc/modules-load.d/rpi-gpu.conf`, `kiosk/stage2-configure.sh:97`),
+  `vc4`/`v3d` via `/etc/modules-load.d/rpi-gpu.conf`, `unitotem/stage2-configure.sh:97`),
   some SoCs, USB adapters, DisplayPort-to-HDMI via `drm_dp_cec`. Desktop Intel/AMD/NVIDIA
   generally do **not**. Confirmed on both the dev host and the rebuilt `unitotem-test`
   (GTX 1060 passthrough, `nvidia` driver): no `/dev/cec*` on either. No CEC path has been
@@ -628,10 +628,10 @@ old hashed bundle is served silently.
   package that must also serve headless nodes. The runtime version gate handles it
   instead.
 - Sibling repo `unitotem-system`: `/etc/modules-load.d/unitotem-i2c.conf` containing
-  `i2c-dev`, following the `rpi-gpu.conf` pattern at `kiosk/stage2-configure.sh:97`.
+  `i2c-dev`, following the `rpi-gpu.conf` pattern at `unitotem/stage2-configure.sh:97`.
   Install `ddcutil` and `v4l-utils` in the image package set — from the trixie archive,
   no backport stage.
-- **New section 29 in `unitotem-system/debian-kiosk.md`** (the file currently ends at
+- **New section 29 in `unitotem-system/debian-unitotem.md`** (the file currently ends at
   28): the module autoload, the ddcutil >= 2.0 requirement and that trixie supplies it,
   the `xrandr --off` vs DPMS decision, and why `xinitrc` was deliberately left alone. In
   **English**, per `CLAUDE.md`, even though parts of that file are Italian. Coordinate
