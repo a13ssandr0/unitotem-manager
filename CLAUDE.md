@@ -544,6 +544,12 @@ the VM-specific ones.
   Initializing ImageProcessor` and STALLS: no frame, no error, no fallback (`currentTime` 0, `getVideoPlaybackQuality().total` 0), and
   `SystemInfo.getInfo` `videoDecoding` stays empty. Without the feature the same build plays H.264/AAC in software (720p30 smooth,
   1080p30 ~15% dropped frames, 52% CPU). So never put `AcceleratedVideoDecoder` in the `pi` profile until the stall is understood.
+  **Cause found (2026-10-19, debug libcef on the Pi 4, X11 + Mesa V3D)**: `GBM: Failed to create GBM BO, NV12/YV12/P010 ... gbm_device_is_format_supported() = 0`, so
+  `supports_nv12_gl_native_pixmap` is false and `GetPreferredRenderableFourccs` returns ONLY AR24; the stateful decoder offers YU12 first, so
+  `PickDecoderOutputFormat` needs an ImageProcessor (to AR24): the GL one is only tried when `candidates[0]` is NV12 (it is YU12), LibYUV does not
+  take it, the V4L2 one says "None of YUYV YU12 YV12 NV12 NV21 YU12 formats is supported" -> `Unable to find ImageProcessor to convert format`,
+  and `V4L2StatefulVideoDecoder::ApplyResolutionChange` ignores the failure -> silent stall. Patch tried: list NV12 first
+  (`tools/cef-server/patches/0001-*.patch`, applied in the server tree, arm64 relinked in 7 min). Result: see TODO.
   A release build compiles every `DVLOG` out (that is why the log goes quiet): debug it with a `dcheck_always_on=true` libcef in its own
   out dir (`out/Dbg_arm64` on the build server), not with the release tree.
 - **The VA-API decode blocklist (`IsBlockedDriver` in `vaapi_wrapper.cc`) only blocks

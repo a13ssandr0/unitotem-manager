@@ -1,4 +1,8 @@
 === CURRENT WORK ===
+2026-10-19 V4L2 on the Pi 4: stall cause found (no ImageProcessor to AR24 because GBM cannot allocate NV12 on V3D/X11; error swallowed). Patched arm64 libcef (NV12 candidate first -> GL image processor)
+built: /nas/cef-wheels/cefpython3-nv12-aarch64.tar.zst + scratchpad v4l2nv12-pi.sh; TEST ON THE PI after unitotem-system's destructive A/B tests (they asked for the Pi first; they message when done).
+If the GL image processor path does not work: next options are a patch letting LibYUV convert NV12->AR24 (CPU copy, still offloads the decode) or Wayland/DRM output (not an option on this kiosk).
+- x64 CEF 147 (+codecs) verified 2026-10-18 on the VM (GTX 1060 passthrough) and venus (read-only): canPlayType probably for avc1/mp4a/vp8/vp9/av01, no for hevc/ac3/eac3/theora; H.264 720p/1080p+AAC play with FFmpegVideoDecoder/FFmpegAudioDecoder, 0 dropped frames; HEVC fails (DEMUXER_ERROR_NO_SUPPORTED_STREAMS). videoDecoding is empty on both (no VA-API): VM = NVIDIA (excluded upstream), venus = llvmpipe because 2026.10.22 lacks the i915 firmware (iHD init fails; fixed in 2026.10.24, re-test then).
 2026-10-18 Desktop notifications (org.freedesktop.Notifications, user+system bus) feed the notification center: node plugin `system/desktop_notifications.py`,
 tests in tests/test_desktop_notifications.py, e2e with notify-send verified on the build server (distro sdbus). TO DO: the image needs a session bus for root so GUI apps can reach it; policy file in the node deb.
 2026-10-17 WAITING on unitotem-system: identity merge at OTA (spec sent). Until it exists a root password change and every web-created account is lost
