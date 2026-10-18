@@ -77,6 +77,13 @@ const routes = [
     name: 'Login',
     component: () => import('@/pages/login.vue'),
   },
+  // First access: the server renders this page (routers/setup.py) and looks its chunk up in the build manifest, so it must be a
+  // route here, or Vite does not build it and the page is blank
+  {
+    path: '/setup',
+    name: 'Setup',
+    component: () => import('@/pages/setup.vue'),
+  },
 ]
 
 export default routes
