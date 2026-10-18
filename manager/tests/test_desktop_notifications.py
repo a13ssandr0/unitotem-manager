@@ -1,7 +1,7 @@
 """org.freedesktop.Notifications -> notification center: mapping, replacement, rate limit, the answer to a dismissal."""
 import pytest
 
-from plugins.unitotem_node.system import desktop_notifications as dn
+from unitotem_node.system import desktop_notifications as dn
 from utils.notifications import NotificationCenter
 
 
