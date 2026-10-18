@@ -18,7 +18,7 @@ from routers.login import LOGMAN, session_cookie
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
 from utils import osusers, passwords
 from utils.models.user import UserData, UserPerms, user_manager
-from utils.system.ip import default_ipv4
+from utils.system.ip import reachable_ipv4
 from webview.controller import WebviewManager
 
 router = APIRouter()
@@ -42,7 +42,7 @@ async def setup_page(request: Request):
         'state': {
             'ut_vers': const.__version__,
             'os_vers': os_release()['PRETTY_NAME'],
-            'ip_addr': default_ipv4(),
+            'ip_addr': reachable_ipv4(),
             'hostname': gethostname(),
             'rules': passwords.RULES,
             'min_length': passwords.MIN_LENGTH,
