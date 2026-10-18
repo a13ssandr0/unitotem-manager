@@ -385,6 +385,10 @@ the VM-specific ones.
   rather than fighting the root filesystem. This is new in the trixie image; the old bookworm one
   did not separate the two.
 
+- **NO COMMAND MAY EVER OPEN A GRAPHICAL PASSWORD PROMPT (user rule, repeated since the start of the project; it must stop).** Every ssh/scp/rsync/sshpass
+  call runs with `SSH_ASKPASS_REQUIRE=never` in its own environment (not "exported earlier"), key hosts also with `-o BatchMode=yes`, password hosts with
+  `sshpass` + `-o PreferredAuthentications=password -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no` (a changed host key prompts too), and `sudo`
+  only as `sudo -n`. The brief of every subagent that touches a remote host must say so.
 - **ssh must never be able to prompt graphically.** On KDE, a missing key or an unknown host key
   makes ssh spawn `ksshaskpass`, which steals focus and blocks automation until a human clicks it.
   Always run with `SSH_ASKPASS_REQUIRE=never` and `-o BatchMode=yes` — `tools/vm-env.sh` does both,
@@ -647,6 +651,11 @@ the VM-specific ones.
   `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` right): it bundles an old sd-bus; the Debian `python3-sdbus` (system libsystemd) works.** Test anything
   that opens the user bus against the distro package (e.g. on the build server: `apt install python3-sdbus`, `dbus-run-session -- python3 ...`),
   and run async subprocesses (`notify-send`) in such a test: a blocking `subprocess.run` in the same loop starves the D-Bus server under test.
+- **The first-boot welcome page burned the CPU because its gradient animated `background-position`** (a paint property: the whole screen is repainted
+  every frame, CPU-side on a machine with no GPU such as venus on llvmpipe before the i915 firmware). Measured in headless Chrome with SwiftShader at
+  1920x1080: old page 1216% of a core, two static gradient layers cross-faded with `opacity` in steps 77%, no gradient animation 47%. Same lesson as the boot
+  screen: only animate `opacity`/`transform`, in steps. High CPU in `cefpython3 --type=gpu-process` with no GPU (`videoDecoding` empty, llvmpipe) is
+  software rendering, not a runaway loop; first check the page for paint animations and the machine for GPU firmware.
 - **Do not parse `ip addr` (or any CLI) for facts psutil or /proc already give.** `utils/system/ip.py` was a copy of a
   Red Hat parser of `ip addr`'s text that also needed `/usr/sbin/ip`, which a minimal Debian does not have: the login page
   answered 500 on a clean install. It is now `psutil` plus the default route from `/proc/net/route`. Prefer a library
@@ -752,8 +761,9 @@ the VM-specific ones.
   expects GPU compositing does not get it (`EXPECTS_COMPOSITING`, `Cdp.gpu_info`).
 - **A silent `str.replace` that finds nothing is a bug you will chase for an hour**: after a merge, code you patch by string may
   have moved (the DevTools binding dispatch did). Assert the pattern is there.
-- **Password policy is opt-in** for the passwords an administrator sets (`security.json`, `Security/set_password_policy`, switch on
-  the Users page); the first account (setup, `--create-admin`) always follows it. Terminal account stays root (user decision).
+- **Password rules are those of plain `passwd`/`useradd` (user decision, 2026-10-19: the 10-character policy was "too strict")**: always only
+  non-empty, no control characters, <= 128 (`passwords.validate_basic`), usernames as Debian's `NAME_REGEX` (lowercase). The stricter policy (10+ chars,
+  not the username, not a common word) is opt-in (`security.json`, `Security/set_password_policy`, switch on the Users page) and applies on top. Terminal account stays root (user decision).
 - **`WS.disconnect` needs the user**, or `active_users` keeps dead sockets. `/remote/*` refuses loopback senders: test a pairing
   request from another host. A hidden `v-badge` stays in the DOM with its text and a `v-menu`'s content stays after the first
   opening: test the computed display / `aria-expanded`. The scratchpad directory is shared between agents: prefix your files.

@@ -9,8 +9,11 @@ from api.ws.wsmanager import WSAPIBase
 
 
 def _policy_problems(password: str, username: str) -> list[str]:
-    """What the password policy objects to, when the node enforces it (nothing otherwise)."""
-    return passwords.validate_password(password, username) if security_settings.enforce_password_policy else []
+    """What objects to the password: the basic rules always, the stricter policy when the node enforces it."""
+    problems = passwords.validate_basic(password)
+    if not problems and security_settings.enforce_password_policy:
+        problems = passwords.validate_password(password, username)
+    return problems
 
 
 class Security(WSAPIBase):

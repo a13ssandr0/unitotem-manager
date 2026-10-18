@@ -167,7 +167,10 @@ async def logout():
 async def set_pass(request: Request, response: Response, password: str, user: User = Depends(LOGMAN)):
     from utils import passwords
     from utils.models.security import security_settings
-    if security_settings.enforce_password_policy and (problems := passwords.validate_password(password, user.name)):
+    problems = passwords.validate_basic(password)
+    if not problems and security_settings.enforce_password_policy:
+        problems = passwords.validate_password(password, user.name)
+    if problems:
         raise HTTPException(status_code=422, detail=problems)
     try:
         user_manager.change_password(user.name, password)
