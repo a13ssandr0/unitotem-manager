@@ -9,7 +9,7 @@ VM booted from the same kiosk image that ships to devices.
 This document is the whole procedure. Follow it instead of rediscovering it;
 when a step turns out to be wrong, fix it here.
 
-Related: `unitotem-system/debian-kiosk.md` documents the kiosk image itself.
+Related: `unitotem-system/debian-unitotem.md` documents the kiosk image itself.
 
 ---
 
@@ -58,11 +58,11 @@ The base image is whatever `unitotem-system` last built for amd64:
 
 ```bash
 SYS=~/Sviluppo/unitotem-system
-IMG=$(ls -t $SYS/deploy/amd64/kiosk-*-amd64.img.xz | head -1)
+IMG=$(ls -t $SYS/deploy/amd64/unitotem-*-amd64.img.xz | head -1)
 
 mkdir -p /var/tmp/unitotem-vm && cd /var/tmp/unitotem-vm
-xz -dc -T0 "$IMG" > kiosk-amd64.img
-qemu-img create -f qcow2 -b kiosk-amd64.img -F raw overlay.qcow2 16G
+xz -dc -T0 "$IMG" > unitotem-amd64.img
+qemu-img create -f qcow2 -b unitotem-amd64.img -F raw overlay.qcow2 16G
 cp /usr/share/OVMF/OVMF_VARS_4M.fd OVMF_VARS.fd
 ```
 
@@ -145,7 +145,7 @@ tools/vm-ssh 'mount -o remount,rw / && \
   sync && mount -o remount,ro /'
 ```
 
-Do **not** use `kiosk-update enter` / `exit` for this: `exit` reboots the VM and
+Do **not** use `unitotem-maintenance enter` / `exit` for this: `exit` reboots the VM and
 regenerates initramfs, neither of which a plain package install needs. A manual
 remount pair is faster and leaves the root read-only again immediately.
 

@@ -328,7 +328,7 @@ written into this file, in this section, as soon as it is found. A commit messag
 commit messages are not read at the start of the next session, this file is.
 
 System- or OS-level changes (kiosk image, systemd units, X11 session, packaging on the target)
-additionally go into `unitotem-system/debian-kiosk.md`, which is the reference document for the
+additionally go into `unitotem-system/debian-unitotem.md`, which is the reference document for the
 kiosk image.
 
 ## Running the project
