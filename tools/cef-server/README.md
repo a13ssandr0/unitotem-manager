@@ -47,3 +47,12 @@ removes its own). Distributions land in `chromium/src/cef/binary_distrib/`.
 ## Timings
 
 x64 full build 3 h 48 on the old box; arm64 cross about 35 min incremental (V4L2 rebuild), `Dbg_arm64` about 1 h 27.
+
+## Patches (`patches/`, applied by hand in `chromium/src`, not by the scripts)
+
+- `0001-v4l2-stateful-nv12-candidate-first.patch`: lists NV12 first among the CAPTURE formats and tells the driver the picked one (`SetFormat`).
+  Needed for the V4L2 decoder to run at all on a Pi 4 under X11 (without it: silent stall). With it Chromium picks the LibYUV image processor
+  (NV12 -> AR24 on the CPU); the GL image processor only does NV12 -> NV12 (scaling/detiling), it is not a colour converter.
+- `experimental-libyuv-cached-bounce.patch`: NOT shipped. Copies the NV12 frame to cached memory, converts there and copies the ARGB out
+  (the dmabuf mappings are uncached on the Pi 4: reading 2 MB takes 5-14 ms, libyuv straight on them 60-120 ms per 1080p frame; bounce: 33-55 ms).
+  Still ~15 fps at 1080p with 55% dropped frames, so the V4L2 path stays slower than software decode on this hardware.

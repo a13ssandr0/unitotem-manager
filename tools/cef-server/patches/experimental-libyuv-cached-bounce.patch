@@ -1,0 +1,48 @@
+diff --git a/media/gpu/chromeos/libyuv_image_processor_backend.cc b/media/gpu/chromeos/libyuv_image_processor_backend.cc
+index 92f5925691..034441b6a8 100644
+--- a/media/gpu/chromeos/libyuv_image_processor_backend.cc
++++ b/media/gpu/chromeos/libyuv_image_processor_backend.cc
+@@ -574,8 +574,41 @@ int LibYUVImageProcessorBackend::DoConversion(const FrameResource* const input,
+ #if BUILDFLAG(IS_LINUX)
+   if (output->format() == PIXEL_FORMAT_ARGB) {
+     if (input_config_.fourcc == Fourcc(Fourcc::NV12)) {
+-      return LIBYUV_FUNC(NV12ToARGB, Y_UV_DATA(input),
+-                         ARGB_DATA(output));
++      // UniTotem: the decoder output and the output pool are uncached (write-combined) dmabuf mappings. libyuv reading/writing
++      // them directly costs 60-120 ms per 1080p frame on a Raspberry Pi 4: bounce through cached memory with wide copies.
++      const int w = output->visible_rect().width();
++      const int h = output->visible_rect().height();
++      const int ys = input->stride(VideoFrame::Plane::kY);
++      const int uvs = input->stride(VideoFrame::Plane::kUV);
++      const size_t ysz = static_cast<size_t>(ys) * h;
++      const size_t uvsz = static_cast<size_t>(uvs) * ((h + 1) / 2);
++      const size_t osz = static_cast<size_t>(w) * 4 * h;
++      static thread_local uint8_t* in_buf = nullptr;
++      static thread_local size_t in_cap = 0;
++      static thread_local uint8_t* out_buf = nullptr;
++      static thread_local size_t out_cap = 0;
++      if (in_cap < ysz + uvsz) {
++        delete[] in_buf;
++        in_cap = ysz + uvsz;
++        in_buf = new uint8_t[in_cap];
++      }
++      if (out_cap < osz) {
++        delete[] out_buf;
++        out_cap = osz;
++        out_buf = new uint8_t[out_cap];
++      }
++      memcpy(in_buf, input->visible_data(VideoFrame::Plane::kY), ysz);
++      memcpy(in_buf + ysz, input->visible_data(VideoFrame::Plane::kUV), uvsz);
++      const int res = libyuv::NV12ToARGB(in_buf, ys, in_buf + ysz, uvs, out_buf, w * 4, w, h);
++      if (res != 0) {
++        return res;
++      }
++      uint8_t* dst = output->GetWritableVisibleData(VideoFrame::Plane::kARGB);
++      const int ds = output->stride(VideoFrame::Plane::kARGB);
++      for (int row = 0; row < h; row++) {
++        memcpy(dst + static_cast<size_t>(row) * ds, out_buf + static_cast<size_t>(row) * w * 4, static_cast<size_t>(w) * 4);
++      }
++      return 0;
+     }
+   }
+ #endif
