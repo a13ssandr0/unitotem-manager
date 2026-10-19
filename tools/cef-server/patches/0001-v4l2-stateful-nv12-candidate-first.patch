@@ -1,8 +1,22 @@
 diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
-index 9da1741a42..52c9b513b8 100644
+index 9da1741a42..c018ac30eb 100644
 --- a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
 +++ b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
-@@ -827,6 +827,9 @@ V4L2StatefulVideoDecoder::EnumeratePixelLayoutCandidates(
+@@ -774,6 +774,13 @@ bool V4L2StatefulVideoDecoder::InitializeCAPTUREQueue() {
+       chosen_fourcc = Fourcc::FromV4L2PixFmt(V4L2_PIX_FMT_QC08C).value();
+     }
+   }
++  // UniTotem: the candidates are reordered (NV12 first), so the picked format is no longer the queue's out-of-the-box one:
++  // tell the driver.
++  if (chosen_fourcc.ToV4L2PixFmt() != v4l2_format.fmt.pix_mp.pixelformat) {
++    if (!CAPTURE_queue_->SetFormat(chosen_fourcc.ToV4L2PixFmt(), chosen_size, /*buffer_size=*/0).has_value()) {
++      return false;
++    }
++  }
+   VLOG(2) << "Chosen |CAPTURE_queue_| format: " << chosen_fourcc.ToString()
+           << " " << chosen_size.ToString() << " (modifier: 0x" << std::hex
+           << chosen_modifier << std::dec << "). Using " << v4l2_num_buffers
+@@ -827,6 +834,9 @@ V4L2StatefulVideoDecoder::EnumeratePixelLayoutCandidates(
      VLOG(2) << "CAPTURE queue candidate format: "
              << candidate_fourcc->ToString() << ", " << coded_size.ToString();
    }
