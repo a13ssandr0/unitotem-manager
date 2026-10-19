@@ -549,7 +549,7 @@ the VM-specific ones.
   `PickDecoderOutputFormat` needs an ImageProcessor (to AR24): the GL one is only tried when `candidates[0]` is NV12 (it is YU12), LibYUV does not
   take it, the V4L2 one says "None of YUYV YU12 YV12 NV12 NV21 YU12 formats is supported" -> `Unable to find ImageProcessor to convert format`,
   and `V4L2StatefulVideoDecoder::ApplyResolutionChange` ignores the failure -> silent stall. Patch tried: list NV12 first
-  (`tools/cef-server/patches/0001-*.patch`, applied in the server tree, arm64 relinked in 7 min). Result: see TODO.
+  (`tools/cef-server/patches/0001-*.patch`, applied in the server tree, arm64 relinked in 7 min) PLUS a `SetFormat` on the CAPTURE queue for the picked fourcc (upstream assumes it is the queue's current one, so with NV12 first the frames stayed I420 and every one was rejected by the GL image processor). Result on the Pi 4: decodes, but slower than software (1080p: ~12 fps, 45% dropped, 110% CPU) and a second video hung: NOT enabled, see TODO.
   A release build compiles every `DVLOG` out (that is why the log goes quiet): debug it with a `dcheck_always_on=true` libcef in its own
   out dir (`out/Dbg_arm64` on the build server), not with the release tree.
 - **The VA-API decode blocklist (`IsBlockedDriver` in `vaapi_wrapper.cc`) only blocks
