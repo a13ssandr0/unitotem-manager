@@ -1,8 +1,8 @@
 === CURRENT WORK ===
-2026-10-19 V4L2 on the Pi 4 TESTED (release libcef with tools/cef-server/patches/0001: NV12 first + SetFormat on the CAPTURE queue): the stall is gone, V4L2VideoDecoder plays (kIsPlatformVideoDecoder=true)
-but it is SLOWER than software: 720p30 306 frames/10 s with 65 dropped, 1080p 149 frames in 12 s with 67 dropped, 110% CPU (software: 1080p ~15% dropped, 52% CPU); a second video in the same
-browser session hung the probe (decoder re-init?). So `AcceleratedVideoDecoder` stays OUT of the `pi` profile and the shipped arm64 deb is unchanged. Next: find where the time goes (dcheck build `cef-arm64-dbg.sh` + the
-same patch; GL image processor probably copying V4L2 buffers instead of importing dmabufs) or a LibYUV NV12->AR24 patch; Wayland/DRM output is not an option on this kiosk.
+2026-10-19 V4L2 on the Pi 4: CLOSED as not worth it (measured with dcheck libcef + timers). With patch 0001 (NV12 first + CAPTURE SetFormat) the V4L2 decoder runs, but Chromium
+must convert NV12 -> AR24 on the CPU with LibYUV (GBM has no NV12 on V3D/X11; the GL image processor only does NV12->NV12): 60-120 ms per 1080p frame because the dmabuf mappings are uncached
+(read 2 MB = 5-14 ms). A cached bounce patch (experimental-libyuv-cached-bounce.patch) gets 33-55 ms: still ~15 fps at 1080p, 55% dropped, 146% CPU; software FFmpeg decode is better (1080p ~15% dropped, 52% CPU).
+`AcceleratedVideoDecoder` stays OUT of the `pi` profile, shipped arm64 deb unchanged. A second video in one browser session also hung the probe. Only a different output path (no CPU conversion) would change this.
 - x64 CEF 147 (+codecs) verified 2026-10-18 on the VM (GTX 1060 passthrough) and venus (read-only): canPlayType probably for avc1/mp4a/vp8/vp9/av01, no for hevc/ac3/eac3/theora; H.264 720p/1080p+AAC play with FFmpegVideoDecoder/FFmpegAudioDecoder, 0 dropped frames; HEVC fails (DEMUXER_ERROR_NO_SUPPORTED_STREAMS). videoDecoding is empty on both (no VA-API): VM = NVIDIA (excluded upstream), venus = llvmpipe because 2026.10.22 lacks the i915 firmware (iHD init fails; fixed in 2026.10.24, re-test then).
 2026-10-18 Desktop notifications (org.freedesktop.Notifications, user+system bus) feed the notification center: node plugin `system/desktop_notifications.py`,
 tests in tests/test_desktop_notifications.py, e2e with notify-send verified on the build server (distro sdbus). TO DO: the image needs a session bus for root so GUI apps can reach it; policy file in the node deb.
