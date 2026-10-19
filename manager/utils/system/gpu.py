@@ -174,10 +174,17 @@ PROFILES: Dict[str, Dict[str, str]] = {
     # purpose: with CEF built with use_v4l2_codec and `AcceleratedVideoDecoder` enabled, Chromium picks V4L2VideoDecoder
     # (bcm2835-codec) and then stalls without a frame or an error (measured on a Pi 4, 2026-10-18); without it video decodes
     # in software (FFmpeg: 720p30 smooth, 1080p30 ~15% dropped frames). Do not add it back before that stall is understood.
+    # `webgl-antialiasing-mode=none`: a WebGL canvas gets 4x MSAA by default (antialias:true) and on the V3D that alone
+    # halves the frame rate of anything that redraws the whole canvas: a full-screen clear at ~1080p went 33 -> 60 fps
+    # (WebGL 1 and 2, default context attributes), measured on a Pi 4 under X11 (2026-10-20). The scene-heavy WebGL
+    # Aquarium is GPU-bound and does not change. Do NOT use `implicit` (EXT_multisampled_render_to_texture): it looked
+    # like 60 fps but every getContext() returned null. The switch is read by the renderer from the command line
+    # (content/renderer/webgraphicscontext3d_provider_impl.cc); pages cannot ask for antialiasing any more.
     "pi": {
         "ignore-gpu-blocklist": "",
         "use-gl": "angle",
         "use-angle": "gles",
+        "webgl-antialiasing-mode": "none",
     },
 
     # V4L2 stateless/stateful decoders (other boards). No VA-API
@@ -203,14 +210,11 @@ VERIFIED: Dict[str, bool] = {
     # driver 535.261.03: selected correctly, and the absence of video-decode
     # switches is the *finding*, not an omission - see _NVIDIA_DRM_NAMES.
     "nvidia": True,
-    # NOT TESTED. No Intel or AMD machine was available. The switches are
-    # read out of libcef.so and the reasoning follows Chromium's source, but
-    # nobody has watched an Intel or AMD box actually pick a hardware decoder
-    # with them. Until someone does, treat this profile as a hypothesis:
-    # the thing to check is that SystemInfo.getInfo's videoDecoding array
-    # stops being empty and the CDP Media domain reports
-    # kIsPlatformVideoDecoder=true.
-    "vaapi": False,
+    # Measured on an Intel Alder Lake-P Iris Xe (venus, iHD driver 25.2.3, 2026-10-20): the CDP Media domain reports
+    # kVideoDecoderName=VaapiVideoDecoder, kIsPlatformVideoDecoder=true for H.264 (4K60 BBB scaled to 1080p: 61 fps,
+    # 0 dropped, 82% of a core under X11 + compositor) and HEVC 720p. AMD is still untested.
+    # (SystemInfo.getInfo's videoDecoding array stays empty on this machine: do not use it as the signal.)
+    "vaapi": True,
     # NOT TESTED. No Raspberry Pi was available. Same standard of proof
     # applies before this may be promoted.
     "v4l2": False,

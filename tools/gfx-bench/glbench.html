@@ -1,0 +1,46 @@
+<!doctype html><meta charset=utf-8><body style="margin:0;background:#000"><canvas id=c style="width:100vw;height:100vh;display:block"></canvas>
+<script>
+const c=document.getElementById('c');c.width=Math.round(innerWidth*devicePixelRatio);c.height=Math.round(innerHeight*devicePixelRatio);
+const gl=c.getContext('webgl2',{antialias:false,powerPreference:'high-performance'});
+window.__res=[];window.__done=false;
+const W=c.width,H=c.height;
+function prog(vs,fs){const p=gl.createProgram();for(const [t,s] of [[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]]){const h=gl.createShader(t);gl.shaderSource(h,s);gl.compileShader(h);if(!gl.getShaderParameter(h,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(h);gl.attachShader(p,h)}gl.linkProgram(p);return p}
+const quadVS='#version 300 es\nout vec2 uv;void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);uv=p;gl_Position=vec4(p*2.-1.,0,1);}';
+const sync=()=>{const px=new Uint8Array(4);gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px)};
+async function timeit(name,frames,fn,unit){
+  fn();sync();                       // warm up (compile, allocate)
+  const t0=performance.now();for(let i=0;i<frames;i++){fn();if(i%4==3)sync()}sync();
+  const ms=(performance.now()-t0)/frames;window.__res.push({name,ms:+ms.toFixed(2),fps:+(1000/ms).toFixed(1),extra:unit?unit(ms):''});
+  await new Promise(r=>setTimeout(r,200));
+}
+function shaderTest(iters){const p=prog(quadVS,`#version 300 es
+precision highp float;in vec2 uv;out vec4 o;uniform float t;
+void main(){vec2 z=(uv-.5)*3.;vec2 k=vec2(-.7+.1*sin(t),.27);float s=0.;for(int i=0;i<${iters};i++){z=vec2(z.x*z.x-z.y*z.y,2.*z.x*z.y)+k;s+=exp(-dot(z,z)*.01);}o=vec4(vec3(s*.02),1);}`);
+  const lt=gl.getUniformLocation(p,'t');let n=0;return()=>{gl.useProgram(p);gl.uniform1f(lt,n++*.01);gl.drawArrays(gl.TRIANGLES,0,3)}}
+function instTest(n){const p=prog(`#version 300 es
+uniform float t;void main(){int id=gl_InstanceID;float a=float(id)*0.0001+t;vec2 off=vec2(fract(sin(float(id)*12.9898)*43758.5453),fract(sin(float(id)*78.233)*43758.5453))*2.-1.;
+vec2 q=vec2((gl_VertexID==1)?1.:0.,(gl_VertexID==2)?1.:0.)*0.01;gl_Position=vec4(off+q*vec2(cos(a),sin(a)),0,1);}`,`#version 300 es
+precision mediump float;out vec4 o;void main(){o=vec4(.2,.6,.9,.15);}`);
+  const lt=gl.getUniformLocation(p,'t');let k=0;return()=>{gl.useProgram(p);gl.uniform1f(lt,k++*.01);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.drawArraysInstanced(gl.TRIANGLES,0,3,n);gl.disable(gl.BLEND)}}
+function fillTest(layers){const p=prog(quadVS,`#version 300 es
+precision mediump float;in vec2 uv;out vec4 o;void main(){o=vec4(uv,.5,.04);}`);
+  return()=>{gl.useProgram(p);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);for(let i=0;i<layers;i++)gl.drawArrays(gl.TRIANGLES,0,3);gl.disable(gl.BLEND)}}
+function texTest(size){const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,size,size);
+  gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,size,size,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(size*size*4).map((_,i)=>i*7));
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  const p=prog(quadVS,`#version 300 es
+precision mediump float;in vec2 uv;out vec4 o;uniform sampler2D s;void main(){vec4 a=vec4(0);for(int i=0;i<16;i++)a+=texture(s,uv*(1.+float(i)*.37)+float(i)*.011);o=a/16.;}`);
+  return()=>{gl.useProgram(p);gl.bindTexture(gl.TEXTURE_2D,tex);gl.drawArrays(gl.TRIANGLES,0,3)}}
+function msaaTest(samples){const rb=gl.createRenderbuffer();gl.bindRenderbuffer(gl.RENDERBUFFER,rb);gl.renderbufferStorageMultisample(gl.RENDERBUFFER,samples,gl.RGBA8,W,H);
+  const fb=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.RENDERBUFFER,rb);
+  const f=instTest(200000);return()=>{gl.bindFramebuffer(gl.FRAMEBUFFER,fb);f();gl.bindFramebuffer(gl.READ_FRAMEBUFFER,fb);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,null);gl.blitFramebuffer(0,0,W,H,0,0,W,H,gl.COLOR_BUFFER_BIT,gl.NEAREST);gl.bindFramebuffer(gl.FRAMEBUFFER,null)}}
+(async()=>{
+  gl.viewport(0,0,W,H);window.__info={W,H,renderer:gl.getParameter(gl.RENDERER),maxSamples:gl.getParameter(gl.MAX_SAMPLES)};
+  for(const n of [32,128,512]) await timeit('fragment shader '+n+' iters/pixel',60,shaderTest(n),ms=>(W*H*n/ms/1e6).toFixed(1)+' Gpx-iter/s');
+  for(const n of [20,60]) await timeit('overdraw '+n+' full-screen blended layers',30,fillTest(n),ms=>(W*H*n/ms/1e6).toFixed(1)+' Gpix/s');
+  for(const n of [100000,1000000]) await timeit(n+' instanced blended triangles',30,instTest(n),ms=>(n/ms/1e3).toFixed(1)+' Mtri/s');
+  await timeit('texture sampling 16 taps 4096^2',30,texTest(4096),ms=>(W*H*16*4/ms/1e6).toFixed(1)+' GB/s(approx)');
+  for(const s of [4,8]){ if(s<=gl.getParameter(gl.MAX_SAMPLES)) await timeit('MSAA '+s+'x + 200k triangles',20,msaaTest(s)) }
+  window.__done=true;
+})().catch(e=>{window.__res.push({name:'ERROR '+e});window.__done=true});
+</script>
