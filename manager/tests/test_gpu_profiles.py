@@ -14,6 +14,8 @@ def test_raspberry_pi_gets_angle_on_gles(monkeypatch):
     assert profile.switches['use-gl'] == 'angle'
     assert profile.switches['use-angle'] == 'gles'
     assert 'ignore-gpu-blocklist' in profile.switches
+    # MSAA off: halves the WebGL frame rate on the V3D; `implicit` would make every getContext() return null
+    assert profile.switches['webgl-antialiasing-mode'] == 'none'
     assert profile.as_dict()['expects_compositing'] is True
 
 

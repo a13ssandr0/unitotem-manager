@@ -772,3 +772,40 @@ the VM-specific ones.
 - **`WS.disconnect` needs the user**, or `active_users` keeps dead sockets. `/remote/*` refuses loopback senders: test a pairing
   request from another host. A hidden `v-badge` stays in the DOM with its text and a `v-menu`'s content stays after the first
   opening: test the computed display / `aria-expanded`. The scratchpad directory is shared between agents: prefix your files.
+- **Working rules from the user (2026-10-20)**: (1) when in doubt, SEARCH THE WEB, always (and the Chromium tree on the build server: `grep` its
+  `content/public/common/content_switches.cc` instead of guessing a flag); (2) keep going alone until there is a result; (3) prefer ONE graphics stack
+  (X11, or Wayland + a compositor) identical on every board to keep the number of cases low, and split into two stacks only where one board loses
+  performance; (4) when the best result is reached and confirmed, build the images for both systems (the OS image is the unitotem-system session's job: send it
+  the spec, never touch its A/B state or `config.txt` without telling it).
+- **Graphics stack measurements, 2026-10-20 (venus = Intel Alder Lake-P Iris Xe, Mesa 25.0, kernel 6.12; Pi 4 = V3D 4.2, Mesa 26.2). Tools in `tools/gfx-bench/`.**
+  - **Tearing on X11 is real and a compositor fixes it, where one can run.** Our kiosk X11 has no compositor and no window manager: a windowed CEF
+    surface is presented by a vsynced COPY, not a flip, and tears. On venus `picom` (glx backend, `vsync = true`, no shadows/fading) removed it with no
+    measurable cost (4K60 H.264 scaled to 1080p: 61.3 fps, 0 dropped, 82% of a core). On the Pi 4 picom does NOT work: its GL backends need GLSL 3.30 and the
+    V3D exposes OpenGL 3.1 / GLSL 1.40 (`GLX_BAD_FB_CONFIG`, `GLSL 3.30 is not supported`), and `--backend=xrender` is worse than nothing (WebGL 33 -> 15 fps,
+    video 33% dropped, +50% CPU). picom needs `libev4t64 libxcb-composite0 libxcb-damage0 libconfig11` on top of the image's libraries.
+  - **Wayland (cage/labwc, CEF with `--ozone-platform=wayland`) on venus is spectacular**: same 4K60 video at 40% of a core (X11 + picom: 82%), 9 W package
+    (22 W), GPU 752 MHz (1371), no tearing (user checked), 60 fps WebGL. `cage` 0.2.0 + `labwc` 0.8.3 + `weston` 14 from trixie run as root with
+    `LIBSEAT_BACKEND=builtin` on a VT (`openvt -c 1 -f -s`), X and the manager stopped; cage wants `/usr/bin/Xwayland` (set `WLR_XWAYLAND`). The viewer
+    CANNOT run there as it is: it embeds CEF as an X11 child of a Qt window (`SetAsChild(winId)`). A Wayland port means CEF top-level windows (no Qt parent),
+    one per output placed by the compositor (labwc window rules / `MoveToOutput`), and the Qt-only parts (splash, screen detection, rotation) redone.
+  - **On the Pi 4 Wayland is NOT better for full-screen redraws**: cage, labwc and weston all cap anything that updates the whole 1080p surface at ~30-37 fps (X11:
+    60 with MSAA off), only `desynchronized:true` canvases reach 55-60. A native EGL client (`weston-simple-egl -f` under labwc) does 60.4 fps, so the
+    board and the compositors can scan out 1080p60: the limit is Chromium's Wayland present path on the V3D (trace: swap is fast, every other BeginFrame has no
+    draw, the swap ack comes too late). Flags that did NOT change it: zero-copy, native GMB, overlay delegation, disable-gpu-rasterization, ANGLE gl,
+    `WLR_DRM_NO_MODIFIERS`/`NO_ATOMIC`, a different compositor, DRM syncobj off. ANGLE on Vulkan (`v3dv`) breaks every WebGL context. Not investigated further.
+  - **Pi 4 WebGL: MSAA is the cost on X11.** A default WebGL context (`antialias:true`, 4x MSAA) that redraws the full canvas runs at 33 fps at ~1080p; with
+    `antialias:false` 60. `--webgl-antialiasing-mode=none` (read from the command line by `webgraphicscontext3d_provider_impl.cc`) gives 60 to every page,
+    now in the `pi` profile (`utils/system/gpu.py`, verified in the real viewer). **`webgl-antialiasing-mode=implicit` makes every `getContext()` return null**
+    (it looked like 60 fps because the rAF counter kept running). `--disable-gl-multisampling` no longer exists. The WebGL Aquarium (30000-fish demo) is GPU-bound
+    on the V3D and does not change (28 fps at 1 fish, 12 at 5000, 1080p). Where the time goes on X11: `egl::Surface::swap` blocks 10 ms on average (27 max)
+    in the GPU process while draw/composite cost ~2 ms.
+  - **Measurement traps (each cost an hour)**: a stand-alone `requestAnimationFrame` counter keeps ticking when the WebGL context is null: count draws and
+    check the context; a CDP `/json/new` window is NOT the screen size (X11 popup: 1919x992; labwc without a rule: ~913x931; fullscreen via
+    `Browser.setWindowBounds` clamps) so print `innerWidth x innerHeight` and fix the size (labwc rule in `tools/gfx-bench/labwc-rc.xml`); a stray video tab keeps
+    decoding in the background and pollutes the next measurement; `pkill -f "wlcef.py"` inside an ssh command line kills its own shell (use a script file).
+    Never measure while the system session builds on the Pi (its `CPUWeight=1` on the services makes every number wrong).
+  - **Pi 4 and 4K**: X11 offers 3840x2160 and 4096x2160 only at 30 Hz; 4Kp60 needs `hdmi_enable_4kp60=1` in `[pi4]` of `config.txt` (HDMI0 only, more power/heat). The
+    image does not set it (nobody decided to); `config.txt` is the system session's.
+  - **venus**: VA-API works with the 25.2.3 iHD driver and the firmware already installed (H.264 4K60 and HEVC 720p, `VaapiVideoDecoder`); i915 reaches 1450 MHz
+    and 90 C with the 30000-fish Aquarium at 4K and never raised a GPU throttle flag (`throttle_reason_*`); a second 4K monitor on HDMI-2 was seen as connected
+    but NOT enabled by anything (the manager adds the window once `xrandr --output HDMI-2 --auto` turns it on).
