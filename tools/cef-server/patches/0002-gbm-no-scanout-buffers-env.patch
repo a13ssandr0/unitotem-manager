@@ -1,0 +1,63 @@
+diff --git a/ui/gfx/linux/gbm_wrapper.cc b/ui/gfx/linux/gbm_wrapper.cc
+index 8ed4c586ef..6795db8b03 100644
+--- a/ui/gfx/linux/gbm_wrapper.cc
++++ b/ui/gfx/linux/gbm_wrapper.cc
+@@ -7,6 +7,7 @@
+ #include <gbm.h>
+ #include <sys/mman.h>
+ 
++#include <cstdlib>
+ #include <memory>
+ #include <utility>
+ #include <vector>
+@@ -42,6 +43,32 @@ namespace ui {
+ namespace gbm_wrapper {
+ namespace {
+ 
++// UniTotem: Mesa's gbm_bo_create_with_modifiers() allocates every buffer as scanout capable, and on the Raspberry Pi 4 (V3D)
++// a scanout buffer can only be linear. A Wayland compositor then has to sample linear buffers and presents every frame two
++// vblanks after its commit (30 fps); with the tiled layout (UIF) Mesa picks for a plain render buffer it runs at 60. With
++// UNITOTEM_NO_SCANOUT_BUFFERS set the buffers are created through gbm_bo_create_with_modifiers2() without the scanout flag.
++struct gbm_bo* UnitotemCreateWithModifiers(struct gbm_device* device,
++                                           uint32_t width,
++                                           uint32_t height,
++                                           uint32_t format,
++                                           const uint64_t* modifiers,
++                                           unsigned int count) {
++  using CreateFn = struct gbm_bo* (*)(struct gbm_device*, uint32_t, uint32_t,
++                                      uint32_t, const uint64_t*, unsigned int,
++                                      uint32_t);
++  static const CreateFn create2 =
++      getenv("UNITOTEM_NO_SCANOUT_BUFFERS")
++          ? reinterpret_cast<CreateFn>(
++                dlsym(RTLD_DEFAULT, "gbm_bo_create_with_modifiers2"))
++          : nullptr;
++  if (create2) {
++    return create2(device, width, height, format, modifiers, count,
++                   GBM_BO_USE_RENDERING);
++  }
++  return gbm_bo_create_with_modifiers(device, width, height, format, modifiers,
++                                      count);
++}
++
+ uint32_t GetHandleForPlane(struct gbm_bo* bo, int plane) {
+   return gbm_bo_get_handle_for_plane(bo, plane).u32;
+ }
+@@ -351,7 +378,7 @@ class Device final : public ui::GbmDevice {
+     bool valid_modifiers = false;
+ 
+     while (!valid_modifiers && !filtered_modifiers.empty()) {
+-      created_bo = gbm_bo_create_with_modifiers(
++      created_bo = UnitotemCreateWithModifiers(
+           device_.get(), size_for_verification.width(),
+           size_for_verification.height(), format, filtered_modifiers.data(),
+           filtered_modifiers.size());
+@@ -399,7 +426,7 @@ class Device final : public ui::GbmDevice {
+     // it it means that the buffer created for verification could not be reused,
+     // ie: different size, so create it now with the `requested_size`.
+     if (valid_modifiers && !created_bo) {
+-      created_bo = gbm_bo_create_with_modifiers(
++      created_bo = UnitotemCreateWithModifiers(
+           device_.get(), requested_size.width(), requested_size.height(),
+           format, filtered_modifiers.data(), filtered_modifiers.size());
+       PLOG_IF(ERROR, !created_bo) << "Failed to create BO with modifiers.";

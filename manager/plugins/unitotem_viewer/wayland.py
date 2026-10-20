@@ -29,8 +29,8 @@ def socket_available() -> bool:
 # window's output and maximizes it (no decorations, no panels: it fills the output; both actions can be repeated harmlessly), labwc is told to re-read it (SIGHUP; a key binding, unlike a window rule, is not
 # applied again to the windows that exist), the window is created, and once the compositor lists it (`wlrctl`, the
 # wlr-foreign-toplevel protocol) a virtual keyboard (uinput) presses the keys. Windows are created one at a time.
-# $UNITOTEM_LABWC_CONFIG is the rc.xml (set by whoever starts labwc), $LABWC_PID is exported by labwc itself. Without
-# them (cage, a desktop compositor...) nothing is done and the compositor places the window.
+# $UNITOTEM_LABWC_CONFIG is the rc.xml (set by whoever starts labwc). Without it, or without labwc (cage, a desktop
+# compositor...), nothing is done and the compositor places the window.
 import fcntl
 import html
 import logging
@@ -74,9 +74,20 @@ def _event(fd: int, key: int, value: int):
     os.write(fd, struct.pack('<qqHHi', 0, 0, 0, 0, 0))             # EV_SYN
 
 
+def _labwc_pid():
+    """labwc exports LABWC_PID to what it starts itself; a viewer started as a service of its own finds the process."""
+    if os.environ.get('LABWC_PID'):
+        return os.environ['LABWC_PID']
+    import psutil
+    for process in psutil.process_iter(['name']):
+        if process.info['name'] == 'labwc':
+            return str(process.pid)
+    return None
+
+
 def prepare(output: str) -> bool:
     """Gets the compositor ready to put the next window on `output`. False when there is no compositor to tell."""
-    path, pid = os.environ.get('UNITOTEM_LABWC_CONFIG'), os.environ.get('LABWC_PID')
+    path, pid = os.environ.get('UNITOTEM_LABWC_CONFIG'), _labwc_pid()
     if not path or not pid or not shutil.which('wlrctl') or not os.path.exists('/dev/uinput'):
         return False
     try:
