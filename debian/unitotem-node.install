@@ -1,3 +1,3 @@
 debian/01-unitotem-nm.yaml etc/netplan
-debian/10-x11.conf usr/lib/systemd/system/unitotem-manager.service.d
+debian/10-wayland.conf usr/lib/systemd/system/unitotem-manager.service.d
 debian/org.unitotem.Notifications.conf usr/share/dbus-1/system.d

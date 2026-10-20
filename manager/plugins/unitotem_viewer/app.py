@@ -43,7 +43,7 @@ from .cdp import Cdp
 from .idle import IdleWatch, schedule_due, seconds_to_next_minute
 from .splash import show_splashes
 from . import wayland
-from .window import WaylandWindow, WebviewWindow
+from .window import WebviewWindow
 import utils.ready as ready
 
 try:
@@ -87,19 +87,12 @@ class WebviewApp:
     @staticmethod
     def display_available() -> bool:
         """
-        Whether a reachable X11 display exists. CEF only supports X11 (a real
-        X server or XWayland - see the QT_QPA_PLATFORM override below), so
+        Whether the compositor's socket exists. Qt and CEF abort the whole process natively when there is none, so
         this must be checked *before* ever touching Qt/CEF: constructing
         either with no usable platform plugin aborts the whole process
         natively (SIGABRT), which no Python exception handler can catch.
         """
-        if wayland.wanted():
-            return wayland.socket_available()
-        display = os.environ.get('DISPLAY')
-        if not display:
-            return False
-        num = display.split(':', 1)[-1].split('.', 1)[0]
-        return num.lstrip('-').isdigit() and os.path.exists(f'/tmp/.X11-unix/X{num}')
+        return wayland.socket_available()
 
     @staticmethod
     def _own_cert_spki_hash(certfile: str) -> Optional[str]:
@@ -149,14 +142,8 @@ class WebviewApp:
         self.instance_id = instance_id
         self.hostname    = socket.gethostname()
 
-        # CEF requires an X11 window handle (winId). On Wayland we fall back
-        # to XWayland by forcing the xcb Qt platform plugin.
-        self.wayland = wayland.wanted()
-        if self.wayland:
-            # no embedding here: CEF windows are top-level, Qt only reports the outputs and draws the splash (wayland.py)
-            os.environ['QT_QPA_PLATFORM'] = 'wayland'
-        elif os.environ.get('WAYLAND_DISPLAY') and 'QT_QPA_PLATFORM' not in os.environ:
-            os.environ['QT_QPA_PLATFORM'] = 'xcb'
+        # CEF windows are top-level, Qt only reports the outputs and draws the splash (wayland.py)
+        os.environ['QT_QPA_PLATFORM'] = 'wayland'
 
         # cef.Initialize() below unconditionally attaches its own internal
         # GLib sources (sandbox IPC, hang watcher, etc.) to the process's
@@ -177,7 +164,7 @@ class WebviewApp:
 
         # The first frame goes up before CEF starts, which takes seconds: the boot splash of the system ends on it
         screens = self._real_screens()
-        self._splashes = dict(zip(screens, show_splashes(screens, self.wayland)))      # screen -> its splash
+        self._splashes = dict(zip(screens, show_splashes(screens)))      # screen -> its splash
         stop_boot_splash()      # ours is up: hand over from the one the boot started on its own
         ready.ready('first frame on screen')
 
@@ -255,12 +242,11 @@ class WebviewApp:
                     f'({self.gpu_profile.reason})'
                     + ('' if self.gpu_profile.verified
                        else ' [profile not verified on real hardware]'))
-        if self.wayland:
-            switches['ozone-platform'] = 'wayland'
-            if self.gpu_profile.name == 'pi':
-                # needs the CEF build that reads it (tools/cef-server/patches/0002): without it the compositor gets LINEAR buffers
-                # on the V3D and presents every frame two vblanks late (30 fps instead of 60); a CEF without the patch ignores it
-                os.environ.setdefault('UNITOTEM_NO_SCANOUT_BUFFERS', '1')
+        switches['ozone-platform'] = 'wayland'
+        if self.gpu_profile.name == 'pi':
+            # needs the CEF build that reads it (tools/cef-server/patches/0002): without it the compositor gets LINEAR buffers
+            # on the V3D and presents every frame two vblanks late (30 fps instead of 60); a CEF without the patch ignores it
+            os.environ.setdefault('UNITOTEM_NO_SCANOUT_BUFFERS', '1')
         # Experiments: UNITOTEM_CEF_SWITCHES="name=value,name2" adds browser switches without a code change
         for item in filter(None, os.environ.get('UNITOTEM_CEF_SWITCHES', '').split(';')):
             name, _, value = item.partition('=')
@@ -317,12 +303,14 @@ class WebviewApp:
 
         self.windows: dict[int, WebviewWindow] = {}
         self._screen_windows: dict[QScreen, int] = {}
-        self._screen_geometry: dict[QScreen, object] = {}   # last geometry seen per screen (QRect)
         self._next_id = 0
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
         self._ws = None
         self._cdp: Optional[Cdp] = None
         self._gpu_checked = False
+        self._open_lock = threading.Lock()
+        self._open_queue: Optional[asyncio.Queue] = None    # windows waiting to be opened (websocket thread)
+        self._early_windows: list[WebviewWindow] = []       # the ones made before that thread runs
         self._keyboard_config: dict[int, dict] = {}     # window -> settings of its on-screen keyboard
         self._text_focus: dict[int, dict[str, Optional[str]]] = {}      # window -> frames with a text field focused
         self._keyboard_wanted: dict[int, bool] = {}
@@ -347,34 +335,11 @@ class WebviewApp:
     @staticmethod
     def _is_placeholder(screen: QScreen) -> bool:
         """
-        Whether this is Qt's stand-in for "no screen at all" rather than a
-        real output.
-
-        QGuiApplication always keeps at least one QScreen, so with every
-        output disconnected the xcb backend leaves behind a placeholder named
-        after the X display itself (':0.0') instead of after a RandR output.
-        Observed transitions on the test VM:
-
-          0 outputs            -> one screen  ':0.0'      0x0
-          first output plugged -> screenAdded 'Virtual-1', then
-                                  screenRemoved ':0.0'
-          last output unplugged-> the existing QScreen is *renamed in place*
-                                  to ':0.0', keeping its now-stale geometry,
-                                  and NO signal of any kind is emitted
-
-        Without this check the manager opens a window on the placeholder when
-        it starts with no monitor attached, and reports a screen that is not
-        there. Real outputs are named after their RandR output (HDMI-1,
-        Virtual-1, ...), which never begins with ':'; the geometry test covers
-        the freshly-created placeholder, whose size is 0x0.
-
-        This does NOT cover the last-output-unplugged case: in a process that
-        owns a window on that screen, Qt keeps the QScreen under its original
-        name and geometry indefinitely (measured: still 'Virtual-1' 1280x800
-        more than 20s after the output was gone). Detecting that needs a RandR
-        event source of our own, independent of Qt - see TODO.
+        Whether this is a stand-in for "no screen at all" rather than a real output: Qt can keep a screen with an empty
+        geometry (or a name that is not an output's) while every output is disconnected. The node must keep running with
+        zero screens, so nothing is opened on it.
         """
-        return screen.name().startswith(':') or screen.geometry().isEmpty()
+        return not screen.name() or screen.name().startswith(':') or screen.geometry().isEmpty()
 
     def _real_screens(self) -> list[QScreen]:
         """Connected outputs only, with Qt's placeholder filtered out."""
@@ -393,35 +358,21 @@ class WebviewApp:
             x=geom.x(), y=geom.y(),
             width=geom.width(), height=geom.height(),
         )
-        win.show()
         self.windows[self._next_id] = win
+        self._queue_open(win)
         self._screen_windows[screen] = self._next_id
         window_id = self._next_id
         self._next_id += 1
-        # There is no window manager on the kiosk, so nothing else makes a window follow its screen when the screen's
-        # mode or rotation changes at runtime (xrandr): without this it stays at the old size, clipped or leaving a
-        # strip of bare root window that touches fall into.
-        self._screen_geometry[screen] = geom
-        screen.geometryChanged.connect(lambda new, s=screen: self._on_screen_geometry(s, new))
+        # The compositor makes the window follow its output when the mode or the rotation changes; the layout shown in
+        # the web UI follows too (debounced, a mode change is a burst of events)
+        screen.geometryChanged.connect(lambda _new: self._geometry_timer.start())
         self._notify_screens_changed()
         return window_id
-
-    def _on_screen_geometry(self, screen: QScreen, new_geometry):
-        """Resize the window that covers `screen` to its new geometry. A window that was given other bounds (a custom
-        layout set from the web UI) is left alone: only one that filled the screen follows it."""
-        old = self._screen_geometry.get(screen)
-        self._screen_geometry[screen] = new_geometry
-        win = self.windows.get(self._screen_windows.get(screen, -1))
-        if win is None or old is None:
-            return
-        current = win.geometry()
-        if (current.x(), current.y(), current.width(), current.height()) == (old.x(), old.y(), old.width(), old.height()):
-            win.set_bounds(new_geometry.x(), new_geometry.y(), new_geometry.width(), new_geometry.height())
 
     def _on_screen_removed(self, screen: QScreen):
         """Close the window associated with a screen that just disconnected."""
         window_id = self._screen_windows.pop(screen, None)
-        self._screen_geometry.pop(screen, None)
+        logger.info('Output {} is gone: closing its window ({})', screen.name(), window_id)
         if window_id is not None:
             win = self.windows.pop(window_id, None)
             if win is not None:
@@ -434,10 +385,56 @@ class WebviewApp:
             self._ws_loop.call_soon_threadsafe(self._drop_window, window_id)
 
     def _new_window(self, **geometry) -> WebviewWindow:
-        win = (WaylandWindow if self.wayland else WebviewWindow)(**geometry)
+        win = WebviewWindow(**geometry)
         win.on_geometry_changed = self._geometry_timer.start
-        win.on_mapped = self._raise_splashes
+        win.send_js = self._send_js
+        win.on_close = self._close_target
         return win
+
+    # ── the browser windows: opened one at a time, on the websocket thread (it owns the DevTools connection) ──
+
+    def _queue_open(self, win: WebviewWindow):
+        """Qt thread: have the window opened. Windows made before the websocket thread runs wait for it."""
+        with self._open_lock:
+            if self._open_queue is None:
+                self._early_windows.append(win)
+                return
+        self._ws_loop.call_soon_threadsafe(self._open_queue.put_nowait, win)
+
+    def _send_js(self, window_id: int, js: str):
+        if self._ws_loop is not None and self._cdp is not None:
+            asyncio.run_coroutine_threadsafe(self._cdp.run_js(window_id, js), self._ws_loop)
+
+    def _close_target(self, window_id: int):
+        if self._ws_loop is not None and self._cdp is not None:
+            asyncio.run_coroutine_threadsafe(self._cdp.close_window(window_id), self._ws_loop)
+
+    async def _window_opener(self):
+        """Opens the queued windows in order. Each one is put on its output before the next exists: the compositor can only
+        be told about the window that has just appeared (wayland.py)."""
+        while True:
+            win = await self._open_queue.get()
+            try:
+                if not win.closed:
+                    await self._open_window_now(win)
+            except Exception:
+                logger.exception('Window {}: cannot open it', win.window_id)
+
+    async def _open_window_now(self, win: WebviewWindow):
+        placed = await asyncio.to_thread(wayland.prepare, win.screen.name())
+        known = await asyncio.to_thread(wayland.toplevel_count) if placed else 0
+        await self._cdp.create_window(win.url)
+        if placed:
+            # the compositor lists the window as it appears, and it is the active one then: ask for it to be moved
+            deadline = asyncio.get_running_loop().time() + wayland.MAP_TIMEOUT_S
+            while await asyncio.to_thread(wayland.toplevel_count) <= known and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.1)
+            await asyncio.sleep(wayland.SETTLE_S * 2)       # it takes the focus a moment after it is listed
+            await asyncio.to_thread(wayland.apply)
+        if await self._cdp.wait_page(win.window_id) and not win.closed:
+            await self._cdp.fullscreen(win.window_id)
+        elif win.closed:
+            await self._cdp.close_window(win.window_id)
 
     def _notify_screens_changed(self):
         """
@@ -481,7 +478,7 @@ class WebviewApp:
     def _raise_splashes(self):
         for splash in self._splashes.values():
             splash.raise_()
-        self.qt_app.sync()      # to the X server now: the window below is unpainted until the event loop runs
+        self.qt_app.sync()      # to the compositor now: the window below is unpainted until the event loop runs
 
     def _close_splashes(self, screens=None):
         """Closes the splash of those screens (all of them by default)."""
@@ -533,8 +530,8 @@ class WebviewApp:
             width=width or geom.width(),
             height=height or geom.height(),
         )
-        win.show()
         self.windows[self._next_id] = win
+        self._queue_open(win)
         self._next_id += 1
         self._notify_screens_changed()
         return self._next_id - 1
@@ -596,6 +593,12 @@ class WebviewApp:
         self._cdp.on_binding('utSaver', self._on_saver_event)
         self._ws_loop.create_task(self._cdp.run(asyncio.Event()))
         self._ws_loop.create_task(self._refresh_scheduler())
+        with self._open_lock:
+            self._open_queue = asyncio.Queue()
+            for win in self._early_windows:
+                self._open_queue.put_nowait(win)
+            self._early_windows.clear()
+        self._ws_loop.create_task(self._window_opener())
         self._ws_loop.run_until_complete(self._ws_client())
 
     # ── focus in the pages and the on-screen keyboard (see cdp.py), on the websocket thread ──
@@ -818,8 +821,6 @@ class WebviewApp:
                 asyncio.run_coroutine_threadsafe(self._apply_keyboard(data['window_id']), self._ws_loop)
         elif target == 'SetAudioOutput' and win:
             win.set_audio_output(data.get('device'))
-        elif target == 'SetBounds' and win:
-            win.set_bounds(data['x'], data['y'], data['width'], data['height'])
         elif target == 'SetOrientation' and win:
             win.set_orientation(data.get('orientation', 0))
         elif target == 'SetFlip' and win:

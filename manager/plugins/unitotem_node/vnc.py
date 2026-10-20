@@ -3,7 +3,7 @@ The screen of the totem in the web UI: `/vnc` is a websocket carrying the RFB st
 occasion (see system/vnc.py for the server and why it is reachable through nothing else).
 
 Only an administrator gets in, with the same session cookie as the rest of the interface; everybody else is turned away
-before anything is started. Query parameters: `output` (a connected output, absent for the whole desktop) and `control=1`
+before anything is started. Query parameters: `output` (a connected output, absent for the compositor's first) and `control=1`
 to let the administrator type and click. The default is view-only, and that is enforced by the server.
 
 The session ends when the browser closes the websocket, when the browser has sent no sign of life of the user for
@@ -29,7 +29,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from routers.login import LOGMAN, NotAuthenticatedException
 from utils import sessions
 from .system import vnc as vnc_system
-from .system.screens import xorg
+from .system.screens import wayland
 from .system.vnc import IdleWatch, VncError, VncServer
 
 router = APIRouter()
@@ -72,10 +72,10 @@ async def authorize(websocket: WebSocket):
 
 
 async def _pick_output(name: str | None):
-    """The XOutput to show, None for the whole desktop. Raises VncError for an output that does not exist."""
+    """The Output to show, None for the compositor's first. Raises VncError for an output that does not exist."""
     if not name:
         return None
-    for output in await xorg.outputs():
+    for output in await wayland.outputs():
         if output.name == name:
             return output
     raise VncError(f'Unknown output {name}')
@@ -119,7 +119,7 @@ async def vnc(websocket: WebSocket):
 
     binary = vnc_system.find_binary()
     if binary is None:
-        await _refuse(websocket, 1011, 'The VNC server is not installed (package tigervnc-scraping-server)')
+        await _refuse(websocket, 1011, 'The VNC server is not installed (package wayvnc)')
         return
     if len(_sessions) >= vnc_system.MAX_SESSIONS:
         await _refuse(websocket, 1013, 'Too many screens are being watched')
@@ -128,7 +128,7 @@ async def vnc(websocket: WebSocket):
     server = None
     try:
         output = await _pick_output(websocket.query_params.get('output'))
-        server = VncServer(binary=binary, control=control, area=vnc_system.geometry(output))
+        server = VncServer(binary=binary, control=control, output=vnc_system.output_name(output))
         _sessions.add(server)
         await server.start()
         reader, writer = await server.connect()
@@ -141,7 +141,7 @@ async def vnc(websocket: WebSocket):
 
     await websocket.accept()
     sessions.track(websocket, user.name, user.sid)
-    logger.info('{} watches the screen ({}) from {}, {}', user.name, output.name if output else 'whole desktop', peer,
+    logger.info('{} watches the screen ({}) from {}, {}', user.name, output.name if output else 'first output', peer,
                 'WITH control' if control else 'view-only')
     idle = IdleWatch()
     tasks = [asyncio.create_task(_to_server(websocket, writer, idle)),

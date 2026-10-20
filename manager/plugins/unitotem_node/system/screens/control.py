@@ -1,7 +1,7 @@
 """
 The facade of screen control: what can be done to each output, and doing it.
 
-Mechanisms: X (RandR, always there with a display), DDC/CI, CEC, Wake-on-LAN and serial. The first three are probed;
+Mechanisms: the compositor's own outputs (always there with a display), DDC/CI, CEC, Wake-on-LAN and serial. The first three are probed;
 WOL and serial exist only when configured for the output. See SCREEN-CONTROL-PLAN.md for the capability model.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Optional
 from loguru import logger
 
 from unitotem_node.models.screen_control import OutputConfig, ScreenControl, screen_control
-from . import cec, ddc_ctl, serial, wol, xorg
+from . import cec, ddc_ctl, serial, wayland, wol
 from ._exec import ToolMissing, ToolTimeout
 from .ddc import DdcError
 from .identity import same_output
@@ -36,14 +36,14 @@ async def _tools() -> dict:
     return {'ddc': (ddc_ok, ddc_reason), 'cec_devices': await cec.devices()}
 
 
-def _availability(name: str, cfg: OutputConfig, x_output: Optional[xorg.XOutput], tools: dict) -> dict[str, dict]:
+def _availability(name: str, cfg: OutputConfig, x_output: Optional[wayland.Output], tools: dict) -> dict[str, dict]:
     """{mechanism: {'available': bool, 'reason': str}} for one output."""
     ddc_ok, ddc_reason = tools['ddc']
     adapters = tools['cec_devices']
     cec_device = cfg.cec_device or (adapters[0].path if len(adapters) == 1 else None)
     result = {
-        'x': {'available': x_output is not None,
-              'reason': '' if x_output is not None else 'the output is not connected to the X server'},
+        'output': {'available': x_output is not None,
+                   'reason': '' if x_output is not None else 'the output is not connected to the compositor'},
         'ddc': {'available': ddc_ok and cfg.ddc_bus is not None and ddc_ctl.VCP_POWER in cfg.ddc_features,
                 'reason': '' if ddc_ok and cfg.ddc_bus is not None and ddc_ctl.VCP_POWER in cfg.ddc_features else
                 (ddc_reason or ('no DDC/CI found on this output (run a probe)' if cfg.ddc_bus is None
@@ -61,7 +61,7 @@ def _availability(name: str, cfg: OutputConfig, x_output: Optional[xorg.XOutput]
 async def screens() -> list[dict]:
     """Every output we know about: the ones X reports plus the configured ones that are not connected right now
     (a monitor in deep standby may disappear from X altogether)."""
-    x_outputs = {o.name: o for o in await xorg.outputs()}
+    x_outputs = {o.name: o for o in await wayland.outputs()}
     tools = await _tools()
     names = list(x_outputs) + [n for n in screen_control.outputs if n not in x_outputs]
     out = []
@@ -90,8 +90,8 @@ async def screens() -> list[dict]:
 
 async def _probe(only: Optional[str]):
     tools = await _tools()
-    x_outputs = {o.name: o for o in await xorg.outputs()}
-    identities = await xorg.identities()
+    x_outputs = {o.name: o for o in await wayland.outputs()}
+    identities = await wayland.identities()
     detected = []
     if tools['ddc'][0]:
         try:
@@ -142,13 +142,13 @@ def probing() -> bool:
     return _probing is not None and not _probing.done()
 
 
-async def _x_output(name: str) -> Optional[xorg.XOutput]:
-    return next((o for o in await xorg.outputs() if o.name == name), None)
+async def _x_output(name: str) -> Optional[wayland.Output]:
+    return next((o for o in await wayland.outputs() if o.name == name), None)
 
 
-async def _do_power(name: str, mechanism: str, on: bool, cfg: OutputConfig, x: Optional[xorg.XOutput]):
-    if mechanism == 'x':
-        await xorg.set_power(name, on, known=x)
+async def _do_power(name: str, mechanism: str, on: bool, cfg: OutputConfig, x: Optional[wayland.Output]):
+    if mechanism == 'output':
+        await wayland.set_power(name, on, known=x)
     elif mechanism == 'ddc':
         await ddc_ctl.set_power(cfg.ddc_bus, on, cfg.ddc_capabilities)
     elif mechanism == 'cec':
@@ -177,7 +177,7 @@ async def set_power(name: str, state: str, mechanism: str = 'auto') -> str:
         availability = _availability(name, cfg, x, tools)
         available = {m for m, v in availability.items() if v['available']}
         if on:
-            # WOL and serial are about waking something X cannot see; X can only switch on what it lists
+            # WOL and serial are about waking something the compositor cannot see; it can only switch on what it lists
             pass
         else:
             available.discard('wol')
@@ -199,11 +199,11 @@ async def set_power(name: str, state: str, mechanism: str = 'auto') -> str:
 
 
 async def power_state(name: str) -> dict:
-    """Best-effort: what each mechanism that can tell says about the output. X knows whether it is driven; DDC and
+    """Best-effort: what each mechanism that can tell says about the output. The compositor knows whether the output is driven; DDC and
     CEC are asked only when probed, and many monitors do not answer while off."""
     cfg = screen_control.output(name)
     x = await _x_output(name)
-    state = {'x': ('on' if x.active else 'off') if x else None, 'ddc': None, 'cec': None}
+    state = {'output': ('on' if x.active else 'off') if x else None, 'ddc': None, 'cec': None}
     if cfg.ddc_bus is not None and (await ddc_ctl.available())[0]:
         state['ddc'] = await ddc_ctl.power_state(cfg.ddc_bus)
     adapters = await cec.devices()
@@ -270,13 +270,13 @@ async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
     """After the manager starts: switch on every screen that is not driven, retrying for `budget` seconds. A monitor
     that stayed off after a boot or a power cut needs this, and some take the best part of a minute to show their
     source once woken (55 s measured on a touch panel woken by Wake-on-LAN), so a retry has to leave that much time
-    before it counts as failed. Once it is on, X reports it and the viewer opens its window by itself (hot-plug)."""
+    before it counts as failed. Once it is on, the compositor reports it and the viewer opens its window by itself (hot-plug)."""
     loop = asyncio.get_running_loop()
     deadline = loop.time() + budget
     attempt = 0
     while True:
         attempt += 1
-        x_outputs = {o.name: o for o in await xorg.outputs()}
+        x_outputs = {o.name: o for o in await wayland.outputs()}
         todo = [name for name, cfg in screen_control.outputs.items()
                 if cfg.power_on_at_start and not (name in x_outputs and x_outputs[name].active)]
         todo += [name for name, o in x_outputs.items() if not o.active and name not in todo

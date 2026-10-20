@@ -1,25 +1,16 @@
 """
-WebviewWindow — frameless Qt6 window with an embedded CEF browser.
+WebviewWindow: one display window, a top-level browser window on a Wayland compositor.
 
-CEF renders directly to an X11 child window (via SetAsChild / winId()),
-so Wayland must be backed by XWayland (QT_QPA_PLATFORM=xcb).
+CEF cannot be embedded in a Qt window there (the protocol has no foreign windows), so the browser window is a window of its own
+and there is no Qt window at all. The compositor puts it on its output (wayland.py) and the browser makes it fullscreen (cdp.py);
+Qt is only used to learn about the outputs and to draw the splash.
 """
 import json
 import logging
-import time
 from typing import Optional
 from pathlib import Path
 
-from . import wayland
-
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QPalette, QScreen
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QSizePolicy
-
-try:
-    from cefpython3 import cefpython as cef
-except ImportError:
-    cef = None  # guarded at WebviewApp init time
+from PySide6.QtGui import QScreen
 
 # container index → name, must match show() in boot-screen.html
 _CONTAINERS = ['boot', 'web', 'image', 'video', 'audio']
@@ -27,128 +18,8 @@ _CONTAINERS = ['boot', 'web', 'image', 'video', 'audio']
 _FIT_NAMES  = ['contain', 'cover', 'fill']
 
 logger = logging.getLogger(__name__)
-_x_display = None   # second X connection, opened on first use (see CefWidget._sync_browser_size)
 
-MAP_TIMEOUT_S = 8.0     # most a Wayland window gets to load its page before the next one is created
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
-
-
-def _black_palette() -> QPalette:
-    """Palette whose every background role is black.
-
-    A display window must never show anything but black before its content is
-    up: the default palette is light, so each newly created window flashes
-    white for the frame or two between being mapped and CEF painting over it.
-    """
-    palette = QPalette()
-    black = QColor(0, 0, 0)
-    for role in (QPalette.ColorRole.Window, QPalette.ColorRole.Base,
-                 QPalette.ColorRole.Button):
-        palette.setColor(role, black)
-    return palette
-
-
-class CefWidget(QWidget):
-    """Hosts a CEF browser as an X11 child window embedded inside this Qt widget."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.browser = None
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        # Black from the very first frame: between show() and CEF's first
-        # paint the widget is filled with the Qt palette's window colour,
-        # which on a kiosk reads as a white flash on every window creation.
-        self.setAutoFillBackground(True)
-        self.setPalette(_black_palette())
-
-    def embed_browser(self, url: str, width: int = None, height: int = None):
-        """
-        Create the CEF browser child window. Must be called after show().
-
-        width/height should be the caller's already-known target size rather
-        than this widget's own self.width()/height(): winId() forces native
-        window creation immediately, which can happen before Qt has finished
-        laying this widget out to its final size, and no later resizeEvent
-        fires to correct it since Qt doesn't consider the size to have
-        changed - the browser is then stuck at a stale (often tiny) size.
-        """
-        winfo = cef.WindowInfo()
-        w = max(width or self.width(), 1)
-        h = max(height or self.height(), 1)
-        winfo.SetAsChild(int(self.winId()), [0, 0, w, h])
-        # Same reason as the Qt palette above: a browser's own pre-document
-        # colour defaults to opaque white, and it is this one that covers the
-        # widget as soon as the CEF child window is mapped. Both the
-        # application-wide setting (WebviewApp.cef.Initialize) and this
-        # per-browser one are needed - the per-browser value wins where set,
-        # and leaving it unset falls back to CefSettings only when its alpha
-        # is fully transparent, which is not a state we want to rely on.
-        self.browser = cef.CreateBrowserSync(
-            winfo, settings={'background_color': 0xFF000000}, url=url)
-        # Since the window is already created at its final size, no
-        # subsequent resizeEvent (and thus no OnSize call) ever fires to
-        # kick off CEF's compositor - it needs at least one explicit OnSize
-        # to start painting, particularly with multi_threaded_message_loop
-        # (the compositor runs on its own thread and doesn't get an implicit
-        # first-paint trigger from our single-threaded message pump anymore).
-        # OnSize's signature is (windowHandle, msg, wparam, lparam), a Win32
-        # message passthrough reused generically - on Linux it just re-reads
-        # the window's current X11 geometry via the handle, so the other
-        # three args are unused placeholders (matches every example in
-        # vendor/cefpython: gtk2.py, gtk3.py, qt.py all call OnSize(handle,
-        # 0, 0, 0)). Passing width/height positionally there is wrong and
-        # raises TypeError (wrong arg count) - it was never actually
-        # exercised until this call started firing.
-        cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
-    def execute_js(self, js: str):
-        if self.browser:
-            self.browser.ExecuteJavascript(js)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self.browser:
-            cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
-            # OnSize reads the widget's X11 geometry through its own connection, and at this point Qt has not flushed
-            # the resize to the server yet: the browser kept its old size when the screen changed mode or rotated
-            # (measured: window 2160x3840, CEF child still 3840x2160). Ask again once the resize has been applied.
-            QTimer.singleShot(0, self._sync_browser_size)
-            QTimer.singleShot(100, self._sync_browser_size)
-
-    def _sync_browser_size(self):
-        """Make the browser's own X11 window as big as this widget. cefpython's OnSize does not do it on Linux (the
-        child keeps the size it was created with), so the child is resized directly over a second X connection."""
-        if not self.browser:
-            return
-        cef.WindowUtils.OnSize(int(self.winId()), 0, 0, 0)
-        try:
-            from Xlib import display
-            global _x_display
-            if _x_display is None:
-                _x_display = display.Display()
-            handle = self.browser.GetWindowHandle()
-            if handle:
-                _x_display.create_resource_object('window', handle).configure(width=max(self.width(), 1),
-                                                                              height=max(self.height(), 1))
-                _x_display.flush()
-        except Exception as exc:
-            logger.warning('could not resize the browser window: %s', exc)
-
-    def focusInEvent(self, event):
-        super().focusInEvent(event)
-        if self.browser:
-            self.browser.SetFocus(True)
-
-    def focusOutEvent(self, event):
-        super().focusOutEvent(event)
-        if self.browser:
-            self.browser.SetFocus(False)
-
-    def closeEvent(self, event):
-        if self.browser:
-            self.browser.CloseBrowser(True)
-            self.browser = None
-        super().closeEvent(event)
 
 
 class PageCommands:
@@ -209,132 +80,38 @@ class PageCommands:
         self._cef.execute_js(f'setFlip({flip})')
 
 
-class WebviewWindow(QMainWindow, PageCommands):
-    """One frameless display window. Multiple instances = multiple screens."""
+class WebviewWindow(PageCommands):
+    """One display window. The browser window itself is made by the browser when the application asks (app.py, cdp.py); this is
+    the application's name for it: its id, its output, and the way to send it commands."""
 
-    def __init__(self, window_id: int, screen: QScreen,
-                 x: int, y: int, width: int, height: int):
-        super().__init__()
-        self._window_id = window_id
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        # The window itself is painted before its child widget is, so it needs
-        # the same black background - otherwise the flash simply moves one
-        # level up. See _black_palette().
-        self.setAutoFillBackground(True)
-        self.setPalette(_black_palette())
-        self.setScreen(screen)
-        self.setGeometry(x, y, width, height)
-        self._content_width = width
-        self._content_height = height
-
-        self._cef = CefWidget(self)
-        self.setCentralWidget(self._cef)
-        # set by the application: called when the window is moved or resized
-        self.on_geometry_changed = None
-        # called when the window has been mapped, before its browser is created
-        self.on_mapped = None
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self.on_geometry_changed:
-            self.on_geometry_changed()
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        if self.on_geometry_changed:
-            self.on_geometry_changed()
-
-    def closeEvent(self, event):
-        # Qt delivers a close event only to the widget close() was called on,
-        # never to its children, so CefWidget.closeEvent below does not fire
-        # when this window is closed - which is how every window disappears
-        # (a screen being unplugged, or a RemoveWindow command). The CEF
-        # browser it hosts was therefore never shut down: it outlived its
-        # window, keeping its renderer process alive with nothing to draw on.
-        # That is the "renderers are never reclaimed" leak, measured going
-        # 2 -> 4 -> 5 -> 6 across hot-plug cycles and confirmed on CEF's own
-        # DevTools target list, which still listed the removed window's page.
-        # Forward the close explicitly so the browser goes with the window.
-        self._cef.close()
-        super().closeEvent(event)
-
-    def show(self):
-        super().show()
-        # Mapped, not painted yet (nothing runs the event loop until the browser exists): what shows is white. The
-        # application puts its splash back on top before the browser, which takes a while to create, is embedded.
-        if self.on_mapped:
-            self.on_mapped()
-        # embed_browser() needs a valid, visible X11 window handle
-        if self._cef.browser is None:
-            # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to
-            self._cef.embed_browser(f'{_BOOT_URL}?window={self._window_id}', self._content_width, self._content_height)
-
-    def set_bounds(self, x: int, y: int, width: int, height: int):
-        self.setGeometry(x, y, width, height)
-
-
-class _TopLevelBrowser:
-    """The CEF browser of a Wayland window: a top-level window of its own, not a child of a Qt widget."""
-
-    def __init__(self):
-        self.browser = None
-
-    def execute_js(self, js: str):
-        if self.browser:
-            self.browser.ExecuteJavascript(js)
-
-    def close(self):
-        if self.browser:
-            self.browser.CloseBrowser(True)
-            self.browser = None
-
-
-class WaylandWindow(PageCommands):
-    """One display window on Wayland. CEF cannot be embedded in a Qt window there (no foreign windows in the protocol), so
-    the browser is a top-level window of its own and there is no Qt window at all: the compositor decides where it goes and
-    makes it fullscreen on its output (window rules, see wayland.py). Qt is only used to learn about the
-    outputs and for the splash. Same interface as WebviewWindow."""
-
-    def __init__(self, window_id: int, screen: QScreen, x: int, y: int, width: int, height: int):
+    def __init__(self, window_id: int, screen: QScreen, x: int = 0, y: int = 0, width: int = 0, height: int = 0):
         self._window_id = window_id
         self.screen = screen
-        self._cef = _TopLevelBrowser()
-        # same attributes as WebviewWindow, set by the application
-        self.on_geometry_changed = None
-        self.on_mapped = None
+        self._cef = self                    # what PageCommands talks to
+        self.closed = False
+        self.on_geometry_changed = None     # set by the application
+        self.send_js = None                 # (window_id, js), set by the application
+        self.on_close = None                # (window_id), set by the application
+
+    @property
+    def window_id(self) -> int:
+        return self._window_id
 
     def geometry(self):
         return self.screen.geometry()
 
-    def show(self):
-        if self.on_mapped:
-            self.on_mapped()
-        if self._cef.browser is None:
-            placed = wayland.prepare(self.screen.name())
-            known = wayland.toplevel_count() if placed else 0
-            # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to
-            self._cef.browser = cef.CreateBrowserSync(
-                cef.WindowInfo(), settings={'background_color': 0xFF000000},
-                url=f'{_BOOT_URL}?window={self._window_id}')
-            if placed:
-                # wait until the compositor lists the new window (it is the active one then), and ask it to move it
-                deadline = time.monotonic() + MAP_TIMEOUT_S
-                while wayland.toplevel_count() <= known and time.monotonic() < deadline:
-                    cef.MessageLoopWork()
-                    QApplication.processEvents()
-                    time.sleep(0.05)
-                for _ in range(int(wayland.SETTLE_S * 4 / 0.01)):       # the window takes the focus a moment after it is listed
-                    cef.MessageLoopWork()
-                    QApplication.processEvents()
-                    time.sleep(0.01)
-                wayland.apply()
+    def execute_js(self, js: str):
+        if self.send_js and not self.closed:
+            self.send_js(self._window_id, js)
 
-    def set_bounds(self, x: int, y: int, width: int, height: int):
-        logger.debug('Window {}: bounds are the compositor\'s business on Wayland, ignoring', self._window_id)
+    @property
+    def url(self) -> str:
+        # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to
+        return f'{_BOOT_URL}?window={self._window_id}'
 
     def close(self):
-        self._cef.close()
+        if self.closed:
+            return
+        self.closed = True
+        if self.on_close:
+            self.on_close(self._window_id)

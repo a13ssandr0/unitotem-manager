@@ -138,11 +138,11 @@ class WebviewManager:
         # the viewer: one screen is one window, and a node driving two screens
         # must be able to show a different playlist on each.
         #
-        # The key is the RandR output name ('HDMI-1', 'DP-1') rather than the
+        # The key is the output name ('HDMI-1', 'DP-1') rather than the
         # window_id it used to be, because window_id is minted by app.py's
         # _next_id and never reused: an output that goes away and comes back -
         # which is exactly what screen power control does with
-        # `xrandr --output X --off/--auto` - returns under a NEW window_id and
+        # `wlr-randr --output X --off/--on` - returns under a NEW window_id and
         # orphaned its assignment. The spec requires the opposite ("the
         # playlist outputting to that window must be unaware of the change").
         # The output name survives that cycle; the window_id does not.
@@ -606,14 +606,6 @@ class WebviewManager:
 
     async def send_webview_command(self, webview_id: str, target: str, **kwargs):
         await self.remote_ws.multicast(webview_id, target, nocache=True, **kwargs)
-
-    async def set_bounds(self, webview_id: str, window_id: int, x: int, y: int, width: int, height: int):
-        if webview_id in self._webviews:
-            windows = self._webviews[webview_id].get('windows', [])
-            if window_id < len(windows):
-                windows[window_id].update({'x': x, 'y': y, 'width': width, 'height': height})
-        await self.send_webview_command(webview_id, 'SetBounds',
-                                       window_id=window_id, x=x, y=y, width=width, height=height)
 
     async def set_orientation(self, webview_id: str, window_id: int, orientation: int):
         if webview_id in self._webviews:

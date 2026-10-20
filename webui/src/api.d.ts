@@ -102,7 +102,7 @@ export interface Api {
         set_volume: ApiCall<{ name: string; volume: number }>
       }
       Touch: {
-        /** Touch screens found on the X server with their output (None: automatic), the remembered ones that are not [requires: admin] */
+        /** Touch screens found on this machine with their output (None: automatic), the remembered ones that are not [requires: admin] */
         devices: ApiCall<Record<string, never>>
         /** Drop the mapping of a device that is not plugged in any more. [requires: admin] */
         forget: ApiCall<{ key: string }>
@@ -123,8 +123,6 @@ export interface Api {
       orientation: ApiCall<{ viewer_id: string; window_id?: number }>
       /** Stored now, applied by the viewer the next time it starts: CEF [requires: admin] */
       set_allow_insecure_certs: ApiCall<{ allow: boolean }>
-      /** [requires: admin] */
-      set_bounds: ApiCall<{ viewer_id: string; window_id: number; x: number; y: number; width: number; height: number }>
       /** [requires: admin] */
       set_flip: ApiCall<{ viewer_id: string; window_id: number; flip: number }>
       /** [requires: admin] */

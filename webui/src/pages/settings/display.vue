@@ -33,13 +33,6 @@
               :y="disp.y+disp.height*3/5">
               ({{ disp.width }}x{{ disp.height }})
             </text>
-            <rect
-              :x="disp.x"
-              :y="disp.y"
-              :width="disp.width"
-              :height="disp.height"
-              fill="#00000000"
-              @click="api.Settings.Display.set_bounds({viewer_id: currentViewerId, window_id: 0, x: disp.x, y: disp.y, width: disp.width, height: disp.height})"/>
           </template>
           <text x="500" y="500" v-if="svg.disabled" :fill="textColor">Disconnected</text>
           <rect id="window_bound_rect"

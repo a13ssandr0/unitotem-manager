@@ -89,10 +89,6 @@ class Display(WSAPIBase):
             return WSBroadcast(**windows[window_id])
         return WSBroadcast()
 
-    def set_bounds(self, viewer_id: str, window_id: int, x: int, y: int, width: int, height: int):
-        asyncio.create_task(_vm().set_bounds(viewer_id, window_id, x, y, width, height))
-        return WSBroadcast(self.bounds, x=x, y=y, width=width, height=height)
-
     def orientation(self, viewer_id: str, window_id: int = 0):
         windows = _vm().get_webview_windows(viewer_id)
         orientation = windows[window_id].get('orientation', 0) if window_id < len(windows) else 0

@@ -10,14 +10,19 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, Field, field_validator
 
 from utils.models.command_line import cmdargs
 
-MechanismChoice = Literal['auto', 'ddc', 'cec', 'x', 'wol', 'serial']
+def _legacy_mechanism(value):
+    """'x' was the name of the output mechanism while the kiosk ran an X server: files written then still say so."""
+    return 'output' if value == 'x' else value
+
+
+MechanismChoice = Annotated[Literal['auto', 'ddc', 'cec', 'output', 'wol', 'serial'], BeforeValidator(_legacy_mechanism)]
 OUTPUT_NAME_RE = re.compile(r'^[A-Za-z0-9_.-]{1,64}$')
 
 
