@@ -15,6 +15,7 @@ from unitotem_node.models.screen_control import OutputConfig, ScreenControl, scr
 from . import cec, ddc_ctl, serial, wayland, wol
 from ._exec import ToolMissing, ToolTimeout
 from .ddc import DdcError
+from utils.outputs import find_renamed
 from .identity import same_output
 from .mechanism import NoMechanismAvailable, candidates
 
@@ -58,10 +59,24 @@ def _availability(name: str, cfg: OutputConfig, x_output: Optional[wayland.Outpu
     return result
 
 
+def _adopt_renamed(present: list[str]):
+    """Settings saved under an output's old name (X server spelling) move to its name under the compositor."""
+    changed = False
+    for old in list(screen_control.outputs):
+        renamed = find_renamed(old, present)
+        if renamed is not None and renamed not in screen_control.outputs:
+            logger.info('Screen {} is now called {}: its settings follow', old, renamed)
+            screen_control.outputs[renamed] = screen_control.outputs.pop(old)
+            changed = True
+    if changed:
+        screen_control.save()
+
+
 async def screens() -> list[dict]:
     """Every output we know about: the ones X reports plus the configured ones that are not connected right now
     (a monitor in deep standby may disappear from X altogether)."""
     x_outputs = {o.name: o for o in await wayland.outputs()}
+    _adopt_renamed(list(x_outputs))
     tools = await _tools()
     names = list(x_outputs) + [n for n in screen_control.outputs if n not in x_outputs]
     out = []

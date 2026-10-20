@@ -70,30 +70,7 @@ def edid_identity(edid: bytes) -> Optional[str]:
     return f'{mfg}:{model}:{serial}'
 
 
-_HDMI_A_RE = re.compile(r'^HDMI-A-(\d+)$')
-_CARD_PREFIX_RE = re.compile(r'^card\d+-')
-
-
-def canonical_output_name(name: str) -> str:
-    """Fold a RandR output name and a DRM connector name that refer to the
-    same physical output into one comparable form.
-
-    Two independent differences observed on real hardware, both handled:
-      - DRM connectors are prefixed 'cardN-' ('card0-HDMI-A-1'); RandR names
-        never are ('HDMI-A-1'). Stripped unconditionally.
-      - HDMI naming disagrees even between RandR and DRM on the SAME driver:
-        confirmed real, dev host (NVIDIA): RandR calls it 'HDMI-A-1', DRM
-        calls it 'card1-HDMI-A-1' - same 'HDMI-A-1' suffix, no problem. But
-        on i915 (documented, not locally reproduced), RandR is reported to
-        use the shorter 'HDMI-1' while DRM keeps 'HDMI-A-1'. Normalising
-        'HDMI-A-n' -> 'HDMI-n' handles both conventions the same way, since
-        applying it to an already-short 'HDMI-1' is a no-op.
-    DP-n, DVI-D-n, eDP-n and Virtual-n have not been observed to disagree
-    between RandR and DRM beyond the card prefix, so nothing else is touched.
-    """
-    stripped = _CARD_PREFIX_RE.sub('', name)
-    m = _HDMI_A_RE.match(stripped)
-    return f'HDMI-{m.group(1)}' if m else stripped
+from utils.outputs import canonical_output_name  # noqa: E402,F401  (re-exported: it used to live here)
 
 
 def same_output(randr_name: str, drm_connector: str) -> bool:

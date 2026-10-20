@@ -21,8 +21,8 @@ sys.modules.setdefault('routers.login', _login)
 
 from unitotem_node import vnc as vnc_route  # noqa: E402
 from unitotem_node.system import vnc  # noqa: E402
-from unitotem_node.system.screens.xorg import XOutput  # noqa: E402
-from unitotem_node.system.vnc import IdleWatch, VncError, VncServer, build_command, geometry  # noqa: E402
+from unitotem_node.system.screens.wayland import Output  # noqa: E402
+from unitotem_node.system.vnc import IdleWatch, VncError, VncServer, build_command, output_name  # noqa: E402
 
 
 # ── command line ─────────────────────────────────────────────────────────────
@@ -32,48 +32,46 @@ def option(command, name):
 
 
 def test_command_never_listens_on_tcp_and_uses_the_unix_socket():
-    command = build_command('/usr/bin/x0vncserver', '/run/unitotem-vnc/abc/rfb', control=False)
-    assert option(command, '-rfbport') == '-1'
-    assert option(command, '-rfbunixpath') == '/run/unitotem-vnc/abc/rfb'
-    assert '-localhost' not in command and not any(c.startswith('-rfbauth') for c in command)
+    command = build_command('/usr/bin/wayvnc', '/run/unitotem-vnc/abc/rfb', control=False)
+    assert '--unix-socket' in command and command[-1] == '/run/unitotem-vnc/abc/rfb'
+    assert '127.0.0.1' not in command and '0.0.0.0' not in command and '5900' not in command
 
 
 def test_command_is_view_only_by_default_and_server_enforced():
-    command = build_command('x', '/s', control=False)
-    assert '-AcceptKeyEvents=0' in command and '-AcceptPointerEvents=0' in command
+    assert '--disable-input' in build_command('x', '/s', control=False)
 
 
 def test_command_with_control_accepts_input():
-    command = build_command('x', '/s', control=True)
-    assert '-AcceptKeyEvents=1' in command and '-AcceptPointerEvents=1' in command
+    assert '--disable-input' not in build_command('x', '/s', control=True)
 
 
 @pytest.mark.parametrize('control', [False, True])
-def test_command_always_blocks_clipboard_and_resizing(control):
-    command = build_command('x', '/s', control=control)
-    for flag in ('-AcceptCutText=0', '-SendCutText=0', '-AcceptSetDesktopSize=0'):
-        assert flag in command
+def test_command_never_lets_a_client_resize_the_screen(control):
+    assert '--disable-resizing' in build_command('x', '/s', control=control)
 
 
-def test_command_restricts_to_the_area_only_when_given():
-    assert '-Geometry' not in build_command('x', '/s', False)
-    assert option(build_command('x', '/s', False, '1920x1080+1920+0'), '-Geometry') == '1920x1080+1920+0'
+def test_command_captures_one_output_only_when_given():
+    assert '--output' not in build_command('x', '/s', False)
+    assert option(build_command('x', '/s', False, 'DP-2'), '--output') == 'DP-2'
 
 
-def test_geometry_of_an_output_and_of_the_whole_desktop():
-    assert geometry(None) is None
-    assert geometry(XOutput('DP-1', True, True, 1080, 1920, 3840, 0, 'left')) == '1080x1920+3840+0'
+def test_command_has_an_explicit_config_when_given():
+    assert option(build_command('x', '/s', False, None, '/run/unitotem-vnc/abc/config'), '--config') == '/run/unitotem-vnc/abc/config'
 
 
-def test_geometry_of_an_output_that_shows_nothing_is_refused():
+def test_output_to_capture():
+    assert output_name(None) is None
+    assert output_name(Output('DP-1', True, True, 1080, 1920, 3840, 0, 'left')) == 'DP-1'
+
+
+def test_an_output_that_shows_nothing_is_refused():
     with pytest.raises(VncError):
-        geometry(XOutput('HDMI-1', True, False))
+        output_name(Output('HDMI-1', True, False))
 
 
-def test_find_binary_prefers_the_alternatives_name_then_the_real_one():
-    assert vnc.find_binary(which=lambda n: '/usr/bin/x0vncserver' if n == 'x0vncserver' else None) \
-        == '/usr/bin/x0vncserver'
-    assert vnc.find_binary(which=lambda n: None, exists=lambda p: p == '/usr/bin/X0tigervnc') == '/usr/bin/X0tigervnc'
+def test_find_binary():
+    assert vnc.find_binary(which=lambda n: '/usr/bin/wayvnc' if n == 'wayvnc' else None) == '/usr/bin/wayvnc'
+    assert vnc.find_binary(which=lambda n: None, exists=lambda p: p == '/usr/bin/wayvnc') == '/usr/bin/wayvnc'
     assert vnc.find_binary(which=lambda n: None, exists=lambda p: False) is None
 
 
@@ -104,7 +102,7 @@ def test_idle_watch_expires_after_the_timeout_and_activity_rearms_it():
 
 FAKE_SERVER = '''
 import os, socket, sys
-path = sys.argv[sys.argv.index("-rfbunixpath") + 1]
+path = sys.argv[-1]
 s = socket.socket(socket.AF_UNIX)
 s.bind(path)
 os.chmod(path, 0o600)
@@ -177,7 +175,7 @@ def test_sweep_kills_only_a_process_that_belongs_to_the_session(tmp_path):
     (mine / 'pid').write_text('424242')
     (other / 'pid').write_text('434343')
     (proc_root / '424242').mkdir(parents=True)
-    (proc_root / '424242' / 'cmdline').write_bytes(f'x0vncserver\0-rfbunixpath\0{mine}/rfb\0'.encode())
+    (proc_root / '424242' / 'cmdline').write_bytes(f'wayvnc\0--unix-socket\0{mine}/rfb\0'.encode())
     (proc_root / '434343').mkdir(parents=True)
     (proc_root / '434343' / 'cmdline').write_bytes(b'something-else\0')
     killed = []
