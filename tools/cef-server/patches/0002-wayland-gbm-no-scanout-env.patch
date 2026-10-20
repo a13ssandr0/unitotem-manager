@@ -1,0 +1,28 @@
+diff --git a/ui/ozone/platform/wayland/gpu/gbm_pixmap_wayland.cc b/ui/ozone/platform/wayland/gpu/gbm_pixmap_wayland.cc
+index 82dacd5379..1c750306f8 100644
+--- a/ui/ozone/platform/wayland/gpu/gbm_pixmap_wayland.cc
++++ b/ui/ozone/platform/wayland/gpu/gbm_pixmap_wayland.cc
+@@ -8,6 +8,7 @@
+ #include <gbm.h>
+ #include <xf86drmMode.h>
+ 
++#include <cstdlib>
+ #include <memory>
+ 
+ #include "base/files/platform_file.h"
+@@ -55,7 +56,14 @@ bool GbmPixmapWayland::InitializeBuffer(
+     return false;
+ 
+   const uint32_t fourcc_format = GetFourCCFormatFromSharedImageFormat(format);
+-  const uint32_t gbm_flags = ui::NativePixmapUsageToGbmFlags(usage);
++  uint32_t gbm_flags = ui::NativePixmapUsageToGbmFlags(usage);
++  // UniTotem: with UNITOTEM_NO_SCANOUT_BUFFERS set the buffers are not asked to be scanout capable. On the Raspberry Pi 4 (V3D)
++  // such a buffer can only be linear, which the Wayland compositor then has to sample slowly: every frame is presented two
++  // vblanks after its commit (30 fps). Without the flag Mesa picks its tiled layout (UIF) and the presentation runs at 60.
++  static const bool no_scanout = getenv("UNITOTEM_NO_SCANOUT_BUFFERS") != nullptr;
++  if (no_scanout) {
++    gbm_flags &= ~GBM_BO_USE_SCANOUT;
++  }
+   auto modifiers = buffer_manager_->GetModifiersForFormat(format);
+ 
+   // Create buffer object without format modifiers unless they are explicitly

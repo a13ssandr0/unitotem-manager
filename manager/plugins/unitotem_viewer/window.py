@@ -6,12 +6,15 @@ so Wayland must be backed by XWayland (QT_QPA_PLATFORM=xcb).
 """
 import json
 import logging
+import time
 from typing import Optional
 from pathlib import Path
 
+from . import wayland
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPalette, QScreen
-from PySide6.QtWidgets import QMainWindow, QWidget, QSizePolicy
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QSizePolicy
 
 try:
     from cefpython3 import cefpython as cef
@@ -26,6 +29,7 @@ _FIT_NAMES  = ['contain', 'cover', 'fill']
 logger = logging.getLogger(__name__)
 _x_display = None   # second X connection, opened on first use (see CefWidget._sync_browser_size)
 
+MAP_TIMEOUT_S = 8.0     # most a Wayland window gets to load its page before the next one is created
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
 
 
@@ -292,7 +296,7 @@ class _TopLevelBrowser:
 class WaylandWindow(PageCommands):
     """One display window on Wayland. CEF cannot be embedded in a Qt window there (no foreign windows in the protocol), so
     the browser is a top-level window of its own and there is no Qt window at all: the compositor decides where it goes and
-    makes it fullscreen on its output (window rules keyed on the title, see wayland.py). Qt is only used to learn about the
+    makes it fullscreen on its output (window rules, see wayland.py). Qt is only used to learn about the
     outputs and for the splash. Same interface as WebviewWindow."""
 
     def __init__(self, window_id: int, screen: QScreen, x: int, y: int, width: int, height: int):
@@ -310,11 +314,24 @@ class WaylandWindow(PageCommands):
         if self.on_mapped:
             self.on_mapped()
         if self._cef.browser is None:
-            # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to,
-            # and the page's title ('unitotem-<id>', see boot-screen.html) is how the compositor knows which output it is for
+            placed = wayland.prepare(self.screen.name())
+            known = wayland.toplevel_count() if placed else 0
+            # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to
             self._cef.browser = cef.CreateBrowserSync(
                 cef.WindowInfo(), settings={'background_color': 0xFF000000},
                 url=f'{_BOOT_URL}?window={self._window_id}')
+            if placed:
+                # wait until the compositor lists the new window (it is the active one then), and ask it to move it
+                deadline = time.monotonic() + MAP_TIMEOUT_S
+                while wayland.toplevel_count() <= known and time.monotonic() < deadline:
+                    cef.MessageLoopWork()
+                    QApplication.processEvents()
+                    time.sleep(0.05)
+                for _ in range(int(wayland.SETTLE_S * 4 / 0.01)):       # the window takes the focus a moment after it is listed
+                    cef.MessageLoopWork()
+                    QApplication.processEvents()
+                    time.sleep(0.01)
+                wayland.apply()
 
     def set_bounds(self, x: int, y: int, width: int, height: int):
         logger.debug('Window {}: bounds are the compositor\'s business on Wayland, ignoring', self._window_id)

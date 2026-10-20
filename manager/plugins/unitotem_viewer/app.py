@@ -257,6 +257,10 @@ class WebviewApp:
                        else ' [profile not verified on real hardware]'))
         if self.wayland:
             switches['ozone-platform'] = 'wayland'
+        # Experiments: UNITOTEM_CEF_SWITCHES="name=value,name2" adds browser switches without a code change
+        for item in filter(None, os.environ.get('UNITOTEM_CEF_SWITCHES', '').split(';')):
+            name, _, value = item.partition('=')
+            switches[name] = value
         for key, value in self.gpu_profile.switches.items():
             # Never override something set above: an explicit switch here is a
             # deliberate decision about this node, the profile is a default.
