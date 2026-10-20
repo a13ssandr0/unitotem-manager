@@ -810,7 +810,7 @@ the VM-specific ones.
     but NOT enabled by anything (the manager adds the window once `xrandr --output HDMI-2 --auto` turns it on).
 - **THE KIOSK RUNS WAYLAND (labwc) AND NOTHING ELSE since 2026-10-20 (user decision "via X11, andiamo tutto su Wayland"). Everything X11 in this file is history.**
   Pieces: `unitotem-compositor.service` (shipped by unitotem-viewer, enabled by the image: labwc as root on VT1 with libseat's builtin backend, `RuntimeDirectory=unitotem`,
-  `XDG_RUNTIME_DIR=/run/unitotem/xdg`, `labwc --merge-config` with `XDG_CONFIG_DIRS=/etc/unitotem/xdg:/run/unitotem/labwc/node:/run/unitotem/labwc/viewer`; the base config is
+  the compositor's `XDG_RUNTIME_DIR=/run/unitotem/xdg` (private; the manager and the splash do NOT set XDG_RUNTIME_DIR, it is where pipewire-pulse and root's session bus live: they get `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`, an absolute path), `labwc --merge-config` with `XDG_CONFIG_DIRS=/etc/unitotem/xdg:/run/unitotem/labwc/node:/run/unitotem/labwc/viewer`; the base config is
   `debian/labwc-rc.xml`); `utils/labwc.py` (one configuration FRAGMENT per writer, `reload()` = SIGHUP: the viewer writes the window placement, the node the touch mapping);
   the viewer (Qt wayland only for QScreens and splash; browser windows made by DevTools `Target.createTarget`, see below); the node (`system/screens/wayland.py`: `wlr-randr --json`
   for outputs/power/rotation names, `wlopm` for blanking, EDID from `/sys/class/drm/card*-<output>/edid` for the identity; `touch.py`; `vnc.py` with wayvnc); `bootsplash.py` in QtGui.

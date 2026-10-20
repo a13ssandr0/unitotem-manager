@@ -19,7 +19,7 @@ screen power. Everything below was run on real boards with the transient unit of
 - `unitotem-compositor.service` comes with the unitotem-viewer deb (disabled): **enable it** (`WantedBy=multi-user.target`). It does what start-xorg did: Plymouth
   `deactivate` before, plymouthd killed once the socket exists, VT1, `Restart=always`. `unitotem-splash.service` (viewer deb) waits for the same socket.
 - `/etc/unitotem/xdg/labwc/rc.xml` comes with the viewer deb (base configuration). The manager unit needs the drop-in `debian/10-wayland.conf` (unitotem-node deb:
-  `XDG_RUNTIME_DIR=/run/unitotem/xdg`, `WAYLAND_DISPLAY=wayland-0`); replace `20-unitotem-x.conf` by one that orders the manager after the compositor and waits
+  `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`, absolute: the manager's own XDG_RUNTIME_DIR is NOT touched, it is where pipewire-pulse and the session bus of root live); replace `20-unitotem-x.conf` by one that orders the manager after the compositor and waits
   (up to 60 s) for `/run/unitotem/xdg/wayland-0` instead of `/tmp/.X11-unix/X0`.
 - `/dev/uinput`: the viewer presses a key binding through a virtual keyboard to put each window on its output: `uinput` in `/etc/modules-load.d/` (it exists on the Pi and
   venus images today). Root runs everything, no group needed.
@@ -35,8 +35,8 @@ CEF patch `tools/cef-server/patches/0002-gbm-no-scanout-buffers-env.patch` (Chro
 ## Check list for verify-image.sh
 - `unitotem-compositor.service` enabled, `labwc` and `wlrctl wlr-randr wlopm wayvnc` present, no `Xorg`/`xset`/`xrandr`/`xauth`.
 - `/etc/unitotem/xdg/labwc/rc.xml` valid XML (a broken base file makes labwc silently use its defaults: look for "error parsing config file" in the journal).
-- manager drop-in waits for `/run/unitotem/xdg/wayland-0`; `XDG_RUNTIME_DIR` of the manager and of `unitotem-splash` is `/run/unitotem/xdg`.
-- `wlr-randr --json` answers (`XDG_RUNTIME_DIR=/run/unitotem/xdg WAYLAND_DISPLAY=wayland-0`), `wlopm` lists the outputs.
+- manager drop-in waits for `/run/unitotem/xdg/wayland-0`; `WAYLAND_DISPLAY` of the manager and of `unitotem-splash` is `/run/unitotem/xdg/wayland-0` (absolute) and neither sets `XDG_RUNTIME_DIR`.
+- `wlr-randr --json` answers (`WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`), `wlopm` lists the outputs.
 
 ## Behaviour that changed for users
 Output names are DRM's (`HDMI-A-1`, was RandR's `HDMI-1`): saved playlist assignments, screen settings and timers follow by themselves. The Display page no longer moves a
