@@ -60,7 +60,6 @@ Build-Depends-Indep: dh-python,
                      python3-watchdog,
                      python3-websockets,
                      python3-werkzeug,
-                     python3-xlib,
                      python3-zeroconf,
 Standards-Version: 4.7.0
 Homepage: https://github.com/a13ssandr0/unitotem-manager
@@ -121,14 +120,14 @@ Depends: ${python3:Depends},
          netplan.io,
          network-manager,
          unitotem-manager (= ${source:Version}),
-         x11-xserver-utils,
+         wlr-randr,
+         wlopm,
          python3-croniter,
          python3-packaging,
          python3-pulsectl,
          python3-qrcode,
          python3-sdbus-networkmanager,
-         python3-xlib,
-Recommends: alsa-utils, ddcutil, tigervnc-scraping-server, v4l-utils
+Recommends: alsa-utils, ddcutil, wayvnc, v4l-utils
 Description: UniTotem integration with the machine it runs on
  Network (NetworkManager through netplan), audio, displays and screen power
  (DDC, CEC, Wake-on-LAN, serial), reboot and power-off, timers, system
@@ -149,13 +148,15 @@ Depends: ${python3:Depends},
          python3-pil,
          python3-pyside6.qtwidgets,
          python3-sdbus,
-         python3-xlib,
+         labwc,
+         wlrctl,
+         qt6-wayland,
          unitotem-manager (= ${source:Version}),
          unitotem-node (= ${source:Version}),
 Description: Fullscreen viewer window for UniTotem
- One frameless fullscreen browser window per connected screen, driven by the
- UniTotem scheduler. Windows follow the screens as they are plugged and
- unplugged.
+ One fullscreen browser window per connected screen on a Wayland compositor
+ (labwc), driven by the UniTotem scheduler. Windows follow the screens as they
+ are plugged and unplugged.
 
 Package: unitotem
 Architecture: all

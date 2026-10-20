@@ -177,7 +177,7 @@ const commands = [
 const isScreenAction = (value) => value === 'scr_on' || value === 'scr_off';
 const mechanismItems = [
   { title: 'Automatic', value: 'auto' },
-  { title: 'Display output', value: 'x' },
+  { title: 'Display output', value: 'output' },
   { title: 'DDC/CI', value: 'ddc' },
   { title: 'CEC', value: 'cec' },
   { title: 'Wake-on-LAN', value: 'wol' },

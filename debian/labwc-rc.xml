@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!-- Base configuration of the UniTotem compositor. The window placement (viewer) and the touch mapping (node) are written at
+     run time into their own fragments, merged by labwc with the merge-config option (see /usr/lib/systemd/system/unitotem-compositor.service). -->
+<labwc_config>
+  <core>
+    <gap>0</gap>
+  </core>
+  <theme>
+    <name></name>
+    <cornerRadius>0</cornerRadius>
+  </theme>
+</labwc_config>

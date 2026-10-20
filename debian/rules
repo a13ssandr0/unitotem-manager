@@ -43,6 +43,8 @@ override_dh_auto_install-indep:
 	install -d debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem
 	cp -r plymouth/unitotem/. debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem/
 	chmod 644 debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem/*
+	# base configuration of the compositor
+	install -D -m 644 debian/labwc-rc.xml debian/unitotem-viewer/etc/unitotem/xdg/labwc/rc.xml
 	# launcher
 	install -D -m 755 debian/unitotem-manager.sh debian/unitotem-manager/usr/sbin/unitotem-manager
 
@@ -83,6 +85,8 @@ override_dh_installsystemd-indep:
 	dh_installsystemd -p unitotem-manager --name=unitotem-manager unitotem-manager.service
 	# not started by the installation: it would sit on the screen of a running totem until the next boot
 	dh_installsystemd -p unitotem-viewer --name=unitotem-splash --no-start
+	# the image decides to enable it (it replaces the X server the kiosk used to run)
+	dh_installsystemd -p unitotem-viewer --name=unitotem-compositor --no-start --no-enable
 
 # CEF's own libraries (libvulkan, libEGL...) are shipped beside it and resolved through RPATH
 override_dh_shlibdeps-arch:

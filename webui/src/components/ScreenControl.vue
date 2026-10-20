@@ -7,7 +7,7 @@
       </v-btn>
     </template>
     <v-card-text v-if="!screens.length" class="text-medium-emphasis">
-      No screen is known. Screens appear here when the X server reports an output, or once configured below.
+      No screen is known. Screens appear here when the compositor reports an output, or once configured below.
     </v-card-text>
     <v-expansion-panels variant="accordion" multiple>
       <v-expansion-panel v-for="screen in screens" :key="screen.name">
@@ -115,7 +115,7 @@ const volume = reactive({})
 const form = reactive({})
 const bauds = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
 
-const mechanismNames = {x: 'Display output', ddc: 'DDC/CI', cec: 'CEC', wol: 'Wake-on-LAN', serial: 'Serial'}
+const mechanismNames = {output: 'Display output', ddc: 'DDC/CI', cec: 'CEC', wol: 'Wake-on-LAN', serial: 'Serial'}
 
 const mechanismChoices = (action) => [
   {title: 'Automatic', value: 'auto'},

@@ -14,7 +14,7 @@ from unitotem_node.system.touch_service import touch_service
 
 class Touch(WSAPIBase):
     def devices(self):
-        """Touch screens found on the X server with their output (None: automatic), the remembered ones that are not
+        """Touch screens found on this machine with their output (None: automatic), the remembered ones that are not
         plugged in, and the outputs to choose from."""
         return WSBroadcast(self.devices, **touch_service.snapshot())
 
