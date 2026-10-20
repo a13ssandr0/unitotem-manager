@@ -1,15 +1,13 @@
 === CURRENT WORK ===
 
-2026-10-20 VIEWER ON WAYLAND (branch `viewer-wayland`, pushed; details and traps in CLAUDE.md "Viewer on Wayland")
-  DONE and measured with the real viewer: it runs on labwc on the Pi 4 and on venus, Qt wayland + top-level CEF windows; Pi 60.2 fps canvas2d/WebGL2 (was 34) after the CEF
-  patch `tools/cef-server/patches/0002-gbm-no-scanout-buffers-env.patch` (Chromium's scanout buffers are LINEAR on the V3D; the patched libcef is bind-mounted on the Pi, NOT in a
-  wheel yet); venus 60/60; two outputs on venus (forced DP-1) each get their window. The X11 path still works (checked on venus). Boards are back on X11 + the service; the test
-  environment stays in `/var/lib/unitotem/wl` on both (labwc, cage, qt6-wayland, wlrctl, the code, `run-viewer.sh`; ~500 MB each, delete when done).
-  TO DO for a Wayland image (nothing of it is in the image/debs): (1) node plugin on Wayland: outputs/rotation/mode (`wlr-randr`), DPMS, touch mapping (labwc `mapToOutput`), VNC
-  (`wayvnc`); (2) a compositor service (labwc as root, `LIBSEAT_BACKEND=builtin`, `UNITOTEM_LABWC_CONFIG`) instead of `start-xorg.service`, manager after it with `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR`;
-  (3) boot splash handoff (`bootsplash.py` is X11 only); (4) packages: `labwc`, `wlrctl`, `qt6-wayland` + libs, `/dev/uinput` access; (5) build the arm64 (and x64) CEF wheels with patch 0002
-  (`tools/build-cef-wheels.sh`); (6) cleaner window placement: a CEF patch giving each window an `app_id` would replace the uinput key press with plain labwc window rules;
-  (7) X11 vs Wayland decision for the product (user): Wayland is better on both boards now (no tearing, venus half the CPU/power), at the cost of items 1-5.
+2026-10-20 KIOSK ON WAYLAND ONLY (user decision "andiamo tutto su Wayland", branch `viewer-wayland`, pushed; CLAUDE.md "THE KIOSK RUNS WAYLAND", image list in WAYLAND-IMAGE.md)
+  DONE and run on a Pi 4 and on venus with the real compositor unit: viewer (Qt wayland for outputs/splash, browser windows made by DevTools, placed by a uinput key press,
+  closed/re-opened on unplug/plug), node (wlr-randr/wlopm outputs+power, EDID identity from sysfs, touch mapping as a labwc fragment, wayvnc), bootsplash in QtGui, compositor unit +
+  base config, deb control/rules, 433 tests pass. Pi 60.2 fps canvas2d/WebGL2 with the patched libcef (bind-mounted, not in a wheel yet).
+  NEXT: (1) `cef-rebuild` unit on the build server (x64 is a FULL rebuild, then arm64): then `tools/build-cef-wheels.sh start|fetch`, build the debs, put the wheels where the
+  image build finds them; (2) unitotem-system applies WAYLAND-IMAGE.md (message sent), then a real image on a Pi and venus and the VM (virtio, check labwc there); (3) per-window `app_id` CEF patch would replace
+  the uinput key press; (4) decide the pointer cursor policy; (5) test boards: `/var/lib/unitotem/wl` on both (~1 GB each, delete when done), the patched libcef bind mount on the Pi.
+
 2026-10-20 GRAPHICS STACK (user: one stack for both boards if possible; two only where one loses; images when sure). Measured, see CLAUDE.md "Graphics stack measurements, 2026-10-20" and tools/gfx-bench/:
 - DONE: `pi` GPU profile has `webgl-antialiasing-mode=none` (Pi 4 WebGL default context 33 -> 60 fps, verified in the real viewer); `vaapi` profile marked verified (venus Iris Xe: VaapiVideoDecoder, 4K60 H.264 scaled to 1080p, 0 dropped).
   The Pi runs it only through a non-persistent bind mount of gpu.py (reboot clears it): it needs a new python3-unitotem-manager deb/image.
