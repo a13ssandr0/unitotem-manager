@@ -19,7 +19,7 @@ screen power. Everything below was run on real boards with the transient unit of
 - `unitotem-compositor.service` comes with the unitotem-viewer deb (disabled): **enable it** (`WantedBy=multi-user.target`). It does what start-xorg did: Plymouth
   `deactivate` before, plymouthd killed once the socket exists, VT1, `Restart=always`. `unitotem-splash.service` (viewer deb) waits for the same socket.
 - `/etc/unitotem/xdg/labwc/rc.xml` comes with the viewer deb (base configuration). The manager unit needs the drop-in `debian/10-wayland.conf` (unitotem-node deb:
-  `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`, absolute: the manager's own XDG_RUNTIME_DIR is NOT touched, it is where pipewire-pulse and the session bus of root live); replace `20-unitotem-x.conf` by one that orders the manager after the compositor and waits
+  `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0` absolute, and `XDG_RUNTIME_DIR=/run/user/0`, see "Audio" below); replace `20-unitotem-x.conf` by one that orders the manager after the compositor and waits
   (up to 60 s) for `/run/unitotem/xdg/wayland-0` instead of `/tmp/.X11-unix/X0`.
 - `/dev/uinput`: the viewer presses a key binding through a virtual keyboard to put each window on its output: `uinput` in `/etc/modules-load.d/` (it exists on the Pi and
   venus images today). Root runs everything, no group needed.
@@ -35,9 +35,19 @@ CEF patch `tools/cef-server/patches/0002-gbm-no-scanout-buffers-env.patch` (Chro
 ## Check list for verify-image.sh
 - `unitotem-compositor.service` enabled, `labwc` and `wlrctl wlr-randr wlopm wayvnc` present, no `Xorg`/`xset`/`xrandr`/`xauth`.
 - `/etc/unitotem/xdg/labwc/rc.xml` valid XML (a broken base file makes labwc silently use its defaults: look for "error parsing config file" in the journal).
-- manager drop-in waits for `/run/unitotem/xdg/wayland-0`; `WAYLAND_DISPLAY` of the manager and of `unitotem-splash` is `/run/unitotem/xdg/wayland-0` (absolute) and neither sets `XDG_RUNTIME_DIR`.
+- manager drop-in waits for `/run/unitotem/xdg/wayland-0`; `WAYLAND_DISPLAY` of the manager and of `unitotem-splash` is `/run/unitotem/xdg/wayland-0` (absolute); the manager has `XDG_RUNTIME_DIR=/run/user/0`.
 - `wlr-randr --json` answers (`WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`), `wlopm` lists the outputs.
 
 ## Behaviour that changed for users
 Output names are DRM's (`HDMI-A-1`, was RandR's `HDMI-1`): saved playlist assignments, screen settings and timers follow by themselves. The Display page no longer moves a
 window onto a clicked monitor (the compositor owns geometry). Two identical touch panels share one mapping (labwc matches by device name). VNC shows one output at a time.
+
+## Audio (found 2026-10-20 on a Pi 4 with the dev5 image; applies to every image, X or Wayland)
+PipeWire has never run for root on the image, so the manager's audio controls (pulsectl) and the browser's sound did not work at all:
+1. Debian's `pipewire.socket`, `pipewire.service`, `pipewire-pulse.socket`, `pipewire-pulse.service` have `ConditionUser=!root` ("start condition unmet"), and the manager and the
+   kiosk run as root. The image must override it for the user manager of root, for those four units and for `wireplumber.service`: `/etc/systemd/user/<unit>.d/10-root.conf`
+   with `[Unit]` and an empty `ConditionUser=`. (root already has `user@0.service` and `Linger=yes`, and the units are enabled.)
+2. The manager's unit had no `XDG_RUNTIME_DIR`, so neither libpulse in the browser nor in pulsectl looked in `/run/user/0/pulse/native`. The unitotem-node drop-in `10-wayland.conf` now sets
+   `XDG_RUNTIME_DIR=/run/user/0`; the manager should also start after `user@0.service`.
+Measured with both applied (volatile drop-ins on the Pi): `wpctl` shows the HDMI sink, `pw-play` and the browser (stream "Chromium", WebAudio oscillator) play into it, ALSA `RUNNING` owned by pipewire, pulsectl lists the sink, sets and reads back
+the volume and the mute. Without 2 the page runs and no stream ever appears.

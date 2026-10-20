@@ -810,7 +810,7 @@ the VM-specific ones.
     but NOT enabled by anything (the manager adds the window once `xrandr --output HDMI-2 --auto` turns it on).
 - **THE KIOSK RUNS WAYLAND (labwc) AND NOTHING ELSE since 2026-10-20 (user decision "via X11, andiamo tutto su Wayland"). Everything X11 in this file is history.**
   Pieces: `unitotem-compositor.service` (shipped by unitotem-viewer, enabled by the image: labwc as root on VT1 with libseat's builtin backend, `RuntimeDirectory=unitotem`,
-  the compositor's `XDG_RUNTIME_DIR=/run/unitotem/xdg` (private; the manager and the splash do NOT set XDG_RUNTIME_DIR, it is where pipewire-pulse and root's session bus live: they get `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`, an absolute path), `labwc --merge-config` with `XDG_CONFIG_DIRS=/etc/unitotem/xdg:/run/unitotem/labwc/node:/run/unitotem/labwc/viewer`; the base config is
+  the compositor's private `XDG_RUNTIME_DIR=/run/unitotem/xdg` (the manager gets `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`, an absolute path, and root's `XDG_RUNTIME_DIR=/run/user/0`), `labwc --merge-config` with `XDG_CONFIG_DIRS=/etc/unitotem/xdg:/run/unitotem/labwc/node:/run/unitotem/labwc/viewer`; the base config is
   `debian/labwc-rc.xml`); `utils/labwc.py` (one configuration FRAGMENT per writer, `reload()` = SIGHUP: the viewer writes the window placement, the node the touch mapping);
   the viewer (Qt wayland only for QScreens and splash; browser windows made by DevTools `Target.createTarget`, see below); the node (`system/screens/wayland.py`: `wlr-randr --json`
   for outputs/power/rotation names, `wlopm` for blanking, EDID from `/sys/class/drm/card*-<output>/edid` for the identity; `touch.py`; `vnc.py` with wayvnc); `bootsplash.py` in QtGui.
@@ -842,4 +842,8 @@ the VM-specific ones.
   - **Test traps**: labwc `-d` logs `[map] identifier=, title=` per window; a rule or keybinding written with the wrong quoting makes labwc silently load the DEFAULT config (check
     "error parsing config file"); Chromium rewrites its `/proc/<pid>/environ` (it looks empty), check the environment with a shim that prints `getenv`; `umount` of a bind-mounted
     libcef says "busy" while the viewer runs (stop it first); `raf.py -1` runs in the viewer's own window (it stays on the test page).
+- **Audio never worked on the image until 2026-10-20 (found testing a Pi 4, see WAYLAND-IMAGE.md "Audio").** Two causes: Debian's PipeWire units have `ConditionUser=!root` (never started for root: needs an empty
+  `ConditionUser=` drop-in in `/etc/systemd/user/*.d/` for pipewire/pipewire-pulse sockets+services and wireplumber), and the manager's unit had no `XDG_RUNTIME_DIR` (libpulse, in the browser and in pulsectl, looks for `$XDG_RUNTIME_DIR/pulse/native`;
+  `10-wayland.conf` sets `/run/user/0`). A recording of a sink MONITOR (`pw-record --target <sink> -P stream.capture.sink=true`) does not show the sink's volume or mute (taken before them): do not use it to test volume. `pw-record` needs SIGINT to finish its file and a shell leaves SIGINT ignored for
+  background jobs: reset the signal (python `signal.signal(SIGINT, SIG_DFL)` then exec). Chromium's audio process links libpulse AND libasound; with no pulse server found it produced no sound at all (no ALSA stream either), it did not fall back.
 
