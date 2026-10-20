@@ -1,3 +1,17 @@
+unitotem-manager (3.0.0~dev6) stable; urgency=medium
+
+  * The kiosk runs on Wayland (labwc) and nothing else: no X server, no
+    python3-xlib, no xrandr/xset. unitotem-viewer ships the compositor service
+    (unitotem-compositor.service, enabled by the image) and the base
+    configuration of labwc; unitotem-node drops 10-x11.conf for 10-wayland.conf
+  * Screens, screen power, touch mapping and the screen-in-the-browser use the
+    compositor (wlr-randr, wlopm, labwc configuration fragments, wayvnc)
+  * Output names are the compositor's (HDMI-A-1): saved assignments and
+    settings follow by themselves; the screen mechanism "x" is now "output"
+  * The Display page no longer moves a window onto a clicked monitor
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Tue, 20 Oct 2026 22:40:00 +0200
+
 unitotem-manager (3.0.0~dev5) stable; urgency=medium
 
   * Split by role: unitotem-manager is a complete orchestrator on its own;
