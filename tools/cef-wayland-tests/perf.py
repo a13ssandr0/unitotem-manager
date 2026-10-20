@@ -6,7 +6,7 @@ usage: perf.py --mode views|devtools [--gpu pi|vaapi|none] [--page webgl2|webgl2
 Prints one JSON line: fps (from requestAnimationFrame draws counted by the page), cpu (% of one core, whole process tree), pss_mb.
 Env as for outputs.py. The page reports through document.title, read from the DevTools /json list (same for both modes).
 """
-import argparse, asyncio, json, os, sys, time, urllib.request
+import argparse, asyncio, json, os, sys, threading, time, urllib.request
 from cefpython3 import cefpython as cef
 
 ap = argparse.ArgumentParser()
@@ -62,8 +62,16 @@ def pump(sec):
     end = time.monotonic() + sec
     while time.monotonic() < end: cef.MessageLoopWork(); time.sleep(0.005)
 
-def targets():
-    return json.load(urllib.request.urlopen('http://127.0.0.1:%d/json' % PORT))
+titles = []
+def poll_titles():
+    # a thread: the DevTools server answers from the message loop that the main thread pumps
+    while True:
+        time.sleep(1)
+        try:
+            for t in json.load(urllib.request.urlopen('http://127.0.0.1:%d/json' % PORT, timeout=5)):
+                if t['type'] == 'page' and t['title'].startswith('fps:') and measuring[0]: titles.append(t['title'])
+        except Exception: pass
+measuring = [False]
 
 class Delegate:
     def OnWindowCreated(self, window):
@@ -97,16 +105,14 @@ if a.mode == 'views':
     d = Delegate(); d.view = cef.BrowserView.CreateBrowserView(url=URL)
     w = cef.Window.CreateTopLevelWindow(d)
 else:
-    pump(2); asyncio.run(devtools_window())
+    pump(2); threading.Thread(target=lambda: asyncio.run(devtools_window()), daemon=True).start()
+threading.Thread(target=poll_titles, daemon=True).start()
 pump(6)
 me = os.getpid(); pids = descendants(me)
 t0, c0 = time.monotonic(), ticks(pids)
-titles = []
-end = t0 + a.seconds
-while time.monotonic() < end:
-    pump(1)
-    pg = [t for t in targets() if t['type'] == 'page' and t['title'].startswith('fps:')]
-    if pg: titles.append(pg[0]['title'])
+measuring[0] = True
+pump(a.seconds)
+measuring[0] = False
 pids = descendants(me)
 cpu = (ticks(pids) - c0) / os.sysconf('SC_CLK_TCK') / (time.monotonic() - t0) * 100
 fps = [float(t.split()[0][4:]) for t in titles]
