@@ -147,7 +147,65 @@ class CefWidget(QWidget):
         super().closeEvent(event)
 
 
-class WebviewWindow(QMainWindow):
+class PageCommands:
+    """What the manager asks of a window, done by calling the functions of boot-screen.html. Shared by the windows of both
+    graphics stacks: they only have to provide `self._cef.execute_js`."""
+
+    def show_asset(self, src: str, container: int, fit: int, bg_color: str,
+                   volume: float = 1.0, muted: bool = False, zoom: float = 1.0,
+                   allow_pinch_zoom: bool = False, idle: bool = False):
+        """
+        Display an asset.
+
+        container: index into ['boot','web','image','video','audio'] (= media_type + 1)
+        fit:       FitEnum int value → 'contain' | 'cover' | 'fill'
+        bg_color:  CSS colour string e.g. 'rgb(0,0,0)'
+        idle:      there is nothing to play (the idle page): a screensaver has nothing to show
+        """
+        # A negative index means the media type is unknown: pass null so the
+        # page probes the URL and decides for itself (see show() in
+        # boot-screen.html). Falling back to 'boot' here instead, as this used
+        # to, made such an asset invisible - the logo just stayed up.
+        # Whatever arrives (an older or remote manager, a hand-edited file) is clamped here, the page divides by it
+        try:
+            zoom = min(5.0, max(0.25, float(zoom)))
+        except (TypeError, ValueError):
+            zoom = 1.0
+        cont = _CONTAINERS[container] if 0 <= container < len(_CONTAINERS) else None
+        fit_s = _FIT_NAMES[fit] if 0 <= fit < len(_FIT_NAMES) else 'contain'
+        self._cef.execute_js(
+            f'show({json.dumps(src)}, {json.dumps(cont)}, {json.dumps(fit_s)}, {json.dumps(bg_color)}, '
+            f'{json.dumps(volume)}, {json.dumps(muted)}, {json.dumps(zoom)}, {json.dumps(bool(allow_pinch_zoom))}, '
+            f'{json.dumps(bool(idle))})'
+        )
+
+    def set_audio_output(self, device: Optional[str]):
+        """Send this window's sound to the output with that name (its description, as the browser lists it);
+        None means the default one, i.e. whatever the system decides."""
+        self._cef.execute_js(f'setAudioOutput({json.dumps(device)})')
+
+    def set_orientation(self, orientation: int):
+        # orientation is a quarter-turn index (0/1/2/3 = 0/90/180/270deg),
+        # not a raw degree value. boot-screen.html's setOrientation() applies
+        # it via a body[r] CSS attribute selector with the correct swapped
+        # width/height + transform-origin per rotation (a plain
+        # transform:rotate() would clip the content at 90/270deg, since the
+        # unrotated box still occupies the original, now-perpendicular,
+        # viewport dimensions).
+        self._cef.execute_js(f'setOrientation({orientation})')
+
+    def set_flip(self, flip: int):
+        # flip: 0=none, 1=horizontal, 2=vertical (mutually exclusive, no
+        # "both" state). Applied to a separate wrapper element from
+        # orientation (see boot-screen.html's setFlip()) so the two compose
+        # independently regardless of order - entangling them into a single
+        # element's transform meant setting orientation again erased any
+        # flip, and flip mirrored along the rotated axes instead of the
+        # screen's true horizontal/vertical.
+        self._cef.execute_js(f'setFlip({flip})')
+
+
+class WebviewWindow(QMainWindow, PageCommands):
     """One frameless display window. Multiple instances = multiple screens."""
 
     def __init__(self, window_id: int, screen: QScreen,
@@ -211,60 +269,55 @@ class WebviewWindow(QMainWindow):
             # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to
             self._cef.embed_browser(f'{_BOOT_URL}?window={self._window_id}', self._content_width, self._content_height)
 
-    # ── commands sent by the manager via WebSocket ────────────────────────
-
-    def show_asset(self, src: str, container: int, fit: int, bg_color: str,
-                   volume: float = 1.0, muted: bool = False, zoom: float = 1.0,
-                   allow_pinch_zoom: bool = False, idle: bool = False):
-        """
-        Display an asset.
-
-        container: index into ['boot','web','image','video','audio'] (= media_type + 1)
-        fit:       FitEnum int value → 'contain' | 'cover' | 'fill'
-        bg_color:  CSS colour string e.g. 'rgb(0,0,0)'
-        idle:      there is nothing to play (the idle page): a screensaver has nothing to show
-        """
-        # A negative index means the media type is unknown: pass null so the
-        # page probes the URL and decides for itself (see show() in
-        # boot-screen.html). Falling back to 'boot' here instead, as this used
-        # to, made such an asset invisible - the logo just stayed up.
-        # Whatever arrives (an older or remote manager, a hand-edited file) is clamped here, the page divides by it
-        try:
-            zoom = min(5.0, max(0.25, float(zoom)))
-        except (TypeError, ValueError):
-            zoom = 1.0
-        cont = _CONTAINERS[container] if 0 <= container < len(_CONTAINERS) else None
-        fit_s = _FIT_NAMES[fit] if 0 <= fit < len(_FIT_NAMES) else 'contain'
-        self._cef.execute_js(
-            f'show({json.dumps(src)}, {json.dumps(cont)}, {json.dumps(fit_s)}, {json.dumps(bg_color)}, '
-            f'{json.dumps(volume)}, {json.dumps(muted)}, {json.dumps(zoom)}, {json.dumps(bool(allow_pinch_zoom))}, '
-            f'{json.dumps(bool(idle))})'
-        )
-
-    def set_audio_output(self, device: Optional[str]):
-        """Send this window's sound to the output with that name (its description, as the browser lists it);
-        None means the default one, i.e. whatever the system decides."""
-        self._cef.execute_js(f'setAudioOutput({json.dumps(device)})')
-
     def set_bounds(self, x: int, y: int, width: int, height: int):
         self.setGeometry(x, y, width, height)
 
-    def set_orientation(self, orientation: int):
-        # orientation is a quarter-turn index (0/1/2/3 = 0/90/180/270deg),
-        # not a raw degree value. boot-screen.html's setOrientation() applies
-        # it via a body[r] CSS attribute selector with the correct swapped
-        # width/height + transform-origin per rotation (a plain
-        # transform:rotate() would clip the content at 90/270deg, since the
-        # unrotated box still occupies the original, now-perpendicular,
-        # viewport dimensions).
-        self._cef.execute_js(f'setOrientation({orientation})')
 
-    def set_flip(self, flip: int):
-        # flip: 0=none, 1=horizontal, 2=vertical (mutually exclusive, no
-        # "both" state). Applied to a separate wrapper element from
-        # orientation (see boot-screen.html's setFlip()) so the two compose
-        # independently regardless of order - entangling them into a single
-        # element's transform meant setting orientation again erased any
-        # flip, and flip mirrored along the rotated axes instead of the
-        # screen's true horizontal/vertical.
-        self._cef.execute_js(f'setFlip({flip})')
+class _TopLevelBrowser:
+    """The CEF browser of a Wayland window: a top-level window of its own, not a child of a Qt widget."""
+
+    def __init__(self):
+        self.browser = None
+
+    def execute_js(self, js: str):
+        if self.browser:
+            self.browser.ExecuteJavascript(js)
+
+    def close(self):
+        if self.browser:
+            self.browser.CloseBrowser(True)
+            self.browser = None
+
+
+class WaylandWindow(PageCommands):
+    """One display window on Wayland. CEF cannot be embedded in a Qt window there (no foreign windows in the protocol), so
+    the browser is a top-level window of its own and there is no Qt window at all: the compositor decides where it goes and
+    makes it fullscreen on its output (window rules keyed on the title, see wayland.py). Qt is only used to learn about the
+    outputs and for the splash. Same interface as WebviewWindow."""
+
+    def __init__(self, window_id: int, screen: QScreen, x: int, y: int, width: int, height: int):
+        self._window_id = window_id
+        self.screen = screen
+        self._cef = _TopLevelBrowser()
+        # same attributes as WebviewWindow, set by the application
+        self.on_geometry_changed = None
+        self.on_mapped = None
+
+    def geometry(self):
+        return self.screen.geometry()
+
+    def show(self):
+        if self.on_mapped:
+            self.on_mapped()
+        if self._cef.browser is None:
+            # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to,
+            # and the page's title ('unitotem-<id>', see boot-screen.html) is how the compositor knows which output it is for
+            self._cef.browser = cef.CreateBrowserSync(
+                cef.WindowInfo(), settings={'background_color': 0xFF000000},
+                url=f'{_BOOT_URL}?window={self._window_id}')
+
+    def set_bounds(self, x: int, y: int, width: int, height: int):
+        logger.debug('Window {}: bounds are the compositor\'s business on Wayland, ignoring', self._window_id)
+
+    def close(self):
+        self._cef.close()

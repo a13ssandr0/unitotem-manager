@@ -42,7 +42,8 @@ from .boot import stop_boot_splash
 from .cdp import Cdp
 from .idle import IdleWatch, schedule_due, seconds_to_next_minute
 from .splash import show_splashes
-from .window import WebviewWindow
+from . import wayland
+from .window import WaylandWindow, WebviewWindow
 import utils.ready as ready
 
 try:
@@ -92,6 +93,8 @@ class WebviewApp:
         either with no usable platform plugin aborts the whole process
         natively (SIGABRT), which no Python exception handler can catch.
         """
+        if wayland.wanted():
+            return wayland.socket_available()
         display = os.environ.get('DISPLAY')
         if not display:
             return False
@@ -148,7 +151,11 @@ class WebviewApp:
 
         # CEF requires an X11 window handle (winId). On Wayland we fall back
         # to XWayland by forcing the xcb Qt platform plugin.
-        if os.environ.get('WAYLAND_DISPLAY') and 'QT_QPA_PLATFORM' not in os.environ:
+        self.wayland = wayland.wanted()
+        if self.wayland:
+            # no embedding here: CEF windows are top-level, Qt only reports the outputs and draws the splash (wayland.py)
+            os.environ['QT_QPA_PLATFORM'] = 'wayland'
+        elif os.environ.get('WAYLAND_DISPLAY') and 'QT_QPA_PLATFORM' not in os.environ:
             os.environ['QT_QPA_PLATFORM'] = 'xcb'
 
         # cef.Initialize() below unconditionally attaches its own internal
@@ -170,7 +177,7 @@ class WebviewApp:
 
         # The first frame goes up before CEF starts, which takes seconds: the boot splash of the system ends on it
         screens = self._real_screens()
-        self._splashes = dict(zip(screens, show_splashes(screens)))      # screen -> its splash
+        self._splashes = dict(zip(screens, show_splashes(screens, self.wayland)))      # screen -> its splash
         stop_boot_splash()      # ours is up: hand over from the one the boot started on its own
         ready.ready('first frame on screen')
 
@@ -248,6 +255,8 @@ class WebviewApp:
                     f'({self.gpu_profile.reason})'
                     + ('' if self.gpu_profile.verified
                        else ' [profile not verified on real hardware]'))
+        if self.wayland:
+            switches['ozone-platform'] = 'wayland'
         for key, value in self.gpu_profile.switches.items():
             # Never override something set above: an explicit switch here is a
             # deliberate decision about this node, the profile is a default.
@@ -417,7 +426,7 @@ class WebviewApp:
             self._ws_loop.call_soon_threadsafe(self._drop_window, window_id)
 
     def _new_window(self, **geometry) -> WebviewWindow:
-        win = WebviewWindow(**geometry)
+        win = (WaylandWindow if self.wayland else WebviewWindow)(**geometry)
         win.on_geometry_changed = self._geometry_timer.start
         win.on_mapped = self._raise_splashes
         return win

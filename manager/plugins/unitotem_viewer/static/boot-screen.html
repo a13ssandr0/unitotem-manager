@@ -4,6 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UniTotem</title>
+  <script>
+    /* The title is the name of the window in the compositor's list: on Wayland the compositor's window rules find the
+       window of an output by it ('unitotem-<window id>', see wayland.py). Harmless on X11. */
+    document.title = 'unitotem-' + (new URLSearchParams(location.search).get('window') ?? '');
+  </script>
   <style>
     @font-face {
       font-family: "Noto Sans";
