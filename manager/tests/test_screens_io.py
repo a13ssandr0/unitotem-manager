@@ -1,28 +1,47 @@
-"""Pure parts of the screen control hardware layer: xrandr, CEC, Wake-on-LAN, serial, the model, mechanism order."""
+"""Pure parts of the screen control hardware layer: the compositor's outputs, CEC, Wake-on-LAN, serial, the model, mechanism order."""
+import json
+
 import pytest
 
 from unitotem_node.models.screen_control import OutputConfig, SerialConfig, WolConfig
-from unitotem_node.system.screens import cec, serial, wol, xorg
+from unitotem_node.system.screens import cec, serial, wayland, wol
 from unitotem_node.system.screens.ddc_ctl import power_off_value
 from unitotem_node.system.screens.mechanism import NoMechanismAvailable, candidates
 
-XRANDR = """Screen 0: minimum 320 x 200, current 5760 x 2160, maximum 16384 x 16384
-DP-1 connected primary 3840x2160+0+0 (normal left inverted right x axis y axis) 600mm x 340mm
-   3840x2160     60.00*+  30.00
-HDMI-A-1 connected 1920x1080+3840+0 left (normal left inverted right x axis y axis) 510mm x 290mm
-   1920x1080     60.00*+
-HDMI-A-2 connected (normal left inverted right x axis y axis)
-   1920x1080     60.00 +
-DP-2 disconnected (normal left inverted right x axis y axis)
-"""
+OUTPUTS = json.dumps([
+    {'name': 'DP-1', 'make': 'GSM', 'model': 'LG ULTRAFINE', 'serial': '401', 'enabled': True,
+     'modes': [{'width': 3840, 'height': 2160, 'refresh': 60.0, 'preferred': True, 'current': True},
+               {'width': 1920, 'height': 1080, 'refresh': 60.0, 'preferred': False, 'current': False}],
+     'position': {'x': 0, 'y': 0}, 'transform': 'normal', 'scale': 1.0},
+    {'name': 'HDMI-A-1', 'make': '', 'model': '', 'serial': '', 'enabled': True,
+     'modes': [{'width': 1920, 'height': 1080, 'refresh': 60.0, 'preferred': True, 'current': True}],
+     'position': {'x': 3840, 'y': 0}, 'transform': '90', 'scale': 1.0},
+    {'name': 'HDMI-A-2', 'enabled': False,
+     'modes': [{'width': 1920, 'height': 1080, 'refresh': 60.0, 'preferred': True, 'current': False}],
+     'position': {'x': 0, 'y': 0}, 'transform': 'normal', 'scale': 1.0},
+])
 
 
-def test_parse_xrandr_query_states_and_geometry():
-    outs = {o.name: o for o in xorg.parse_xrandr_query(XRANDR)}
+def test_parse_outputs_states_and_geometry():
+    outs = {o.name: o for o in wayland.parse_outputs(OUTPUTS)}
     assert outs['DP-1'].active and (outs['DP-1'].width, outs['DP-1'].height) == (3840, 2160)
+    # a rotated output covers the rotated rectangle in the layout, and the web UI keeps xrandr's names for rotations
     assert outs['HDMI-A-1'].x == 3840 and outs['HDMI-A-1'].rotation == 'left'
-    assert outs['HDMI-A-2'].connected and not outs['HDMI-A-2'].active   # connected but switched off
-    assert not outs['DP-2'].connected
+    assert (outs['HDMI-A-1'].width, outs['HDMI-A-1'].height) == (1080, 1920)
+    assert outs['HDMI-A-2'].connected and not outs['HDMI-A-2'].active       # connected but switched off
+
+
+def test_parse_outputs_of_garbage_is_empty():
+    assert wayland.parse_outputs('not json') == [] and wayland.parse_outputs('{}') == []
+
+
+def test_edid_is_read_from_the_connector_of_the_same_name(tmp_path):
+    (tmp_path / 'card0-DP-2').mkdir()
+    (tmp_path / 'card0-DP-2' / 'edid').write_bytes(b'\x00\xff')
+    (tmp_path / 'card0-DP-3').mkdir()
+    assert wayland.read_edid('DP-2', str(tmp_path)) == b'\x00\xff'
+    assert wayland.read_edid('DP-3', str(tmp_path)) is None
+    assert wayland.read_edid('HDMI-A-1', str(tmp_path)) is None
 
 
 def test_cec_device_list_and_power_status():
@@ -77,14 +96,14 @@ def test_models_validate_what_reaches_the_system():
 
 
 def test_auto_order_with_the_new_mechanisms():
-    assert candidates({'x', 'ddc', 'wol'}, 'on') == ['wol', 'ddc', 'x']
-    assert candidates({'x', 'ddc', 'serial', 'cec'}, 'off') == ['ddc', 'cec', 'serial', 'x']
+    assert candidates({'output', 'ddc', 'wol'}, 'on') == ['wol', 'ddc', 'output']
+    assert candidates({'output', 'ddc', 'serial', 'cec'}, 'off') == ['ddc', 'cec', 'serial', 'output']
     # WOL has no off
     with pytest.raises(NoMechanismAvailable):
         candidates({'wol'}, 'off')
-    assert candidates({'x', 'ddc'}, 'on', 'ddc') == ['ddc']
+    assert candidates({'output', 'ddc'}, 'on', 'ddc') == ['ddc']
     with pytest.raises(NoMechanismAvailable):
-        candidates({'x'}, 'on', 'ddc')
+        candidates({'output'}, 'on', 'ddc')
 
 
 def test_power_off_value_follows_what_the_monitor_advertises():

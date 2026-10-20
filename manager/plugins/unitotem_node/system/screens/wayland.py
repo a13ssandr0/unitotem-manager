@@ -120,6 +120,21 @@ async def set_power(name: str, on: bool, known: Optional[Output] = None):
     result = await run(cmd, timeout=15)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip() or f'wlr-randr exited with {result.returncode}')
+    if on:
+        await _power_protocol(name, True)       # an output blanked by the power protocol is not woken by being enabled
+    else:
+        await asyncio.sleep(0.5)
+        now = next((o for o in await outputs() if o.name == name), None)
+        if now is not None and now.active:
+            # the compositor keeps its last output enabled (the Raspberry Pi's, for one): blank it instead
+            await _power_protocol(name, False)
+
+
+async def _power_protocol(name: str, on: bool):
+    try:
+        await dpms(on, name)
+    except RuntimeError as exc:
+        logger.debug('The power protocol did not take {}: {}', name, exc)
 
 
 async def dpms(on: bool, name: str = '*'):

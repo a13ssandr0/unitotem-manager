@@ -1,19 +1,12 @@
 """
-Touch-to-screen mapping: identity keys, the transformation matrix for an output (position, size, rotation), the plan
-of what to write, the XI2 float encoding, the sysfs identity and the persisted model. No X server needed.
+Touch-to-screen mapping: identity keys, the touch screens in /proc/bus/input/devices, the compositor configuration that maps
+them, the sysfs identity and the persisted model. No compositor needed.
 """
 import pytest
 
 from unitotem_node.models.touch_map import TouchMap
 from unitotem_node.system import touch
-from unitotem_node.system.touch import (
-    IDENTITY, ROTATE_0, ROTATE_180, ROTATE_270, ROTATE_90, Output, TouchDevice,
-)
-
-
-def apply(matrix, x, y):
-    """Where a normalised touch lands, normalised over the whole X screen."""
-    return (matrix[0] * x + matrix[1] * y + matrix[2], matrix[3] * x + matrix[4] * y + matrix[5])
+from unitotem_node.system.touch import TouchDevice
 
 
 # ── identity ─────────────────────────────────────────────────────────────────
@@ -27,109 +20,99 @@ def test_identity_key_without_ids_or_serial():
 
 
 def test_two_identical_panels_are_told_apart_by_port():
-    a = TouchDevice(xid=11, name='Panel', vendor=1, product=2, phys='usb-1/input0')
-    b = TouchDevice(xid=12, name='Panel', vendor=1, product=2, phys='usb-2/input0')
-    c = TouchDevice(xid=13, name='Other', vendor=1, product=3)
+    a = TouchDevice(name='Panel', vendor=1, product=2, phys='usb-1/input0')
+    b = TouchDevice(name='Panel', vendor=1, product=2, phys='usb-2/input0')
+    c = TouchDevice(name='Other', vendor=1, product=3)
     touch.assign_keys([a, b, c])
     assert a.key != b.key
     assert a.key.endswith('@usb-1/input0') and b.key.endswith('@usb-2/input0')
     assert c.key == 'Other|0001:0003|'
 
 
-def test_key_does_not_depend_on_the_x_id():
-    one = TouchDevice(xid=11, name='Panel', vendor=1, product=2, serial='S')
-    two = TouchDevice(xid=47, name='Panel', vendor=1, product=2, serial='S')
-    touch.assign_keys([one])
-    touch.assign_keys([two])
-    assert one.key == two.key
 
 
-# ── matrix ───────────────────────────────────────────────────────────────────
+# ── the devices of /proc/bus/input/devices ───────────────────────────────────
 
-def test_full_screen_output_is_identity():
-    assert touch.output_matrix(Output('HDMI-1', 0, 0, 1920, 1080), 1920, 1080) == pytest.approx(IDENTITY)
+PROC_DEVICES = """\
+I: Bus=0003 Vendor=04f3 Product=2a1b Version=0111
+N: Name="ELAN Touchscreen"
+P: Phys=usb-0000:00:14.0-2/input0
+S: Sysfs=/devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2:1.0/0003:04F3:2A1B.0001/input/input7
+U: Uniq=
+H: Handlers=mouse1 event5
+B: PROP=2
+B: EV=b
+B: KEY=400 0 0 0 0 0
+B: ABS=260800000000003
 
+I: Bus=0003 Vendor=046d Product=c52b Version=0111
+N: Name="Logitech USB Receiver Touchpad"
+P: Phys=usb-0000:00:14.0-3/input1
+S: Sysfs=/devices/x
+U: Uniq=
+H: Handlers=mouse2 event6
+B: PROP=5
+B: EV=1b
+B: KEY=e520 10000 0 0 0 0
+B: ABS=260800000000003
 
-def test_second_output_to_the_right():
-    m = touch.output_matrix(Output('HDMI-2', 1920, 0, 1920, 1080), 3840, 1080)
-    assert apply(m, 0, 0) == pytest.approx((0.5, 0))
-    assert apply(m, 1, 1) == pytest.approx((1, 1))
-
-
-def test_output_below_and_smaller():
-    m = touch.output_matrix(Output('DP-1', 0, 1080, 1280, 720), 1920, 1800)
-    assert apply(m, 0, 0) == pytest.approx((0, 0.6))
-    assert apply(m, 1, 1) == pytest.approx((1280 / 1920, 1))
-
-
-@pytest.mark.parametrize('rotation, native_corner, lands_on', [
-    # the panel's own top-left corner ends up where the rotated picture's corner is
-    (ROTATE_0, (0, 0), (0, 0)),
-    (ROTATE_90, (0, 0), (1, 0)),        # xrandr 'left'
-    (ROTATE_180, (0, 0), (1, 1)),       # 'inverted'
-    (ROTATE_270, (0, 0), (0, 1)),       # 'right'
-    (ROTATE_90, (1, 1), (0, 1)),
-    (ROTATE_270, (1, 1), (1, 0)),
-])
-def test_rotation_moves_the_corners(rotation, native_corner, lands_on):
-    m = touch.output_matrix(Output('DP-1', 0, 0, 1080, 1920, rotation), 1080, 1920)
-    assert apply(m, *native_corner) == pytest.approx(lands_on)
-
-
-def test_rotated_output_on_the_right_of_another():
-    # 1920x1080 on the left, a second one turned 'left' (so 1080x1920 in the layout) on its right
-    m = touch.output_matrix(Output('DP-2', 1920, 0, 1080, 1920, ROTATE_90), 3000, 1920)
-    x, y = apply(m, 0, 0)
-    assert (x, y) == pytest.approx((3000 / 3000, 0))
-    x, y = apply(m, 1, 1)
-    assert (x, y) == pytest.approx((1920 / 3000, 1))
+I: Bus=0011 Vendor=0001 Product=0001 Version=ab41
+N: Name="AT Translated Set 2 keyboard"
+P: Phys=isa0060/serio0/input0
+S: Sysfs=/devices/platform/i8042/serio0/input/input0
+U: Uniq=
+H: Handlers=sleep kbd event0
+B: PROP=0
+B: EV=120013
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
+"""
 
 
-def test_degenerate_geometry_gives_identity():
-    assert touch.output_matrix(Output('X', 0, 0, 0, 0), 100, 100) == IDENTITY
-    assert touch.output_matrix(Output('X', 0, 0, 10, 10), 0, 0) == IDENTITY
+def test_only_the_touch_screens_are_found():
+    devices = touch.parse_devices(PROC_DEVICES)
+    assert [d.name for d in devices] == ['ELAN Touchscreen']      # not the touchpad (no DIRECT property), not the keyboard
+    d = devices[0]
+    assert (d.vendor, d.product, d.phys, d.node) == (0x04f3, 0x2a1b, 'usb-0000:00:14.0-2/input0', '/dev/input/event5')
+    assert d.key == 'ELAN Touchscreen|04f3:2a1b|'
 
 
-# ── plan ─────────────────────────────────────────────────────────────────────
-
-def _devices():
-    return touch.assign_keys([TouchDevice(xid=10, name='A', vendor=1, product=1),
-                              TouchDevice(xid=11, name='B', vendor=1, product=2)])
+def test_no_devices_is_an_empty_list():
+    assert touch.parse_devices('') == []
+    assert touch.touch_devices('') == []
 
 
-def test_plan_maps_only_mapped_devices():
-    outputs = [Output('HDMI-1', 0, 0, 1000, 1000), Output('HDMI-2', 1000, 0, 1000, 1000)]
-    devices = _devices()
-    result = touch.plan(devices, {devices[0].key: 'HDMI-2'}, outputs, (2000, 1000))
-    assert set(result) == {10}
-    assert apply(result[10], 0, 0) == pytest.approx((0.5, 0))
+def test_bitmap_bits_in_both_word_sizes():
+    assert touch._bit('260800000000003', 0x35) and touch._bit('260800000000003', 0)
+    assert not touch._bit('260800000000003', 2)
+    assert touch._bit('1 0000000000000002', 1) and touch._bit('1 0000000000000002', 64)   # two 64-bit words, high one first
+    assert not touch._bit('2', 64)
 
 
-def test_plan_resets_a_device_whose_mapping_was_removed():
-    devices = _devices()
-    result = touch.plan(devices, {}, [], (100, 100), managed={devices[1].key})
-    assert result == {11: IDENTITY}
+# ── the compositor configuration ─────────────────────────────────────────────
+
+def test_fragment_maps_devices_by_name():
+    text = touch.fragment({'ELAN Touchscreen|04f3:2a1b|': 'DP-2', 'Other|0001:0002|SN': 'HDMI-A-1'})
+    assert '<touch deviceName="ELAN Touchscreen" mapToOutput="DP-2"' in text
+    assert '<touch deviceName="Other" mapToOutput="HDMI-A-1"' in text
 
 
-def test_plan_unplugged_output_falls_back_to_identity():
-    devices = _devices()
-    result = touch.plan(devices, {devices[0].key: 'DP-9'}, [Output('HDMI-1', 0, 0, 10, 10)], (10, 10))
-    assert result == {10: IDENTITY}
+def test_fragment_first_mapping_of_a_name_wins_and_is_escaped():
+    text = touch.fragment({'Panel|0001:0001|@usb-1': 'DP-1', 'Panel|0001:0001|@usb-2': 'DP-2', 'A"B|0|': 'X'})
+    assert text.count('deviceName="Panel"') == 1 and 'mapToOutput="DP-1"' in text
+    assert 'deviceName="A&quot;B"' in text
 
 
-# ── XI2 float encoding ───────────────────────────────────────────────────────
-
-def test_float_property_round_trip():
-    m = (0.5, 0.0, 0.25, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
-    words = touch.matrix_to_property(m)
-    assert words[0] == 0x3F000000           # 0.5 as an IEEE-754 single
-    assert touch.matrix_from_property(words) == pytest.approx(m)
+def test_fragment_of_nothing_is_empty():
+    assert touch.fragment({}) == ''
 
 
-def test_close_enough():
-    assert touch.close_enough(IDENTITY, tuple(v + 1e-6 for v in IDENTITY))
-    assert not touch.close_enough(IDENTITY, (0.5,) + IDENTITY[1:])
-    assert not touch.close_enough(IDENTITY, IDENTITY[:8])
+def test_apply_mapping_writes_the_nodes_fragment(tmp_path, monkeypatch):
+    from utils import labwc
+    monkeypatch.setattr(labwc, 'RUN_DIR', tmp_path)
+    monkeypatch.setattr(labwc, 'pid', lambda: None)             # no compositor to signal
+    assert touch.apply_mapping({'ELAN Touchscreen|04f3:2a1b|': 'DP-2'}) is False
+    text = (tmp_path / 'node' / 'labwc' / 'rc.xml').read_text()
+    assert text.startswith('<?xml') and 'mapToOutput="DP-2"' in text and text.rstrip().endswith('</labwc_config>')
 
 
 # ── sysfs identity ───────────────────────────────────────────────────────────
@@ -146,7 +129,7 @@ def test_sysfs_identity_walks_up_to_the_usb_serial(tmp_path):
     cls.mkdir(parents=True)
     (cls / 'device').symlink_to(hid)
     found = touch.sysfs_identity('/dev/input/event5', root=str(tmp_path / 'class' / 'input'))
-    assert found == {'phys': 'usb-0000:00:14.0-2/input0', 'serial': 'ABC123'}
+    assert found == {'serial': 'ABC123'}
 
 
 def test_sysfs_identity_ignores_garbage():
@@ -186,9 +169,9 @@ def test_touch_map_unreadable_file_gives_defaults(tmp_path, monkeypatch):
     assert TouchMap.load().mapping == {}
 
 
-# ── no X ─────────────────────────────────────────────────────────────────────
+# ── no compositor ────────────────────────────────────────────────────────────
 
-def test_snapshot_without_x_is_empty():
+def test_snapshot_without_a_compositor_is_empty():
     from unitotem_node.system.touch_service import TouchService
     s = TouchService().snapshot()
     assert s['available'] is False and s['outputs'] == []

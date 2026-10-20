@@ -10,7 +10,6 @@ from unitotem_node.system.screens.identity import (
     canonical_output_name,
     edid_identity,
     same_output,
-    xrandr_edid_property,
 )
 
 
@@ -54,33 +53,6 @@ def test_edid_identity_valid_header_no_descriptors_still_has_mfg():
     edid[0:8] = bytes([0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
     edid[8:10] = bytes([0x1E, 0x6D])   # 'GSM', the same packing as the real fixtures
     assert edid_identity(bytes(edid)) == 'GSM:None:None'
-
-
-# ── xrandr --props EDID property ────────────────────────────────────────────
-
-def test_xrandr_edid_property_real_capture_matches_ddcutil(fixtures):
-    text = (fixtures / 'xrandr_props_dp1.txt').read_text()
-    edid = xrandr_edid_property(text, 'DP-1')
-    assert edid is not None
-    assert edid_identity(edid) == 'GSM:LG ULTRAFINE:401NTMX52747'
-
-
-def test_xrandr_edid_property_nonexistent_output_is_none(fixtures):
-    text = (fixtures / 'xrandr_props_dp1.txt').read_text()
-    assert xrandr_edid_property(text, 'HDMI-99') is None
-
-
-def test_xrandr_edid_property_absent_on_real_xwayland_capture(fixtures):
-    # Real capture, this project's own dev host: three connected outputs,
-    # zero EDID properties anywhere - because :0 there is XWayland, whose
-    # RandR is an emulation layer that never forwards EDID at all (see the
-    # module docstring). Confirms the parser returns None for a genuinely
-    # EDID-less capture rather than raising or fabricating something - the
-    # exact shape the code will see on a developer's own machine.
-    text = (fixtures / 'xrandr_props_host.txt').read_text()
-    assert xrandr_edid_property(text, 'DP-1') is None
-    assert xrandr_edid_property(text, 'HDMI-A-1') is None
-    assert xrandr_edid_property(text, 'DVI-D-1') is None
 
 
 # ── RandR <-> DRM name normalisation ─────────────────────────────────────────
