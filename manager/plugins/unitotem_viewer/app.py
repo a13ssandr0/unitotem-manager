@@ -257,6 +257,10 @@ class WebviewApp:
                        else ' [profile not verified on real hardware]'))
         if self.wayland:
             switches['ozone-platform'] = 'wayland'
+            if self.gpu_profile.name == 'pi':
+                # needs the CEF build that reads it (tools/cef-server/patches/0002): without it the compositor gets LINEAR buffers
+                # on the V3D and presents every frame two vblanks late (30 fps instead of 60); a CEF without the patch ignores it
+                os.environ.setdefault('UNITOTEM_NO_SCANOUT_BUFFERS', '1')
         # Experiments: UNITOTEM_CEF_SWITCHES="name=value,name2" adds browser switches without a code change
         for item in filter(None, os.environ.get('UNITOTEM_CEF_SWITCHES', '').split(';')):
             name, _, value = item.partition('=')

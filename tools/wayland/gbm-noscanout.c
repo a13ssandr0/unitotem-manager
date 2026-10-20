@@ -5,12 +5,13 @@
 #include <dlfcn.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #define SCANOUT (1u << 0)
 struct gbm_device;
 struct gbm_bo;
 static void note(const char *what, uint32_t f) {
     static int n;
-    if (n++ < 6) fprintf(stderr, "[gbm-noscanout] %s flags=0x%x -> 0x%x\n", what, f, f & ~SCANOUT);
+    if (n++ < 40) fprintf(stderr, "[gbm-noscanout] %s flags=0x%x -> 0x%x (env %s)\n", what, f, f & ~SCANOUT, getenv("UNITOTEM_NO_SCANOUT_BUFFERS") ? "set" : "unset");
 }
 struct gbm_bo *gbm_bo_create(struct gbm_device *g, uint32_t w, uint32_t h, uint32_t fmt, uint32_t flags) {
     static struct gbm_bo *(*real)(struct gbm_device *, uint32_t, uint32_t, uint32_t, uint32_t);

@@ -809,3 +809,29 @@ the VM-specific ones.
   - **venus**: VA-API works with the 25.2.3 iHD driver and the firmware already installed (H.264 4K60 and HEVC 720p, `VaapiVideoDecoder`); i915 reaches 1450 MHz
     and 90 C with the 30000-fish Aquarium at 4K and never raised a GPU throttle flag (`throttle_reason_*`); a second 4K monitor on HDMI-2 was seen as connected
     but NOT enabled by anything (the manager adds the window once `xrandr --output HDMI-2 --auto` turns it on).
+- **Viewer on Wayland (branch `viewer-wayland`, 2026-10-20) — it works on both boards.** `UNITOTEM_VIEWER_PLATFORM=wayland` (or a Wayland socket and no `DISPLAY`) makes the viewer
+  use Qt's wayland platform (only for the QScreens and the splash) and plain top-level CEF windows (`window.WaylandWindow`, `ozone-platform=wayland`); the X11 path is untouched.
+  Measured with the real viewer under labwc, 1080p: Pi 4 canvas2d and WebGL2 **60.2 fps** (X11: 60 with MSAA off but tearing), venus 60/60, no tearing.
+  - **The Pi's "Wayland caps at ~30 fps" was Chromium's buffers, not the compositors.** Chromium's `BufferQueue` asks for scanout buffers, Mesa's
+    `gbm_bo_create_with_modifiers()` then allocates them **LINEAR** (`create_with_modifiers2 flags=0x1`; the V3D can only scan out linear), and labwc/cage/weston present such a
+    surface two vblanks after every commit (`presented` seq jumps by 2, 31 flips/s, V3D only ~15% busy). A native EGL client gets UIF-tiled buffers (modifier `0x0700000000000006`)
+    and does 60. Fix: no SCANOUT flag. Proven with `tools/wayland/gbm-noscanout.c` (LD_PRELOAD) and shipped as CEF patch `tools/cef-server/patches/0002-gbm-no-scanout-buffers-env.patch`
+    (a 4-minute arm64 relink; reads `UNITOTEM_NO_SCANOUT_BUFFERS`, which the viewer sets on the `pi` profile under Wayland). Diagnosis tools: `WAYLAND_DEBUG=1` on the viewer
+    (`zwp_linux_buffer_params_v1.add` modifier, `wp_presentation_feedback.presented` sequence numbers), `/sys/kernel/tracing/events/drm/drm_vblank_event_delivered`, `drm-engine-*` in
+    `/proc/<pid>/fdinfo`, Chromium trace categories `wayland,viz` (`tools/gfx-bench/wltrace.py`). Flags that changed nothing: `disable-gpu-vsync`, `in-process-gpu`;
+    `disable-frame-rate-limit` only makes rAF lie (400 "fps").
+  - **Placing a window on its output is the hard part.** A Wayland client cannot choose; CEF's windows have empty `app_id` and title (the page title never reaches the compositor:
+    only `cef::Window` delegates set it) so a labwc window rule on them is deleted ("no criteria") or never matches, `Browser.getWindowForTarget` does not know them and
+    `cefpython`'s `WindowInfo(title)` is ignored. `type="normal"` rules match but labwc applies the rules AGAIN to every existing window when it re-reads rc.xml (SIGHUP), which
+    toggled fullscreen off. What works (`wayland.py`): per window, rc.xml gets a key binding (Super+Alt+F12: `MoveToOutput` + `Maximize`, both repeatable), labwc re-reads it, the
+    window is created, `wlrctl toplevel list` shows when it appeared, a **uinput virtual keyboard** presses the keys (new windows are NOT focused by labwc by default, the binding acts on
+    the active window: wait until the new one is it). Verified with `WAYLAND_DEBUG` `wl_surface.enter`: two windows on two outputs (venus, DP-2 forced with
+    `echo on > /sys/kernel/debug/dri/0/DP-1/force`). The Qt splash needs none of it (`showFullScreen` per screen). The first window shows an extra `configure` without the maximized
+    state right after (not understood, the output is covered anyway). A proper fix would be a CEF patch that gives each window an `app_id` (then plain window rules work).
+  - **Not ported yet (all X11-only in the node plugin)**: output rotation/mode/enable (`xrandr` → `wlr-randr`), DPMS/screen on-off, touch-to-output mapping (labwc `<touch mapToOutput>`),
+    VNC (`x0vncserver` → `wayvnc`), the boot splash handoff (`bootsplash.py` is python-xlib), and a compositor service replacing `start-xorg.service`.
+    `Cannot apply the DPMS policy: the X server has no DPMS extension` is expected until then. Needs `qt6-wayland`, `labwc`, `wlrctl` in the image, `/dev/uinput`, and the patched CEF.
+  - **Test traps**: labwc `-d` logs `[map] identifier=, title=` per window; a rule or keybinding written with the wrong quoting makes labwc silently load the DEFAULT config (check
+    "error parsing config file"); Chromium rewrites its `/proc/<pid>/environ` (it looks empty), check the environment with a shim that prints `getenv`; `umount` of a bind-mounted
+    libcef says "busy" while the viewer runs (stop it first); `raf.py -1` runs in the viewer's own window (it stays on the test page).
+
