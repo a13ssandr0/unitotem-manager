@@ -202,12 +202,10 @@ The service is `Type=notify`: `utils/ready.py` sends READY=1 when the first fram
 Qt splash, before CEF starts, so the system's boot splash can end), or when the web server answers if there are no local
 windows. `TimeoutStartSec=300`.
 On a slow board the manager needs many seconds just to import its dependencies, so the very first frame comes from a
-separate tiny process: `unitotem-splash.service` (shipped by unitotem-viewer, started in parallel with the X server: it warms up, then waits for the socket) runs
-`plugins/unitotem_viewer/bootsplash.py`, a plain script that uses only python-xlib and Pillow (NO Qt: importing PySide6 takes
-seconds on a Pi 4 and the screen stays black meanwhile; measured on the VM: visible 0.12 s after it starts). It must stay free of
-imports from the rest of UniTotem, sends its own READY=1 and is stopped by the viewer (a D-Bus `StopUnit` call to systemd) once
-the viewer's own Qt splash (splash.py), which looks the same, is showing once the viewer's own
-splash, which looks the same, is showing.
+separate tiny process: `unitotem-splash.service` (shipped by unitotem-viewer, started in parallel with the compositor: it warms up, then waits for the Wayland socket) runs
+`plugins/unitotem_viewer/bootsplash.py`, a plain script that imports only QtGui (NOT QtWidgets, nor the manager), Pillow and sdnotify (measured on a Pi 4: the window
+is up 1.2 s after it starts). It must stay free of imports from the rest of UniTotem, sends its own READY=1 and is stopped by the viewer (a D-Bus `StopUnit` call to systemd) once
+the viewer's own Qt splash (splash.py), which looks the same, is showing.
 
 
 ## On-screen keyboard (touch panels)
@@ -223,8 +221,9 @@ but is clamped inside the screen and to a minimum size after every gesture, ever
 ## Touch panels
 Everything per window and per screen, off by default, kept in viewer_settings.json (core) or touch_map.json (node):
 - **Touch-to-screen mapping** (node plugin, `system/touch.py` + `touch_service.py`, Display page): touch devices are tied to an
-  output by a stable identity (`name|vendor:product|serial`, never the X device id) through the Coordinate Transformation
-  Matrix (output position, size and rotation), applied at start and on XI2 hierarchy / RandR events, no polling.
+  output by a stable identity (`name|vendor:product|serial`, never the `eventN` number): the touch screens come from `/proc/bus/input/devices` (DIRECT property),
+  the mapping is the node's fragment of the compositor configuration (`<touch deviceName mapToOutput>`, labwc handles position and rotation by itself and
+  matches by device NAME: two identical panels share one mapping), re-read on SIGHUP; the list is kept up to date by inotify on `/dev/input`, no polling.
 - **Screensaver** (`Viewers/set_screensaver`): a window can have a home page shown indefinitely; after an idle timeout the
   playlist plays as an overlay, the first touch dismisses it and is consumed (a shield keeps compat mouse events from
   clicking through). Activity inside the cross-origin home page is reported by a script injected into every frame
@@ -263,9 +262,9 @@ and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The w
   two simultaneous setups have one winner (asyncio lock). The totem shows the WELCOME screen (gradient, address, hotspot QR) meanwhile,
   `idle_asset()` is `first_boot` until an admin exists and `WebviewManager.refresh_idle()` switches the windows when setup completes. There
   is NO admin/admin. The claim code and `--create-admin` were removed on purpose: "too protective".
-- **VNC on demand** (node plugin `vnc.py`, `system/vnc.py`, VncWindow.vue): TigerVNC `x0vncserver` on a UNIX socket only (no TCP
-  port), view-only enforced by the server, control an explicit per-session switch, started when the window opens and stopped on
-  close/drop/shutdown (no idle timeout by default, `UNITOTEM_VNC_IDLE_TIMEOUT` switches one on), admin only, `/vnc` websocket bridge with Origin check. Debian binary is `/usr/bin/X0tigervnc`.
+- **VNC on demand** (node plugin `vnc.py`, `system/vnc.py`, VncWindow.vue): `wayvnc` (`--unix-socket`, `--disable-input` for view-only, `--output NAME`: it captures ONE output, with an explicit
+  `--config` so it never looks for a home directory) on a UNIX socket only (no TCP port), view-only enforced by the server, control an explicit per-session switch, started when the window opens and stopped on
+  close/drop/shutdown (no idle timeout by default, `UNITOTEM_VNC_IDLE_TIMEOUT` switches one on), admin only, `/vnc` websocket bridge with Origin check. Debian binary is `/usr/bin/wayvnc`.
 - **Suspend with scheduled wake** (node plugin `system/{wake,rtc,suspend}.py`, timer action `sus`, `Power/suspend`): the alarm is
   written to `/sys/class/rtc/rtcN/wakealarm` (UTC epoch whatever /etc/adjtime says; clear first, read back), then logind
   `Suspend` over D-Bus; refused with a reason when there is no usable RTC / wakeup / CanSuspend; resume is the logind
@@ -327,7 +326,7 @@ not be retried, a trap that cost real debugging time) and every new rule given b
 written into this file, in this section, as soon as it is found. A commit message is not enough:
 commit messages are not read at the start of the next session, this file is.
 
-System- or OS-level changes (kiosk image, systemd units, X11 session, packaging on the target)
+System- or OS-level changes (kiosk image, systemd units, the compositor session, packaging on the target)
 additionally go into `unitotem-system/debian-unitotem.md`, which is the reference document for the
 kiosk image.
 
@@ -809,9 +808,17 @@ the VM-specific ones.
   - **venus**: VA-API works with the 25.2.3 iHD driver and the firmware already installed (H.264 4K60 and HEVC 720p, `VaapiVideoDecoder`); i915 reaches 1450 MHz
     and 90 C with the 30000-fish Aquarium at 4K and never raised a GPU throttle flag (`throttle_reason_*`); a second 4K monitor on HDMI-2 was seen as connected
     but NOT enabled by anything (the manager adds the window once `xrandr --output HDMI-2 --auto` turns it on).
-- **Viewer on Wayland (branch `viewer-wayland`, 2026-10-20) — it works on both boards.** `UNITOTEM_VIEWER_PLATFORM=wayland` (or a Wayland socket and no `DISPLAY`) makes the viewer
-  use Qt's wayland platform (only for the QScreens and the splash) and plain top-level CEF windows (`window.WaylandWindow`, `ozone-platform=wayland`); the X11 path is untouched.
-  Measured with the real viewer under labwc, 1080p: Pi 4 canvas2d and WebGL2 **60.2 fps** (X11: 60 with MSAA off but tearing), venus 60/60, no tearing.
+- **THE KIOSK RUNS WAYLAND (labwc) AND NOTHING ELSE since 2026-10-20 (user decision "via X11, andiamo tutto su Wayland"). Everything X11 in this file is history.**
+  Pieces: `unitotem-compositor.service` (shipped by unitotem-viewer, enabled by the image: labwc as root on VT1 with libseat's builtin backend, `RuntimeDirectory=unitotem`,
+  `XDG_RUNTIME_DIR=/run/unitotem/xdg`, `labwc --merge-config` with `XDG_CONFIG_DIRS=/etc/unitotem/xdg:/run/unitotem/labwc/node:/run/unitotem/labwc/viewer`; the base config is
+  `debian/labwc-rc.xml`); `utils/labwc.py` (one configuration FRAGMENT per writer, `reload()` = SIGHUP: the viewer writes the window placement, the node the touch mapping);
+  the viewer (Qt wayland only for QScreens and splash; browser windows made by DevTools `Target.createTarget`, see below); the node (`system/screens/wayland.py`: `wlr-randr --json`
+  for outputs/power/rotation names, `wlopm` for blanking, EDID from `/sys/class/drm/card*-<output>/edid` for the identity; `touch.py`; `vnc.py` with wayvnc); `bootsplash.py` in QtGui.
+  Output names are the DRM connector's (`HDMI-A-1`, not RandR's `HDMI-1`): saved assignments/settings follow through `utils/outputs.find_renamed`. The screen mechanism formerly called `x` is
+  `output` (old files are read through a validator). The web UI lost the "click a monitor to move the window onto it" (`set_bounds`): the compositor owns window geometry.
+  Needs in the image: `labwc`, `wlrctl`, `qt6-wayland`, `wlr-randr`, `wlopm`, `wayvnc` (all Depends/Recommends of the debs), `/dev/uinput`, the patched CEF. No Xorg, no xauth, no python-xlib.
+  Dev tooling: `tools/wayland/session.sh` (runs the real compositor unit and the manager from a copy of the code on a board, see `tools/wayland/README.md`).
+  Measured with the real viewer under labwc, 1080p: Pi 4 canvas2d and WebGL2 **60.2 fps** (X11 was 60 with MSAA off but tearing), venus 60/60, no tearing.
   - **The Pi's "Wayland caps at ~30 fps" was Chromium's buffers, not the compositors.** Chromium's `BufferQueue` asks for scanout buffers, Mesa's
     `gbm_bo_create_with_modifiers()` then allocates them **LINEAR** (`create_with_modifiers2 flags=0x1`; the V3D can only scan out linear), and labwc/cage/weston present such a
     surface two vblanks after every commit (`presented` seq jumps by 2, 31 flips/s, V3D only ~15% busy). A native EGL client gets UIF-tiled buffers (modifier `0x0700000000000006`)
@@ -820,17 +827,18 @@ the VM-specific ones.
     (`zwp_linux_buffer_params_v1.add` modifier, `wp_presentation_feedback.presented` sequence numbers), `/sys/kernel/tracing/events/drm/drm_vblank_event_delivered`, `drm-engine-*` in
     `/proc/<pid>/fdinfo`, Chromium trace categories `wayland,viz` (`tools/gfx-bench/wltrace.py`). Flags that changed nothing: `disable-gpu-vsync`, `in-process-gpu`;
     `disable-frame-rate-limit` only makes rAF lie (400 "fps").
-  - **Placing a window on its output is the hard part.** A Wayland client cannot choose; CEF's windows have empty `app_id` and title (the page title never reaches the compositor:
-    only `cef::Window` delegates set it) so a labwc window rule on them is deleted ("no criteria") or never matches, `Browser.getWindowForTarget` does not know them and
-    `cefpython`'s `WindowInfo(title)` is ignored. `type="normal"` rules match but labwc applies the rules AGAIN to every existing window when it re-reads rc.xml (SIGHUP), which
-    toggled fullscreen off. What works (`wayland.py`): per window, rc.xml gets a key binding (Super+Alt+F12: `MoveToOutput` + `Maximize`, both repeatable), labwc re-reads it, the
-    window is created, `wlrctl toplevel list` shows when it appeared, a **uinput virtual keyboard** presses the keys (new windows are NOT focused by labwc by default, the binding acts on
-    the active window: wait until the new one is it). Verified with `WAYLAND_DEBUG` `wl_surface.enter`: two windows on two outputs (venus, DP-2 forced with
-    `echo on > /sys/kernel/debug/dri/0/DP-1/force`). The Qt splash needs none of it (`showFullScreen` per screen). The first window shows an extra `configure` without the maximized
-    state right after (not understood, the output is covered anyway). A proper fix would be a CEF patch that gives each window an `app_id` (then plain window rules work).
-  - **Not ported yet (all X11-only in the node plugin)**: output rotation/mode/enable (`xrandr` → `wlr-randr`), DPMS/screen on-off, touch-to-output mapping (labwc `<touch mapToOutput>`),
-    VNC (`x0vncserver` → `wayvnc`), the boot splash handoff (`bootsplash.py` is python-xlib), and a compositor service replacing `start-xorg.service`.
-    `Cannot apply the DPMS policy: the X server has no DPMS extension` is expected until then. Needs `qt6-wayland`, `labwc`, `wlrctl` in the image, `/dev/uinput`, and the patched CEF.
+  - **Windows and why they are made through DevTools.** A Wayland client cannot choose its output, and the windows `cefpython.CreateBrowserSync` makes have empty `app_id` and title (labwc
+    deletes a window rule without criteria, a `type="normal"` rule is re-applied to every window at each SIGHUP and toggled fullscreen off), **`CloseBrowser`/`Page.close` never destroy the window** (a
+    zombie toplevel stays and labwc moves it onto the remaining output after an unplug; `OnBeforeClose` only fires at shutdown) and `Browser.getWindowForTarget` does not know them. The windows
+    DevTools itself opens (`Target.createTarget {newWindow:true}`) close with `Target.closeTarget`, go fullscreen with `Browser.setWindowBounds {windowState:'fullscreen'}` and show up in
+    `wlrctl toplevel list`: `cdp.py` creates them (`create_window`), `app.py` opens them ONE AT A TIME (`_window_opener`). Placement (`wayland.py`): the viewer's fragment gets a key binding
+    (Super+Alt+F12: `MoveToOutput`; a binding, unlike a rule, is not applied again to existing windows), labwc re-reads it, the window is created, `wlrctl` shows it appeared, a **uinput
+    virtual keyboard** presses the keys (labwc does NOT focus new windows: wait a moment, the binding acts on the active one), then CDP makes it fullscreen (labwc ignores `MoveToOutput` on a
+    fullscreen window, so move first). Verified with two outputs on venus (DP-1 phantom via `echo on > /sys/kernel/debug/dri/0/DP-1/force` BEFORE the compositor starts) and by
+    `wlr-randr --output DP-1 --off/--on`: the window of an unplugged output is closed (toplevels 2 -> 1), a re-plugged one gets a new window. Touch mapping verified with a uinput touch screen:
+    unmapped lands at the centre of the whole layout, mapped to DP-2 at the centre of DP-2. A better placement would be a CEF patch giving each window an `app_id` (plain window rules).
+  - **The last output of a Raspberry Pi cannot be disabled by `wlr-randr --off`** (it stays enabled): `wayland.set_power` blanks it with `wlopm` instead. Qt wayland does emit `screenRemoved` / `screenAdded` when an output
+    is disabled / enabled (checked with `tools`-style script), no `udevadm trigger` or debugfs `force` is needed to test hot-plug on a running compositor.
   - **Test traps**: labwc `-d` logs `[map] identifier=, title=` per window; a rule or keybinding written with the wrong quoting makes labwc silently load the DEFAULT config (check
     "error parsing config file"); Chromium rewrites its `/proc/<pid>/environ` (it looks empty), check the environment with a shim that prints `getenv`; `umount` of a bind-mounted
     libcef says "busy" while the viewer runs (stop it first); `raf.py -1` runs in the viewer's own window (it stays on the test page).
