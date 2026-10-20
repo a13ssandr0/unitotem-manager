@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 
 from api.commons import SHUTDOWN_EVENT
+from utils.outputs import find_renamed
 from utils.models.assets import Asset, AssetsManager, first_boot, idle_asset, no_assets
 from utils.models.command_line import cmdargs
 from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings, viewer_settings
@@ -289,6 +290,15 @@ class WebviewManager:
         self._idle_windows -= {(vid, window_id) for vid, window_id in self._idle_windows
                                if vid == instance_id and window_id not in live_ids}
         self._audio_applied = {k for k in self._audio_applied if k[0] != instance_id or k[1] in live_ids}
+
+        # assignments saved while the screens had X server names (HDMI-1) follow their output under the compositor's (HDMI-A-1)
+        names = [name for _, name in windows if name]
+        for key in [k for k in self._assignments if k[0] == instance_id]:
+            renamed = find_renamed(key[1], names)
+            if renamed is not None and (instance_id, renamed) not in self._assignments:
+                logger.info('Output {} of {} is now called {}: its playlist follows', key[1], instance_id, renamed)
+                self._assignments[(instance_id, renamed)] = self._assignments.pop(key)
+                self._save_assignments()
 
         legacy = self._legacy_assignments.pop(instance_id, None)
         if legacy is not None:
