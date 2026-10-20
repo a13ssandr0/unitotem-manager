@@ -70,7 +70,9 @@ prepare_cef() {
     if [ "$arch" = x86_64 ]; then suffix=linux64; triple=x86_64-linux-gnu; strip=strip; else suffix=linuxarm64; triple=aarch64-linux-gnu; strip=aarch64-linux-gnu-strip; fi
     local src; src=$(ls -d /work/distrib/cef_binary_*_"$suffix")
     local root="$W/cef-$arch"
-    [ -f "$root/.ready" ] && return 0
+    # the layout is cached between runs, but only while it is newer than the distribution it was made from: a rebuilt libcef.so must not be
+    # shadowed by an old one (the wheels of 2026-10-20 shipped the previous libcef, without the patches, because of this)
+    [ -f "$root/.ready" ] && [ "$root/.ready" -nt "$src/Release/libcef.so" ] && return 0
     log "CEF $arch: wrapper from $src"
     rm -rf "$root"; mkdir -p "$root/bin" "$root/lib"
     local dist="$W/dist-$arch"; rm -rf "$dist"; cp -a "$src" "$dist"
