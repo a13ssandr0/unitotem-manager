@@ -1,7 +1,7 @@
 [Unit]
 Description=UniTotem boot splash
-# Started in parallel with the X server on purpose: the program loads everything it needs first and then waits for the X
-# socket and cookie itself, so the first frame is drawn the moment X accepts clients
+# Started in parallel with the compositor on purpose: the program loads everything it needs first and then waits for the
+# Wayland socket itself, so the first frame is drawn the moment the compositor accepts clients
 
 [Service]
 # Ready when the first frame is on screen: this is what the boot splash of the system can end on. The viewer stops the
@@ -9,8 +9,8 @@ Description=UniTotem boot splash
 Type=notify
 NotifyAccess=main
 TimeoutStartSec=120
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=/run/unitotem-x11.auth
+Environment=XDG_RUNTIME_DIR=/run/unitotem/xdg
+Environment=WAYLAND_DISPLAY=wayland-0
 ExecStart=/usr/bin/python3 /usr/share/unitotem-manager/plugins/unitotem_viewer/bootsplash.py
 
 [Install]

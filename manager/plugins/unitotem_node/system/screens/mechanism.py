@@ -3,16 +3,16 @@ Pure priority resolution between the three power-control mechanisms - no
 subprocess calls, no I/O; see the module docstring in __init__.py. The
 capability model itself (SCREEN-CONTROL-PLAN.md §2):
 
-    Operation      DDC/CI (>= 2.0)          CEC                       X
-    Power off      0xD6 <- 04/05            --standby (0x36)          xrandr --output X --off
-    Power on       0xD6 <- 01 (best-effort) --image-view-on + --active-source  xrandr --output X --auto
+    Operation      DDC/CI (>= 2.0)          CEC                       output
+    Power off      0xD6 <- 04/05            --standby (0x36)          wlr-randr --output X --off
+    Power on       0xD6 <- 01 (best-effort) --image-view-on + --active-source  wlr-randr --output X --on
     Input source   0x60                     not supported             -
     Volume/mute    0x62 / 0x8D              relative up/down, toggle  -
 
-'auto' order is CEC -> DDC -> X for turning ON (only CEC reliably wakes a
+'auto' order is CEC -> DDC -> output for turning ON (only CEC reliably wakes a
 display that stopped responding on DDC once off - unverified on real hardware
 so far, no CEC adapter has been available anywhere this was tested, but it is
-the documented reason for CEC-first on power-on) and DDC -> CEC -> X for
+the documented reason for CEC-first on power-on) and DDC -> CEC -> output for
 turning OFF (DDC/CI reliably powers a monitor down - confirmed real, dev host:
 0xD6 answered SNC values on every monitor tried).
 """
@@ -20,14 +20,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-Mechanism = Literal['cec', 'ddc', 'x', 'wol', 'serial']
+Mechanism = Literal['cec', 'ddc', 'output', 'wol', 'serial']
 Action = Literal['on', 'off']
 
 # 'wol' and 'serial' are only ever available when somebody configured them for the output, which is the intent
 # to use them: a monitor with Wake-on-LAN is woken by it first. WOL has no "off", it is simply never offered there.
 _ORDER: dict[Action, tuple[Mechanism, ...]] = {
-    'on':  ('wol', 'cec', 'ddc', 'serial', 'x'),
-    'off': ('ddc', 'cec', 'serial', 'x'),
+    'on':  ('wol', 'cec', 'ddc', 'serial', 'output'),
+    'off': ('ddc', 'cec', 'serial', 'output'),
 }
 
 

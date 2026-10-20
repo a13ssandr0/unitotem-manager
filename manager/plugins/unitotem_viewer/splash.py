@@ -20,11 +20,8 @@ class Splash(QWidget):
     """The picture of bootsplash.py (the Plymouth theme's own wordmark and ring, same geometry), still: the thread that
     would turn the ring is the one busy starting CEF. Plymouth, bootsplash and this are one identical picture."""
 
-    def __init__(self, screen, wayland: bool = False):
+    def __init__(self, screen):
         super().__init__()
-        self.wayland = wayland
-        if not wayland:
-            self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setScreen(screen)
         self.setGeometry(screen.geometry())
         self.setCursor(Qt.CursorShape.BlankCursor)
@@ -56,15 +53,15 @@ class Splash(QWidget):
                           self._picture)
 
 
-def show_splashes(screens, wayland: bool = False, timeout: float = 3.0) -> list[Splash]:
+def show_splashes(screens, timeout: float = 3.0) -> list[Splash]:
     """One per screen, ON SCREEN with their pixels painted before this returns: whoever called asks for the previous frame
     to be removed right after, and showing a window is not painting it (on a slow board the first paint comes several event
     loop turns after the window is mapped, and the gap between the two frames is a black screen)."""
     import time
     from PySide6.QtWidgets import QApplication
-    splashes = [Splash(screen, wayland) for screen in screens]
+    splashes = [Splash(screen) for screen in screens]
     for splash in splashes:
-        splash.showFullScreen() if wayland else splash.show()      # on Wayland the protocol has a request for it, per output
+        splash.showFullScreen()      # the protocol has a request for it, per output: no compositor rule needed
     deadline = time.monotonic() + timeout
     while not all(splash.painted for splash in splashes) and time.monotonic() < deadline:
         QApplication.processEvents()

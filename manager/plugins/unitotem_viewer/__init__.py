@@ -39,8 +39,8 @@ def run_gui(on_quit) -> bool:
     logger.info('Starting the local viewer')
     _app.run()                                      # blocks until request_quit()
     if not _quit_requested:
-        # Qt ends its loop by itself when the X server goes away. That is not a clean exit: the service must fail so that
-        # systemd starts it again on the new X server
+        # Qt ends its loop by itself when the compositor goes away. That is not a clean exit: the service must fail so that
+        # systemd starts it again on the new compositor
         raise RuntimeError('The display connection was lost')
     return True
 

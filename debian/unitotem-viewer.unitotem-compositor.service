@@ -1,0 +1,40 @@
+[Unit]
+Description=UniTotem compositor (labwc)
+# Plymouth keeps its last frame on screen while the compositor starts and is removed once the compositor answers. Measured on a
+# Pi 4 with the X server this replaces (2026-10-17, capture of the HDMI output): `plymouth quit` blanks the screen at once,
+# `plymouth deactivate` does not (it only stops drawing and gives up the DRM master, so the new owner can take it, and the last
+# frame stays scanned out). The time the compositor needs to initialise is covered by the Plymouth frame.
+After=plymouth-start.service systemd-udevd.service
+Before=unitotem-manager.service
+
+[Service]
+Type=simple
+# Everything the program and the node write for the compositor lives in /run/unitotem: the XDG runtime directory (the Wayland
+# socket; it must be private) and one configuration fragment per writer (manager/utils/labwc.py). /run is a tmpfs: nothing
+# can be left behind by a crash or a power cut.
+RuntimeDirectory=unitotem unitotem/xdg unitotem/labwc/node/labwc unitotem/labwc/viewer/labwc
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+# labwc runs on VT1, the VT Plymouth is on; libseat's builtin backend needs a VT and no seat daemon
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+UnsetEnvironment=TERM
+Environment=XDG_RUNTIME_DIR=/run/unitotem/xdg
+Environment=LIBSEAT_BACKEND=builtin
+# base configuration of the image, then the fragments of the node (touch screens) and the viewer (window placement)
+Environment=XDG_CONFIG_DIRS=/etc/unitotem/xdg:/run/unitotem/labwc/node:/run/unitotem/labwc/viewer
+ExecStartPre=-/usr/bin/timeout 5 /usr/bin/plymouth deactivate
+ExecStartPre=/bin/chmod 700 /run/unitotem/xdg
+ExecStartPre=/bin/sh -c 'for n in node viewer; do f=/run/unitotem/labwc/$n/labwc/rc.xml; [ -e "$f" ] || printf \'<?xml version="1.0"?>\\n<labwc_config>\\n</labwc_config>\\n\' > "$f"; done'
+ExecStart=/usr/bin/labwc --merge-config
+# once the compositor really answers (the socket exists), remove Plymouth WITHOUT `plymouth quit`: quit puts the VT back into
+# text mode, which makes the kernel console repaint over the new frame. The daemon is already deactivated (no drawing, no DRM
+# master), so killing it only drops the process; the VT buffer and /dev/fb0 are cleared first.
+ExecStartPost=-/bin/sh -c 'i=0; until [ -S /run/unitotem/xdg/wayland-0 ] || [ $i -ge 400 ]; do sleep 0.05; i=$((i+1)); done; printf "\\033[H\\033[2J\\033[3J" > /dev/tty1; cat /dev/zero > /dev/fb0 2>/dev/null; pkill -KILL -x plymouthd'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -20,7 +20,7 @@ def on_startup(loop):
     from api.commons import SHUTDOWN_EVENT
     from api.ws.endpoints import WS
     from .system import suspend, updater
-    from .system.screens import control, xorg
+    from .system.screens import control, wayland
     from .system.timer_actions import run_timers
 
     async def screens_at_start():
@@ -32,9 +32,9 @@ def on_startup(loop):
 
         try:
             try:
-                await xorg.dpms_policy()
+                await wayland.wake_all()
             except Exception as exc:
-                logger.warning('Cannot apply the DPMS policy: {}', exc)
+                logger.warning('Cannot wake the outputs: {}', exc)
             await control.wake_all(on_done=broadcast)
             await control.probe(on_done=broadcast)
         except Exception:

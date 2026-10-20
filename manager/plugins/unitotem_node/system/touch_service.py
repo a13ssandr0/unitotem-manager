@@ -1,83 +1,90 @@
 """
-Keeps the touch mapping applied. Event-driven: a connection to the X server listens for XInput2 hierarchy events (a
-device was added or removed) and RandR notifications (an output appeared, went away, moved or rotated) and, a moment
-after the last of a burst, writes the matrices again and tells the open pages. Nothing polls.
+Keeps the touch mapping applied and the list of touch screens up to date. Event-driven: the mapping is a fragment of the
+compositor configuration, written whenever it changes and at start (the compositor applies it to a device when the device
+appears, so a screen plugged later is mapped without anybody noticing), and the kernel's own notifications (inotify on
+/dev/input) tell when a device appears or goes away so that the open pages are told. Nothing polls.
 
-No X display, or an X server without XInput, simply leaves the list empty.
+No compositor, or no /dev/input, simply leaves the list empty.
 """
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import os
+import struct
 from typing import Awaitable, Callable, Optional
 
 from loguru import logger
 
 from . import touch
+from .screens import wayland
 
-DEBOUNCE = 0.3          # a hot-plug is a burst of events; the matrices are computed once it settles
-CONNECT_ATTEMPTS = 30   # the manager can start a moment before X is up
-CONNECT_DELAY = 2.0
+DEBOUNCE = 0.3          # a hot-plug is a burst of events; the list is read once it settles
+IN_CREATE, IN_DELETE = 0x100, 0x200
+INPUT_DIR = '/dev/input'
 
 OnChange = Callable[[], Awaitable[None]]
 
 
+def _inotify(path: str) -> Optional[int]:
+    """A non-blocking inotify descriptor watching `path` for devices appearing and going away (None when it cannot)."""
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        if fd < 0 or libc.inotify_add_watch(fd, path.encode(), IN_CREATE | IN_DELETE) < 0:
+            if fd >= 0:
+                os.close(fd)
+            return None
+        return fd
+    except (OSError, AttributeError):
+        return None
+
+
 class TouchService:
     def __init__(self):
-        self.x: Optional[touch.XTouch] = None
         self.devices: list[touch.TouchDevice] = []
-        self.outputs: list[touch.Output] = []
+        self.outputs: list[wayland.Output] = []
+        self.available = False
+        self._fd: Optional[int] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._timer: Optional[asyncio.TimerHandle] = None
         self._on_change: Optional[OnChange] = None
 
     async def start(self, on_change: OnChange):
-        """Connect (waiting a little for X to come up), apply the stored mapping and start listening."""
+        """Apply the stored mapping and start listening for devices."""
         self._loop = asyncio.get_running_loop()
         self._on_change = on_change
-        if not os.environ.get('DISPLAY'):
-            logger.debug('No X display: touch mapping disabled')
-            return
-        for _ in range(CONNECT_ATTEMPTS):
-            try:
-                self.x = touch.XTouch()
-                self.x.select_events()
-                break
-            except ImportError:
-                logger.debug('python-xlib is missing: touch mapping disabled')
-                return
-            except Exception as exc:
-                logger.debug('Touch mapping cannot reach the X server yet: {}', exc)
-                if self.x:
-                    self.x.close()
-                self.x = None
-                await asyncio.sleep(CONNECT_DELAY)
-        if self.x is None:
-            logger.warning('Touch mapping disabled: cannot connect to the X server')
-            return
-        self._loop.add_reader(self.x.fileno(), self._readable)
+        self._fd = _inotify(INPUT_DIR)
+        if self._fd is not None:
+            self._loop.add_reader(self._fd, self._readable)
         await self.refresh()
 
     def stop(self):
         if self._timer:
             self._timer.cancel()
-        if self.x and self._loop:
+        if self._fd is not None and self._loop:
             try:
-                self._loop.remove_reader(self.x.fileno())
-            except Exception:
-                pass
-            self.x.close()
-            self.x = None
+                self._loop.remove_reader(self._fd)
+            finally:
+                os.close(self._fd)
+                self._fd = None
 
     # events -----------------------------------------------------------------
 
     def _readable(self):
         try:
-            if self.x.relevant_events():
-                self._schedule()
-        except Exception as exc:        # the X server went away: the kiosk is going down with it
-            logger.warning('Lost the X connection of the touch mapping: {}', exc)
-            self.stop()
+            data = os.read(self._fd, 4096)
+        except BlockingIOError:
+            return
+        # only the event nodes matter (mouse0, js0... are not touch screens)
+        offset, relevant = 0, False
+        while offset + 16 <= len(data):
+            _wd, _mask, _cookie, length = struct.unpack_from('iIII', data, offset)
+            name = data[offset + 16:offset + 16 + length].split(b'\0', 1)[0]
+            relevant = relevant or name.startswith(b'event')
+            offset += 16 + length
+        if relevant:
+            self._schedule()
 
     def _schedule(self):
         if self._timer:
@@ -92,15 +99,12 @@ class TouchService:
     # state ------------------------------------------------------------------
 
     async def refresh(self):
-        """Apply the stored mapping and remember what is there."""
+        """Write the stored mapping and remember what is there."""
         from ..models.touch_map import touch_map
-        if self.x is None:
-            return
         try:
-            self.x.relevant_events()        # events queued by our own round trips are not news
-            self.devices, self.outputs = touch.apply_mapping(self.x, touch_map.mapping)
-            if self.x.relevant_events():    # something changed while we were writing
-                self._schedule()
+            self.devices = await asyncio.to_thread(touch.touch_devices)
+            self.outputs = [o for o in await wayland.outputs() if o.active]
+            self.available = await asyncio.to_thread(touch.apply_mapping, touch_map.mapping) or bool(self.outputs)
         except Exception as exc:
             logger.warning('Cannot apply the touch mapping: {}', exc)
 
@@ -120,8 +124,8 @@ class TouchService:
         return {
             'devices': devices,
             'outputs': [{'name': o.name, 'x': o.x, 'y': o.y, 'width': o.width, 'height': o.height,
-                         'rotation': o.rotation_name} for o in self.outputs],
-            'available': self.x is not None,
+                         'rotation': o.rotation} for o in self.outputs],
+            'available': self.available,
         }
 
 

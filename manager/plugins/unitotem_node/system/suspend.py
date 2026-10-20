@@ -136,20 +136,20 @@ async def on_prepare_for_sleep(starting: bool, wake_screens: Optional[Callable[[
 
 
 async def wake_screens_after_resume():
-    """Same as at start-up: re-apply the DPMS policy (the X server may have lost it) and switch on the screens that
-    should be on. The viewer needs nothing more: a screen that comes back is a RandR hot-plug and the viewer already
+    """Same as at start-up: wake the outputs the compositor may have left blanked and switch on the screens that
+    should be on. The viewer needs nothing more: a screen that comes back is a hot-plug and the viewer already
     follows those."""
     from api.ws.endpoints import WS
-    from unitotem_node.system.screens import control, xorg
+    from unitotem_node.system.screens import control, wayland
 
     async def broadcast():
         await WS.broadcast('Settings/Display/Screens/screens', screens=await control.screens(), probing=control.probing())
 
     try:
         try:
-            await xorg.dpms_policy()
+            await wayland.wake_all()
         except Exception as exc:
-            logger.warning('Cannot apply the DPMS policy after resume: {}', exc)
+            logger.warning('Cannot wake the outputs after resume: {}', exc)
         await control.wake_all(on_done=broadcast)
     except Exception:
         logger.exception('Waking the screens after resume failed')

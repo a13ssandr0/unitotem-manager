@@ -22,7 +22,7 @@ class Result:
 
 
 def _run(cmd: list[str], timeout: float) -> Result:
-    # The environment is inherited on purpose: the manager's unit sets DISPLAY and XAUTHORITY for xrandr/xset
+    # The environment is inherited on purpose: the manager's unit sets WAYLAND_DISPLAY and XDG_RUNTIME_DIR for wlr-randr/wlopm
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, errors='replace')
     except FileNotFoundError as exc:

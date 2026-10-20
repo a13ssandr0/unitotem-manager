@@ -1,19 +1,10 @@
-"""Running the viewer on a Wayland compositor instead of an X server (cage, labwc, weston...).
+"""The viewer on a Wayland compositor (labwc on the kiosk image).
 
-The viewer picks its graphics stack at start: Wayland when `UNITOTEM_VIEWER_PLATFORM=wayland`, or when a Wayland socket is
-there and there is no X display; X11 otherwise (the default of the kiosk image). What changes:
   - Qt runs on its wayland platform: it only reports the outputs (QScreen) and draws the splash;
-  - each window is a top-level CEF browser (window.WaylandWindow), the browser cannot be embedded in a Qt window;
-  - the compositor, not the viewer, puts each window on its output and makes it fullscreen (see place_next).
+  - each window is a top-level CEF browser (window.WebviewWindow), the browser cannot be embedded in a Qt window;
+  - the compositor, not the viewer, puts each window on its output and makes it fullscreen (see prepare/apply below).
 """
 import os
-
-
-def wanted() -> bool:
-    forced = os.environ.get('UNITOTEM_VIEWER_PLATFORM', '').lower()
-    if forced:
-        return forced == 'wayland'
-    return bool(os.environ.get('WAYLAND_DISPLAY')) and not os.environ.get('DISPLAY')
 
 
 def socket_available() -> bool:
@@ -29,24 +20,33 @@ def socket_available() -> bool:
 # window's output and maximizes it (no decorations, no panels: it fills the output; both actions can be repeated harmlessly), labwc is told to re-read it (SIGHUP; a key binding, unlike a window rule, is not
 # applied again to the windows that exist), the window is created, and once the compositor lists it (`wlrctl`, the
 # wlr-foreign-toplevel protocol) a virtual keyboard (uinput) presses the keys. Windows are created one at a time.
-# $UNITOTEM_LABWC_CONFIG is the rc.xml (set by whoever starts labwc). Without it, or without labwc (cage, a desktop
-# compositor...), nothing is done and the compositor places the window.
+# The key binding is the viewer's fragment of the compositor configuration (utils/labwc.py). Without labwc (cage, a desktop
+# compositor...) nothing is done and the compositor places the window.
 import fcntl
 import html
 import logging
 import shutil
-import signal
 import struct
 import subprocess
 import time
 
+from utils import labwc
+
 logger = logging.getLogger(__name__)
-_RC = ('<?xml version="1.0"?>\n<labwc_config>\n  <core><gap>0</gap></core>\n  <theme><name></name><cornerRadius>0</cornerRadius></theme>\n'
-       '  <windowRules>\n    <windowRule type="normal" serverDecoration="no"/>\n  </windowRules>\n'
-       '  <keyboard>\n    <default />\n    <keybind key="W-A-F12">\n'
-       '      <action name="MoveToOutput" output="{output}"/>\n      <action name="Maximize"/>\n    </keybind>\n  </keyboard>\n'
-       '</labwc_config>\n')
+FRAGMENT = 'viewer'
+_BODY = ('''  <windowRules>
+    <windowRule type="normal" serverDecoration="no"/>
+  </windowRules>
+  <keyboard>
+    <default />
+    <keybind key="W-A-F12">
+      <action name="MoveToOutput" output="{output}"/>
+      <action name="Maximize"/>
+    </keybind>
+  </keyboard>
+''')
 SETTLE_S = 0.25      # time labwc gets to re-read its configuration, and to act on the keys
+MAP_TIMEOUT_S = 8.0  # most a window gets to be listed by the compositor
 _KEYS = (125, 56, 88)    # KEY_LEFTMETA, KEY_LEFTALT, KEY_F12
 _keyboard_fd = None
 
@@ -74,32 +74,17 @@ def _event(fd: int, key: int, value: int):
     os.write(fd, struct.pack('<qqHHi', 0, 0, 0, 0, 0))             # EV_SYN
 
 
-def _labwc_pid():
-    """labwc exports LABWC_PID to what it starts itself; a viewer started as a service of its own finds the process."""
-    if os.environ.get('LABWC_PID'):
-        return os.environ['LABWC_PID']
-    import psutil
-    for process in psutil.process_iter(['name']):
-        if process.info['name'] == 'labwc':
-            return str(process.pid)
-    return None
-
-
 def prepare(output: str) -> bool:
     """Gets the compositor ready to put the next window on `output`. False when there is no compositor to tell."""
-    path, pid = os.environ.get('UNITOTEM_LABWC_CONFIG'), _labwc_pid()
-    if not path or not pid or not shutil.which('wlrctl') or not os.path.exists('/dev/uinput'):
+    if labwc.pid() is None or not shutil.which('wlrctl') or not os.path.exists('/dev/uinput'):
         return False
     try:
-        tmp = f'{path}.tmp'
-        with open(tmp, 'w') as f:
-            f.write(_RC.format(output=html.escape(output)))
-        os.replace(tmp, path)
-        os.kill(int(pid), signal.SIGHUP)
+        if not labwc.write_fragment(FRAGMENT, _BODY.format(output=html.escape(output))) or not labwc.reload():
+            return False
         _virtual_keyboard()
         time.sleep(SETTLE_S)
         return True
-    except (OSError, ValueError) as exc:
+    except OSError as exc:
         logger.warning('Cannot prepare the compositor for %s: %s', output, exc)
         return False
 
