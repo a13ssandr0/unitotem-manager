@@ -48,11 +48,37 @@ removes its own). Distributions land in `chromium/src/cef/binary_distrib/`.
 
 x64 full build 3 h 48 on the old box; arm64 cross about 35 min incremental (V4L2 rebuild), `Dbg_arm64` about 1 h 27.
 
-## Patches (`patches/`, applied by hand in `chromium/src`, not by the scripts)
+## Patches (`patches/`)
 
-- `0001-v4l2-stateful-nv12-candidate-first.patch`: lists NV12 first among the CAPTURE formats and tells the driver the picked one (`SetFormat`).
-  Needed for the V4L2 decoder to run at all on a Pi 4 under X11 (without it: silent stall). With it Chromium picks the LibYUV image processor
-  (NV12 -> AR24 on the CPU); the GL image processor only does NV12 -> NV12 (scaling/detiling), it is not a colour converter.
-- `experimental-libyuv-cached-bounce.patch`: NOT shipped. Copies the NV12 frame to cached memory, converts there and copies the ARGB out
-  (the dmabuf mappings are uncached on the Pi 4: reading 2 MB takes 5-14 ms, libyuv straight on them 60-120 ms per 1080p frame; bounce: 33-55 ms).
-  Still ~15 fps at 1080p with 55% dropped frames, so the V4L2 path stays slower than software decode on this hardware.
+Inventory checked on 2026-10-20 against the server's tree (`/nas/cef-build/work/chromium/src`, Chromium 147.0.7727.118, CEF
+`d58e84d17`; `git HEAD` of the Chromium checkout is the pristine base): of the 439 files `git diff` reports as modified, 437 are
+touched by CEF's own `cef/patch/patches/*.patch` (applied by `automate-git.py`, not ours). Exactly two are not, and they are
+byte-identical to the two numbered patches below: `media/gpu/v4l2/v4l2_stateful_video_decoder.cc` (0001) and
+`ui/gfx/linux/gbm_wrapper.cc` (0002). The CEF checkout (`chromium/src/cef`) has no local modifications. Nothing of ours is
+uncaptured. All three patch files pass `git apply --check` on the pristine files of 147.0.7727.118 (0001 and 0002 also together,
+and 0001 together with the experimental one).
+
+Patches are plain `git diff` output relative to `chromium/src`, applied AFTER `automate-git.py` has applied CEF's patches, with:
+
+    tools/cef-server/apply-patches.sh [/nas/cef-build/work/chromium/src]      # DRY_RUN=1 to only check
+
+It is idempotent (an already applied patch is detected with `git apply --check --reverse` and skipped), checks each patch before
+applying it, stops on the first one that fits neither state, and never applies `experimental-*`. The build scripts do not call it:
+run it by hand before `cef-rebuild.sh` (or before `build-all.sh` on a fresh checkout). `automate-git.py --force-clean` or
+`--force-update` resets the files, so re-run it afterwards.
+
+| patch | file | fixes | runtime switch |
+|---|---|---|---|
+| `0001-v4l2-stateful-nv12-candidate-first.patch` | `media/gpu/v4l2/v4l2_stateful_video_decoder.cc` | Lists NV12 first among the CAPTURE formats and tells the driver the picked one (`SetFormat`). Without it the V4L2 stateful decoder on a Pi 4 stalls silently (no ImageProcessor for YU12 -> AR24). With it Chromium picks the LibYUV image processor (NV12 -> AR24 on the CPU); the GL image processor only does NV12 -> NV12. **Measured slower than software decode, so the feature is NOT enabled** (`AcceleratedVideoDecoder` stays out of the `pi` profile); the patch is kept as the base for further work. Only matters in a build with `use_v4l2_codec=true`. | `--enable-features=AcceleratedVideoDecoder` (not used) |
+| `0002-gbm-no-scanout-buffers-env.patch` | `ui/gfx/linux/gbm_wrapper.cc` | Mesa's `gbm_bo_create_with_modifiers()` makes every buffer scanout capable and on the Pi 4 (V3D) a scanout buffer can only be linear, so the Wayland compositor presents every frame two vblanks late (30 fps). With the variable set, buffers are created through `gbm_bo_create_with_modifiers2()` without the scanout flag (tiled UIF layout, 60 fps). Behaviour is unchanged when the variable is unset. | env `UNITOTEM_NO_SCANOUT_BUFFERS` (any value; read once; the viewer sets it for the `pi` GPU profile, `unitotem_viewer/app.py`) |
+| `experimental-libyuv-cached-bounce.patch` | `media/gpu/chromeos/libyuv_image_processor_backend.cc` | NOT shipped, NOT applied by the script. Copies the NV12 frame to cached memory, converts there and copies the ARGB out (the dmabuf mappings are uncached on the Pi 4: reading 2 MB takes 5-14 ms, libyuv straight on them 60-120 ms per 1080p frame; bounce: 33-55 ms). Still ~15 fps at 1080p with 55% dropped frames. | none |
+
+## Rebuilding and making wheels
+
+1. `./sync.sh push` (scripts to the server), then on the server `apply-patches.sh` (the copy in `/nas/cef-build/work`).
+2. `sudo systemd-run --unit=cef-rebuild --working-directory=/nas/cef-build/work /nas/cef-build/work/cef-rebuild.sh` rebuilds BOTH
+   distributions (x64 native, arm64 cross with V4L2) incrementally and re-creates `chromium/src/cef/binary_distrib/`. Follow it with
+   `tail -f /nas/cef-build/work/logs/stages.log`. Never run two builds at once and never delete the tree.
+3. `tools/build-cef-wheels.sh start|status|fetch` (from the repository): copies `vendor/cefpython`, builds cp310-cp314 wheels for x86_64
+   and aarch64 inside a trixie container from those distributions (`WHEEL_VERSION=147.0+codecs`), and `fetch` rsyncs them to
+   `vendor/cefpython-wheels/` (not in git). `python3-cefpython3` for arm64: `TARGET_ARCH=arm64 tools/build-debs.sh cefpython`.
