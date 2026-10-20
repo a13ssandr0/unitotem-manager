@@ -7,7 +7,7 @@ vocabulary) is the fallback for a node whose outputs cannot be disabled, and the
 output off makes the viewer close that output's window and switching it on opens a new one; the playlist assignment is keyed on
 the output name, so it follows (see webview/controller.py).
 
-Both tools talk to the compositor through $WAYLAND_DISPLAY / $XDG_RUNTIME_DIR; without a compositor they fail and the
+Both tools talk to the compositor through $WAYLAND_DISPLAY (the absolute path of the socket); without a compositor they fail and the
 functions answer "nothing there".
 """
 from __future__ import annotations

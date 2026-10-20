@@ -9,8 +9,7 @@ Description=UniTotem boot splash
 Type=notify
 NotifyAccess=main
 TimeoutStartSec=120
-Environment=XDG_RUNTIME_DIR=/run/unitotem/xdg
-Environment=WAYLAND_DISPLAY=wayland-0
+Environment=WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0
 ExecStart=/usr/bin/python3 /usr/share/unitotem-manager/plugins/unitotem_viewer/bootsplash.py
 
 [Install]
