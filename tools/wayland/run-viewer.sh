@@ -14,8 +14,8 @@ start)
   systemctl stop unitotem-manager start-xorg 2>&1
   mkdir -p $XDG_RUNTIME_DIR; chmod 700 $XDG_RUNTIME_DIR; : > $W/run.log
   COMP=${2:-labwc}
-  INNER="cd $W/code && UNITOTEM_VIEWER_PLATFORM=wayland QT_PLUGIN_PATH=$ARCH/qt6/plugins PYTHONUNBUFFERED=1 python3 init.py"
-  if [ "$COMP" = cage ]; then RUN="cage -s -- sh -c '$INNER'"; else RUN="labwc -C $W/labwc -s \"sh -c '$INNER'\""; fi
+  INNER="cd $W/code && UNITOTEM_LABWC_CONFIG=$W/labwc/rc.xml UNITOTEM_VIEWER_PLATFORM=wayland QT_PLUGIN_PATH=$ARCH/qt6/plugins PYTHONUNBUFFERED=1 $WLEXTRA python3 init.py"
+  if [ "$COMP" = cage ]; then RUN="cage -s -- sh -c '$INNER'"; else RUN="labwc $LABWC_ARGS -C $W/labwc -s \"sh -c '$INNER'\""; fi
   openvt -c 1 -f -s -- sh -c "exec env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR LIBSEAT_BACKEND=builtin LD_LIBRARY_PATH=$LD_LIBRARY_PATH WLR_XWAYLAND=$W/usr/bin/Xwayland PATH=$PATH $RUN > $W/run.log 2>&1" ;;
 stop)
   pkill -x labwc; pkill -x cage; pkill -x python3; sleep 2; pkill -9 -x python3; pkill -9 -f "cefpython3.*--type"

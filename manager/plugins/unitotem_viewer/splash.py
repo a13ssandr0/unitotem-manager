@@ -23,10 +23,7 @@ class Splash(QWidget):
     def __init__(self, screen, wayland: bool = False):
         super().__init__()
         self.wayland = wayland
-        if wayland:
-            # no positioning or stacking on Wayland: a fullscreen window on its output, the compositor does the rest
-            self.setWindowTitle(f'unitotem-splash-{screen.name()}')
-        else:
+        if not wayland:
             self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setScreen(screen)
         self.setGeometry(screen.geometry())
@@ -67,7 +64,7 @@ def show_splashes(screens, wayland: bool = False, timeout: float = 3.0) -> list[
     from PySide6.QtWidgets import QApplication
     splashes = [Splash(screen, wayland) for screen in screens]
     for splash in splashes:
-        splash.showFullScreen() if wayland else splash.show()
+        splash.showFullScreen() if wayland else splash.show()      # on Wayland the protocol has a request for it, per output
     deadline = time.monotonic() + timeout
     while not all(splash.painted for splash in splashes) and time.monotonic() < deadline:
         QApplication.processEvents()

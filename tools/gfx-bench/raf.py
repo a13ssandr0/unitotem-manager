@@ -1,4 +1,5 @@
 # rAF cadence of REAL WebGL/2D draws (counts only frames drawn, reports missing context), at the actual window size.
+# x = -1: run in the viewer's own window instead of a new one (it must be reloaded afterwards)
 import asyncio, json, sys, urllib.request, websockets
 BASE='http://127.0.0.1:9223'
 def page(kind, attrs='{}'):
@@ -12,7 +13,10 @@ async def main(x,w,h):
     br=await websockets.connect(json.load(urllib.request.urlopen(BASE+'/json/version'))['webSocketDebuggerUrl'],max_size=None)
     for name,html in PAGES.items():
         fn='/tmp/vp/raf_%d.html'%abs(hash(name)); open(fn,'w').write('<!doctype html>'+html)
-        t=json.load(urllib.request.urlopen(urllib.request.Request(BASE+'/json/new?about:blank',method='PUT')))
+        if x<0:     # the viewer's own window: navigate its page (it comes back with a reload of the manager's boot page)
+            t=next(p for p in json.load(urllib.request.urlopen(BASE+'/json')) if p['type']=='page' and 'unitotem-first-boot' not in p['url'])
+        else:
+            t=json.load(urllib.request.urlopen(urllib.request.Request(BASE+'/json/new?about:blank',method='PUT')))
         ws=await websockets.connect(t['webSocketDebuggerUrl'],max_size=None); n=[0]
         async def call(s,m,**p):
             n[0]+=1; i=n[0]; await s.send(json.dumps({'id':i,'method':m,'params':p}))
@@ -20,7 +24,7 @@ async def main(x,w,h):
                 d=json.loads(await s.recv())
                 if d.get('id')==i: return d.get('result')
         ev=lambda e: call(ws,'Runtime.evaluate',returnByValue=True,expression=e)
-        if w:
+        if w and x>=0:
             wid=await call(br,'Browser.getWindowForTarget',targetId=t['id'])
             await call(br,'Browser.setWindowBounds',windowId=wid['windowId'],bounds={'left':x,'top':0,'width':w,'height':h})
         await call(ws,'Page.navigate',url='file://'+fn); await asyncio.sleep(4)
@@ -28,5 +32,5 @@ async def main(x,w,h):
         await asyncio.sleep(6)
         d1=(await ev('window.__d'))['result']['value']
         print('%-24s [%s] %s' % (name, info['wh'], ('%.1f fps' % ((d1-info['d'])/6)) if info['ok'] else 'NO CONTEXT'),flush=True)
-        urllib.request.urlopen(BASE+'/json/close/'+t['id']).read()
+        if x>=0: urllib.request.urlopen(BASE+'/json/close/'+t['id']).read()
 asyncio.run(main(*map(int,sys.argv[1:4])))
