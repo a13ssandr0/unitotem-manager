@@ -1,4 +1,4 @@
-From d1dfb9fa40e44d8896a392c2f7fbde71c27bce61 Mon Sep 17 00:00:00 2001
+From ba6c6a2575e3b2347aefa6f8e34acface544fb1c Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Tue, 20 Oct 2026 21:50:28 +0000
 Subject: [PATCH 1/5] views: Fix frameless windows and X11 assumptions on
@@ -27,14 +27,14 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
  4 files changed, 35 insertions(+), 16 deletions(-)
 
 diff --git a/libcef/browser/views/view_util.h b/libcef/browser/views/view_util.h
-index b1f5df332..41011f32b 100644
+index b1f5df332..e31ac1b26 100644
 --- a/libcef/browser/views/view_util.h
 +++ b/libcef/browser/views/view_util.h
 @@ -188,6 +188,11 @@ bool ShouldUseDarkTheme(views::Widget* widget);
  // Updates the titlebar light/dark theme for |widget|.
  void UpdateTitlebarTheme(views::Widget* widget);
  
-+#if BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_OZONE)
 +// Returns true if running on the Wayland Ozone platform (as opposed to X11).
 +bool IsRunningOnWayland();
 +#endif
@@ -43,14 +43,14 @@ index b1f5df332..41011f32b 100644
  
  #endif  // CEF_LIBCEF_BROWSER_VIEWS_VIEW_UTIL_H_
 diff --git a/libcef/browser/views/view_util_aura.cc b/libcef/browser/views/view_util_aura.cc
-index a0c358212..8fa0ad5c6 100644
+index a0c358212..6fba0b8fd 100644
 --- a/libcef/browser/views/view_util_aura.cc
 +++ b/libcef/browser/views/view_util_aura.cc
 @@ -10,6 +10,10 @@
  #include "ui/views/widget/native_widget_delegate.h"
  #include "ui/views/widget/widget.h"
  
-+#if BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_OZONE)
 +#include "ui/ozone/public/ozone_platform.h"
 +#endif
 +
@@ -61,7 +61,7 @@ index a0c358212..8fa0ad5c6 100644
    return nullptr;
  }
  
-+#if BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_OZONE)
 +bool IsRunningOnWayland() {
 +  return ui::OzonePlatform::GetPlatformNameForTest() == "wayland";
 +}
@@ -125,7 +125,7 @@ index 008b42056..d7e87e9a0 100644
      gfx::Point mouse_location = aura::Env::GetInstance()->last_mouse_location();
      EnsureEventGenerator(mouse_location);
 diff --git a/libcef/browser/views/window_view.cc b/libcef/browser/views/window_view.cc
-index 47ff9bf78..82912b631 100644
+index 47ff9bf78..989aa57fa 100644
 --- a/libcef/browser/views/window_view.cc
 +++ b/libcef/browser/views/window_view.cc
 @@ -19,6 +19,7 @@
@@ -146,7 +146,7 @@ index 47ff9bf78..82912b631 100644
 +    // will result in window resize artifacts.
 +    params.remove_standard_frame = true;
 +  }
-+#elif BUILDFLAG(IS_LINUX)
++#elif BUILDFLAG(IS_OZONE)
 +  if (is_frameless_ && view_util::IsRunningOnWayland()) {
 +    // Otherwise Ozone/Wayland asks the compositor for server-side decorations
 +    // (xdg-decoration) and a title bar is drawn around the frameless window.
