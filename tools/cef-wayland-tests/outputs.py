@@ -91,6 +91,8 @@ if a.hotplug:
         disp = w.window.GetDisplay()
         check(disp and re.search(r'\(%s( via [^)]*)?\)$' % a.hotplug, disp.GetLabel()), 'window moved back to %s: %s' % (a.hotplug, disp and disp.GetLabel()))
         check(w.window.IsFullscreen(), 'still fullscreen')
+        m = [m for m in outputs()[a.hotplug]['modes'] if m['current']][0]
+        check(w.window.GetClientAreaBoundsInScreen()[2:] == [m['width'], m['height']], 'moved window has the size of %s' % a.hotplug)
 for w in wins: w.window.Close()
 pump(5)
 check(all(w.destroyed for w in wins), 'OnWindowDestroyed for all')
