@@ -92,7 +92,6 @@ class Cdp:
         self._pages: dict[int, str] = {}            # window id -> session of its top-level page
         self._attached_targets: set[str] = set()    # pages we are attached to or about to be: one session each
         self._handlers: dict[str, Callable[[int, dict], Awaitable[None] | None]] = {}
-        self.connected = asyncio.Event()      # set while the connection to the browser is up
 
     def on_binding(self, name: str, handler):
         """`handler(window_id, payload)` is called when the page calls the function `name` (only top-level pages)."""
@@ -108,14 +107,12 @@ class Cdp:
                     self._ws = ws
                     reader = asyncio.create_task(self._read(ws))
                     await self._send('Target.setDiscoverTargets', {'discover': True})
-                    self.connected.set()
                     await reader
             except (OSError, ConnectionClosed, asyncio.TimeoutError):
                 pass            # the browser is not up yet, or went away: try again
             except Exception:
                 logger.exception('DevTools connection failed')
             finally:
-                self.connected.clear()
                 self._ws = None
                 self._sessions.clear()
                 self._pages.clear()
@@ -236,53 +233,6 @@ class Cdp:
     async def gpu_info(self) -> dict:
         """Chromium's own report of its graphics (SystemInfo.getInfo on the browser): feature status and GL implementation."""
         return (await self._send('SystemInfo.getInfo')).get('gpu', {})
-
-    # ── windows: the browser creates them, the viewer only names them ──────
-
-    async def create_window(self, url: str) -> str:
-        """A new browser window showing `url` (its address carries `?window=N`, which is how its page is found again).
-        These are the windows DevTools itself opens: unlike what cefpython creates they can be closed, made fullscreen and
-        asked about their state."""
-        await asyncio.wait_for(self.connected.wait(), 60)
-        result = await self._send('Target.createTarget', {'url': url, 'newWindow': True})
-        return result['targetId']
-
-    async def wait_page(self, window: int, timeout: float = 30.0) -> bool:
-        """Until the page of `window` is attached (the browser announces it a moment after it exists)."""
-        deadline = asyncio.get_running_loop().time() + timeout
-        while window not in self._pages:
-            if asyncio.get_running_loop().time() > deadline:
-                return False
-            await asyncio.sleep(0.05)
-        return True
-
-    async def fullscreen(self, window: int) -> bool:
-        """Makes the window fullscreen on the output it is on. False when its page is not attached."""
-        session = self._pages.get(window)
-        if not session:
-            return False
-        found = await self._send('Browser.getWindowForTarget', {'targetId': self._sessions[session]['target']})
-        await self._send('Browser.setWindowBounds', {'windowId': found['windowId'], 'bounds': {'windowState': 'fullscreen'}})
-        return True
-
-    async def close_window(self, window: int) -> bool:
-        session = self._pages.get(window)
-        if not session:
-            return False
-        await self._send('Target.closeTarget', {'targetId': self._sessions[session]['target']})
-        return True
-
-    async def run_js(self, window: int, js: str):
-        """Runs what the manager asked of a window in its page. The page may not have loaded its functions yet (a command
-        arrives as soon as the window exists): a call to one that is not defined is repeated until it is."""
-        if not await self.wait_page(window):
-            return
-        wrapped = (f'(function again(){{try{{{js}}}catch(e){{if(e instanceof ReferenceError)setTimeout(again,100);'
-                   f'else throw e}}}})()')
-        try:
-            await self.evaluate(window, wrapped)
-        except Exception as exc:
-            logger.warning('Window {}: cannot run a command in its page: {}', window, exc)
 
     async def evaluate(self, window: int, expression: str):
         session = self._pages.get(window)

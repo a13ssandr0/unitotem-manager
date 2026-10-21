@@ -107,14 +107,58 @@ forced connectors (`echo on > /sys/kernel/debug/dri/1/HDMI-A-1/force`); the 1920
 measurement traps in CLAUDE.md), so the Pi CPU numbers of the two modes are only comparable in the WebGL2 and idle rows. The Pi numbers
 say the Views path costs nothing extra; they are not a statement about scanout to a real monitor.
 
-## Related upstream work (searched 2026-10-20/21)
+## Behaviour changes of the cefpython branch (regression analysis)
 
-* chromiumembedded/cef#2804 "Linux: Add support for embedded Ozone/Wayland windows" (open; embedding via subsurfaces, Views is the supported path).
-* chromiumembedded/cef#4273 / PR #4274 "Frameless Views windows request server-side decorations on Wayland" (open): the same `remove_standard_frame`
-  change as our 0001.
-* chromiumembedded/cef#4061 (old Chrome decoration on Wayland), Collabora "CEF on Wayland upstreamed" (2019: Ozone is usable only in Views mode).
-* crbug.com/40111909 (X11 target display), wayland-protocols xdg-shell `xdg_toplevel.set_fullscreen`.
-* No upstream issue exists for choosing the display of a fullscreen CefWindow.
+Everything new is additive except two decisions made at `Initialize()`/`CreateBrowserSync()` time on Linux. The table lists every case.
+
+| platform / backend | WindowInfo kind | before | after |
+|---|---|---|---|
+| Linux, X11 backend (DISPLAY set, or `ozone-platform=x11`) | `SetAsChild(handle)` | embedded X11 child window | unchanged (proved: `x11_embed.py`) |
+| Linux, X11 backend | parentless (`WindowInfo()`, `SetAsChild(0)`, no window info) | CEF native X11 top-level window | unchanged (proved: `x11_embed.py`, parent of the window = root) |
+| Linux, X11 backend | `SetAsOffscreen` | windowless | unchanged (`osr_test.py` passes) |
+| Linux, no DISPLAY, WAYLAND_DISPLAY set (kiosk, pure Wayland) | any | `ozone-platform=x11` forced: no X server, CEF cannot start | `ozone-platform=wayland` chosen: this is a CHANGE (it did not work before) |
+| Linux, both set (desktop with XWayland) | any | x11 (XWayland) | x11: unchanged; `GDK_BACKEND=x11` is still set |
+| Linux, `ozone-platform=wayland` passed by the caller | parentless | Chrome-style window, empty app_id/title, `CloseBrowser` leaves a zombie toplevel, no `OnBeforeClose` | Views window (800x600, framed), closed with the browser: CHANGE |
+| same | `SetAsChild(handle != 0)` | not embeddable on Wayland (CEF cannot parent into an X11 handle) | unchanged: the condition requires a parent handle of 0 |
+| same | `SetAsOffscreen` | windowless | unchanged (the new branch needs `windowType == "child"`) |
+| Windows, macOS | any | - | unchanged: the branch and the backend selection are inside `IF UNAME_SYSNAME == "Linux"` (Cython compile time); the new modules compile on every platform (Views is cross-platform) but were only built and run on Linux |
+
+The X11 test suite is the fork's own `unittests/_test_runner.py` on venus's X session, stock module (the board's installed cefpython3)
+against the new module: 85 tests OK before, 93 OK after (85 + 8 of `views_test.py`).
+
+## Upstream state checked 2026-10-21 (fresh clone of chromiumembedded/cef master 7f8a5ec28, Chromium 156.0.8078.0)
+
+* The series applies with a plain `git am` (no 3-way, no fuzz) on master: 158 commits since `d58e84d17`, none touching these code paths.
+* Not obsolete: master has no `SetFullscreenOnDisplay`, no `CefDisplay::GetLabel`, and `CefWindowView::CreateWidget` still sets
+  `remove_standard_frame` on Windows only.
+* chromiumembedded/cef#2804 "Linux: Add support for embedded Ozone/Wayland windows" is OPEN. magreenblatt, 2022-01-31: "Ozone builds can
+  currently run with different platform backends (Wayland, X11, etc). Usage of the Views framework is required, and the cefclient sample
+  application is not supported. See issue #2296. What's currently missing (and covered by this issue) is the ability to embed CEF windows in
+  third-party Wayland applications."
+* chromiumembedded/cef#4273 "Linux: Frameless Views windows request server-side decorations on Wayland" is OPEN and PR #4274 "Fix frameless
+  Views windows on Wayland" (one file, `window_view.cc`, by swarogan, `Assisted-by: Codex`) is OPEN, unmerged: it overlaps our patch 0001
+  (both set `remove_standard_frame` for frameless Wayland windows); the review asked for the `IsRunningOnWayland()` helper to move to `view_util`
+  (our patch 0001 does that). If #4274 merges first, 0001 shrinks to the X11 guards and the helper.
+* chromiumembedded/cef#4061 "Linux, Wayland uses very old Google Chrome decoration" is CLOSED (Chrome style window frame, not our topic).
+* crbug.com/40111909: the page requires a sign-in and could not be read. What is verified is the source comment in
+  `ui/ozone/platform/x11/x11_window.cc` (Chromium 147): `// TODO(crbug.com/40111909) Support target_display_id on this platform.` followed by
+  `DCHECK_EQ(target_display_id, display::kInvalidDisplayId);`. The same file in master/156 was not checked.
+* No upstream issue exists for choosing the display of a fullscreen CefWindow (searched issues and the forum).
+
+## Platform review of the CEF series
+
+Files touched and how each is guarded:
+
+| file | change | guard / why other platforms are not affected |
+|---|---|---|
+| `include/views/cef_window.h`, `cef_display.h` | new pure virtual methods | inside `#if CEF_API_ADDED(CEF_EXPERIMENTAL)`, `/*--cef(added=experimental)--*/` like `CefBrowserHost::SetAxViewportCollapse`; the wrappers are generated by `tools/version_manager.py` (untracked, regenerated in every build), implementations are in the shared `libcef` sources |
+| `libcef/browser/views/display_impl.{h,cc}` | `GetLabel()` returns `display_.label()` | shared code; `display::Display::label()` exists on every platform (empty where unset) |
+| `libcef/browser/views/window_impl.{h,cc}` | `SetFullscreenOnDisplay`; `IsRunningOnWayland()` calls now `view_util::` | uses only `views::Widget::SetFullscreen(bool, int64_t)` (cross-platform Chromium API); the Wayland specifics (target ignored on X11, leave fullscreen first) are `#if BUILDFLAG(IS_OZONE)`; `#if !BUILDFLAG(IS_MAC)` for the delegate notification exactly as in `SetFullscreen` |
+| `libcef/browser/views/view_util.h`, `view_util_aura.cc` | `view_util::IsRunningOnWayland()` | declared and defined only under `BUILDFLAG(IS_OZONE)`; `view_util_mac.mm` is not touched and nothing outside `IS_OZONE` code calls it |
+| `libcef/browser/views/window_view.cc` | `remove_standard_frame` on Wayland; X11 window handling skipped on Wayland; `GetDisplay` on Wayland | each addition is `#if BUILDFLAG(IS_WIN)`/`#elif BUILDFLAG(IS_OZONE)` or inside the existing `IS_LINUX` + `SUPPORTS_OZONE_X11` blocks; Windows and macOS code paths are textually unchanged |
+| `tests/ceftests/views/window_unittest.cc` | new test | `#if CEF_API_ADDED(CEF_EXPERIMENTAL)` |
+
+Windows and macOS were NOT compiled (no such machines here): this is a review by inspection only.
 
 ## Not verified
 
