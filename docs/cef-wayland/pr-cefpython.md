@@ -30,5 +30,5 @@ never destroys. This adds the CEF Views framework, which works on every Ozone ba
 
 `unittests/views_test.py` passes on a Wayland compositor (labwc, pure Wayland, Python 3.13, CEF 147 x86_64); the documented example runs
 verbatim; two outputs, hot-plug, move, close: `tools/cef-wayland-tests/outputs.py` (UniTotem repository), 18/18 on an x86_64 board and a
-Raspberry Pi 4 (aarch64). Not tested: Windows/macOS (guarded by `IF UNAME_SYSNAME`), X11 (the unit test is backend independent but was
-not run on X11 here), Python versions other than 3.13.
+Raspberry Pi 4 (aarch64). The unit test also passes on the X11 backend (same board, X session). Not tested: Windows/macOS
+(guarded by `IF UNAME_SYSNAME`), Python versions other than 3.13.
