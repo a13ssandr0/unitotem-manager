@@ -1,9 +1,10 @@
 """
-WebviewWindow: one display window, a top-level browser window on a Wayland compositor.
+WebviewWindow: one display window, a frameless fullscreen window of CEF's own windowing (the Views API of cefpython) on a Wayland
+compositor, showing the boot page.
 
 CEF cannot be embedded in a Qt window there (the protocol has no foreign windows), so the browser window is a window of its own
-and there is no Qt window at all. The compositor puts it on its output (wayland.py) and the browser makes it fullscreen (cdp.py);
-Qt is only used to learn about the outputs and to draw the splash.
+and there is no Qt window at all. The window asks the compositor for fullscreen on a given output itself; Qt is only used to
+learn about the outputs and to draw the splash.
 """
 import json
 import logging
@@ -12,12 +13,19 @@ from pathlib import Path
 
 from PySide6.QtGui import QScreen
 
+try:
+    from cefpython3 import cefpython as cef
+except ImportError:
+    cef = None  # guarded at WebviewApp init time
+
 # container index → name, must match show() in boot-screen.html
 _CONTAINERS = ['boot', 'web', 'image', 'video', 'audio']
 # FitEnum value → CSS object-fit name
 _FIT_NAMES  = ['contain', 'cover', 'fill']
 
 logger = logging.getLogger(__name__)
+
+APP_ID = 'org.unitotem.viewer'       # xdg_toplevel.app_id of every window: what the compositor's rules can match
 
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
 
@@ -80,18 +88,63 @@ class PageCommands:
         self._cef.execute_js(f'setFlip({flip})')
 
 
+class _BrowserViewDelegate:
+    """Callbacks of the browser view of a window (cefpython Views API)."""
+
+    def __init__(self, owner: 'WebviewWindow'):
+        self._owner = owner
+
+    def OnBrowserCreated(self, browser_view, browser):
+        self._owner._browser = browser
+
+    def OnBrowserDestroyed(self, browser_view, browser):
+        self._owner._browser = None
+
+
+class _WindowDelegate:
+    """Callbacks of the window itself: frameless, fullscreen on its output, the application id of the compositor's rules."""
+
+    def __init__(self, owner: 'WebviewWindow'):
+        self._owner = owner
+
+    def OnWindowCreated(self, window):
+        owner = self._owner
+        window.SetToFillLayout()
+        window.AddChildView(owner._view)            # the browser is created now
+        display = cef.Display.FindByOutputName(owner.screen.name())      # ids change at every plug: look it up now
+        if display is not None:
+            window.SetFullscreenOnDisplay(display.GetID())
+        else:
+            logger.warning('Window %s: the browser does not know the output %s, fullscreen where the compositor puts it',
+                           owner.window_id, owner.screen.name())
+            window.SetFullscreen(True)
+        window.Show()
+
+    def OnWindowDestroyed(self, window):
+        self._owner._window = None
+
+    def IsFrameless(self, window):
+        return True
+
+    def CanClose(self, window):
+        return True
+
+    def GetLinuxWindowProperties(self, window):
+        return {'wayland_app_id': APP_ID}
+
+
 class WebviewWindow(PageCommands):
-    """One display window. The browser window itself is made by the browser when the application asks (app.py, cdp.py); this is
-    the application's name for it: its id, its output, and the way to send it commands."""
+    """One display window: a frameless fullscreen window of CEF's own windowing (Views) on the output of its screen, showing the
+    boot page. There is no Qt window; Qt only tells which outputs exist (app.py)."""
 
     def __init__(self, window_id: int, screen: QScreen, x: int = 0, y: int = 0, width: int = 0, height: int = 0):
         self._window_id = window_id
         self.screen = screen
         self._cef = self                    # what PageCommands talks to
-        self.closed = False
+        self._view = None
+        self._window = None
+        self._browser = None
         self.on_geometry_changed = None     # set by the application
-        self.send_js = None                 # (window_id, js), set by the application
-        self.on_close = None                # (window_id), set by the application
 
     @property
     def window_id(self) -> int:
@@ -100,18 +153,22 @@ class WebviewWindow(PageCommands):
     def geometry(self):
         return self.screen.geometry()
 
-    def execute_js(self, js: str):
-        if self.send_js and not self.closed:
-            self.send_js(self._window_id, js)
+    def show(self):
+        """Creates the window and its browser, on the output of the screen. The address carries `?window=N`: it is how the
+        DevTools connection (cdp.py) knows which window a page belongs to."""
+        if self._window is not None:
+            return
+        self._view = cef.BrowserView.CreateBrowserView(
+            url=f'{_BOOT_URL}?window={self._window_id}', settings={'background_color': 0xFF000000},
+            delegate=_BrowserViewDelegate(self))
+        self._window = cef.Window.CreateTopLevelWindow(_WindowDelegate(self))
 
-    @property
-    def url(self) -> str:
-        # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to
-        return f'{_BOOT_URL}?window={self._window_id}'
+    def execute_js(self, js: str):
+        if self._browser is not None:
+            self._browser.ExecuteJavascript(js)
 
     def close(self):
-        if self.closed:
-            return
-        self.closed = True
-        if self.on_close:
-            self.on_close(self._window_id)
+        """Destroys the window for real (the toplevel goes away, the browser is closed)."""
+        window, self._window = self._window, None
+        if window is not None:
+            window.Close()
