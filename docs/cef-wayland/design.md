@@ -93,7 +93,7 @@ All on the real boards with the real compositor (labwc 0.8.3), pure Wayland (no 
 | test | venus (Intel Iris Xe, x86_64, DP-1 640x480 forced + DP-2 1920x1080) | Pi 4 (V3D, arm64, HDMI-A-1/2 forced) |
 |---|---|---|
 | `outputs.py --hotplug`: one frameless window per output, fullscreen on its output, sizes, app_id, off/on, move back, close | 18/18 PASS (19 in the last runs) | 18/18 PASS (forced connectors, no monitor attached at that time) |
-| `observer_hotplug.py`: windows follow `OnDisplayAdded/Removed` | 9/9 PASS, 7 runs | not run |
+| `observer_hotplug.py`: windows follow `OnDisplayAdded/Removed` | all PASS (9 checks, 8 runs) | not run |
 | ceftests `Views*` (x86_64, `--ozone-platform=wayland`) | 105 pass, none fail (includes `WindowFullscreenOnDisplay`, `DisplayObserverAddRemove`) | not run |
 | `views_test.py` (cefpython unit test) | OK on Wayland and on X11 (the backend is chosen from the environment) | not run (Pi reserved by another session) |
 | doc example `api/Window.md` verbatim | works | - |
@@ -185,6 +185,17 @@ licence that ties it to Apple hardware/Xcode. What was done instead (`tools/cef-
 (`display_impl.cc`, `window_impl.cc`, `window_view.cc`, `view_util_aura.cc`) compile syntax-only with Chromium's clang and the flags of the
 Linux `libcef_static` target both with and without `-DUSE_OZONE`; without it `BUILDFLAG(IS_OZONE)` is 0, the situation of Windows and macOS in
 shared code. 0 errors in both modes. This checks types, includes and guards of that path, nothing OS specific.
+
+## Running the whole suite on a board (one command)
+
+`tools/cef-wayland-tests/run-suite.sh HOST x86_64|aarch64` puts the tests (and, with `DEV=1`, the dev build of cefpython3) on the board and runs
+`board-suite.sh` there: `outputs.py`, `views_test.py`, the ceftests Views suites (binary from `CEFTESTS_PKG`, default
+`/tmp/ceftests-pkg-ARCH`) and the Views-against-DevTools `perf.py` matrix (WebGL2, canvas 2D, idle). It detects the mode by itself:
+on the image (`unitotem-compositor` active) it stops `unitotem-manager`, uses the image's compositor and the system python3-cefpython3 and starts
+the manager again at the end (the compositor unit is never touched); on a board with the X session it starts its own labwc and brings X back.
+For the Pi (no `--off` of the last output, so no hot-plug there):
+`CEFTESTS_PKG=/tmp/ceftests-pkg-aarch64 OUTPUT=HDMI-A-1 tools/cef-wayland-tests/run-suite.sh 192.168.1.173 aarch64`. Validated in X mode on
+venus (all parts); image mode has not run on a board yet.
 
 ## Not verified
 
