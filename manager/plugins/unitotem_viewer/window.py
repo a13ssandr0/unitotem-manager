@@ -11,6 +11,7 @@ import logging
 from typing import Optional
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QScreen
 
 try:
@@ -25,6 +26,7 @@ _FIT_NAMES  = ['contain', 'cover', 'fill']
 
 logger = logging.getLogger(__name__)
 
+DISPLAY_WAIT_MS, DISPLAY_WAIT_TRIES = 150, 40     # up to 6 s for the browser to know a new output
 APP_ID = 'org.unitotem.viewer'       # xdg_toplevel.app_id of every window: what the compositor's rules can match
 
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
@@ -96,6 +98,9 @@ class _BrowserViewDelegate:
 
     def OnBrowserCreated(self, browser_view, browser):
         self._owner._browser = browser
+        for js in self._owner._pending_js:          # commands that arrived before the window existed
+            browser.ExecuteJavascript(js)
+        self._owner._pending_js.clear()
 
     def OnBrowserDestroyed(self, browser_view, browser):
         self._owner._browser = None
@@ -111,9 +116,8 @@ class _WindowDelegate:
         owner = self._owner
         window.SetToFillLayout()
         window.AddChildView(owner._view)            # the browser is created now
-        display = cef.Display.FindByOutputName(owner.screen.name())      # ids change at every plug: look it up now
-        if display is not None:
-            window.SetFullscreenOnDisplay(display.GetID())
+        if owner._display_id is not None:
+            window.SetFullscreenOnDisplay(owner._display_id)
         else:
             logger.warning('Window %s: the browser does not know the output %s, fullscreen where the compositor puts it',
                            owner.window_id, owner.screen.name())
@@ -144,6 +148,10 @@ class WebviewWindow(PageCommands):
         self._view = None
         self._window = None
         self._browser = None
+        self._display_id = None
+        self._pending_js: list[str] = []
+        self.closed = False
+        self._attempts = 0
         self.on_geometry_changed = None     # set by the application
 
     @property
@@ -156,8 +164,16 @@ class WebviewWindow(PageCommands):
     def show(self):
         """Creates the window and its browser, on the output of the screen. The address carries `?window=N`: it is how the
         DevTools connection (cdp.py) knows which window a page belongs to."""
-        if self._window is not None:
+        if self._window is not None or self.closed:
             return
+        # The browser learns about a new output a moment after Qt does, and the id changes at every plug: look it up now, and wait
+        # for it (a window made too early would go fullscreen on whatever output the compositor likes)
+        display = cef.Display.FindByOutputName(self.screen.name())
+        if display is None and self._attempts < DISPLAY_WAIT_TRIES:
+            self._attempts += 1
+            QTimer.singleShot(DISPLAY_WAIT_MS, self.show)
+            return
+        self._display_id = display.GetID() if display is not None else None
         self._view = cef.BrowserView.CreateBrowserView(
             url=f'{_BOOT_URL}?window={self._window_id}', settings={'background_color': 0xFF000000},
             delegate=_BrowserViewDelegate(self))
@@ -166,9 +182,13 @@ class WebviewWindow(PageCommands):
     def execute_js(self, js: str):
         if self._browser is not None:
             self._browser.ExecuteJavascript(js)
+        elif not self.closed:
+            self._pending_js.append(js)
 
     def close(self):
         """Destroys the window for real (the toplevel goes away, the browser is closed)."""
+        self.closed = True
+        self._pending_js.clear()
         window, self._window = self._window, None
         if window is not None:
             window.Close()
