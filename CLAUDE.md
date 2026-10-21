@@ -847,3 +847,12 @@ the VM-specific ones.
   `10-wayland.conf` sets `/run/user/0`). A recording of a sink MONITOR (`pw-record --target <sink> -P stream.capture.sink=true`) does not show the sink's volume or mute (taken before them): do not use it to test volume. `pw-record` needs SIGINT to finish its file and a shell leaves SIGINT ignored for
   background jobs: reset the signal (python `signal.signal(SIGINT, SIG_DFL)` then exec). Chromium's audio process links libpulse AND libasound; with no pulse server found it produced no sound at all (no ALSA stream either), it did not fall back.
 
+- **CEF Views on Wayland (2026-10-21, design note `docs/cef-wayland/design.md`, series `tools/cef-server/patches/cef/`, bindings in vendor/cefpython branch `wayland-views`).** A Views window (`cef.Window` +
+  `cef.BrowserView`) is the way to get a frameless, closable, per-output window on Wayland; `WindowInfo()` ends up as a zombie Chrome-style toplevel. Traps found: (1) **CToCpp wrappers**: the CEF
+  library hands out a NEW wrapper object every time (`window.AsPanel()`, a delegate argument): never keep a raw pointer from a temporary `CefRefPtr` (use-after-free, "kWrapperType == wrapperStruct->type_"
+  FATAL) and never use the address as identity (`CefView::IsSame`). (2) The DevTools HTTP server is served by the message loop: a script that polls `127.0.0.1:<port>/json` from the thread that
+  pumps `MessageLoopWork` deadlocks (poll from a thread). (3) Display ids on Wayland are the `wl_output` registry names and change on every unplug/plug; the output NAME is only in the label
+  (`CefDisplay::GetLabel`, `... (DP-1)`); a client does not know where its toplevel is (bounds start at 0,0), `CefWindow::GetDisplay` needed the entered-output patch. (4) labwc ignores the output of
+  `xdg_toplevel.set_fullscreen` for a toplevel that is already fullscreen: leave fullscreen first (done inside `SetFullscreenOnDisplay`). (5) X11 does not support a target display (DCHECK).
+  (6) A forced debugfs connector (`echo on > .../force`) is undone with `echo off > .../force` AND `echo detect > /sys/class/drm/cardN-X/status` (`unspecified` is rejected). (7) Test scripts
+  must not be called `bisect.py`/`random.py`: Python's stdlib imports them. (8) `clang-format` of the CEF tree: `buildtools/linux64-format` + `depot_tools` in PATH, needed by `make_distrib.py`.
