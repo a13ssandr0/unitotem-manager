@@ -1,4 +1,4 @@
-From 0b234cccfa072a0d10fc32fb31bc4d4cd30bf9aa Mon Sep 17 00:00:00 2001
+From 29c5b23f6620cacd7d506daf1ed42f1c58459706 Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Tue, 20 Oct 2026 21:50:28 +0000
 Subject: [PATCH 2/5] views: Add CefWindow::SetFullscreenOnDisplay
@@ -19,9 +19,9 @@ behaves like SetFullscreen(true) for an invalid id or on X11.
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 ---
  include/views/cef_window.h          | 17 +++++++++++
- libcef/browser/views/window_impl.cc | 44 +++++++++++++++++++++++++++++
+ libcef/browser/views/window_impl.cc | 46 +++++++++++++++++++++++++++++
  libcef/browser/views/window_impl.h  |  1 +
- 3 files changed, 62 insertions(+)
+ 3 files changed, 64 insertions(+)
 
 diff --git a/include/views/cef_window.h b/include/views/cef_window.h
 index 06221be3b..fcd017164 100644
@@ -59,7 +59,7 @@ index 06221be3b..fcd017164 100644
    /// Returns true if the Window is maximized.
    ///
 diff --git a/libcef/browser/views/window_impl.cc b/libcef/browser/views/window_impl.cc
-index d7e87e9a0..535fa9cad 100644
+index d7e87e9a0..b64b1b784 100644
 --- a/libcef/browser/views/window_impl.cc
 +++ b/libcef/browser/views/window_impl.cc
 @@ -21,6 +21,7 @@
@@ -70,7 +70,7 @@ index d7e87e9a0..535fa9cad 100644
  #include "ui/gfx/geometry/rect.h"
  #include "ui/views/controls/button/menu_button.h"
  #include "ui/views/controls/menu/menu_runner.h"
-@@ -293,6 +294,49 @@ void CefWindowImpl::SetFullscreen(bool fullscreen) {
+@@ -293,6 +294,51 @@ void CefWindowImpl::SetFullscreen(bool fullscreen) {
    }
  }
  
@@ -81,7 +81,7 @@ index d7e87e9a0..535fa9cad 100644
 +  }
 +
 +  bool target_display_supported = true;
-+#if BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_OZONE)
 +  // X11 does not support a target Display.
 +  target_display_supported = view_util::IsRunningOnWayland();
 +#endif
@@ -101,10 +101,12 @@ index d7e87e9a0..535fa9cad 100644
 +      // Already there.
 +      return;
 +    }
++#if BUILDFLAG(IS_OZONE)
 +    // Move to the other Display. A Wayland compositor may ignore the output
 +    // of xdg_toplevel.set_fullscreen while the toplevel is fullscreen, so
 +    // leave fullscreen first.
 +    widget_->SetFullscreen(false);
++#endif
 +  }
 +
 +  widget_->SetFullscreen(true, display_id);

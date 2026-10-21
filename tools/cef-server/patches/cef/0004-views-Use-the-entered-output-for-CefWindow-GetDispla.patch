@@ -1,4 +1,4 @@
-From 992bf0e16542d2e8194d02de6088d54575620ce4 Mon Sep 17 00:00:00 2001
+From 5d3b565a44daef5b6b88b5a812e40d5bd00a5896 Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Tue, 20 Oct 2026 22:05:33 +0000
 Subject: [PATCH 4/5] views: Use the entered output for CefWindow::GetDisplay
@@ -17,14 +17,14 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
  1 file changed, 9 insertions(+)
 
 diff --git a/libcef/browser/views/window_view.cc b/libcef/browser/views/window_view.cc
-index 82912b631..8ac37b463 100644
+index 989aa57fa..2cd72182c 100644
 --- a/libcef/browser/views/window_view.cc
 +++ b/libcef/browser/views/window_view.cc
 @@ -898,6 +898,15 @@ void CefWindowView::OnWidgetBoundsChanged(views::Widget* widget,
  display::Display CefWindowView::GetDisplay() const {
    const views::Widget* widget = GetWidget();
    if (widget) {
-+#if BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_OZONE)
 +    if (view_util::IsRunningOnWayland()) {
 +      // A Wayland client does not know the position of its toplevel in the
 +      // global coordinate space, so the window bounds say nothing about the
