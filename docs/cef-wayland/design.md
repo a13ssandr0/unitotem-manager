@@ -128,7 +128,7 @@ against the new module: 85 tests OK before, 93 OK after (85 + 8 of `views_test.p
 
 ## Upstream state checked 2026-10-21 (fresh clone of chromiumembedded/cef master 7f8a5ec28, Chromium 156.0.8078.0)
 
-* The series applies with a plain `git am` (no 3-way, no fuzz) on master: 158 commits since `d58e84d17`, none touching these code paths.
+* The series applies with a plain `git am` (no 3-way, no fuzz) on master: 158 commits since `d58e84d17`; one of them touches the same files (`2d3ce7f94` "views: Preserve overlay contents during Chrome window teardown") and does not conflict.
 * Not obsolete: master has no `SetFullscreenOnDisplay`, no `CefDisplay::GetLabel`, and `CefWindowView::CreateWidget` still sets
   `remove_standard_frame` on Windows only.
 * chromiumembedded/cef#2804 "Linux: Add support for embedded Ozone/Wayland windows" is OPEN. magreenblatt, 2022-01-31: "Ozone builds can
