@@ -308,9 +308,6 @@ class WebviewApp:
         self._ws = None
         self._cdp: Optional[Cdp] = None
         self._gpu_checked = False
-        self._open_lock = threading.Lock()
-        self._open_queue: Optional[asyncio.Queue] = None    # windows waiting to be opened (websocket thread)
-        self._early_windows: list[WebviewWindow] = []       # the ones made before that thread runs
         self._keyboard_config: dict[int, dict] = {}     # window -> settings of its on-screen keyboard
         self._text_focus: dict[int, dict[str, Optional[str]]] = {}      # window -> frames with a text field focused
         self._keyboard_wanted: dict[int, bool] = {}
@@ -358,8 +355,8 @@ class WebviewApp:
             x=geom.x(), y=geom.y(),
             width=geom.width(), height=geom.height(),
         )
+        win.show()
         self.windows[self._next_id] = win
-        self._queue_open(win)
         self._screen_windows[screen] = self._next_id
         window_id = self._next_id
         self._next_id += 1
@@ -387,54 +384,7 @@ class WebviewApp:
     def _new_window(self, **geometry) -> WebviewWindow:
         win = WebviewWindow(**geometry)
         win.on_geometry_changed = self._geometry_timer.start
-        win.send_js = self._send_js
-        win.on_close = self._close_target
         return win
-
-    # ── the browser windows: opened one at a time, on the websocket thread (it owns the DevTools connection) ──
-
-    def _queue_open(self, win: WebviewWindow):
-        """Qt thread: have the window opened. Windows made before the websocket thread runs wait for it."""
-        with self._open_lock:
-            if self._open_queue is None:
-                self._early_windows.append(win)
-                return
-        self._ws_loop.call_soon_threadsafe(self._open_queue.put_nowait, win)
-
-    def _send_js(self, window_id: int, js: str):
-        if self._ws_loop is not None and self._cdp is not None:
-            asyncio.run_coroutine_threadsafe(self._cdp.run_js(window_id, js), self._ws_loop)
-
-    def _close_target(self, window_id: int):
-        if self._ws_loop is not None and self._cdp is not None:
-            asyncio.run_coroutine_threadsafe(self._cdp.close_window(window_id), self._ws_loop)
-
-    async def _window_opener(self):
-        """Opens the queued windows in order. Each one is put on its output before the next exists: the compositor can only
-        be told about the window that has just appeared (wayland.py)."""
-        while True:
-            win = await self._open_queue.get()
-            try:
-                if not win.closed:
-                    await self._open_window_now(win)
-            except Exception:
-                logger.exception('Window {}: cannot open it', win.window_id)
-
-    async def _open_window_now(self, win: WebviewWindow):
-        placed = await asyncio.to_thread(wayland.prepare, win.screen.name())
-        known = await asyncio.to_thread(wayland.toplevel_count) if placed else 0
-        await self._cdp.create_window(win.url)
-        if placed:
-            # the compositor lists the window as it appears, and it is the active one then: ask for it to be moved
-            deadline = asyncio.get_running_loop().time() + wayland.MAP_TIMEOUT_S
-            while await asyncio.to_thread(wayland.toplevel_count) <= known and asyncio.get_running_loop().time() < deadline:
-                await asyncio.sleep(0.1)
-            await asyncio.sleep(wayland.SETTLE_S * 2)       # it takes the focus a moment after it is listed
-            await asyncio.to_thread(wayland.apply)
-        if await self._cdp.wait_page(win.window_id) and not win.closed:
-            await self._cdp.fullscreen(win.window_id)
-        elif win.closed:
-            await self._cdp.close_window(win.window_id)
 
     def _notify_screens_changed(self):
         """
@@ -530,8 +480,8 @@ class WebviewApp:
             width=width or geom.width(),
             height=height or geom.height(),
         )
+        win.show()
         self.windows[self._next_id] = win
-        self._queue_open(win)
         self._next_id += 1
         self._notify_screens_changed()
         return self._next_id - 1
@@ -593,12 +543,6 @@ class WebviewApp:
         self._cdp.on_binding('utSaver', self._on_saver_event)
         self._ws_loop.create_task(self._cdp.run(asyncio.Event()))
         self._ws_loop.create_task(self._refresh_scheduler())
-        with self._open_lock:
-            self._open_queue = asyncio.Queue()
-            for win in self._early_windows:
-                self._open_queue.put_nowait(win)
-            self._early_windows.clear()
-        self._ws_loop.create_task(self._window_opener())
         self._ws_loop.run_until_complete(self._ws_client())
 
     # ── focus in the pages and the on-screen keyboard (see cdp.py), on the websocket thread ──
