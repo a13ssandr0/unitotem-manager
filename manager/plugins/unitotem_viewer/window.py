@@ -1,10 +1,9 @@
 """
-WebviewWindow: one display window, a frameless fullscreen window of CEF's own windowing (the Views API of cefpython) on a Wayland
-compositor, showing the boot page.
+WebviewWindow: one display window, a top-level browser window on a Wayland compositor.
 
 CEF cannot be embedded in a Qt window there (the protocol has no foreign windows), so the browser window is a window of its own
-and there is no Qt window at all. The window asks the compositor for fullscreen on a given output itself; Qt is only used to
-learn about the outputs and to draw the splash.
+and there is no Qt window at all. The compositor puts it on its output (wayland.py) and the browser makes it fullscreen (cdp.py);
+Qt is only used to learn about the outputs and to draw the splash.
 """
 import json
 import logging
@@ -14,11 +13,6 @@ from pathlib import Path
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QScreen
 
-try:
-    from cefpython3 import cefpython as cef
-except ImportError:
-    cef = None  # guarded at WebviewApp init time
-
 # container index → name, must match show() in boot-screen.html
 _CONTAINERS = ['boot', 'web', 'image', 'video', 'audio']
 # FitEnum value → CSS object-fit name
@@ -26,9 +20,12 @@ _FIT_NAMES  = ['contain', 'cover', 'fill']
 
 logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 DISPLAY_WAIT_MS, DISPLAY_WAIT_TRIES = 150, 40     # up to 6 s for the browser to know a new output
 APP_ID = 'org.unitotem.viewer'       # xdg_toplevel.app_id of every window: what the compositor's rules can match
 
+=======
+>>>>>>> viewer-wayland
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
 
 
@@ -90,6 +87,7 @@ class PageCommands:
         self._cef.execute_js(f'setFlip({flip})')
 
 
+<<<<<<< HEAD
 class _BrowserViewDelegate:
     """Callbacks of the browser view of a window (cefpython Views API)."""
 
@@ -137,14 +135,17 @@ class _WindowDelegate:
         return {'wayland_app_id': APP_ID}
 
 
+=======
+>>>>>>> viewer-wayland
 class WebviewWindow(PageCommands):
-    """One display window: a frameless fullscreen window of CEF's own windowing (Views) on the output of its screen, showing the
-    boot page. There is no Qt window; Qt only tells which outputs exist (app.py)."""
+    """One display window. The browser window itself is made by the browser when the application asks (app.py, cdp.py); this is
+    the application's name for it: its id, its output, and the way to send it commands."""
 
     def __init__(self, window_id: int, screen: QScreen, x: int = 0, y: int = 0, width: int = 0, height: int = 0):
         self._window_id = window_id
         self.screen = screen
         self._cef = self                    # what PageCommands talks to
+<<<<<<< HEAD
         self._view = None
         self._window = None
         self._browser = None
@@ -152,7 +153,12 @@ class WebviewWindow(PageCommands):
         self._pending_js: list[str] = []
         self.closed = False
         self._attempts = 0
+=======
+        self.closed = False
+>>>>>>> viewer-wayland
         self.on_geometry_changed = None     # set by the application
+        self.send_js = None                 # (window_id, js), set by the application
+        self.on_close = None                # (window_id), set by the application
 
     @property
     def window_id(self) -> int:
@@ -161,6 +167,7 @@ class WebviewWindow(PageCommands):
     def geometry(self):
         return self.screen.geometry()
 
+<<<<<<< HEAD
     def show(self):
         """Creates the window and its browser, on the output of the screen. The address carries `?window=N`: it is how the
         DevTools connection (cdp.py) knows which window a page belongs to."""
@@ -192,3 +199,20 @@ class WebviewWindow(PageCommands):
         window, self._window = self._window, None
         if window is not None:
             window.Close()
+=======
+    def execute_js(self, js: str):
+        if self.send_js and not self.closed:
+            self.send_js(self._window_id, js)
+
+    @property
+    def url(self) -> str:
+        # the window id in the address is how the DevTools connection (cdp.py) knows which window a page belongs to
+        return f'{_BOOT_URL}?window={self._window_id}'
+
+    def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        if self.on_close:
+            self.on_close(self._window_id)
+>>>>>>> viewer-wayland

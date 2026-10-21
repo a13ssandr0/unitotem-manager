@@ -1,4 +1,4 @@
-From 33e2dc7dacd5c3955b3d8b8f74f591d378324a69 Mon Sep 17 00:00:00 2001
+From 9b8893f85998ade021096567eb632681a190d1e8 Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Tue, 20 Oct 2026 22:30:45 +0000
 Subject: [PATCH 5/5] tests: Add views tests for
