@@ -854,3 +854,7 @@ the VM-specific ones.
   `xdg_toplevel.set_fullscreen` for a toplevel that is already fullscreen: leave fullscreen first (done inside `SetFullscreenOnDisplay`). (5) X11 does not support a target display (DCHECK).
   (6) A forced debugfs connector (`echo on > .../force`) is undone with `echo off > .../force` AND `echo detect > /sys/class/drm/cardN-X/status` (`unspecified` is rejected). (7) Test scripts
   must not be called `bisect.py`/`random.py`: Python's stdlib imports them. (8) `clang-format` of the CEF tree: `buildtools/linux64-format` + `depot_tools` in PATH, needed by `make_distrib.py`.
+- **CEF Views observer and test tooling (2026-10-21).** `cef.Display.AddObserver(obj)` (CEF patch 0006) tells a window opener when an output appears (measured on venus: `OnDisplayAdded` 211-228 ms after `wlr-randr --on`,
+  `FindByOutputName` finds it inside the callback): never poll `FindByOutputName`. `/tmp` of the dev machine is a 16 GB tmpfs: wheels, ceftests packages and docker-built trees fill it (rsync then dies with "No space left" /
+  `log.c(245)` code 13); docker-created trees are root-owned (remove them from a container). `rm -rf $VAR/...` is refused by the tool safety check, write `"${VAR:?}"/...`. `tools/cef-wayland-tests/run-suite.sh` runs the
+  whole suite on a board in one command (X mode or image mode, see docs/cef-wayland/design.md).
