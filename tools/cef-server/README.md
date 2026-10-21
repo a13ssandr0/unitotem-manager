@@ -88,8 +88,11 @@ later patches touch lines of earlier ones). The C API wrappers are generated: af
 | `0003-views-Add-CefDisplay-GetLabel.patch` | `CefDisplay::GetLabel()` (experimental API), the `wl_output` description on Wayland |
 | `0004-views-Use-the-entered-output-for-CefWindow-GetDisplay.patch` | `CefWindow::GetDisplay()` follows the entered output on Wayland |
 | `0005-tests-Add-views-tests-...patch` | ceftests `ViewsWindowTest.WindowFullscreenOnDisplay` |
+| `0006-views-Add-CefDisplayObserver.patch` | `CefDisplayObserver` and `CefDisplay::AddObserver/RemoveObserver` (experimental API), independent of 0001-0004, plus a ceftests registration test |
 
-The headers of `0002`/`0003` must also be copied to `vendor/cefpython/src/include/views/` (cefpython vendors CEF's C++ headers).
+`check-nonozone.py` (syntax-only compile of the touched units without `USE_OZONE`, what Windows/macOS see) is the only cross-platform check available on the server.
+
+The headers of `0002`/`0003`/`0006` must also be copied to `vendor/cefpython/src/include/views/` (cefpython vendors CEF's C++ headers).
 
 Development builds of the cefpython module against a tree-built libcef without a full distribution: `make_distrib.py --output-dir
 <scratch> --allow-partial --ninja-build --x64-build --no-docs --no-archive` (with `buildtools/linux64-format` and `depot_tools` in

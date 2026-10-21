@@ -1,7 +1,7 @@
 From 29c5b23f6620cacd7d506daf1ed42f1c58459706 Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Tue, 20 Oct 2026 21:50:28 +0000
-Subject: [PATCH 2/5] views: Add CefWindow::SetFullscreenOnDisplay
+Subject: [PATCH 2/6] views: Add CefWindow::SetFullscreenOnDisplay
 
 CefWindow::SetFullscreen(bool) leaves the choice of the display to the
 window manager or compositor. views::Widget::SetFullscreen() already

@@ -1,7 +1,7 @@
 From b7bb458513e10ceb4d1a2b9d34306fcf6025fd77 Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Tue, 20 Oct 2026 21:50:28 +0000
-Subject: [PATCH 3/5] views: Add CefDisplay::GetLabel
+Subject: [PATCH 3/6] views: Add CefDisplay::GetLabel
 
 Expose display::Display::label(), the platform's user-friendly label of
 a display (experimental API). On Ozone/Wayland it is the wl_output
