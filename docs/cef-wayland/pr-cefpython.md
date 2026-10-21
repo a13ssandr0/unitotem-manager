@@ -1,34 +1,46 @@
-# Draft upstream pull request: cefpython (a13ssandr0/cefpython)
+# Draft upstream pull request: cefpython
 
-Not opened. Branch `wayland-views` (pushed to a13ssandr0/cefpython), based on `cefpython147-qt` f86bdbf.
+Not opened. Where to send it: `gh repo view a13ssandr0/cefpython --json parent` gives `linesight/cefpython`, whose parent is
+`cztomczak/cefpython` (root, default branch `master`, last push 2026-10-09). The CEF 147 line lives in `linesight/cefpython`, branches
+`cefpython147` and `cefpython147-qt` (both pushed 2026-10-21; `cztomczak/cefpython` PR #691 "Add CEF 147, Python 3.10-3.14..." is open
+from `linesight:cefpython147-qt` into `cztomczak:cefpython147`). The branch prepared for a PR is `wayland-views-pr` of
+`a13ssandr0/cefpython`: three commits on top of `linesight/cefpython147-qt` a2a95cf (`git cherry-pick` of the work, conflicts in
+`window_info.pyx` (the warning now uses `NonCriticalError`), the vendored CEF headers (deleted upstream) and the migration guide were
+resolved). Suggested base: `cefpython147-qt` of `linesight/cefpython` (so it rides along with #691). Whether `linesight` takes PRs is unknown
+(there are none open there). The older branch `wayland-views` (on `cefpython147-qt` f86bdbf of the fork, with vendored headers and the fork's
+arm64 commits) is what the UniTotem repository builds.
+
+**Not tested on Windows or macOS** (everything new is platform independent Views code; the Linux parts are inside `IF UNAME_SYSNAME ==
+"Linux"`). Tested on Linux x86_64, Python 3.13 (and 3.14 for the Views test from the wheel); aarch64 builds, not yet run on a board.
 
 ## Title
 
 CEF Views bindings (Window, BrowserView, Display), Wayland backend selection, CreateBrowserSync on Wayland
 
-## Description
+## Requires the CEF patches
 
-cefpython could only open browsers as native windows (`WindowInfo`), which CEF implements for X11 only, and forced
-`ozone-platform=x11`/`GDK_BACKEND=x11`. On Wayland the result is a Chrome-style window with no `app_id`/title that `CloseBrowser()`
-never destroys. This adds the CEF Views framework, which works on every Ozone backend:
+The branch calls `CefWindow::SetFullscreenOnDisplay`, `CefDisplay::GetLabel` and `CefDisplay::AddObserver/RemoveObserver`, which exist only in
+the CEF patch series of the UniTotem repository (`tools/cef-server/patches/cef`, patches 0002, 0003 and 0006; CEF `d58e84d17`, 147.0.7727.118;
+experimental API, `CEF_EXPERIMENTAL`; draft PR text `pr-cef.md`). Against a CEF distribution without them the module does not compile (the
+Cython code refers to the three methods), so the build needs the patched `include/` (`CEF_ROOT`). `libcef_dll_wrapper` compares API hashes
+with libcef at `CefInitialize`, so a module built with the patched headers also refuses an unpatched libcef (observed: "API hashes for libcef and
+libcef_dll_wrapper do not match"). Making the three methods optional at build time was not done.
 
-* `cef.Window`, `cef.Panel`, `cef.View`, `cef.BrowserView`, `cef.Display`; Python delegates (an object with optional methods named like
-  CEF's `CefWindowDelegate`/`CefViewDelegate`/`CefBrowserViewDelegate`: `OnWindowCreated`, `OnWindowDestroyed`, `CanClose`,
-  `IsFrameless`, `GetInitialBounds`, `GetInitialShowState`, `GetLinuxWindowProperties` -> `wayland_app_id`, ...). One C++ delegate
-  (`client_handler/views_delegate.*`) forwards to Python; the Python object is kept alive by it. Windows are identified with
-  `CefView::IsSame` (the library hands out a new wrapper every time).
-* `Window.SetFullscreenOnDisplay(display_id)`, `Display.GetLabel()`, `Display.FindByOutputName(name)`: need the CEF patches
-  of the UniTotem repository (`tools/cef-server/patches/cef`, draft upstream PR `docs/cef-wayland/pr-cef.md`); the vendored headers
-  in `src/include/views` are updated.
-* `ozone-platform` is chosen automatically: wayland when `WAYLAND_DISPLAY` is set and `DISPLAY` is not, x11 otherwise (so a desktop
-  with XWayland keeps working as before); `GDK_BACKEND=x11` is not forced in a pure Wayland session; the `SetAsChild` warning is accurate.
-* `CreateBrowserSync()` with a parentless `WindowInfo` on the Wayland backend opens a Views window and closes it with the browser.
-* Docs in `api/` (Window, BrowserView, View, WindowDelegate, Display, ozone-platform), README index, migration guide; a runnable example;
-  `unittests/views_test.py`.
+## What it does
 
-## Testing
+* `cef.Window`, `cef.Panel`, `cef.View`, `cef.BrowserView`, `cef.Display`; Python delegates (objects with optional methods named like
+  `CefWindowDelegate`, `CefViewDelegate`, `CefBrowserViewDelegate`). One C++ delegate forwards to Python; views are identified with
+  `CefView::IsSame` (the library hands out a new wrapper each time).
+* `ozone-platform` is chosen from the session: wayland when `WAYLAND_DISPLAY` is set and `DISPLAY` is not, x11 otherwise (a desktop with
+  XWayland is unchanged); `GDK_BACKEND=x11` is not forced in a pure Wayland session; the `SetAsChild` warning says what is wrong.
+* On the Wayland backend `CreateBrowserSync()` with a parentless `WindowInfo` opens a Views window that closes with the browser (CEF's
+  native windowed browser is X11 only; its Wayland window cannot be destroyed). Every other WindowInfo case is unchanged (table in
+  `docs/cef-wayland/design.md`; X11 `SetAsChild` and parentless windows checked against the old module).
+* Docs in `api/`, README index, migration guide, `examples/views.py`, `examples/views_hotplug.py`, `unittests/views_test.py`.
 
-`unittests/views_test.py` passes on a Wayland compositor (labwc, pure Wayland, Python 3.13, CEF 147 x86_64); the documented example runs
-verbatim; two outputs, hot-plug, move, close: `tools/cef-wayland-tests/outputs.py` (UniTotem repository), 18/18 on an x86_64 board and a
-Raspberry Pi 4 (aarch64). The unit test also passes on the X11 backend (same board, X session). Not tested: Windows/macOS
-(guarded by `IF UNAME_SYSNAME`), Python versions other than 3.13.
+## Tested
+
+`unittests/_test_runner.py` on an X11 session: 85 tests pass with the unmodified module, 93 with this branch (85 + the 8 of `views_test`).
+`views_test.py` on a Wayland compositor (labwc, pure Wayland): pass; `outputs.py` (UniTotem repository, 19 checks, two outputs, hot-plug and
+move) pass; `observer_hotplug.py` (9 checks) pass. The two examples were run. Not tested: Windows, macOS, a Pi/aarch64 run, Python
+versions other than 3.13/3.14, PyInstaller.
