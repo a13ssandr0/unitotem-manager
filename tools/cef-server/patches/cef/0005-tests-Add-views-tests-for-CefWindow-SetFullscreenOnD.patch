@@ -1,0 +1,79 @@
+From 33e2dc7dacd5c3955b3d8b8f74f591d378324a69 Mon Sep 17 00:00:00 2001
+From: Alessandro Campolo <campolo.alex@gmail.com>
+Date: Tue, 20 Oct 2026 22:30:45 +0000
+Subject: [PATCH 5/5] tests: Add views tests for
+ CefWindow::SetFullscreenOnDisplay and CefDisplay::GetLabel
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ tests/ceftests/views/window_unittest.cc | 33 +++++++++++++++++++++++++
+ 1 file changed, 33 insertions(+)
+
+diff --git a/tests/ceftests/views/window_unittest.cc b/tests/ceftests/views/window_unittest.cc
+index 6b20bcc6e..a0e9ff2a3 100644
+--- a/tests/ceftests/views/window_unittest.cc
++++ b/tests/ceftests/views/window_unittest.cc
+@@ -3,6 +3,7 @@
+ // can be found in the LICENSE file.
+ 
+ #include "include/base/cef_callback.h"
++#include "include/cef_api_hash.h"
+ #include "include/views/cef_box_layout.h"
+ #include "include/views/cef_layout.h"
+ #include "include/views/cef_panel.h"
+@@ -321,6 +322,10 @@ void RunWindowLayoutAndCoords(CefRefPtr<CefWindow> window) {
+ 
+   CefRefPtr<CefDisplay> display = window->GetDisplay();
+   EXPECT_TRUE(display.get());
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++  // The label is platform specific and may be empty.
++  display->GetLabel();
++#endif
+ 
+   // We don't know what the pixel values will be, but they should be reversable.
+   point = CefPoint(client_bounds_in_screen.x, client_bounds_in_screen.y);
+@@ -495,6 +500,31 @@ void RunWindowFullscreen(CefRefPtr<CefWindow> window) {
+   window->SetFullscreen(true);
+ }
+ 
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++void RunWindowFullscreenOnDisplay(CefRefPtr<CefWindow> window) {
++  CreateBoxLayout(window);
++  window->Show();
++  EXPECT_FALSE(window->IsMinimized());
++  EXPECT_FALSE(window->IsMaximized());
++  EXPECT_FALSE(window->IsFullscreen());
++  EXPECT_TRUE(window->IsVisible());
++  EXPECT_TRUE(window->IsDrawn());
++
++  CefRefPtr<CefDisplay> display = window->GetDisplay();
++  ASSERT_TRUE(display.get());
++  window->SetFullscreenOnDisplay(display->GetID());
++}
++
++void WindowFullscreenOnDisplayImpl(CefRefPtr<CefWaitableEvent> event) {
++  auto config = std::make_unique<TestWindowDelegate::Config>();
++  config->on_window_created = base::BindOnce(RunWindowFullscreenOnDisplay);
++  config->on_window_fullscreen_transition_complete =
++      base::BindRepeating(WindowFullscreenTransitionComplete);
++  config->close_window = false;
++  TestWindowDelegate::RunTest(event, std::move(config));
++}
++#endif  // CEF_API_ADDED(CEF_EXPERIMENTAL)
++
+ void WindowFullscreenImpl(CefRefPtr<CefWaitableEvent> event) {
+   auto config = std::make_unique<TestWindowDelegate::Config>();
+   config->on_window_created = base::BindOnce(RunWindowFullscreen);
+@@ -606,6 +636,9 @@ WINDOW_TEST_ASYNC(WindowMinimize)
+ WINDOW_TEST_ASYNC(WindowMinimizeFrameless)
+ WINDOW_TEST_ASYNC(WindowFullscreen)
+ WINDOW_TEST_ASYNC(WindowFullscreenFrameless)
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++WINDOW_TEST_ASYNC(WindowFullscreenOnDisplay)
++#endif
+ WINDOW_TEST_ASYNC(WindowIcon)
+ WINDOW_TEST_ASYNC(WindowIconFrameless)
+ WINDOW_TEST_ASYNC(WindowAccelerator)
+-- 
+2.53.0
+

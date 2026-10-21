@@ -1,0 +1,188 @@
+From d1dfb9fa40e44d8896a392c2f7fbde71c27bce61 Mon Sep 17 00:00:00 2001
+From: Alessandro Campolo <campolo.alex@gmail.com>
+Date: Tue, 20 Oct 2026 21:50:28 +0000
+Subject: [PATCH 1/5] views: Fix frameless windows and X11 assumptions on
+ Ozone/Wayland
+
+Frameless CefWindows on Ozone/Wayland still got server-side decorations:
+CefWindowView only set Widget::InitParams::remove_standard_frame on
+Windows, and for Linux only called ui::SetUseOSWindowFrame(), which is
+X11 specific. Set remove_standard_frame on Wayland so that Chromium
+requests client-side decorations from the compositor (xdg-decoration).
+
+The X11 specific window handling in CreateWidget() and WindowClosing()
+(SetUseOSWindowFrame, transient-for and modal window properties) treated
+the accelerated widget as an X11 window on any Ozone platform. Skip it
+on Wayland.
+
+Move the existing IsRunningOnWayland() helper of window_impl.cc to
+view_util so that both files can use it.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ libcef/browser/views/view_util.h       |  5 +++++
+ libcef/browser/views/view_util_aura.cc | 10 ++++++++++
+ libcef/browser/views/window_impl.cc    | 15 ++++-----------
+ libcef/browser/views/window_view.cc    | 21 ++++++++++++++++-----
+ 4 files changed, 35 insertions(+), 16 deletions(-)
+
+diff --git a/libcef/browser/views/view_util.h b/libcef/browser/views/view_util.h
+index b1f5df332..41011f32b 100644
+--- a/libcef/browser/views/view_util.h
++++ b/libcef/browser/views/view_util.h
+@@ -188,6 +188,11 @@ bool ShouldUseDarkTheme(views::Widget* widget);
+ // Updates the titlebar light/dark theme for |widget|.
+ void UpdateTitlebarTheme(views::Widget* widget);
+ 
++#if BUILDFLAG(IS_LINUX)
++// Returns true if running on the Wayland Ozone platform (as opposed to X11).
++bool IsRunningOnWayland();
++#endif
++
+ }  // namespace view_util
+ 
+ #endif  // CEF_LIBCEF_BROWSER_VIEWS_VIEW_UTIL_H_
+diff --git a/libcef/browser/views/view_util_aura.cc b/libcef/browser/views/view_util_aura.cc
+index a0c358212..8fa0ad5c6 100644
+--- a/libcef/browser/views/view_util_aura.cc
++++ b/libcef/browser/views/view_util_aura.cc
+@@ -10,6 +10,10 @@
+ #include "ui/views/widget/native_widget_delegate.h"
+ #include "ui/views/widget/widget.h"
+ 
++#if BUILDFLAG(IS_LINUX)
++#include "ui/ozone/public/ozone_platform.h"
++#endif
++
+ #if BUILDFLAG(IS_WIN)
+ #include <dwmapi.h>
+ 
+@@ -26,6 +30,12 @@ gfx::NativeWindow GetNativeWindow(views::Widget* widget) {
+   return nullptr;
+ }
+ 
++#if BUILDFLAG(IS_LINUX)
++bool IsRunningOnWayland() {
++  return ui::OzonePlatform::GetPlatformNameForTest() == "wayland";
++}
++#endif
++
+ gfx::NativeView GetNativeView(views::Widget* widget) {
+   if (widget) {
+     return widget->GetNativeView();
+diff --git a/libcef/browser/views/window_impl.cc b/libcef/browser/views/window_impl.cc
+index 008b42056..d7e87e9a0 100644
+--- a/libcef/browser/views/window_impl.cc
++++ b/libcef/browser/views/window_impl.cc
+@@ -43,13 +43,6 @@
+ 
+ namespace {
+ 
+-#if BUILDFLAG(IS_OZONE)
+-// Returns true if running on the Wayland platform.
+-bool IsRunningOnWayland() {
+-  return ui::OzonePlatform::GetPlatformNameForTest() == "wayland";
+-}
+-#endif
+-
+ // Based on chrome/test/base/interactive_ui_tests_main.cc.
+ // Note: On Ozone/Wayland, ui_controls requires a test compositor with
+ // WaylandProxy infrastructure. Instead, we use ui::test::EventGenerator
+@@ -60,7 +53,7 @@ void InitializeUITesting() {
+ #if BUILDFLAG(IS_WIN)
+     aura::test::EnableUIControlsAuraWin();
+ #elif BUILDFLAG(IS_OZONE)
+-    if (IsRunningOnWayland()) {
++    if (view_util::IsRunningOnWayland()) {
+       // On Wayland, we use EventGenerator instead of ui_controls.
+       ui::test::EventGeneratorDelegate::SetFactoryFunction(
+           base::BindRepeating(&aura::test::EventGeneratorDelegateAura::Create));
+@@ -699,7 +692,7 @@ void CefWindowImpl::SendKeyPress(int key_code, uint32_t event_flags) {
+   }
+ 
+ #if BUILDFLAG(IS_OZONE)
+-  if (IsRunningOnWayland()) {
++  if (view_util::IsRunningOnWayland()) {
+     // On Wayland, use EventGenerator which dispatches events directly
+     // to the window event dispatcher without requiring test compositor support.
+     gfx::Rect bounds = widget_->GetWindowBoundsInScreen();
+@@ -741,7 +734,7 @@ void CefWindowImpl::SendMouseMove(int screen_x, int screen_y) {
+   gfx::Point point(screen_x, screen_y);
+ 
+ #if BUILDFLAG(IS_OZONE)
+-  if (IsRunningOnWayland()) {
++  if (view_util::IsRunningOnWayland()) {
+     EnsureEventGenerator(point);
+     if (event_generator_) {
+       event_generator_->MoveMouseTo(point);
+@@ -765,7 +758,7 @@ void CefWindowImpl::SendMouseEvents(cef_mouse_button_type_t button,
+   InitializeUITesting();
+ 
+ #if BUILDFLAG(IS_OZONE)
+-  if (IsRunningOnWayland()) {
++  if (view_util::IsRunningOnWayland()) {
+     // Use the last known mouse position to find the correct target window.
+     gfx::Point mouse_location = aura::Env::GetInstance()->last_mouse_location();
+     EnsureEventGenerator(mouse_location);
+diff --git a/libcef/browser/views/window_view.cc b/libcef/browser/views/window_view.cc
+index 47ff9bf78..82912b631 100644
+--- a/libcef/browser/views/window_view.cc
++++ b/libcef/browser/views/window_view.cc
+@@ -19,6 +19,7 @@
+ 
+ #include "cef/libcef/browser/geometry_util.h"
+ #include "cef/libcef/browser/image_impl.h"
++#include "cef/libcef/browser/views/view_util.h"
+ #include "cef/libcef/browser/views/widget.h"
+ #include "cef/libcef/browser/views/window_impl.h"
+ #include "ui/base/hit_test.h"
+@@ -656,8 +657,15 @@ void CefWindowView::CreateWidget(gfx::AcceleratedWidget parent_widget) {
+ 
+ #if BUILDFLAG(IS_WIN)
+   if (is_frameless_) {
+-    // Don't show the native window caption. Setting this value on Linux will
+-    // result in window resize artifacts.
++    // Don't show the native window caption. Setting this value on Linux/X11
++    // will result in window resize artifacts.
++    params.remove_standard_frame = true;
++  }
++#elif BUILDFLAG(IS_LINUX)
++  if (is_frameless_ && view_util::IsRunningOnWayland()) {
++    // Otherwise Ozone/Wayland asks the compositor for server-side decorations
++    // (xdg-decoration) and a title bar is drawn around the frameless window.
++    // X11 is handled with ui::SetUseOSWindowFrame() below.
+     params.remove_standard_frame = true;
+   }
+ #endif
+@@ -679,14 +687,17 @@ void CefWindowView::CreateWidget(gfx::AcceleratedWidget parent_widget) {
+ 
+ #if BUILDFLAG(IS_LINUX)
+ #if BUILDFLAG(SUPPORTS_OZONE_X11)
++  // The window handle is not an X11 window on Ozone/Wayland.
++  const bool is_x11 = !view_util::IsRunningOnWayland();
++
+   auto x11window = static_cast<x11::Window>(view_util::GetWindowHandle(widget));
+   CHECK(x11window != x11::Window::None);
+ 
+-  if (is_frameless_) {
++  if (is_x11 && is_frameless_) {
+     ui::SetUseOSWindowFrame(x11window, false);
+   }
+ 
+-  if (host_widget) {
++  if (is_x11 && host_widget) {
+     auto parent = static_cast<gfx::AcceleratedWidget>(
+         view_util::GetWindowHandle(host_widget));
+     CHECK(parent);
+@@ -772,7 +783,7 @@ void CefWindowView::WindowClosing() {
+ 
+ #if BUILDFLAG(IS_LINUX)
+ #if BUILDFLAG(SUPPORTS_OZONE_X11)
+-  if (host_widget()) {
++  if (host_widget() && !view_util::IsRunningOnWayland()) {
+     auto parent = static_cast<gfx::AcceleratedWidget>(
+         view_util::GetWindowHandle(host_widget()));
+     CHECK(parent);
+-- 
+2.53.0
+

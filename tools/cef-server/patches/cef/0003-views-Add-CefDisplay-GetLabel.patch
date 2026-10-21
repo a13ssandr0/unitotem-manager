@@ -1,0 +1,76 @@
+From bd1bc71cec7a92ca6e89c64c7de9c162039aa904 Mon Sep 17 00:00:00 2001
+From: Alessandro Campolo <campolo.alex@gmail.com>
+Date: Tue, 20 Oct 2026 21:50:28 +0000
+Subject: [PATCH 3/5] views: Add CefDisplay::GetLabel
+
+Expose display::Display::label(), the platform's user-friendly label of
+a display (experimental API). On Ozone/Wayland it is the wl_output
+description, which is the only place where an application can find out
+which compositor output (connector name) a CefDisplay is: wlroots based
+compositors end it with the output name, e.g. "Vendor Model (DP-1)".
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ include/views/cef_display.h          | 12 ++++++++++++
+ libcef/browser/views/display_impl.cc |  5 +++++
+ libcef/browser/views/display_impl.h  |  1 +
+ 3 files changed, 18 insertions(+)
+
+diff --git a/include/views/cef_display.h b/include/views/cef_display.h
+index 85d24d188..4436f6c6a 100644
+--- a/include/views/cef_display.h
++++ b/include/views/cef_display.h
+@@ -40,6 +40,7 @@
+ 
+ #include <vector>
+ 
++#include "include/cef_api_hash.h"
+ #include "include/cef_base.h"
+ 
+ ///
+@@ -172,6 +173,17 @@ class CefDisplay : public CefBaseRefCounted {
+   ///
+   /*--cef()--*/
+   virtual int GetRotation() = 0;
++
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++  ///
++  /// Returns this Display's user-friendly label, determined by the platform,
++  /// or an empty string. On Wayland this is the description of the wl_output
++  /// (the compositor's make, model and, usually, the connector name such as
++  /// "DP-1").
++  ///
++  /*--cef(added=experimental)--*/
++  virtual CefString GetLabel() = 0;
++#endif
+ };
+ 
+ #endif  // CEF_INCLUDE_VIEWS_CEF_DISPLAY_H_
+diff --git a/libcef/browser/views/display_impl.cc b/libcef/browser/views/display_impl.cc
+index 55e5547e5..6a16816ee 100644
+--- a/libcef/browser/views/display_impl.cc
++++ b/libcef/browser/views/display_impl.cc
+@@ -152,3 +152,8 @@ int CefDisplayImpl::GetRotation() {
+   CEF_REQUIRE_UIT_RETURN(0);
+   return display_.RotationAsDegree();
+ }
++
++CefString CefDisplayImpl::GetLabel() {
++  CEF_REQUIRE_UIT_RETURN(CefString());
++  return display_.label();
++}
+diff --git a/libcef/browser/views/display_impl.h b/libcef/browser/views/display_impl.h
+index 4db34a2c2..d681aee90 100644
+--- a/libcef/browser/views/display_impl.h
++++ b/libcef/browser/views/display_impl.h
+@@ -27,6 +27,7 @@ class CefDisplayImpl : public CefDisplay {
+   CefRect GetBounds() override;
+   CefRect GetWorkArea() override;
+   int GetRotation() override;
++  CefString GetLabel() override;
+ 
+   const display::Display& display() const { return display_; }
+ 
+-- 
+2.53.0
+
