@@ -1,7 +1,8 @@
 """
-The compositor of the kiosk is labwc, and a part of its configuration is written by the program at run time: the node maps each
-touch screen to an output (unitotem_node/system/touch.py). labwc is started with `--merge-config` and an XDG_CONFIG_DIRS that lists
-one directory per writer, so each package owns a file nobody else touches:
+The compositor of the kiosk is labwc, and a part of its configuration is written by the program at run time: the viewer
+needs a key binding to put each window on its output (unitotem_viewer/wayland.py), the node maps each touch screen to an
+output (unitotem_node/system/touch_service.py). labwc is started with `--merge-config` and an XDG_CONFIG_DIRS that lists one
+directory per writer, so each package owns a file nobody else touches:
 
     $UNITOTEM_LABWC_RUN (default /run/unitotem/labwc)/<name>/labwc/rc.xml
 
@@ -24,7 +25,7 @@ def fragment_path(name: str) -> Path:
     return RUN_DIR / name / 'labwc' / 'rc.xml'
 
 
-def config_dirs(names=('node',)) -> str:
+def config_dirs(names=('node', 'viewer')) -> str:
     """The value for XDG_CONFIG_DIRS of the compositor, besides the base configuration of the image."""
     return ':'.join(str(RUN_DIR / name) for name in names)
 
@@ -53,7 +54,7 @@ def write_fragment(name: str, body: str) -> bool:
         return False
 
 
-def ensure_fragments(names=('node',)):
+def ensure_fragments(names=('node', 'viewer')):
     """An empty, valid fragment for every writer, so that the compositor can start before any of them has run."""
     for name in names:
         path = fragment_path(name)
