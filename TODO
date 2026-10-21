@@ -1,5 +1,11 @@
 === CURRENT WORK ===
 
+2026-10-21 CEF WAYLAND PORT (owner: the "CEF on Wayland" agent; design note docs/cef-wayland/design.md): DONE and run on venus and the Pi 4: cefpython Views bindings (branch `wayland-views`
+  of a13ssandr0/cefpython, pushed, docs in api/), CEF patch series tools/cef-server/patches/cef/ (SetFullscreenOnDisplay, GetLabel, Wayland GetDisplay/frameless/X11 guards, ceftests), end-to-end
+  tests tools/cef-wayland-tests/ (18/18 checks on both boards, 60 fps, same CPU and 2-5% less RAM than the DevTools windows). NEXT: the viewer switches to the Views API (removes the uinput/labwc key
+  binding trick), wheels/debs rebuilt from the patched CEF (`apply-patches.sh` then `version_manager.py -u --fast-check`, rebuild, `build-cef-wheels.sh`, vendored headers in src/include/views),
+  decide whether to open the PRs (docs/cef-wayland/pr-cef.md, pr-cefpython.md).
+
 2026-10-20 KIOSK ON WAYLAND ONLY (user decision "andiamo tutto su Wayland", branch `viewer-wayland`, pushed; CLAUDE.md "THE KIOSK RUNS WAYLAND", image list in WAYLAND-IMAGE.md)
   DONE and run on a Pi 4 and on venus with the real compositor unit: viewer (Qt wayland for outputs/splash, browser windows made by DevTools, placed by a uinput key press,
   closed/re-opened on unplug/plug), node (wlr-randr/wlopm outputs+power, EDID identity from sysfs, touch mapping as a labwc fragment, wayvnc), bootsplash in QtGui, compositor unit +
