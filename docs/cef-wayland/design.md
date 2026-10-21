@@ -56,6 +56,20 @@ CEF's supported way to get a frameless, UI-less, closable top-level window that 
 * A Wayland client does not know where its toplevel is in the global space: `Window.GetClientAreaBoundsInScreen()` starts at 0,0, and
   `CefWindowView::GetDisplay()` (match by bounds) reported the first output for a window on the second: fixed in 0004.
 
+### Hot-plug timing (found by the viewer integration, 2026-10-21)
+
+Right after `wlr-randr --output DP-1 --on` Qt knew the output at once, but `cef.Display.FindByOutputName("DP-1")` returned None for a moment
+(Chromium's display list follows the `wl_output` global, its `description`/xdg-output events and the output manager update), and a
+window made then went fullscreen on the other output. The viewer polls up to 6 s. CEF-side options:
+1. `CefWindow::SetFullscreenOnDisplay` waiting for an unknown id: not upstream quality (an API that blocks or defers on an id it cannot
+   resolve hides errors and cannot know whether the id will ever appear).
+2. `CefDisplay` observer (`CefDisplayObserver` with `OnDisplayAdded/OnDisplayRemoved/OnDisplayMetricsChanged`, registered with
+   `CefDisplay::AddObserver`), a thin wrapper of Chromium's `display::DisplayObserver` on `display::Screen`: this is the right fix, generic
+   (useful on every platform for any multi-monitor application, replaces polling), small (client-side interface + one impl class that
+   registers on `Screen::Get()`, UI thread only), and follows CEF's existing delegate pattern. It is a new public interface, so it needs
+   maintainer agreement on the API shape first; not implemented in this series.
+cefpython would expose it as `cef.Display.AddObserver(obj)`. Until then: poll `FindByOutputName` (documented in `Display.md`).
+
 ## D. The Alloy "native" Wayland gap: recommendation
 
 Do **not** implement a Wayland version of the native windowed path (`CefWindowX11` equivalent). The Views framework is the supported
