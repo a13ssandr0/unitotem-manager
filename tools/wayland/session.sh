@@ -24,7 +24,7 @@ ExecStart=$W/usr/bin/labwc --merge-config $LABWC_ARGS
 EOD
   systemctl daemon-reload; systemctl start unitotem-compositor
   systemctl reset-failed unitotem-wl-test 2>/dev/null
-  systemd-run --unit=unitotem-wl-test --working-directory=$W/code -p KillMode=process \
+  systemd-run --unit=unitotem-wl-test --working-directory=${CODE:-$W/code} -p KillMode=process \
     -E WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0 -E LD_LIBRARY_PATH=$W/extra \
     -E PATH=$W/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin -E QT_PLUGIN_PATH=$ARCH/qt6/plugins \
     -E PYTHONUNBUFFERED=1 $WLEXTRA_ARGS /usr/bin/python3 init.py
