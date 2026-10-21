@@ -14,15 +14,13 @@ screen power. Everything below was run on real boards with the transient unit of
 - `verify-image.sh`: the X checks (lines about start-xorg, xset, noblank, 10-x11.conf, xbackground) become the checks below.
 
 ## Add
-- Packages: `labwc wlrctl qt6-wayland wlr-randr wlopm wayvnc` (the debs of unitotem-viewer/unitotem-node now Depend on / Recommend them; `wayvnc` pulls ffmpeg libraries, the
+- Packages: `labwc qt6-wayland wlr-randr wlopm wayvnc` (the debs of unitotem-viewer/unitotem-node now Depend on / Recommend them; `wayvnc` pulls ffmpeg libraries, the
   biggest cost), plus `xwayland` (labwc starts it lazily and logs an error without it; no X client is run). Mesa is already there. Remove `python3-xlib`.
 - `unitotem-compositor.service` comes with the unitotem-viewer deb (disabled): **enable it** (`WantedBy=multi-user.target`). It does what start-xorg did: Plymouth
   `deactivate` before, plymouthd killed once the socket exists, VT1, `Restart=always`. `unitotem-splash.service` (viewer deb) waits for the same socket.
 - `/etc/unitotem/xdg/labwc/rc.xml` comes with the viewer deb (base configuration). The manager unit needs the drop-in `debian/10-wayland.conf` (unitotem-node deb:
   `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0` absolute, and `XDG_RUNTIME_DIR=/run/user/0`, see "Audio" below); replace `20-unitotem-x.conf` by one that orders the manager after the compositor and waits
   (up to 60 s) for `/run/unitotem/xdg/wayland-0` instead of `/tmp/.X11-unix/X0`.
-- `/dev/uinput`: the viewer presses a key binding through a virtual keyboard to put each window on its output: `uinput` in `/etc/modules-load.d/` (it exists on the Pi and
-  venus images today). Root runs everything, no group needed.
 - `LIBSEAT_BACKEND=builtin` is set by the unit; there is no seatd/logind session. The compositor needs `/dev/dri/card*` and the input devices as root (it is).
 - No cursor theme is needed; if a mouse is plugged in the pointer shows (labwc has no kiosk "hide cursor" without a touch-only config): decide if it matters.
 - Pi: `dtoverlay=vc4-kms-v3d` is already there. 4Kp60 still needs `hdmi_enable_4kp60=1` in `[pi4]` (nobody decided; not Wayland related).
@@ -33,7 +31,7 @@ CEF patch `tools/cef-server/patches/0002-gbm-no-scanout-buffers-env.patch` (Chro
 `tools/cef-server/cef-rebuild.sh` then `tools/build-cef-wheels.sh start|fetch`, then `TARGET_ARCH=... tools/build-debs.sh`. Until then a board gets 30 fps from the stock wheel.
 
 ## Check list for verify-image.sh
-- `unitotem-compositor.service` enabled, `labwc` and `wlrctl wlr-randr wlopm wayvnc` present, no `Xorg`/`xset`/`xrandr`/`xauth`.
+- `unitotem-compositor.service` enabled, `labwc` and `wlr-randr wlopm wayvnc` present, no `Xorg`/`xset`/`xrandr`/`xauth`.
 - `/etc/unitotem/xdg/labwc/rc.xml` valid XML (a broken base file makes labwc silently use its defaults: look for "error parsing config file" in the journal).
 - manager drop-in waits for `/run/unitotem/xdg/wayland-0`; `WAYLAND_DISPLAY` of the manager and of `unitotem-splash` is `/run/unitotem/xdg/wayland-0` (absolute); the manager has `XDG_RUNTIME_DIR=/run/user/0`.
 - `wlr-randr --json` answers (`WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`), `wlopm` lists the outputs.

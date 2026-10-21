@@ -816,7 +816,7 @@ the VM-specific ones.
   for outputs/power/rotation names, `wlopm` for blanking, EDID from `/sys/class/drm/card*-<output>/edid` for the identity; `touch.py`; `vnc.py` with wayvnc); `bootsplash.py` in QtGui.
   Output names are the DRM connector's (`HDMI-A-1`, not RandR's `HDMI-1`): saved assignments/settings follow through `utils/outputs.find_renamed`. The screen mechanism formerly called `x` is
   `output` (old files are read through a validator). The web UI lost the "click a monitor to move the window onto it" (`set_bounds`): the compositor owns window geometry.
-  Needs in the image: `labwc`, `wlrctl`, `qt6-wayland`, `wlr-randr`, `wlopm`, `wayvnc` (all Depends/Recommends of the debs), `/dev/uinput`, the patched CEF. No Xorg, no xauth, no python-xlib.
+  Needs in the image: `labwc`, `qt6-wayland`, `wlr-randr`, `wlopm`, `wayvnc` (all Depends/Recommends of the debs) and the patched CEF/cefpython wheels. No Xorg, no xauth, no python-xlib.
   Dev tooling: `tools/wayland/session.sh` (runs the real compositor unit and the manager from a copy of the code on a board, see `tools/wayland/README.md`).
   Measured with the real viewer under labwc, 1080p: Pi 4 canvas2d and WebGL2 **60.2 fps** (X11 was 60 with MSAA off but tearing), venus 60/60, no tearing.
   - **The Pi's "Wayland caps at ~30 fps" was Chromium's buffers, not the compositors.** Chromium's `BufferQueue` asks for scanout buffers, Mesa's
@@ -827,16 +827,14 @@ the VM-specific ones.
     (`zwp_linux_buffer_params_v1.add` modifier, `wp_presentation_feedback.presented` sequence numbers), `/sys/kernel/tracing/events/drm/drm_vblank_event_delivered`, `drm-engine-*` in
     `/proc/<pid>/fdinfo`, Chromium trace categories `wayland,viz` (`tools/gfx-bench/wltrace.py`). Flags that changed nothing: `disable-gpu-vsync`, `in-process-gpu`;
     `disable-frame-rate-limit` only makes rAF lie (400 "fps").
-  - **Windows and why they are made through DevTools.** A Wayland client cannot choose its output, and the windows `cefpython.CreateBrowserSync` makes have empty `app_id` and title (labwc
-    deletes a window rule without criteria, a `type="normal"` rule is re-applied to every window at each SIGHUP and toggled fullscreen off), **`CloseBrowser`/`Page.close` never destroy the window** (a
-    zombie toplevel stays and labwc moves it onto the remaining output after an unplug; `OnBeforeClose` only fires at shutdown) and `Browser.getWindowForTarget` does not know them. The windows
-    DevTools itself opens (`Target.createTarget {newWindow:true}`) close with `Target.closeTarget`, go fullscreen with `Browser.setWindowBounds {windowState:'fullscreen'}` and show up in
-    `wlrctl toplevel list`: `cdp.py` creates them (`create_window`), `app.py` opens them ONE AT A TIME (`_window_opener`). Placement (`wayland.py`): the viewer's fragment gets a key binding
-    (Super+Alt+F12: `MoveToOutput`; a binding, unlike a rule, is not applied again to existing windows), labwc re-reads it, the window is created, `wlrctl` shows it appeared, a **uinput
-    virtual keyboard** presses the keys (labwc does NOT focus new windows: wait a moment, the binding acts on the active one), then CDP makes it fullscreen (labwc ignores `MoveToOutput` on a
-    fullscreen window, so move first). Verified with two outputs on venus (DP-1 phantom via `echo on > /sys/kernel/debug/dri/0/DP-1/force` BEFORE the compositor starts) and by
-    `wlr-randr --output DP-1 --off/--on`: the window of an unplugged output is closed (toplevels 2 -> 1), a re-plugged one gets a new window. Touch mapping verified with a uinput touch screen:
-    unmapped lands at the centre of the whole layout, mapped to DP-2 at the centre of DP-2. A better placement would be a CEF patch giving each window an `app_id` (plain window rules).
+  - **Windows: CEF's own windowing (Views), through the `cefpython` branch `wayland-views` (docs/cef-wayland/, api/Window.md of the fork).** A Wayland client cannot choose its output, and the windows
+    `cefpython.CreateBrowserSync` makes on Wayland (Chrome-style, parentless `WindowInfo`) have empty `app_id`/title, are never destroyed by `CloseBrowser` (a zombie toplevel that labwc moves onto
+    the remaining output after an unplug) and unknown to `Browser.getWindowForTarget`. The viewer (`window.py`) therefore opens `cef.BrowserView` + `cef.Window.CreateTopLevelWindow(delegate)`:
+    frameless, `app_id` `org.unitotem.viewer`, and `SetFullscreenOnDisplay(display id)` = `xdg_toplevel.set_fullscreen(output)`, so the COMPOSITOR is told nothing (no key binding, no uinput, no
+    wlrctl). `cef.Display.FindByOutputName` matches the `(DP-1)` that wlroots compositors append to the `wl_output` description; the id changes at every plug and **CEF learns about a new output
+    a moment after Qt does**: a window made right away went fullscreen on the wrong output (measured: 640x480 DP-1 plugged back, the window landed on DP-2), so `show()` waits (up to 6 s) until
+    the browser knows the output. Needs the CEF patches `tools/cef-server/patches/cef/0001..0005` (`SetFullscreenOnDisplay`, `GetLabel`, frameless windows on Wayland): without them `cef.Window` lacks them.
+    Verified on venus with two outputs: a window per output with the right size, `wlr-randr --output DP-1 --off/--on` closes (windows 2 -> 1) and re-opens (-> 2, 640x480 on DP-1), 60.2 fps canvas/WebGL2.
   - **The last output of a Raspberry Pi cannot be disabled by `wlr-randr --off`** (it stays enabled): `wayland.set_power` blanks it with `wlopm` instead. Qt wayland does emit `screenRemoved` / `screenAdded` when an output
     is disabled / enabled (checked with `tools`-style script), no `udevadm trigger` or debugfs `force` is needed to test hot-plug on a running compositor.
   - **Test traps**: labwc `-d` logs `[map] identifier=, title=` per window; a rule or keybinding written with the wrong quoting makes labwc silently load the DEFAULT config (check
