@@ -75,7 +75,7 @@ All on the real boards with the real compositor (labwc 0.8.3), pure Wayland (no 
 | test | venus (Intel Iris Xe, x86_64, DP-1 640x480 forced + DP-2 1920x1080) | Pi 4 (V3D, arm64, HDMI-A-1/2 forced) |
 |---|---|---|
 | `outputs.py --hotplug`: one frameless window per output, fullscreen on its output, sizes, app_id, off/on, move back, close | 18/18 PASS | 18/18 PASS (phantom connectors: no monitor attached) |
-| `views_test.py` (cefpython unit test) | OK | not run (Pi reserved by another session) |
+| `views_test.py` (cefpython unit test) | OK on Wayland and on X11 (the backend is chosen from the environment) | not run (Pi reserved by another session) |
 | doc example `api/Window.md` verbatim | works | - |
 | `old_windowinfo.py`: parentless WindowInfo, CloseBrowser | window closes, `OnBeforeClose` | - |
 
