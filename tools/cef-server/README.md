@@ -73,6 +73,29 @@ run it by hand before `cef-rebuild.sh` (or before `build-all.sh` on a fresh chec
 | `0002-gbm-no-scanout-buffers-env.patch` | `ui/gfx/linux/gbm_wrapper.cc` | Mesa's `gbm_bo_create_with_modifiers()` makes every buffer scanout capable and on the Pi 4 (V3D) a scanout buffer can only be linear, so the Wayland compositor presents every frame two vblanks late (30 fps). With the variable set, buffers are created through `gbm_bo_create_with_modifiers2()` without the scanout flag (tiled UIF layout, 60 fps). Behaviour is unchanged when the variable is unset. | env `UNITOTEM_NO_SCANOUT_BUFFERS` (any value; read once; the viewer sets it for the `pi` GPU profile, `unitotem_viewer/app.py`) |
 | `experimental-libyuv-cached-bounce.patch` | `media/gpu/chromeos/libyuv_image_processor_backend.cc` | NOT shipped, NOT applied by the script. Copies the NV12 frame to cached memory, converts there and copies the ARGB out (the dmabuf mappings are uncached on the Pi 4: reading 2 MB takes 5-14 ms, libyuv straight on them 60-120 ms per 1080p frame; bounce: 33-55 ms). Still ~15 fps at 1080p with 55% dropped frames. | none |
 
+### CEF series (`patches/cef/`)
+
+A `git format-patch` series against the CEF repository itself (`chromium/src/cef`, commit `d58e84d17`), with the Wayland work (design
+note: `docs/cef-wayland/design.md`, upstream PR drafts: `docs/cef-wayland/pr-cef.md`). They apply to pristine CEF with `git am`
+(checked on a clean clone) and `apply-patches.sh` applies the series as a whole (working tree only, no commit; checked as a unit because
+later patches touch lines of earlier ones). The C API wrappers are generated: after applying run
+`python3 tools/version_manager.py -u --fast-check` in `chromium/src/cef`, then `autoninja -C out/Release_GN_x64 libcef` (and `_arm64`).
+
+| patch | what |
+|---|---|
+| `0001-views-Fix-frameless-windows-and-X11-assumptions-on-O.patch` | frameless Views windows get `remove_standard_frame` on Wayland; the X11 only window handling is skipped on Wayland; `view_util::IsRunningOnWayland()` |
+| `0002-views-Add-CefWindow-SetFullscreenOnDisplay.patch` | `CefWindow::SetFullscreenOnDisplay(int64 display_id)` (experimental API) |
+| `0003-views-Add-CefDisplay-GetLabel.patch` | `CefDisplay::GetLabel()` (experimental API), the `wl_output` description on Wayland |
+| `0004-views-Use-the-entered-output-for-CefWindow-GetDisplay.patch` | `CefWindow::GetDisplay()` follows the entered output on Wayland |
+| `0005-tests-Add-views-tests-...patch` | ceftests `ViewsWindowTest.WindowFullscreenOnDisplay` |
+
+The headers of `0002`/`0003` must also be copied to `vendor/cefpython/src/include/views/` (cefpython vendors CEF's C++ headers).
+
+Development builds of the cefpython module against a tree-built libcef without a full distribution: `make_distrib.py --output-dir
+<scratch> --allow-partial --ninja-build --x64-build --no-docs --no-archive` (with `buildtools/linux64-format` and `depot_tools` in
+`PATH`, it needs `clang-format`), a wrapper build of its `libcef_dll_wrapper` and `tools/cef-wayland-tests/deploy.sh` for the boards.
+Never write into `binary_distrib/` while a wheel build reads it.
+
 ## Rebuilding and making wheels
 
 1. `./sync.sh push` (scripts to the server), then on the server `apply-patches.sh` (the copy in `/nas/cef-build/work`).
