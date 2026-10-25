@@ -1,3 +1,17 @@
+unitotem-manager (3.0.0~dev9) stable; urgency=medium
+
+  * unitotem-viewer: the base labwc configuration moves from /etc/unitotem/xdg to
+    /usr/share/unitotem/xdg: an A/B update imports all of /etc/unitotem from the
+    previous slot, which froze an image-owned file at its first-install version
+    (the dev8 fix of the empty <name> never reached an updated board).
+    /etc/unitotem holds user and device state only
+  * Viewer: editing the volume or mute of the asset on screen applies at once
+    (SetAssetAudio), no new showing needed
+  * Viewer: commands sent to a window before its page is loaded (a window restored
+    to its playlist at start) wait for the load instead of being lost
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sun, 25 Oct 2026 19:10:00 +0100
+
 unitotem-manager (3.0.0~dev8) stable; urgency=medium
 
   * python3-cefpython3: wheels rebuilt with CefDisplayObserver (CEF patch 0006):

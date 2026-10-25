@@ -13,7 +13,7 @@ start)
   pkill -x labwc; pkill -x cage; pkill -9 -f 'python3 init.py'; pkill -9 -f 'cefpython3/subprocess'; sleep 2
   mkdir -p /run/systemd/system/unitotem-compositor.service.d
   cp $W/unitotem-compositor.service /run/systemd/system/unitotem-compositor.service
-  mkdir -p /etc/unitotem/xdg/labwc; cp $W/labwc-rc.xml /etc/unitotem/xdg/labwc/rc.xml
+  mkdir -p /usr/share/unitotem/xdg/labwc; cp $W/labwc-rc.xml /usr/share/unitotem/xdg/labwc/rc.xml
   cat > /run/systemd/system/unitotem-compositor.service.d/dev.conf <<EOD
 [Service]
 Environment=LD_LIBRARY_PATH=$W/extra
