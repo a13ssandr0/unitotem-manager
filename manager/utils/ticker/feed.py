@@ -17,7 +17,7 @@ MAX_TITLE = 300
 MAX_SUMMARY = 400
 MAX_LINK = 1000
 MAX_ID = 300
-MAX_ENTRIES_PER_FEED = 200       # a feed with more is cut at its first entries: the merged list holds 500 in all
+MAX_ENTRIES_PER_FEED = 500       # a feed with more is cut at its first entries (the merged list holds 500 in all)
 
 _TAG_RE = re.compile(r'<[^>]*>')
 _BLOCK_RE = re.compile(r'(?i)<\s*(?:br|/p|/div|/li|/h[1-6])\s*/?>')
