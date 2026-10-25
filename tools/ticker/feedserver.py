@@ -11,6 +11,7 @@ Throwaway feed server for trying the ticker (never part of the product): feeds w
   /dated.xml    RSS 2.0 with one item per hour for 3 days (for the count/today/range selections)
   /hostile.xml  titles with markup, Rich tags, braces and control characters
   /dateless.xml items without a date
+  /black.html   a static dark page (a quiet background for measuring the bar)
   /slow.xml     answers after 40 s;  /huge.bin 5 MB;  /loop redirects forever;  /fail answers 500;  /notfeed.html is HTML
 """
 import hashlib
@@ -104,6 +105,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(302, headers={'Location': '/loop'})
         if path == '/fail':
             return self.reply(500)
+        if path == '/black.html':
+            return self.reply(200, b'<html><body style="margin:0;background:#101820"></body></html>', 'text/html')
         if path == '/notfeed.html':
             return self.reply(200, b'<html><body>not a feed</body></html>', 'text/html')
         return self.reply(404)
