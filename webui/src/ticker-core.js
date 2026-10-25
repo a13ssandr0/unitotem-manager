@@ -385,7 +385,12 @@ export function renderItem(parsed, item, locale = '') {
   const segments = []
   const tags = []
   let current = {}
-  const push = text => { if (text) segments.push({text, style: current}) }
+  const push = text => {
+    if (!text) return
+    const last = segments[segments.length - 1]
+    if (last && last.style === current) last.text += text // one span per run of the same style (a background is one block)
+    else segments.push({text, style: current})
+  }
   const restyle = () => { current = tags.reduce(mergeStyle, {}) }
   for (const tok of parsed.tokens) {
     if (tok.t === 'text') push(tok.v)
