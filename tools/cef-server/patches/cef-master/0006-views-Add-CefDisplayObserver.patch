@@ -1,4 +1,4 @@
-From 1407cfb2f3cbd702f734d2db6b8b7103eadb35e6 Mon Sep 17 00:00:00 2001
+From 642b2f65d594779634e93a48f7a1acb0bf938be9 Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Wed, 21 Oct 2026 09:07:50 +0000
 Subject: [PATCH 6/6] views: Add CefDisplayObserver
@@ -11,21 +11,24 @@ window sent to that display before it is listed ends up on another one.
 
 Add CefDisplayObserver (OnDisplayAdded, OnDisplayRemoved,
 OnDisplayMetricsChanged) and CefDisplay::AddObserver/RemoveObserver
-(experimental API), a thin wrapper of display::DisplayObserver. The
-adapter uses display::ScopedOptionalDisplayObserver, which does nothing
-once the display::Screen is gone at shutdown.
+(experimental API), a thin wrapper of display::DisplayObserver. Only
+Wayland delivers notifications: under BUILDFLAG(IS_OZONE) and only when
+running on Wayland, otherwise AddObserver does nothing and the observer
+is never called. The adapter uses
+display::ScopedOptionalDisplayObserver, which does nothing once the
+display::Screen is gone at shutdown.
 
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 ---
- include/views/cef_display.h             | 20 +++++++
- include/views/cef_display_observer.h    | 79 +++++++++++++++++++++++++
- libcef/browser/views/display_impl.cc    | 76 ++++++++++++++++++++++++
- tests/ceftests/views/window_unittest.cc | 29 +++++++++
- 4 files changed, 204 insertions(+)
+ include/views/cef_display.h             | 24 +++++++
+ include/views/cef_display_observer.h    | 81 +++++++++++++++++++++++
+ libcef/browser/views/display_impl.cc    | 86 +++++++++++++++++++++++++
+ tests/ceftests/views/window_unittest.cc | 31 +++++++++
+ 4 files changed, 222 insertions(+)
  create mode 100644 include/views/cef_display_observer.h
 
 diff --git a/include/views/cef_display.h b/include/views/cef_display.h
-index 4436f6c6a..fadc8f67e 100644
+index d37cccd83..eb42583b2 100644
 --- a/include/views/cef_display.h
 +++ b/include/views/cef_display.h
 @@ -43,6 +43,10 @@
@@ -39,7 +42,7 @@ index 4436f6c6a..fadc8f67e 100644
  ///
  /// This class typically, but not always, corresponds to a physical display
  /// connected to the system. A fake Display may exist on a headless system, or a
-@@ -95,6 +99,22 @@ class CefDisplay : public CefBaseRefCounted {
+@@ -95,6 +99,26 @@ class CefDisplay : public CefBaseRefCounted {
    /*--cef(count_func=displays:GetDisplayCount)--*/
    static void GetAllDisplays(std::vector<CefRefPtr<CefDisplay>>& displays);
  
@@ -47,13 +50,17 @@ index 4436f6c6a..fadc8f67e 100644
 +  ///
 +  /// Register |observer| to be notified of display changes. Adding an observer
 +  /// that is already registered has no effect. The observer is kept alive until
-+  /// RemoveObserver is called. Must be called on the browser process UI thread.
++  /// RemoveObserver is called. Only implemented on Wayland: on every other
++  /// platform and Linux backend (Windows, macOS, X11) this does nothing and
++  /// the observer is never called. Must be called on the browser process UI
++  /// thread.
 +  ///
 +  /*--cef(added=experimental)--*/
 +  static void AddObserver(CefRefPtr<CefDisplayObserver> observer);
 +
 +  ///
-+  /// Unregister an observer that was registered with AddObserver.
++  /// Unregister an observer that was registered with AddObserver. Does nothing
++  /// where AddObserver does nothing.
 +  ///
 +  /*--cef(added=experimental)--*/
 +  static void RemoveObserver(CefRefPtr<CefDisplayObserver> observer);
@@ -64,10 +71,10 @@ index 4436f6c6a..fadc8f67e 100644
    /// This method is only used on Windows.
 diff --git a/include/views/cef_display_observer.h b/include/views/cef_display_observer.h
 new file mode 100644
-index 000000000..9422dc487
+index 000000000..85942d108
 --- /dev/null
 +++ b/include/views/cef_display_observer.h
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,81 @@
 +// Copyright (c) 2016 Marshall A. Greenblatt. All rights reserved.
 +//
 +// Redistribution and use in source and binary forms, with or without
@@ -116,8 +123,10 @@ index 000000000..9422dc487
 +
 +///
 +/// Implement this interface to be notified of changes to the set of displays
-+/// and to their metrics. Register with CefDisplay::AddObserver. The methods of
-+/// this interface will be called on the browser process UI thread.
++/// and to their metrics. Register with CefDisplay::AddObserver. Only Wayland
++/// delivers notifications; on every other platform and Linux backend (Windows,
++/// macOS, X11) the methods are never called. The methods of this interface
++/// will be called on the browser process UI thread.
 +///
 +/*--cef(source=client,added=experimental)--*/
 +class CefDisplayObserver : public virtual CefBaseRefCounted {
@@ -148,22 +157,23 @@ index 000000000..9422dc487
 +
 +#endif  // CEF_INCLUDE_VIEWS_CEF_DISPLAY_OBSERVER_H_
 diff --git a/libcef/browser/views/display_impl.cc b/libcef/browser/views/display_impl.cc
-index 6a16816ee..0a50d3d84 100644
+index f4fe07a13..045de6142 100644
 --- a/libcef/browser/views/display_impl.cc
 +++ b/libcef/browser/views/display_impl.cc
-@@ -4,9 +4,61 @@
+@@ -7,6 +7,63 @@
+ #include "cef/libcef/browser/views/view_util.h"
+ #include "ui/display/screen.h"
  
- #include "cef/libcef/browser/views/display_impl.h"
- 
++#if BUILDFLAG(IS_OZONE)
 +#include <memory>
 +#include <vector>
 +
 +#include "base/no_destructor.h"
 +#include "cef/include/views/cef_display_observer.h"
- #include "cef/libcef/browser/views/view_util.h"
 +#include "ui/display/display_observer.h"
- #include "ui/display/screen.h"
- 
++#endif
++
++#if BUILDFLAG(IS_OZONE)
 +namespace {
 +
 +// Forwards the notifications of display::Screen to a CefDisplayObserver.
@@ -209,18 +219,21 @@ index 6a16816ee..0a50d3d84 100644
 +}
 +
 +}  // namespace
++#endif  // BUILDFLAG(IS_OZONE)
 +
  // static
  CefRefPtr<CefDisplay> CefDisplay::GetPrimaryDisplay() {
    CEF_REQUIRE_UIT_RETURN(nullptr);
-@@ -51,6 +103,30 @@ void CefDisplay::GetAllDisplays(std::vector<CefRefPtr<CefDisplay>>& displays) {
+@@ -51,6 +108,35 @@ void CefDisplay::GetAllDisplays(std::vector<CefRefPtr<CefDisplay>>& displays) {
    }
  }
  
 +// static
 +void CefDisplay::AddObserver(CefRefPtr<CefDisplayObserver> observer) {
 +  CEF_REQUIRE_UIT_RETURN_VOID();
-+  if (!observer) {
++#if BUILDFLAG(IS_OZONE)
++  // Only Wayland delivers notifications.
++  if (!observer || !view_util::IsRunningOnWayland()) {
 +    return;
 +  }
 +  auto& adapters = GetAdapters();
@@ -230,22 +243,25 @@ index 6a16816ee..0a50d3d84 100644
 +    }
 +  }
 +  adapters.push_back(std::make_unique<CefDisplayObserverAdapter>(observer));
++#endif
 +}
 +
 +// static
 +void CefDisplay::RemoveObserver(CefRefPtr<CefDisplayObserver> observer) {
 +  CEF_REQUIRE_UIT_RETURN_VOID();
++#if BUILDFLAG(IS_OZONE)
 +  auto& adapters = GetAdapters();
 +  std::erase_if(adapters, [&](const auto& adapter) {
 +    return adapter->observer() == observer.get();
 +  });
++#endif
 +}
 +
  // static
  CefPoint CefDisplay::ConvertScreenPointToPixels(const CefPoint& point) {
    CEF_REQUIRE_UIT_RETURN(CefPoint());
 diff --git a/tests/ceftests/views/window_unittest.cc b/tests/ceftests/views/window_unittest.cc
-index 8531dd9da..9a77a70a6 100644
+index 8531dd9da..016d990b9 100644
 --- a/tests/ceftests/views/window_unittest.cc
 +++ b/tests/ceftests/views/window_unittest.cc
 @@ -8,6 +8,7 @@
@@ -256,13 +272,15 @@ index 8531dd9da..9a77a70a6 100644
  #include "include/views/cef_layout.h"
  #include "include/views/cef_panel.h"
  #include "include/wrapper/cef_closure_task.h"
-@@ -801,6 +802,34 @@ void WindowKeyboardLegacyFallthroughImpl(CefRefPtr<CefWaitableEvent> event) {
- // Test window functionality. This is primarily to exercise exposed CEF APIs
- // and is not intended to comprehensively test window-related behavior (which
- // we presume that Chromium is testing).
+@@ -798,6 +799,36 @@ void WindowKeyboardLegacyFallthroughImpl(CefRefPtr<CefWaitableEvent> event) {
+ 
+ }  // namespace
+ 
 +#if CEF_API_ADDED(CEF_EXPERIMENTAL)
 +namespace {
 +
++// Only registration is tested: display changes cannot be provoked here and
++// only Wayland delivers notifications.
 +class TestDisplayObserver : public CefDisplayObserver {
 + public:
 +  TestDisplayObserver() = default;
@@ -288,9 +306,9 @@ index 8531dd9da..9a77a70a6 100644
 +WINDOW_TEST_ASYNC(DisplayObserverAddRemove)
 +#endif
 +
- WINDOW_TEST_ASYNC(WindowCreate)
- WINDOW_TEST_ASYNC(WindowCreateFrameless)
- WINDOW_TEST_ASYNC(WindowCreateWithOrigin)
+ // Test window functionality. This is primarily to exercise exposed CEF APIs
+ // and is not intended to comprehensively test window-related behavior (which
+ // we presume that Chromium is testing).
 -- 
 2.53.0
 

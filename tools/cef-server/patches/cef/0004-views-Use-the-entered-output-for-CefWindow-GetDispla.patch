@@ -1,4 +1,4 @@
-From 5d3b565a44daef5b6b88b5a812e40d5bd00a5896 Mon Sep 17 00:00:00 2001
+From eaf1f8ba6a9bd37ba68436c394d4ac0bdbb462ea Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Tue, 20 Oct 2026 22:05:33 +0000
 Subject: [PATCH 4/6] views: Use the entered output for CefWindow::GetDisplay
@@ -17,7 +17,7 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
  1 file changed, 9 insertions(+)
 
 diff --git a/libcef/browser/views/window_view.cc b/libcef/browser/views/window_view.cc
-index 989aa57fa..2cd72182c 100644
+index b563608e6..ffc7bd0b4 100644
 --- a/libcef/browser/views/window_view.cc
 +++ b/libcef/browser/views/window_view.cc
 @@ -898,6 +898,15 @@ void CefWindowView::OnWidgetBoundsChanged(views::Widget* widget,

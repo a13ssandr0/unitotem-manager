@@ -7,7 +7,9 @@ include conflict, resolved in `patches/cef-master/`, which applies with plain `g
 CEF's rules (docs/contributing_with_git.md) ask for an issue number in the commit descriptions: open the issue first (text below), then add
 "Fixes #N" to the commits. No CLA is mentioned in the repository docs.
 
-**Not tested on Windows or macOS.** No Windows SDK/MSVC or Apple SDK is available to the author (`gn gen` with `target_os="win"` fails with
+**Behaviour changes on Linux/Wayland only; Windows, macOS and X11 are unchanged by construction** (new code is under `BUILDFLAG(IS_OZONE)` and
+`IsRunningOnWayland()`; outside Wayland `SetFullscreenOnDisplay` is `SetFullscreen(true)`, `GetLabel` is empty, `AddObserver` does nothing). **Not tested on
+Windows or macOS.** No Windows SDK/MSVC or Apple SDK is available to the author (`gn gen` with `target_os="win"` fails with
 `KeyError: 'WINDOWSSDKDIR'`, with `target_os="mac"` in `mac_sdk.gni`; the official Windows cross-build needs a toolchain package made on a
 Windows machine). Linux only: x86_64 and aarch64 builds, ceftests Views suites on x86_64 under labwc. As a partial check the touched
 translation units (`display_impl.cc`, `window_impl.cc`, `window_view.cc`, `view_util_aura.cc`) were compiled syntax-only with Chromium's
@@ -40,17 +42,17 @@ appears, instead of polling.
    Overlaps PR #4274 (open); if it merges first this commit shrinks.
 2. **`CefWindow::SetFullscreenOnDisplay(int64_t display_id)`** (experimental). `views::Widget::SetFullscreen(bool, int64_t)` takes a target
    display; Wayland turns it into `xdg_toplevel.set_fullscreen(wl_output)`. Works before `Show()`. For a window that is already fullscreen it
-   leaves fullscreen first on Ozone, because labwc ignores the output of a fullscreen request for a toplevel that is already fullscreen.
-   X11 does not support a target display (`DCHECK_EQ(target_display_id, kInvalidDisplayId)` in `X11Window::SetFullscreen`): there it
-   behaves like `SetFullscreen(true)`. Windows and macOS pass the id to their widgets (not tested).
-3. **`CefDisplay::GetLabel()`** (experimental): `display::Display::label()`; on Wayland the `wl_output` description, the only place an
-   application can learn the output name (wlroots compositors end it with `(DP-1)`).
+   leaves fullscreen first, because labwc ignores the output of a fullscreen request for a toplevel that is already fullscreen.
+   Only Wayland honors the display; Windows, macOS and X11 (which does not support a target display: `DCHECK_EQ(target_display_id,
+   kInvalidDisplayId)` in `X11Window::SetFullscreen`) behave exactly like `SetFullscreen(true)`.
+3. **`CefDisplay::GetLabel()`** (experimental): on Wayland the `wl_output` description, the only place an application can learn the output name
+   (wlroots compositors end it with `(DP-1)`); empty elsewhere (`display::Display::label()` differs per platform and is not exposed).
 4. **`CefWindow::GetDisplay()` on Wayland** used the window bounds, which a Wayland client cannot know (they start at 0,0): a window on the
    second output was reported on the first. Use `display::Screen::GetDisplayNearestWindow()` there.
 5. ceftests for 2 and 3.
 6. **`CefDisplayObserver` + `CefDisplay::AddObserver/RemoveObserver`** (experimental; independent of 1-4, can be taken or left separately).
    `OnDisplayAdded/Removed/MetricsChanged`, a wrapper of `display::DisplayObserver` (`ScopedOptionalDisplayObserver`, so a late removal after
-   shutdown is harmless). Needed because Chromium lists a new output about 220 ms after it was switched on; measured with
+   shutdown is harmless); Wayland only, `AddObserver` does nothing elsewhere. Needed because Chromium lists a new output about 220 ms after it was switched on; measured with
    `wlr-randr --output DP-2 --off/--on` on labwc, 6 runs: removed 184-219 ms, added 211-228 ms after the command, `FindByOutputName`
    finds the display inside the callback every time, the window opened on the new output 7-8 ms later.
 
@@ -64,7 +66,10 @@ fullscreen on its output (`WAYLAND_DEBUG`: `set_fullscreen(wl_output#32)` / `#34
 output off/on gives a new display id and the window returns with `SetFullscreenOnDisplay`, `Close()` destroys the toplevel and `OnBeforeClose`
 fires. 18 checks pass on both boards, 19 on x86_64 with the observer. ceftests (x86_64, `--ozone-platform=wayland`): `Views*` 105 tests
 pass, including `WindowFullscreenOnDisplay` (`WAYLAND_DEBUG` shows `set_fullscreen(wl_output)` then `unset_fullscreen`) and
-`DisplayObserverAddRemove`. The test of the observer only checks registration: display changes cannot be provoked from ceftests.
+`DisplayObserverAddRemove`. The test of the observer only checks registration: display changes cannot be provoked from ceftests. None of the new tests
+asserts anything platform dependent (`WindowFullscreenOnDisplay` is `SetFullscreen(true)` outside Wayland). `tools/cef-server/list-nonozone-changes.py` lists
+every changed line outside `IS_OZONE`/`CEF_API_ADDED`; the final series was re-checked 2026-10-25 (plain `git am` on d58e84d17 and on master e537569ec, `fix_style.py`
+clean, compile with and without `USE_OZONE` on the 147 tree and on master with Chromium 156).
 
 Not tested: Windows, macOS, X11 for the new methods (the X11 path only calls `SetFullscreen(true)`), a real monitor (the Pi output is an HDMI
 capture card), observer behaviour on compositors other than labwc. Observation: with no window open Chromium's display list did not follow a
