@@ -96,8 +96,11 @@ def test_models_validate_what_reaches_the_system():
 
 
 def test_auto_order_with_the_new_mechanisms():
-    assert candidates({'output', 'ddc', 'wol'}, 'on') == ['wol', 'ddc', 'output']
-    assert candidates({'output', 'ddc', 'serial', 'cec'}, 'off') == ['ddc', 'cec', 'serial', 'output']
+    assert candidates({'output', 'ddc', 'wol'}, 'on') == ['wol', 'output', 'ddc']
+    assert candidates({'output', 'ddc', 'serial', 'cec'}, 'off') == ['output', 'ddc', 'cec', 'serial']
+    # a screen WE switched off over DDC is woken through DDC first: the compositor would 'succeed' and wake nothing
+    assert candidates({'output', 'ddc', 'cec'}, 'on', commanded_off='ddc') == ['ddc', 'output', 'cec']
+    assert candidates({'output', 'ddc', 'cec'}, 'off', commanded_off='ddc') == ['output', 'ddc', 'cec']
     # WOL has no off
     with pytest.raises(NoMechanismAvailable):
         candidates({'wol'}, 'off')

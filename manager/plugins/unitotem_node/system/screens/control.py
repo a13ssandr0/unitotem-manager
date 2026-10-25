@@ -7,6 +7,10 @@ WOL and serial exist only when configured for the output. See SCREEN-CONTROL-PLA
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import time
+from pathlib import Path
 from typing import Optional
 
 from loguru import logger
@@ -21,6 +25,36 @@ from .mechanism import NoMechanismAvailable, candidates
 
 _power_locks: dict[str, asyncio.Lock] = {}
 _probing: Optional[asyncio.Task] = None
+
+# What WE switched off through a mechanism the compositor cannot see: a monitor put to standby over DDC/CI, CEC or a serial command keeps
+# its link and its EDID powered, so the compositor goes on listing the output as driven and a DDC read-back of 0xD6 may still say
+# "on" (measured on an LG Ultrafine and on a Realtek board: the panel was dark, the output active, 0xD6 unchanged or 0x02).
+# The only truth about such a screen is what was commanded; it is forgotten by a switch-on and when the output disappears
+# (the monitor drops its link for an instant when it is switched on by hand). Kept in a state file (not in the configuration, not in
+# the backup) so a restart, a resume or a power cut still knows which screens WE put to standby and must wake with the same mechanism.
+_BLIND_MECHANISMS = ('ddc', 'cec', 'serial')
+STATE_FILE = Path(os.environ.get('UNITOTEM_SCREEN_STATE', '/var/lib/unitotem/screen_state.json'))
+
+
+def _load_commanded() -> dict[str, dict]:
+    try:
+        data = json.loads(STATE_FILE.read_text())
+        return {k: v for k, v in data.get('commanded_off', {}).items()
+                if isinstance(v, dict) and v.get('mechanism') in _BLIND_MECHANISMS}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+_commanded_off: dict[str, dict] = _load_commanded()
+
+
+def _save_commanded():
+    try:
+        tmp = STATE_FILE.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'commanded_off': _commanded_off}))
+        tmp.replace(STATE_FILE)
+    except OSError as exc:
+        logger.warning('Cannot save the screen state to {}: {}', STATE_FILE, exc)
 
 
 class ScreenControlError(Exception):
@@ -79,6 +113,11 @@ async def screens() -> list[dict]:
     _adopt_renamed(list(x_outputs))
     tools = await _tools()
     names = list(x_outputs) + [n for n in screen_control.outputs if n not in x_outputs]
+    gone = [n for n in _commanded_off if n not in x_outputs]
+    for name in gone:
+        _commanded_off.pop(name)        # the link dropped: the monitor was switched on again (or is gone)
+    if gone:
+        _save_commanded()
     out = []
     for name in names:
         cfg = screen_control.outputs.get(name) or OutputConfig()
@@ -87,6 +126,8 @@ async def screens() -> list[dict]:
             'name': name,
             'connected': x is not None,
             'active': bool(x and x.active),
+            # switched off by us through DDC/CEC/serial: the compositor cannot know (see _commanded_off)
+            'commanded_off': _commanded_off.get(name),
             'geometry': {'x': x.x, 'y': x.y, 'width': x.width, 'height': x.height, 'rotation': x.rotation} if x else None,
             'identity': cfg.identity,
             'mechanisms': _availability(name, cfg, x, tools),
@@ -165,7 +206,8 @@ async def _do_power(name: str, mechanism: str, on: bool, cfg: OutputConfig, x: O
     if mechanism == 'output':
         await wayland.set_power(name, on, known=x)
     elif mechanism == 'ddc':
-        await ddc_ctl.set_power(cfg.ddc_bus, on, cfg.ddc_capabilities)
+        was_off_by_us = _commanded_off.get(name, {}).get('mechanism') == 'ddc'
+        await ddc_ctl.set_power(cfg.ddc_bus, on, cfg.ddc_capabilities, wake_reset=was_off_by_us)
     elif mechanism == 'cec':
         adapters = await cec.devices()
         device = cfg.cec_device or adapters[0].path
@@ -198,7 +240,8 @@ async def set_power(name: str, state: str, mechanism: str = 'auto') -> str:
             available.discard('wol')
         preference = mechanism if mechanism != 'auto' else (cfg.on_mechanism if on else cfg.off_mechanism)
         try:
-            order = candidates(available, state, preference)  # type: ignore[arg-type]
+            order = candidates(available, state, preference,  # type: ignore[arg-type]
+                               commanded_off=_commanded_off.get(name, {}).get('mechanism'))
         except NoMechanismAvailable as exc:
             raise ScreenControlError(str(exc)) from exc
         errors = []
@@ -206,6 +249,13 @@ async def set_power(name: str, state: str, mechanism: str = 'auto') -> str:
             try:
                 logger.info('Screen {}: switching {} with {}', name, state, mech)
                 await _do_power(name, mech, on, cfg, x)
+                if on or mech not in _BLIND_MECHANISMS:
+                    changed = _commanded_off.pop(name, None) is not None
+                else:
+                    _commanded_off[name] = {'mechanism': mech, 'at': int(time.time())}
+                    changed = True
+                if changed:
+                    _save_commanded()
                 return mech
             except (RuntimeError, DdcError, ToolMissing, ToolTimeout, OSError, ValueError, ScreenControlError) as exc:
                 logger.warning('Screen {}: {} failed to switch {}: {}', name, mech, state, exc)
@@ -218,7 +268,8 @@ async def power_state(name: str) -> dict:
     CEC are asked only when probed, and many monitors do not answer while off."""
     cfg = screen_control.output(name)
     x = await _x_output(name)
-    state = {'output': ('on' if x.active else 'off') if x else None, 'ddc': None, 'cec': None}
+    state = {'output': ('on' if x.active else 'off') if x else None, 'ddc': None, 'cec': None,
+             'commanded_off': _commanded_off.get(name)}
     if cfg.ddc_bus is not None and (await ddc_ctl.available())[0]:
         state['ddc'] = await ddc_ctl.power_state(cfg.ddc_bus)
     adapters = await cec.devices()
@@ -296,6 +347,17 @@ async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
                 if cfg.power_on_at_start and not (name in x_outputs and x_outputs[name].active)]
         todo += [name for name, o in x_outputs.items() if not o.active and name not in todo
                  and screen_control.outputs.get(name, OutputConfig()).power_on_at_start]
+        if attempt == 1:
+            # A monitor WE put to standby over DDC/CEC/serial keeps its link, so the compositor lists it as driven and the loop above
+            # never wakes it (it is remembered in the state file, see _commanded_off): wake it with the mechanism that switched it off
+            for name in list(_commanded_off):
+                cfg = screen_control.outputs.get(name, OutputConfig())
+                if cfg.power_on_at_start and name in x_outputs and x_outputs[name].active and name not in todo:
+                    try:
+                        await set_power(name, 'on')
+                        logger.info('Woke screen {} that was switched off over {}', name, _commanded_off.get(name, {}).get('mechanism'))
+                    except ScreenControlError as exc:
+                        logger.warning('Cannot wake screen {}: {}', name, exc)
         if not todo:
             break
         for name in todo:
