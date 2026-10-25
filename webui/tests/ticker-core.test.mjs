@@ -132,6 +132,12 @@ test('Rich styles and colours', () => {
   assert.deepEqual(s.map(x => !!x.style.bold), [true, false, true])
 })
 
+test('text of the same style is one segment', () => {
+  assert.deepEqual(seg('[on red] {source} - {title} [/]').map(x => x.text), [' ANSA - Hello world '])
+  assert.equal(seg('a{title}b').length, 1)
+  assert.equal(seg('a[b]{title}[/b]b').length, 3)
+})
+
 test('nesting and closing', () => {
   let s = seg('[bold]a[red]b[/red]c[/bold]d')
   assert.deepEqual(s.map(x => x.style), [{bold: true}, {bold: true, color: 'red'}, {bold: true}, {}])

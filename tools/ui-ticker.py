@@ -139,20 +139,35 @@ async def run(shots):
 
             # ── recycler with 500 headlines ───────────────────────────────────
             big = items(500)
-            await apply(c, {'speed': 25.0}, big)
+            await apply(c, {'speed': 60.0}, big)
             await asyncio.sleep(2.0)
             s = await inspect(c)
             check('500 headlines: the bar is on and sized', s['enabled'] and s['barH'] > 30 and s['selected'] == 500, s)
-            check('500 headlines: only a few elements exist', 0 < s['domItems'] <= 12, s['domItems'])
+            check('500 headlines: only a few elements exist', 0 < s['domItems'] and s['domPages'] <= 3, s)
             check('the bar reserves its height', await c.eval("getComputedStyle(document.getElementById('area')).getPropertyValue('--ticker-h')") == f"{s['barH']}px")
             first_key = s['lanes'][0]['lastKey']
-            await asyncio.sleep(6)
+            await asyncio.sleep(12)
             s2 = await inspect(c)
-            check('the crawl advances and recycles (elements are reused, DOM still small)', s2['lanes'][0]['lastKey'] != first_key and s2['domItems'] <= 12 and s2['lanes'][0]['idx'] > s2['domItems'] + 2, s2)
+            check('the crawl advances and recycles pages (the DOM stays at 3 pages)', s2['lanes'][0]['lastKey'] != first_key and s2['domPages'] <= 3 and s2['lanes'][0]['pages'] == 3, s2)
+            anims = json.loads(await c.eval("JSON.stringify(document.getAnimations().map(a => ({props: [...new Set(a.effect.getKeyframes().flatMap(k => Object.keys(k)))].filter(x => !['offset','easing','composite','computedOffset'].includes(x)), easing: a.effect.getTiming().easing, state: a.playState})))", False))
+            check('only transform animations, linear, one per page', len(anims) == 3 and all(a['props'] == ['transform'] and a['easing'] == 'linear' for a in anims), anims)
+            check('one is running, the others wait for their exact start', sum(a['state'] == 'running' for a in anims) >= 1, anims)
+            check('pages have will-change: transform', await c.eval("[...document.querySelectorAll('.ut-page')].every(e => getComputedStyle(e).willChange === 'transform')", False))
+            await apply(c, {'speed': 5.0}, big)
+            await asyncio.sleep(1)
+            # the position over time is linear (sampled on animation frames: fractional px, no rounding, no stepping)
+            samples = json.loads(await c.eval("new Promise(res => { const out = []; const el = document.querySelector('.ut-page'); const t0 = performance.now(); (function f(t) { out.push([t - t0, el.getBoundingClientRect().left]); if (t - t0 < 1000) requestAnimationFrame(f); else res(JSON.stringify(out)); })(t0); })", True))
+            n = len(samples); mt = sum(t for t, _ in samples) / n; mx = sum(x for _, x in samples) / n
+            slope = sum((t - mt) * (x - mx) for t, x in samples) / sum((t - mt) ** 2 for t, _ in samples)
+            resid = max(abs((x - mx) - slope * (t - mt)) for t, x in samples)
+            check('position is linear in time (residual < 1.5 px, speed %.0f px/s)' % (-slope * 1000), resid < 1.5 and abs(-slope * 1000 - 110) < 5, (resid, slope))
+            check('positions are fractional (not rounded to pixels)', any(abs(x - round(x)) > 0.05 for _, x in samples), samples[:5])
             check('no script errors', not errors(), errors()[:1])
             await shot('01-crawl-500')
 
             # ── no jump when the list changes ─────────────────────────────────
+            await apply(c, {'speed': 2.5}, big)
+            await asyncio.sleep(1)
             pos = 'JSON.stringify([...document.querySelectorAll(".ut-item")].map(e => [e.textContent.slice(0, 24), Math.round(e.getBoundingClientRect().left)]))'
             before = json.loads(await c.eval(pos, False))
             await c.eval('window.utTicker.setItems(%s)' % json.dumps(items(500, title='Fresh')[:1] + big[:300]))
@@ -163,7 +178,7 @@ async def run(shots):
             check('...and the lane goes on after the last placed headline', s3['lanes'][0]['lastKey'] is not None and s3['selected'] == 301, s3)
 
             # ── wrap around: a tiny list loops, with the separator ────────────
-            await apply(c, {'speed': 30.0, 'template': '{title}', 'select': {**BASE['select'], 'count': 3}}, items(3, title='T'))
+            await apply(c, {'speed': 60.0, 'template': '{title}', 'select': {**BASE['select'], 'count': 3}}, items(3, title='T'))
             await asyncio.sleep(6)
             seen = await c.eval('[...document.querySelectorAll(".ut-item")].map(e => e.textContent).join("|")', False)
             check('a short list wraps around', seen.count('number 0') + seen.count('number 1') + seen.count('number 2') >= 2, seen)

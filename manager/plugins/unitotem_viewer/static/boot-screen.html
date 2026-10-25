@@ -569,8 +569,7 @@
         tickerLoad = import(cfg.module);
       }
       tickerLoad.then(() => {
-        window.utTicker.configure(cfg);
-        window.utTicker.setItems(window.__utTickerItems || []);
+        window.utTicker.update(cfg, window.__utTickerItems || []);
       }).catch(e => { tickerLoad = null; console.error('ticker', e); });
     }
 
