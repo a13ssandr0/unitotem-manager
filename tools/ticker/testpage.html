@@ -23,8 +23,7 @@
       const cfg = window.__utTickerConfig
       if (!cfg) return
       await import(cfg.module)
-      window.utTicker.configure(cfg)
-      window.utTicker.setItems(window.__utTickerItems || [])
+      window.utTicker.update(cfg, window.__utTickerItems || [])
     }
     window.__ready = true
   </script>
