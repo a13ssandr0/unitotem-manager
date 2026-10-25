@@ -878,3 +878,5 @@ the VM-specific ones.
   web UI as "off (DDC)", forgotten when the output disappears or on a switch-on), woken through the same mechanism first, DDC with the 05-then-01 reset (`ddc_ctl.set_power(wake_reset=True)`, only for a screen
   we put to standby: 05 flickers a monitor that is on), and `wake_all` wakes at start only those. Never send DDC power commands to someone's working monitor to "see what happens": the LG stayed dark with its LED lit until the right sequence was found.
   DDC reliability differs wildly: a Philips 246V5 on DVI answers half the reads (3-7 s each, no 0xD6 at all), a Realtek board answers every read in milliseconds.
+- **A DDC input-source write (`0x60`) is accepted (rc 0) but ignored when the target input has no signal** (Philips 246V5, 2026-10-25: VGA-1 with nothing plugged in never took the switch, the read-back correctly stayed on HDMI-1): a successful
+  `setvcp 60` proves nothing, only a read-back does, and on such monitors reads fail about half of the time. The web UI must say "sent", not "switched", and offer only inputs the monitor advertises (it already does).
