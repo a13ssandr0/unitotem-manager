@@ -158,8 +158,11 @@ def main() -> int:
     ready.start(300)        # the first frame has been painted by then
 
     # systemd stops the service with SIGTERM: Python's handler only runs while Python code does, so give it a heartbeat
-    signal.signal(signal.SIGTERM, lambda *_: app.quit())
-    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    # The viewer ends this process once its own splash is showing. Qt's orderly teardown of Wayland windows segfaulted at that moment (status
+    # 11 in the journal, measured on a Pi 4 with the 2026.10.31 image): there is nothing to save, leave at once; the compositor removes the
+    # windows when the connection closes
+    signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
+    signal.signal(signal.SIGINT, lambda *_: os._exit(0))
     beat = QTimer()
     beat.timeout.connect(lambda: None)
     beat.start(200)
