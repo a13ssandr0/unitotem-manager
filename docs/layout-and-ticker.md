@@ -128,3 +128,27 @@ Procedure for code on a board without building a deb: CLAUDE.md "Testing code on
   mid-level edges falls from 1.52 (whole pixel) to 0.97 / 0.83: slightly softer text while it moves, still crisp enough to read; it is inherent to smooth sub-pixel motion (rounding the position
   from script is what produced the 1/2 px steps), so it is accepted.
 - The frame spacing of `Display::DrawAndSwap` is 8/20/20 ms at 60 Hz on this compositor (mean 16.7 ms) with or without the ticker: not something the crawl can change.
+
+### Pi 4 (V3D, labwc, 1080p, GPU compositing, `pi` profile with UNITOTEM_NO_SCANOUT_BUFFERS) and the pacing question (2026-10-25, final build)
+
+Same protocol (15 s traces, 500 headlines, 80 px/s). "Presented" = the end of `SubmitCompositorFrameToPresentationCompositorFrame`, i.e. the compositor's `wp_presentation` feedback.
+Quiet static page behind the bar (the board shows the animated first-boot welcome page otherwise, which alone costs 85 % of a core and caps everything at 40 fps: use
+`tools/ticker/board-static-page.py` for any measurement).
+
+| | presented/s | presented gap (median / max) | CPU, whole tree |
+|---|---|---|---|
+| bar off, static page | - | - | 4.2 % |
+| NEW, 1 lane, idle | 59.8 | 16.67 / 16.67 ms | 63.0 % (gpu 25.4, renderer 24.6, python 12.9) |
+| NEW, 1 lane, main thread blocked 300 ms/s | 59.9 | 16.67 / 16.67 ms | |
+| NEW, 2 lanes idle / blocked | 59.8 / 60.0 | 16.67 / 16.68 ms | 67.0 % |
+| OLD rAF control, 1 lane idle / blocked | 30.1 / 23.1 | 33.3 / 50 ms; **333 ms** blocked | 35.8 % |
+| OLD, 2 lanes idle / blocked | 30.0 / 22.1 | 33.3 / 50 ms; **333 ms** blocked | 37.3 % |
+
+- The crawl IS presented at 60 frames/s on the Pi (every vblank, no 2-vblank presentation), also while the main thread is blocked; the old loop gave 30 and froze for 333 ms.
+- The CPU cost does not depend on any knob: font 3 % / 1.5 %, translucent / opaque background, reserve / overlay, 0.5 / 3 / 8 em/s all measured 60-62 %. It is the price of 60 fps compositing
+  + the empty BeginMainFrame per frame (the same animated empty div costs 31.6 % on venus). The only lever is the frame rate: the same animations with `steps()` at 30/s cost 32.8 % but are
+  presented at 30/s with 33/50 ms alternating gaps, which is the judder we removed. Not offered.
+- Pacing: with the final build the draw/present spacing is perfectly regular on venus (presented gap 16.67 ms, max 16.68, 59.8/s) and on the Pi. The 8/20/20 ms pattern of `Display::DrawAndSwap`
+  seen on venus with earlier builds did not reproduce after the merge with package A's last changes (5 traces: idle, blocked, right after a restart, +15 s, +30 s: all 16.67 ms). Its effect
+  would have been: content time of a frame follows BeginFrame time, so a 8 or 20 ms draw spacing at 80 px/s is an error of at most +-0.7 px per frame (+-2.2 px at 8 em/s), below what is
+  visible; with regular pacing the error is 0.02 px. Nothing needed changing in the ticker.

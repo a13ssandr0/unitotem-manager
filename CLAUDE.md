@@ -949,8 +949,9 @@ Tests: `manager/tests/test_ticker_*.py` (models, feeds against local http server
   `startTime` on `document.timeline`; nothing else is animated and nothing is positioned per frame. See the measurements in docs/layout-and-ticker.md. Do not "improve" it with `steps()`, rounding
   or per-frame scripts. Measured before/after on venus (docs/layout-and-ticker.md): 60 vs 30 frames/s, longest gap 21.5 ms vs 311 ms with the main thread blocked, 0 main-thread commits per second.
 - **Any animation costs ~31 % of a core in this CEF on Wayland (60 fps compositing + an empty BeginMainFrame per frame)**, a single animated empty div included: do not chase that number in the ticker's code.
-- **`Display::DrawAndSwap` gaps are not vsync gaps**: under labwc the compositor frame times came out as a 8/20/20 ms pattern at 60 Hz (mean 16.7 ms) on venus, with or without the ticker; judge a crawl by frames drawn
-  per second and the longest gap (no frame skipped), and by the trace's `Raster`/`Paint` counts, not by the spacing of draw events.
+- **Pi 4 and the welcome page**: a board with no administrator shows the animated first-boot page (85 % of a core on a Pi 4, 40 fps cap): measure with a static page assigned (`tools/ticker/board-static-page.py`).
+  The ticker is PRESENTED at 59.8-60 fps on the Pi 4 (wp_presentation feedback gap 16.67 ms, also with the main thread blocked), CPU 63-67 % of a core whatever the font size, colour, speed or rows (any animation
+  costs that there); the 8/20/20 ms `Display::DrawAndSwap` spacing seen on venus with pre-merge builds no longer reproduces (docs/layout-and-ticker.md). Judge a crawl with `tools/ticker/board-trace.py` (presented/s, gaps).
 - **DDC/CI power is blind, and DPMS is the first choice (measured 2026-10-25 on an LG Ultrafine and a Realtek "FHD demoset" board, user decision "always DPMS first").** `0xD6 <- 04` switches the panel off but the link and the EDID stay
   powered: the compositor goes on listing the output as driven, DRM stays `connected/enabled/On`, and the `0xD6` read-back still says `01` (LG) or `02` (Realtek) - the read-back proves NOTHING. The monitor only
   drops its link for an instant when it is switched on by hand. A plain `0xD6 <- 01` does NOT wake the LG from it (and neither does its button); `0xD6 <- 05` and then `01` does (found by binary search with the user watching the panel).
