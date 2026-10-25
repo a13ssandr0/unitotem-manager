@@ -947,7 +947,8 @@ Tests: `manager/tests/test_ticker_*.py` (models, feeds against local http server
   main-thread driven, stepped, snapped to whole pixels (at ~100 px/s the step alternates 1/2 px), so any main-thread work shows as a visible jump. Now every lane is a chain of PAGES (one element with
   several consecutive headlines, 2-3 bar widths, at most 8192 px, `will-change: transform`) each with ONE `element.animate()` transform animation, linear, fractional px, the next page given an exact
   `startTime` on `document.timeline`; nothing else is animated and nothing is positioned per frame. See the measurements in docs/layout-and-ticker.md. Do not "improve" it with `steps()`, rounding
-  or per-frame scripts.
+  or per-frame scripts. Measured before/after on venus (docs/layout-and-ticker.md): 60 vs 30 frames/s, longest gap 21.5 ms vs 311 ms with the main thread blocked, 0 main-thread commits per second.
+- **Any animation costs ~31 % of a core in this CEF on Wayland (60 fps compositing + an empty BeginMainFrame per frame)**, a single animated empty div included: do not chase that number in the ticker's code.
 - **`Display::DrawAndSwap` gaps are not vsync gaps**: under labwc the compositor frame times came out as a 8/20/20 ms pattern at 60 Hz (mean 16.7 ms) on venus, with or without the ticker; judge a crawl by frames drawn
   per second and the longest gap (no frame skipped), and by the trace's `Raster`/`Paint` counts, not by the spacing of draw events.
 - **DDC/CI power is blind, and DPMS is the first choice (measured 2026-10-25 on an LG Ultrafine and a Realtek "FHD demoset" board, user decision "always DPMS first").** `0xD6 <- 04` switches the panel off but the link and the EDID stay
