@@ -93,8 +93,11 @@ All on the real boards with the real compositor (labwc 0.8.3), pure Wayland (no 
 | test | venus (Intel Iris Xe, x86_64, DP-1 640x480 forced + DP-2 1920x1080) | Pi 4 (V3D, arm64, HDMI-A-1/2 forced) |
 |---|---|---|
 | `outputs.py --hotplug`: one frameless window per output, fullscreen on its output, sizes, app_id, off/on, move back, close | 18/18 PASS (19 in the last runs) | 18/18 PASS (forced connectors, no monitor attached at that time) |
-| `observer_hotplug.py`: windows follow `OnDisplayAdded/Removed` | all PASS (9 checks, 8 runs) | not run |
-| ceftests `Views*` (x86_64, `--ozone-platform=wayland`) | 105 pass, none fail (includes `WindowFullscreenOnDisplay`, `DisplayObserverAddRemove`) | not run |
+| `observer_hotplug.py`: windows follow `OnDisplayAdded/Removed` | all PASS (9 checks, 8 runs) | not run (one real output; a second connector cannot be forced on the image: `force` is accepted, the status stays disconnected) |
+| `observer_metrics.py`: `OnDisplayMetricsChanged` on `wlr-randr --mode` | not run | PASS: 69 ms (1280x720) and 73 ms (back to 1920x1080) after the command, with a window open; with NO window open Chromium's display list did not change at all and no event came |
+| ceftests `Views*` (`--ozone-platform=wayland`) | 105 pass, none fail (includes `WindowFullscreenOnDisplay`, `DisplayObserverAddRemove`) | 105 pass, none fail (arm64 binary) |
+| `outputs.py` on the real output (one output: window fullscreen on it, size, app_id, GetDisplay, close) | 19/19 with two outputs | 9/9 (HDMI-A-1 "HJW HDMI TO USB", 1920x1080, capture card) |
+| `views_test.py` | OK | OK (image's compositor, aarch64 cp313 wheel with the observer, Python 3.13) |
 | `views_test.py` (cefpython unit test) | OK on Wayland and on X11 (the backend is chosen from the environment) | not run (Pi reserved by another session) |
 | doc example `api/Window.md` verbatim | works | - |
 | `old_windowinfo.py`: parentless WindowInfo, CloseBrowser | window closes, `OnBeforeClose` | - |
@@ -104,7 +107,9 @@ All on the real boards with the real compositor (labwc 0.8.3), pure Wayland (no 
 
 ### Frame rate, CPU, memory (`tools/cef-wayland-tests/perf.py`, 15-20 s, whole process tree, PSS)
 
-Views window against a Chrome-style window opened through DevTools (the viewer's current workaround), fullscreen, same compositor.
+Views window against a Chrome-style window opened through DevTools (the workaround the viewer used before), fullscreen, same compositor,
+same output, the page draws every `requestAnimationFrame` (fps counted by the page). Pi: the image's own labwc (unitotem-compositor),
+HDMI-A-1 = the HDMI capture card at 1920x1080, `--gpu pi` flags, 20 s per run; venus: 15 s per run, DP-2 1920x1080.
 
 | board | page | mode | fps | CPU (% of a core) | PSS MB |
 |---|---|---|---|---|---|
@@ -114,18 +119,15 @@ Views window against a Chrome-style window opened through DevTools (the viewer's
 | | | DevTools | 60.0 | 39.0 | 433 |
 | | idle page | Views | 60.0 | 13.5 | 399 |
 | | | DevTools | 60.0 | 14.1 | 417 |
-| Pi 4 (HDMI-A-1 forced 1920x1080 for WebGL2, see note) | WebGL2 | Views | 60.0 | 76.0 | 375 |
-| | | DevTools | 60.0 | 77.0 | 391 |
-| Pi 4 | canvas 2D | Views | 60.0 (1024x768) | 77.7 | 373 |
-| | | DevTools | 60.3 (800x600) | 68.0 | 381 |
-| Pi 4 | idle | Views | 60.0 | 11.5 | 360 |
-| | | DevTools | 60.3 | 11.3 | 378 |
+| Pi 4 1920x1080 (real output) | WebGL2 | Views | 60.0 | 75.8 | 371 |
+| | | DevTools | 60.0 | 76.9 | 385 |
+| | canvas 2D | Views | 60.0 | 86.0 | 369 |
+| | | DevTools | 60.0 | 84.6 | 376 |
+| | idle page | Views | 60.0 | 11.4 | 356 |
+| | | DevTools | 60.0 | 11.9 | 375 |
 
-Views windows use 2-5% less memory and the same CPU and frame rate. Note for the Pi rows: there was no monitor, the outputs are
-forced connectors (`echo on > /sys/kernel/debug/dri/1/HDMI-A-1/force`); the 1920x1080 mode of the WebGL2 row is a custom mode set with
-`wlr-randr --custom-mode`, the canvas/idle rows ran at the sizes in the table (the DevTools window is not the output size, see the
-measurement traps in CLAUDE.md), so the Pi CPU numbers of the two modes are only comparable in the WebGL2 and idle rows. The Pi numbers
-say the Views path costs nothing extra; they are not a statement about scanout to a real monitor.
+Views windows run at the same frame rate and CPU and use 2-5% less memory (one run per cell; CPU differences of 1-2 points are noise).
+An earlier Pi run on forced connectors (no monitor) gave the same picture (60 fps, 76/77% CPU WebGL2).
 
 ## Behaviour changes of the cefpython branch (regression analysis)
 
@@ -195,15 +197,15 @@ on the image (`unitotem-compositor` active) it stops `unitotem-manager`, uses th
 the manager again at the end (the compositor unit is never touched); on a board with the X session it starts its own labwc and brings X back.
 For the Pi (no `--off` of the last output, so no hot-plug there):
 `CEFTESTS_PKG=/tmp/ceftests-pkg-aarch64 OUTPUT=HDMI-A-1 tools/cef-wayland-tests/run-suite.sh 192.168.1.173 aarch64`. Validated in X mode on
-venus (all parts); image mode has not run on a board yet.
+venus (all parts) and in image mode on the Pi (this run: `W=/run/cefsuite CEFPY=dev OUTPUT=HDMI-A-1`, everything in `/run` because `/tmp` of the image is 256 MB).
 
 ## Not verified
 
 * Windows and macOS: not built (reasons above). `SetFullscreenOnDisplay` on Windows and macOS only passes the id to Chromium's widgets
   (`HWNDMessageHandler::SetFullscreen`, `NativeWidgetMacNSWindowHost::SetFullscreen` take a target display id): their behaviour is untested.
-* aarch64: libcef, wheels and debs are built; the arm64 `views_test`, `outputs.py`, ceftests and perf have not run on an image yet (the Pi
-  is reserved); the Pi numbers above are from forced connectors without a monitor.
-* A real monitor on either board; a compositor other than labwc (the output-name lookup relies on the wlroots description format).
+* aarch64: `outputs.py`, `views_test.py`, ceftests `Views*`, the metrics observer and perf ran on the Pi 4 image (labwc, real output). Not run there:
+  the hot-plug observer test (no second output can be forced), `x11_embed` (no X on the image).
+* A monitor other than the HDMI capture card on the Pi and a second real monitor on venus; a compositor other than labwc (the output-name lookup relies on the wlroots description format).
 * X11 behaviour of the new CEF methods (only the fallback `SetFullscreen(true)` path; the cefpython regression on X11 was run).
 * The observer's `OnDisplayMetricsChanged` was not provoked (no test changes metrics); only added/removed were measured.
 * The forum was not searched for existing discussions of choosing a display; the GitHub issue tracker was (queries SetFullscreen, fullscreen

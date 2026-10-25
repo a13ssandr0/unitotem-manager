@@ -1,3 +1,12 @@
+unitotem-manager (3.0.0~dev8) stable; urgency=medium
+
+  * python3-cefpython3: wheels rebuilt with CefDisplayObserver (CEF patch 0006):
+    cef.Display.AddObserver() tells when an output is added or removed, so a
+    window can be opened on a new output without polling FindByOutputName
+  * The other packages are rebuilt unchanged from the tree
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sun, 25 Oct 2026 16:36:01 +0100
+
 unitotem-manager (3.0.0~dev7) stable; urgency=medium
 
   * python3-cefpython3: wheels rebuilt from CEF 147 with the Wayland patch series

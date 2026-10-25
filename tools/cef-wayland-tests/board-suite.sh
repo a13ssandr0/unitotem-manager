@@ -8,7 +8,7 @@
 #      HOTPLUG=OUTPUT  also unplug/re-plug that output in outputs.py (not for the last output of a Pi: it cannot be disabled)
 #      SECONDS_PERF=15  PERF_GPU=pi|vaapi|none (default: from the machine)  OUTPUT=NAME (default: the first output, for perf)
 #      SKIP="outputs views ceftests perf"  to skip parts
-W=${W:-/var/lib/unitotem/wl}
+W=${W:-/var/lib/unitotem/wl}; export W
 T=$W/tests; export WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0
 unset XDG_RUNTIME_DIR
 export LD_LIBRARY_PATH=$W/extra
@@ -36,6 +36,7 @@ PY
 skip() { case " $SKIP " in *" $1 "*) return 0;; esac; return 1; }
 cd /tmp
 if ! skip outputs; then echo "== outputs.py"; timeout 300 python3 $T/outputs.py ${HOTPLUG:+--hotplug $HOTPLUG} 2>&1 | grep -v "dbus\|^$\|DevTools\|Vulkan"; fi
+if [ -n "$HOTPLUG" ] && ! skip observer; then echo "== observer_hotplug.py $HOTPLUG"; timeout 300 python3 $T/observer_hotplug.py $HOTPLUG 2>&1 | grep -v "dbus\|^$\|DevTools\|Vulkan"; fi
 if ! skip views; then echo "== views_test.py"; (cd $W/fork/unittests && timeout 300 python3 views_test.py 2>&1 | grep -v "dbus\|^$\|DevTools\|Vulkan" | tail -n 12); fi
 if ! skip ceftests && [ -x $W/ceftests/ceftests ]; then echo "== ceftests (Views suites)"; (cd $W/ceftests && timeout 900 ./ceftests --no-sandbox --ozone-platform=wayland --gtest_filter="ViewsWindowTest.*:ViewsBrowserViewTest.*:ViewsPanelTest.*" 2>&1 | grep "FAILED\|PASSED\|tests ran\|WindowFullscreenOnDisplay\|DisplayObserver"); fi
 if ! skip perf; then

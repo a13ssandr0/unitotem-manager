@@ -9,8 +9,9 @@ import json, os, re, subprocess, sys, time
 from cefpython3 import cefpython as cef
 
 OUT = sys.argv[1]
-WL = os.environ.get('WL_TOOLS', '/var/lib/unitotem/wl/usr/bin')
-ENV = dict(os.environ, LD_LIBRARY_PATH='/var/lib/unitotem/wl/extra')
+W = os.environ.get('W', '/var/lib/unitotem/wl')
+WL = os.environ.get('WL_TOOLS', W + '/usr/bin')
+ENV = dict(os.environ, LD_LIBRARY_PATH=W + '/extra')
 t0 = [0.0]
 log = []
 fails = []
