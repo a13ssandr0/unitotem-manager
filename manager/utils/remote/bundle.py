@@ -49,7 +49,13 @@ def assignments() -> list[tuple[str, str, str]]:
 def plan_for(viewer_id: str) -> Plan:
     """What goes with the node whose windows are known here as `viewer_id`"""
     default = playlists_manager._default_id
-    return transfer.plan_leave(playlist_files(), assignments(), viewer_id, default)
+    used = assignments()
+    vm = _vm()
+    if vm is not None:
+        # the panes of the other windows use playlists too: they must not be taken for unused and removed (the panes of the
+        # leaving node are not carried over: its layouts are dropped, and what they showed stays here)
+        used += [(vid, screen, pid) for vid, screen, _pane, pid in vm.pane_assignments() if vid != viewer_id]
+    return transfer.plan_leave(playlist_files(), used, viewer_id, default)
 
 
 def plan_everything() -> Plan:

@@ -23,6 +23,7 @@
                   <span class="text-caption font-weight-medium">{{ win.hostname }}</span>
                   <span class="text-caption text-medium-emphasis">{{ win.screen_label }}</span>
                   <span class="text-caption text-disabled">{{ win.width }}x{{ win.height }}</span>
+                  <span v-if="win.pane_count > 1" class="text-caption text-primary">{{ win.pane_count }} panes: this is the main one</span>
                 </div>
               </th>
             </tr>
@@ -92,20 +93,6 @@
                 </div>
               </td>
             </tr>
-            <tr v-if="canTicker">
-              <td class="playlist-col">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="small" color="primary">mdi-rss</v-icon>
-                  <div>
-                    <div class="font-weight-medium">RSS ticker</div>
-                    <div class="text-caption text-medium-emphasis">A news crawl and clock bar over or beside the content</div>
-                  </div>
-                </div>
-              </td>
-              <td v-for="win in windows" :key="win.key" class="text-center">
-                <TickerSettings :viewer-id="win.viewer_id" :window-id="win.window_id" />
-              </td>
-            </tr>
             <tr>
               <td class="playlist-col">
                 <div class="d-flex align-center ga-2">
@@ -158,6 +145,22 @@
             </tr>
           </tbody>
         </v-table>
+      </v-col>
+    </v-row>
+
+    <!-- What each window is made of: the rectangle its content is drawn in, and its panes -->
+    <v-row v-if="windows.length" class="mt-2">
+      <v-col>
+        <h3 class="text-h6 mb-1">Window layout</h3>
+        <p class="text-body-2 text-medium-emphasis mb-4">
+          A window can leave blank space around its content (the area) and be divided into panes, each with a playlist of its own.
+          <template v-if="!canConfigureLayout">Only an administrator can change the area and the panes; the playlist of each pane can be chosen here.</template>
+        </p>
+        <v-row>
+          <v-col v-for="win in windows" :key="win.key" cols="12" lg="6" xl="4">
+            <WindowLayout :win="win" :playlists="playlists" :can-edit="canConfigureLayout"/>
+          </v-col>
+        </v-row>
       </v-col>
     </v-row>
 
@@ -233,6 +236,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { api, canCall } from '@/api'
+import WindowLayout from '@/components/WindowLayout.vue'
 
 const viewersMap = ref({})    // instance_id → viewer info
 const playlists = api.Scheduler.playlists.use({pick: 'playlists', initial: []})
@@ -266,9 +270,18 @@ const windows = computed(() =>
       keyboard: {enabled: false, button_position: 'bottom-right', layout: 'english', ...win.keyboard},
       screensaver: {enabled: false, home_url: '', idle_timeout: 120, ...win.screensaver},
       refresh: {refresh_after_idle: null, refresh_schedules: [], ...win.refresh},
+      orientation: win.orientation ?? 0,
+      hostname_label: viewer.hostname,
+      layout: {...DEFAULT_LAYOUT, ...win.layout},
+      pane_count: countLeaves((win.layout ?? DEFAULT_LAYOUT).tree),
     }))
   )
 )
+
+// What a window without a stored layout is: one pane filling it
+const DEFAULT_LAYOUT = {area: {left: 0, top: 0, width: 100, height: 100, margin_color: 'rgb(0,0,0)'},
+  tree: {kind: 'leaf', id: 1}, main: 1, panes: {}}
+const countLeaves = node => node.kind === 'leaf' ? 1 : countLeaves(node.a) + countLeaves(node.b)
 
 function isAssigned(playlistId, win) {
   return win.assigned_playlist === playlistId
@@ -296,7 +309,9 @@ async function toggle(playlistId, win) {
 const currentUser = api.Settings.Security.current_user.use()
 const canConfigureKeyboard = computed(() => canCall('Viewers/set_keyboard', currentUser.value))
 const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/sources', currentUser.value)) // admin only (the RSS ticker)
-const keyboardPositions =['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
+// ... and so are the area and the panes of a window (the playlist of each pane is the scheduler's)
+const canConfigureLayout = computed(() => canCall('Viewers/set_area', currentUser.value))
+const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
 const keyboardLayouts = ['english', 'italian', 'german', 'french', 'spanish', 'brazilian', 'russian', 'polish', 'czech',
   'greek', 'turkish', 'ukrainian']
 function setKeyboard(win, patch) {
@@ -326,6 +341,8 @@ function updateWindow(msg, key, value) {
 }
 api.Viewers.screensaver.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'screensaver', settings))
 api.Viewers.refresh.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'refresh', settings))
+// the layout of one window, pushed by the server after every change (a refusal comes with `error` and no layout)
+api.Viewers.layout.on(({viewer_id, window_id, layout}) => { if (layout) updateWindow({viewer_id, window_id}, 'layout', layout) })
 
 const audioOutputs = ref({})   // viewer id -> outputs its windows can use
 

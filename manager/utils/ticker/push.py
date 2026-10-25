@@ -42,6 +42,8 @@ async def refresh_all(send: Send, webviews: dict):
     """Every window gets its settings and list again (after a restore or a reset replaced them)."""
     merged = ticker.store().merged()
     for viewer_id, info in webviews.items():
+        if not info.get('layout'):
+            continue        # a viewer of an older version does not know the message
         for window in info.get('windows', []):
             settings = ticker.windows().get(window_key(viewer_id, window.get('screen_name')))
             try:
@@ -53,6 +55,8 @@ async def refresh_all(send: Send, webviews: dict):
 async def items_changed(send: Send, webviews: dict, items: list[dict]):
     """The merged list is different: every window with a bar gets it."""
     for viewer_id, info in webviews.items():
+        if not info.get('layout'):
+            continue
         for window in info.get('windows', []):
             settings = ticker.windows().get(window_key(viewer_id, window.get('screen_name')))
             if not settings.enabled:

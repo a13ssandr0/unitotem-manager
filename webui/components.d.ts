@@ -15,6 +15,7 @@ declare module 'vue' {
     CardColumn: typeof import('./src/components/CardColumn.vue')['default']
     FloatingWindow: typeof import('./src/components/FloatingWindow.vue')['default']
     NotificationMenu: typeof import('./src/components/NotificationMenu.vue')['default']
+    PaneTree: typeof import('./src/components/PaneTree.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScreenControl: typeof import('./src/components/ScreenControl.vue')['default']
@@ -24,6 +25,7 @@ declare module 'vue' {
     TickerSources: typeof import('./src/components/TickerSources.vue')['default']
     TouchMapping: typeof import('./src/components/TouchMapping.vue')['default']
     VncWindow: typeof import('./src/components/VncWindow.vue')['default']
+    WindowLayout: typeof import('./src/components/WindowLayout.vue')['default']
     WindowTaskbar: typeof import('./src/components/WindowTaskbar.vue')['default']
   }
 }

@@ -3,19 +3,18 @@ import pytest
 from unitotem_node.system.screens.mechanism import NoMechanismAvailable, resolve_mechanism
 
 
-def test_auto_power_on_prefers_cec_then_ddc_then_output():
-    assert resolve_mechanism({'cec', 'ddc', 'output'}, 'on') == 'cec'
-    assert resolve_mechanism({'ddc', 'output'}, 'on') == 'ddc'
-    assert resolve_mechanism({'output'}, 'on') == 'output'
+def test_auto_power_on_prefers_the_compositor_then_cec_then_ddc():
+    # user decision 2026-10-25: DPMS first, it is the one mechanism with full control
+    assert resolve_mechanism({'cec', 'ddc', 'output'}, 'on') == 'output'
+    assert resolve_mechanism({'cec', 'ddc'}, 'on') == 'cec'
+    assert resolve_mechanism({'ddc'}, 'on') == 'ddc'
 
 
-def test_auto_power_off_prefers_ddc_then_cec_then_output():
-    # DDC/CI reliably powers a monitor down (confirmed real on the dev host:
-    # 0xD6 answered on every monitor tried), which is why the order flips
-    # relative to power-on.
-    assert resolve_mechanism({'cec', 'ddc', 'output'}, 'off') == 'ddc'
-    assert resolve_mechanism({'cec', 'output'}, 'off') == 'cec'
-    assert resolve_mechanism({'output'}, 'off') == 'output'
+def test_auto_power_off_prefers_the_compositor_then_ddc_then_cec():
+    # a DDC/CI standby keeps the link: the compositor cannot see it, wake it or tell the screen is off (measured on an LG Ultrafine)
+    assert resolve_mechanism({'cec', 'ddc', 'output'}, 'off') == 'output'
+    assert resolve_mechanism({'cec', 'ddc'}, 'off') == 'ddc'
+    assert resolve_mechanism({'cec'}, 'off') == 'cec'
 
 
 def test_x_only_output_resolves_to_x_for_both_actions():

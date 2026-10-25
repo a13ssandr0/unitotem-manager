@@ -11,6 +11,7 @@ from utils.notifications import notifications
 from utils.ticker import fetcher, push
 from utils.ticker.service import FAILS_BEFORE_NOTIFYING, TickerService, notification_key
 from utils.ticker.store import TickerStore
+from utils.models.layout import WindowLayouts
 from utils.ticker.windows import WindowTickers
 
 
@@ -304,7 +305,7 @@ async def test_with_no_source_the_task_sleeps_forever(store, clock):
 
 @pytest.fixture
 def windows(tmp_path, store, monkeypatch):
-    w = WindowTickers(tmp_path / 'window_tickers.json')
+    w = WindowTickers(WindowLayouts(tmp_path / 'window_layouts.json'))
     monkeypatch.setattr(ticker, '_windows', w)
     monkeypatch.setattr(ticker, '_store', store)
     return w
@@ -339,9 +340,9 @@ async def test_a_window_that_appears_gets_settings_and_list_only_if_its_bar_is_o
 async def test_a_new_list_goes_to_the_windows_with_a_bar_only(windows):
     windows.put('v1|A', TickerSettings(enabled=True))
     windows.put('v1|B', TickerSettings(enabled=False))
-    webviews = {'v1': {'windows': [{'window_id': 0, 'screen_name': 'A'}, {'window_id': 1, 'screen_name': 'B'},
+    webviews = {'v1': {'layout': True, 'windows': [{'window_id': 0, 'screen_name': 'A'}, {'window_id': 1, 'screen_name': 'B'},
                                    {'window_id': 2, 'screen_name': 'C'}]},
-                'v2': {'windows': [{'window_id': 0, 'screen_name': 'A'}]}}
+                'v2': {'layout': True, 'windows': [{'window_id': 0, 'screen_name': 'A'}]}}
     sent = Sent()
     await push.items_changed(sent, webviews, [{'time': 1, 'source': 's', 'title': 't', 'summary': '', 'link': ''}])
     assert [(v, kw['window_id']) for v, _t, kw in sent] == [('v1', 0)]
@@ -359,8 +360,8 @@ async def test_turning_the_bar_off_tells_the_window_without_a_list(windows, stor
 async def test_one_unreachable_viewer_does_not_block_the_rest(windows):
     windows.put('v1|A', TickerSettings(enabled=True))
     windows.put('v2|A', TickerSettings(enabled=True))
-    webviews = {'v1': {'windows': [{'window_id': 0, 'screen_name': 'A'}]},
-                'v2': {'windows': [{'window_id': 0, 'screen_name': 'A'}]}}
+    webviews = {'v1': {'layout': True, 'windows': [{'window_id': 0, 'screen_name': 'A'}]},
+                'v2': {'layout': True, 'windows': [{'window_id': 0, 'screen_name': 'A'}]}}
     got = []
 
     async def send(viewer, target, **kw):
@@ -373,15 +374,29 @@ async def test_one_unreachable_viewer_does_not_block_the_rest(windows):
 
 # ── window storage and backup ────────────────────────────────────────────────
 
-def test_window_tickers_persist_and_ignore_bad_entries(tmp_path):
-    path = tmp_path / 'w.json'
-    w = WindowTickers(path)
+def test_the_bar_lives_inside_the_window_layout(tmp_path):
+    from utils.models.layout import WindowLayout
+    layouts = WindowLayouts(tmp_path / 'l.json')
+    w = WindowTickers(layouts)
     w.put('v|A', TickerSettings(enabled=True, rows=2, speed=3))
-    again = WindowTickers(path)
-    assert again.get('v|A').rows == 2 and again.get('v|nothing') == TickerSettings()
-    path.write_text('{"windows": {"v|A": {"speed": "fast"}, "v|B": {"enabled": true}}}')
-    again.load()
-    assert list(again.all_settings()) == ['v|B']
+    assert w.get('v|A').rows == 2 and w.get('v|nothing') == TickerSettings()
+    # saved to the layout file, and reloaded with it
+    again = WindowTickers(WindowLayouts.load(tmp_path / 'l.json'))
+    assert again.get('v|A').speed == 3
+    # a layout saved by the panes editor keeps the bar (and a window with only a bar keeps its entry)
+    layouts.put('v|A', layouts.get('v|A').model_copy(update={'area': layouts.get('v|A').area}))
+    assert w.get('v|A').enabled
+    # a default bar on a default layout leaves no entry
+    w.put('v|A', TickerSettings())
+    assert 'v|A' not in layouts.windows
+    assert WindowLayout().ticker == TickerSettings()
+
+
+def test_a_viewer_without_layout_support_is_not_sent_the_bar(windows):
+    windows.put('v1|A', TickerSettings(enabled=True))
+    sent = Sent()
+    asyncio.new_event_loop().run_until_complete(push.items_changed(sent, {'v1': {'windows': [{'window_id': 0, 'screen_name': 'A'}]}}, []))
+    assert sent == []
 
 
 def test_backup_part_roundtrip_and_reset(store, windows, monkeypatch):
@@ -399,15 +414,13 @@ def test_backup_part_roundtrip_and_reset(store, windows, monkeypatch):
     part = backup.parts()['ticker']
     assert part.export_files is None
     store.add(TickerSource(url='http://a/rss', name='A'))
-    windows.put('v|A', TickerSettings(enabled=True, template='{title}'))
     data = json.loads(json.dumps(part.export()))
-    assert data['sources'][0]['url'] == 'http://a/rss' and data['windows']['v|A']['template'] == '{title}'
+    assert data['sources'][0]['url'] == 'http://a/rss' and 'windows' not in data     # the bars are part of the layouts
     assert 'items' not in data                         # what the feeds said is cache, not backup
     part.reset()
-    assert store.sources == [] and windows.all_settings() == {}
+    assert store.sources == []
     part.restore(data, 1)
-    assert [s.name for s in store.sources] == ['A'] and windows.get('v|A').template == '{title}'
+    assert [s.name for s in store.sources] == ['A']
     # a hostile archive: bad entries are skipped, not fatal
-    part.restore({'sources': [{'url': 'file:///etc/passwd'}, {'url': 'http://ok/rss'}],
-                  'windows': {'v|A': {'speed': 'x'}}}, 1)
-    assert [s.url for s in store.sources] == ['http://ok/rss'] and windows.all_settings() == {}
+    part.restore({'sources': [{'url': 'file:///etc/passwd'}, {'url': 'http://ok/rss'}]}, 1)
+    assert [s.url for s in store.sources] == ['http://ok/rss']
