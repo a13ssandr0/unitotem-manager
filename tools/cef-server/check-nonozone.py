@@ -3,10 +3,13 @@
 translation units WITH and WITHOUT -DUSE_OZONE. Without it BUILDFLAG(IS_OZONE) is 0, which is what Windows and macOS see in shared
 code: this checks that code path (types, includes, guards) as far as Linux headers allow. It is NOT a Windows/macOS build: no Windows
 SDK/MSVC or Apple SDK is available (gn gen fails with KeyError 'WINDOWSSDKDIR' / mac_sdk.gni).
+Env CEF_OVERLAY=/path/with/cef/dir: compile the files of that CEF checkout (its `cef/` directory is put first on the include path) instead of the
+tree's own, e.g. a master checkout against the flags of the Chromium 147 out dir (errors that come from the version gap show with the unpatched
+base too: compare the base and the patched counts).
 usage (on the build server, in a tree with out/Release_GN_x64 built): sudo python3 check-nonozone.py ozone|nonozone FILE...
   FILE is relative to chromium/src/cef, e.g. libcef/browser/views/window_impl.cc
 """
-import re,subprocess,sys,shlex
+import os,re,subprocess,sys,shlex
 O='/nas/cef-build/work/chromium/src/out/Release_GN_x64'
 txt=open(O+'/obj/cef/libcef_static.ninja').read()
 def var(n):
@@ -30,7 +33,10 @@ mode=sys.argv[1]  # nonozone | ozone
 if mode=='ozone': defs.append('-DUSE_OZONE')
 rc=0
 for f in sys.argv[2:]:
-    cmd=[clang,'-fsyntax-only','-Wno-unused-command-line-argument']+defs+inc+cf+cc+['../../cef/'+f]
+    ov=os.environ.get('CEF_OVERLAY')
+    extra=['-I'+ov] if ov else []
+    src=(ov+'/cef/'+f) if ov else '../../cef/'+f
+    cmd=[clang,'-fsyntax-only','-Wno-unused-command-line-argument']+extra+defs+inc+cf+cc+[src]
     r=subprocess.run(cmd,cwd=O,capture_output=True,text=True)
     errs=[l for l in r.stderr.splitlines() if 'error' in l]
     print(mode,f,'rc',r.returncode,'errors',len(errs)); [print('  ',l[:230]) for l in errs[:6]]
