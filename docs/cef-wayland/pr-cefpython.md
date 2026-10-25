@@ -11,7 +11,7 @@ resolved). Suggested base: `cefpython147-qt` of `linesight/cefpython` (so it rid
 arm64 commits) is what the UniTotem repository builds.
 
 **Not tested on Windows or macOS** (everything new is platform independent Views code; the Linux parts are inside `IF UNAME_SYSNAME ==
-"Linux"`). Tested on Linux x86_64, Python 3.13 (and 3.14 for the Views test from the wheel); aarch64 builds, not yet run on a board.
+"Linux"`). Tested on Linux x86_64, Python 3.13 (and 3.14 for the Views test from the wheel); aarch64 (Raspberry Pi 4, Python 3.13): `views_test.py`, `outputs.py` pass.
 
 ## Title
 
@@ -42,5 +42,5 @@ libcef_dll_wrapper do not match"). Making the three methods optional at build ti
 
 `unittests/_test_runner.py` on an X11 session: 85 tests pass with the unmodified module, 93 with this branch (85 + the 8 of `views_test`).
 `views_test.py` on a Wayland compositor (labwc, pure Wayland): pass; `outputs.py` (UniTotem repository, 19 checks, two outputs, hot-plug and
-move) pass; `observer_hotplug.py` (9 checks) pass. The two examples were run. Not tested: Windows, macOS, a Pi/aarch64 run, Python
-versions other than 3.13/3.14, PyInstaller.
+move) pass; `observer_hotplug.py` (9 checks) pass. The two examples were run. Not tested: Windows, macOS, Python versions other than 3.13/3.14,
+PyInstaller.

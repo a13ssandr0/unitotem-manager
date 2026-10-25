@@ -10,7 +10,7 @@ CEF's rules (docs/contributing_with_git.md) ask for an issue number in the commi
 Windows machine). Linux only: x86_64 and aarch64 builds, ceftests Views suites on x86_64 under labwc. As a partial check the touched
 translation units (`display_impl.cc`, `window_impl.cc`, `window_view.cc`, `view_util_aura.cc`) were compiled syntax-only with Chromium's
 clang both with and without `USE_OZONE`; without it `BUILDFLAG(IS_OZONE)` is 0, which is what Windows and macOS see (`tools/cef-server/check-nonozone.py`).
-It does not replace a Windows or macOS build. aarch64 was built and the wheel hashes checked; the arm64 ceftests were not run yet.
+It does not replace a Windows or macOS build. aarch64: built, and run on a Raspberry Pi 4 image (labwc, real 1080p output): ceftests Views* 105 pass, outputs/views tests pass.
 
 ## Title
 
@@ -57,7 +57,8 @@ fires. 18 checks pass on both boards, 19 on x86_64 with the observer. ceftests (
 pass, including `WindowFullscreenOnDisplay` (`WAYLAND_DEBUG` shows `set_fullscreen(wl_output)` then `unset_fullscreen`) and
 `DisplayObserverAddRemove`. The test of the observer only checks registration: display changes cannot be provoked from ceftests.
 
-Not tested: Windows, macOS, X11 for the new methods (the X11 path only calls `SetFullscreen(true)`), a real monitor on the Pi (aarch64
-results are from forced connectors), the arm64 ceftests, observer behaviour on compositors other than labwc.
+Not tested: Windows, macOS, X11 for the new methods (the X11 path only calls `SetFullscreen(true)`), a real monitor (the Pi output is an HDMI
+capture card), observer behaviour on compositors other than labwc. Observation: with no window open Chromium's display list did not follow a
+mode change at all (no `OnDisplayMetricsChanged`); with a window open it fires, 69-73 ms after the mode change.
 
 Related: #2804, #4273, #4274.
