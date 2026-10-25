@@ -17,6 +17,7 @@ from loguru import logger
 import utils.plugins as plugins
 from utils import osusers, sessions
 from utils.models.assets import AssetsManager
+from utils.models.layout import WindowLayouts, window_layouts
 from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager
 from utils.models.user import user_manager
@@ -46,6 +47,32 @@ def _reset_playlists():
     for am in playlists_manager.playlists.values():
         am.assets.clear()
         am.save()
+
+
+# ── window layouts (the area and the panes of each window) ────────────────────
+
+def _export_layouts():
+    return window_layouts.export()
+
+
+def _restore_layouts(data, _version):
+    window_layouts.replace_all(WindowLayouts.parse(data))
+    _layouts_changed()
+
+
+def _reset_layouts():
+    window_layouts.replace_all({})
+    _layouts_changed()
+
+
+def _layouts_changed():
+    """The windows that are connected now follow the layouts that were just put in place."""
+    from webview.controller import WebviewManager
+    try:
+        WebviewManager.get_instance().layouts_reloaded()
+    except (RuntimeError, AttributeError):
+        pass        # no viewer manager yet (or no event loop): the windows read the layouts when they connect
+    _ticker_changed()   # the bar of each window is part of its layout
 
 
 # ── users ────────────────────────────────────────────────────────────────────
@@ -139,20 +166,18 @@ def _remote_changed():
 
 def _export_ticker():
     import utils.ticker as ticker
-    return {'sources': [s.model_dump() for s in ticker.store().sources], 'windows': ticker.windows().export()}
+    return {'sources': [s.model_dump() for s in ticker.store().sources]}      # the bars are in the window layouts (part `layouts`)
 
 
 def _restore_ticker(data, _version):
     import utils.ticker as ticker
     ticker.store().set_sources(data.get('sources', []))
-    ticker.windows().replace(data.get('windows', {}))
     _ticker_changed()
 
 
 def _reset_ticker():
     import utils.ticker as ticker
     ticker.store().set_sources([])
-    ticker.windows().replace({})
     _ticker_changed()
 
 
@@ -196,10 +221,11 @@ def _reset_files():
 
 CORE_PARTS = [
     BackupPart('playlists', 'Playlists', _export_playlists, _restore_playlists, _reset_playlists),
+    BackupPart('layouts', 'Window layouts (area and panes)', _export_layouts, _restore_layouts, _reset_layouts),
     BackupPart('users', 'Users', _export_users, _restore_users, _reset_users),
     BackupPart('security', 'Security settings', _export_security, _restore_security, _reset_security),
     BackupPart('remote', 'Pairing and certificates', _export_remote, _restore_remote, _reset_remote),
-    BackupPart('ticker', 'News ticker (RSS sources and bars)', _export_ticker, _restore_ticker, _reset_ticker),
+    BackupPart('ticker', 'News ticker (RSS sources)', _export_ticker, _restore_ticker, _reset_ticker),
     BackupPart('uploads', 'Uploaded files', None, None, _reset_files, _export_files, _restore_files,
                optional_in_backup=True),
 ]

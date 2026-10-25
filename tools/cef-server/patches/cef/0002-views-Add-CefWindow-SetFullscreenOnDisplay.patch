@@ -1,30 +1,31 @@
-From 29c5b23f6620cacd7d506daf1ed42f1c58459706 Mon Sep 17 00:00:00 2001
+From cd7fdde9671c24cf2d66cff78b95da75c00ec712 Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Tue, 20 Oct 2026 21:50:28 +0000
 Subject: [PATCH 2/6] views: Add CefWindow::SetFullscreenOnDisplay
 
 CefWindow::SetFullscreen(bool) leaves the choice of the display to the
-window manager or compositor. views::Widget::SetFullscreen() already
-takes a target display id, which Ozone/Wayland passes to
-xdg_toplevel.set_fullscreen(wl_output) (Windows and macOS use it too),
-but CEF has no way to supply it. X11 does not support it.
+compositor. views::Widget::SetFullscreen() takes a target display id,
+which Ozone/Wayland passes to xdg_toplevel.set_fullscreen(wl_output),
+but CEF has no way to supply it.
 
 Add CefWindow::SetFullscreenOnDisplay(int64_t display_id) (experimental
-API) taking the id of a CefDisplay. It may be called before the window
-is shown, and also for a window that is already fullscreen, to move it
-to another display (it leaves fullscreen first: labwc ignores the output
-of a fullscreen request for a toplevel that is already fullscreen). It
-behaves like SetFullscreen(true) for an invalid id or on X11.
+API). Only Wayland honors the display. On every other platform and
+Linux backend (Windows, macOS, X11) and for an invalid id it is the same
+as SetFullscreen(true): the code is under BUILDFLAG(IS_OZONE) and
+nothing changes elsewhere. It may be called before the window is shown,
+and moves a window that is already fullscreen (it leaves fullscreen
+first: labwc ignores the output of a fullscreen request for a toplevel
+that is already fullscreen).
 
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 ---
- include/views/cef_window.h          | 17 +++++++++++
- libcef/browser/views/window_impl.cc | 46 +++++++++++++++++++++++++++++
+ include/views/cef_window.h          | 16 +++++++++++++
+ libcef/browser/views/window_impl.cc | 37 +++++++++++++++++++++++++++++
  libcef/browser/views/window_impl.h  |  1 +
- 3 files changed, 64 insertions(+)
+ 3 files changed, 54 insertions(+)
 
 diff --git a/include/views/cef_window.h b/include/views/cef_window.h
-index 06221be3b..fcd017164 100644
+index 06221be3b..f57312780 100644
 --- a/include/views/cef_window.h
 +++ b/include/views/cef_window.h
 @@ -38,6 +38,7 @@
@@ -35,7 +36,7 @@ index 06221be3b..fcd017164 100644
  #include "include/cef_image.h"
  #include "include/cef_menu_model.h"
  #include "include/views/cef_display.h"
-@@ -173,6 +174,22 @@ class CefWindow : public CefPanel {
+@@ -173,6 +174,21 @@ class CefWindow : public CefPanel {
    /*--cef()--*/
    virtual void SetFullscreen(bool fullscreen) = 0;
  
@@ -43,13 +44,12 @@ index 06221be3b..fcd017164 100644
 +  ///
 +  /// Set fullscreen Window state on the Display with the specified |display_id|
 +  /// (see CefDisplay::GetID). A Window that is already fullscreen on another
-+  /// Display is moved to the requested one. This lets the application choose
-+  /// the Display on platforms that support it (Wayland, where it is
-+  /// xdg_toplevel.set_fullscreen with a wl_output, Windows and macOS). On X11,
-+  /// or for an invalid |display_id|, it behaves like SetFullscreen(true). May
-+  /// be called before the Window is shown. The
-+  /// CefWindowDelegate::OnWindowFullscreenTransition method will be called
-+  /// during the fullscreen transition for notification purposes.
++  /// Display is moved to the requested one. Only Wayland honors |display_id|
++  /// (xdg_toplevel.set_fullscreen with a wl_output). On every other platform
++  /// and Linux backend (Windows, macOS, X11), and for an invalid |display_id|,
++  /// this is the same as SetFullscreen(true). May be called before the Window
++  /// is shown. The CefWindowDelegate::OnWindowFullscreenTransition method will
++  /// be called during the fullscreen transition for notification purposes.
 +  ///
 +  /*--cef(added=experimental)--*/
 +  virtual void SetFullscreenOnDisplay(int64_t display_id) = 0;
@@ -59,64 +59,55 @@ index 06221be3b..fcd017164 100644
    /// Returns true if the Window is maximized.
    ///
 diff --git a/libcef/browser/views/window_impl.cc b/libcef/browser/views/window_impl.cc
-index d7e87e9a0..b64b1b784 100644
+index d7e87e9a0..c4b44c366 100644
 --- a/libcef/browser/views/window_impl.cc
 +++ b/libcef/browser/views/window_impl.cc
-@@ -21,6 +21,7 @@
- #include "ui/base/mojom/menu_source_type.mojom.h"
- #include "ui/base/test/ui_controls.h"
- #include "ui/compositor/compositor.h"
+@@ -36,6 +36,7 @@
+ #elif BUILDFLAG(IS_OZONE)
+ #include "ui/aura/env.h"
+ #include "ui/aura/test/event_generator_delegate_aura.h"
 +#include "ui/display/types/display_constants.h"
- #include "ui/gfx/geometry/rect.h"
- #include "ui/views/controls/button/menu_button.h"
- #include "ui/views/controls/menu/menu_runner.h"
-@@ -293,6 +294,51 @@ void CefWindowImpl::SetFullscreen(bool fullscreen) {
+ #include "ui/events/test/event_generator.h"
+ #include "ui/ozone/public/ozone_platform.h"
+ #include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
+@@ -293,6 +294,42 @@ void CefWindowImpl::SetFullscreen(bool fullscreen) {
    }
  }
  
 +void CefWindowImpl::SetFullscreenOnDisplay(int64_t display_id) {
 +  CEF_REQUIRE_VALID_RETURN_VOID();
-+  if (!widget_) {
-+    return;
-+  }
-+
-+  bool target_display_supported = true;
 +#if BUILDFLAG(IS_OZONE)
-+  // X11 does not support a target Display.
-+  target_display_supported = view_util::IsRunningOnWayland();
-+#endif
-+  if (display_id == display::kInvalidDisplayId || !target_display_supported) {
-+    SetFullscreen(true);
-+    return;
-+  }
-+
-+  if (!widget_->IsFullscreen() &&
-+      CefWidget::GetForWidget(widget_)->ToggleFullscreenMode()) {
-+    // Received special handling. This has no notion of a target Display.
-+    return;
-+  }
-+
-+  if (widget_->IsFullscreen()) {
-+    if (root_view() && root_view()->GetDisplay().id() == display_id) {
-+      // Already there.
++  // Only Wayland lets a client choose the Display of a fullscreen window.
++  if (widget_ && display_id != display::kInvalidDisplayId &&
++      view_util::IsRunningOnWayland()) {
++    if (!widget_->IsFullscreen() &&
++        CefWidget::GetForWidget(widget_)->ToggleFullscreenMode()) {
++      // Received special handling. This has no notion of a target Display.
 +      return;
 +    }
-+#if BUILDFLAG(IS_OZONE)
-+    // Move to the other Display. A Wayland compositor may ignore the output
-+    // of xdg_toplevel.set_fullscreen while the toplevel is fullscreen, so
-+    // leave fullscreen first.
-+    widget_->SetFullscreen(false);
-+#endif
-+  }
 +
-+  widget_->SetFullscreen(true, display_id);
++    if (widget_->IsFullscreen()) {
++      if (root_view() && root_view()->GetDisplay().id() == display_id) {
++        // Already there.
++        return;
++      }
++      // Move to the other Display. A Wayland compositor may ignore the output
++      // of xdg_toplevel.set_fullscreen while the toplevel is fullscreen, so
++      // leave fullscreen first.
++      widget_->SetFullscreen(false);
++    }
 +
-+#if !BUILDFLAG(IS_MAC)
-+  // See SetFullscreen().
-+  if (delegate()) {
-+    delegate()->OnWindowFullscreenTransition(this, /*is_completed=*/true);
++    widget_->SetFullscreen(true, display_id);
++
++    // See SetFullscreen().
++    if (delegate()) {
++      delegate()->OnWindowFullscreenTransition(this, /*is_completed=*/true);
++    }
++    return;
 +  }
-+#endif
++#endif  // BUILDFLAG(IS_OZONE)
++
++  SetFullscreen(true);
 +}
 +
  bool CefWindowImpl::IsMaximized() {

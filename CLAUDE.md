@@ -237,6 +237,47 @@ Everything per window and per screen, off by default, kept in viewer_settings.js
 `assign_playlist`, `unassign_playlist`, screensaver, refresh, per-window audio output); admin only the configuration of the panel
 and the layout (`keyboard`/`set_keyboard`, `add_window`, `remove_window`). The web UI hides the keyboard row from non-admins.
 
+## Window layout (area, panes)
+Design and contract with the RSS ticker: `docs/layout-and-ticker.md`. Per window, kept per screen like the keyboard (`"<viewer id>|<screen name>"`, so it survives an unplug) in
+`window_layouts.json` (`utils/models/layout.py`, core; backup part `layouts`; a window with no entry has the default). Configured only from the Viewers page
+(`WindowLayout.vue` + `PaneTree.vue`: preview of the window in content space, the area dragged/resized/typed with presets such as "centre third (vertical screen)",
+splitters dragged, per-pane playlist, split/close buttons); **admin** for `set_area`/`split_pane`/`close_pane`/`set_split_ratio`, **scheduler** for what a pane shows.
+- **`area`** = the content rectangle (percent of the window in CONTENT space, after the window's orientation, clamped never refused, min 5 %) + `margin_color` (a plain CSS colour
+  only). It replaces the old xinit trick of shrinking the window to a third of the height on the 55" vertical panel. The on-screen keyboard and the screensaver still cover the
+  WHOLE window (the screensaver overlay is `#stage`, which has the margin colour behind `#area`). Audio output stays per window.
+- **`tree`** = `Leaf(id)` / `Split(dir h|v, ratio 0.1..0.9, a, b)`, max 8 panes and 4 levels, ids never reused. The first leaf in tree order is the MAIN pane: its playlist is the
+  window's assignment in `viewer_assignments.json` (unchanged format, so `assign_playlist` without `pane_id`, old files and old clients keep meaning "the window"); the other
+  panes' playlists are `WindowLayout.panes`. Closing the main pane promotes the next one and its playlist becomes the assignment (nothing that stays on screen restarts).
+- **Operations are pure functions that return a new layout** (`split_leaf`, `close_leaf`, `set_ratio`, `set_area`, `with_pane_playlist`); `model_copy(update=)` does NOT validate,
+  so they all go through `_rebuild`. A split is addressed by a PATH of `a`/`b` from the root (`''` = root) because splits have no id; `is_default` is "area full and tree == Leaf(1)".
+- **One place makes the loops match the layout: `WebviewManager._sync_window`** (assign, unassign, split, close, restore after restart/replug/restore-from-backup all end there).
+  `PlaylistLoop` targets are `(viewer, window, pane)`; `Show`/`SetAssetAudio` carry `pane`; `SetWindowLayout {window_id, area, tree}` is pushed (with `nocache`) when a window first appears and on
+  every change. The viewer says it understands panes with `layout: true` in its `WebviewInfo`; a viewer that does not is driven as one pane and never gets the new messages (an old
+  client would show a pane's asset over the whole window).
+- **Page (`boot-screen.html`)**: `#stage` (whole window, margin colour) > `#area` (percent rectangle) > `#panes` + `#ticker-host`. One `.pane` per leaf, all FLAT and absolutely
+  positioned in percent of `#panes`: never nest them or move an element to another parent, the iframe/video would reload (a surviving pane keeps playing through splits, closes and splitter
+  drags: measured). `class Stage` = what `#stage` used to be (containers, zoom, volume, refresh, `current`); the old globals (`show`, `setAssetAudio`, `refreshPage`, `syncMedia`,
+  `showSaver`, `current`) still work and take an optional `pane`. The first pane is in the static HTML (the first frame must not wait for a script) and the boot logo is
+  sized with container units (`.boot {--boot-em: 12.5cqw}`, an eighth of the PANE's width: identical to Plymouth for a full-window pane). A new pane starts blank and is parked on the idle page
+  by the manager. A command for a pane the page does not know yet (commands of a window can overtake its layout) is kept (latest per pane) until the next layout. The page sanitises what it is told
+  (areas clamped, a tree that is not valid is ignored). `setTickerPlacement(mode, pos)` sets `#area[data-ticker|data-ticker-pos]` for the ticker package.
+- **Gotchas**: `touch-action` for the pinch switch is per pane (and `html` allows it if any pane does); the DevTools focus reports carry a per-frame id and `pagehide` says "no longer focused" (several
+  same-origin iframes share one DevTools session, and a closed pane's iframe never sends a focusout); the playlists of panes of OTHER nodes count as "used" when a client is unpaired
+  (`bundle.plan_for`), the panes of the leaving client are not carried over (its layouts are dropped, what they showed stays on the server); `Viewers/layout` is a read AND the broadcast after
+  every change, `close_pane` answers `Viewers/list` (the main assignment may have changed); tests that touch `utils.backup`/`remote.bundle` need `/var/lib/unitotem` (use a conftest-free
+  plugin that skips the mkdir, as `tools/gen-api-types.py` does, on a dev host).
+- **Tests of the layout**: `tests/test_layout.py` (model, operations, file), `tests/test_layout_controller.py` (per-pane assignments, restart, unplug/plug under a new window id,
+  renamed outputs, close/promote, old viewers, backup part, API answers), `tools/ui-panes.py` (the page's logic in a local headless Chrome: zoom/pinch/refresh/screensaver per pane,
+  junk layouts). Verified for real on a Pi 4 (1080p, DevTools screenshots): full window, centre third with a margin colour, 2 and 4 panes with different playlists, ratio/split/close while two
+  videos play (no `Show`, same element, `currentTime` keeps going), promotion of a main pane, restart of the manager with a saved layout, per-pane volume, screensaver overlay over the whole window,
+  backup/reset/restore of the part, the Viewers page driven with real mouse events (14 checks) as admin and as a scheduler-only user.
+- **The letterbox colour of an image used to be sampled by scaling it to ONE pixel**: on the Pi 4 that returned white at some point (a 64x36 canvas of the same picture was right), so every
+  picture that did not fit its pane got white bars. It is averaged over a 16x9 canvas now (`Stage.applyDominantColour`).
+- **Drags in the Vue editor listen on `window`, not on the element that was grabbed**: with a synthetic mouse (DevTools) `setPointerCapture` succeeded (`hasPointerCapture` true) and the events
+  still went to the element under the pointer, so nothing moved. `tools`-style UI tests must use `Input.dispatchMouseEvent` with `buttons` set; grabbing the middle of the area hits a gutter.
+- **A Pi that is building an image is not a place to measure** (an `xz` at 350% CPU and an rsync in D state made the manager's imports take 5 minutes and the first start time out at 300 s,
+  and 1080p VP8 drop half its frames): everything here was checked for behaviour (counts of `Show`, element identity, `currentTime`), not for speed.
+
 ## First access, VNC, suspend
 - **Accounts = operating-system accounts (user decision, 2026-10-17)**: the web login is PAM (`utils/osusers.py`, python-pam, service
   `unitotem-manager` = `/etc/pam.d/unitotem-manager`, `login` as a stand-in when missing), and only root and members of the group
@@ -895,3 +936,12 @@ Tests: `manager/tests/test_ticker_*.py` (models, feeds against local http server
   or per-frame scripts.
 - **`Display::DrawAndSwap` gaps are not vsync gaps**: under labwc the compositor frame times came out as a 8/20/20 ms pattern at 60 Hz (mean 16.7 ms) on venus, with or without the ticker; judge a crawl by frames drawn
   per second and the longest gap (no frame skipped), and by the trace's `Raster`/`Paint` counts, not by the spacing of draw events.
+- **DDC/CI power is blind, and DPMS is the first choice (measured 2026-10-25 on an LG Ultrafine and a Realtek "FHD demoset" board, user decision "always DPMS first").** `0xD6 <- 04` switches the panel off but the link and the EDID stay
+  powered: the compositor goes on listing the output as driven, DRM stays `connected/enabled/On`, and the `0xD6` read-back still says `01` (LG) or `02` (Realtek) - the read-back proves NOTHING. The monitor only
+  drops its link for an instant when it is switched on by hand. A plain `0xD6 <- 01` does NOT wake the LG from it (and neither does its button); `0xD6 <- 05` and then `01` does (found by binary search with the user watching the panel).
+  So: `mechanism._ORDER` puts `output` (wlr-randr/wlopm) first for on and off; a screen WE switched off over DDC/CEC/serial is remembered in `/var/lib/unitotem/screen_state.json` (`control._commanded_off`, shown by the
+  web UI as "off (DDC)", forgotten when the output disappears or on a switch-on), woken through the same mechanism first, DDC with the 05-then-01 reset (`ddc_ctl.set_power(wake_reset=True)`, only for a screen
+  we put to standby: 05 flickers a monitor that is on), and `wake_all` wakes at start only those. Never send DDC power commands to someone's working monitor to "see what happens": the LG stayed dark with its LED lit until the right sequence was found.
+  DDC reliability differs wildly: a Philips 246V5 on DVI answers half the reads (3-7 s each, no 0xD6 at all), a Realtek board answers every read in milliseconds.
+- **A DDC input-source write (`0x60`) is accepted (rc 0) but ignored when the target input has no signal** (Philips 246V5, 2026-10-25: VGA-1 with nothing plugged in never took the switch, the read-back correctly stayed on HDMI-1): a successful
+  `setvcp 60` proves nothing, only a read-back does, and on such monitors reads fail about half of the time. The web UI must say "sent", not "switched", and offer only inputs the monitor advertises (it already does).

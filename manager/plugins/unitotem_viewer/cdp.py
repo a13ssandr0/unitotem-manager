@@ -22,21 +22,26 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 # Reports, from any frame, whether the focus is on something that takes text. Nothing here may throw into the page.
+# Every frame reports with an identity of its own: the frames of one process (all the same-origin ones, which with several
+# panes are many) arrive over the same DevTools session, and the focus can move from a field in one to a field in another.
+# A frame that goes away (an iframe navigated, a pane closed) says it no longer has the focus, which nothing else can tell.
 FOCUS_SCRIPT = r"""
 (() => {
   if (window.__utFocusWatch) return;
   window.__utFocusWatch = true;
+  const me = Math.random().toString(36).slice(2);
   const NO_TEXT = ['button', 'checkbox', 'radio', 'submit', 'reset', 'file', 'image', 'range', 'color', 'hidden'];
   const editable = el => !!el && !el.disabled && !el.readOnly && (el.isContentEditable || el.tagName === 'TEXTAREA' ||
     (el.tagName === 'INPUT' && !NO_TEXT.includes((el.type || 'text').toLowerCase())));
   const report = () => {
     try {
       const el = document.activeElement;
-      utFocus(JSON.stringify({on: editable(el), type: editable(el) ? (el.type || el.tagName.toLowerCase()) : null}));
+      utFocus(JSON.stringify({on: editable(el), type: editable(el) ? (el.type || el.tagName.toLowerCase()) : null, frame: me}));
     } catch (e) {}
   };
   document.addEventListener('focusin', report, true);
   document.addEventListener('focusout', () => setTimeout(report, 0), true);
+  window.addEventListener('pagehide', () => { try { utFocus(JSON.stringify({on: false, type: null, frame: me})); } catch (e) {} });
 })();
 """
 
@@ -219,7 +224,7 @@ class Cdp:
             return
         data = json.loads(payload)
         if name == 'utFocus':
-            self._on_focus(window, session, bool(data.get('on')), data.get('type'))
+            self._on_focus(window, f"{session}/{data.get('frame', '')}", bool(data.get('on')), data.get('type'))
         elif name in ('utKey', 'utSaver', 'utActivity', 'utFrame') and (name == 'utActivity' or info['type'] == 'page'):
             # utActivity comes from every frame, the others from the page of the window only
             handler = self._handlers.get(name)
