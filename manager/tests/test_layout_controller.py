@@ -341,6 +341,7 @@ def test_the_layouts_of_a_viewer_that_leaves_go_with_it(tmp_path, monkeypatch):
 
 
 def test_a_playlist_shown_in_a_pane_of_another_node_is_not_removed_when_a_client_leaves(tmp_path, monkeypatch):
+    asyncio.set_event_loop(asyncio.new_event_loop())
     try:
         from utils.remote import bundle        # builds the upload manager, which needs the node's /var/lib/unitotem
     except OSError:
@@ -401,6 +402,7 @@ def test_the_web_ui_gets_the_playlist_of_every_pane_the_main_one_included(tmp_pa
 # ── backup ────────────────────────────────────────────────────────────────
 
 def test_layouts_are_a_backup_part_that_restores_and_resets(tmp_path, monkeypatch):
+    asyncio.set_event_loop(asyncio.new_event_loop())        # the upload manager built by the import wants one
     try:
         import utils.backup as backup       # builds the upload manager, which needs the node's /var/lib/unitotem
     except OSError:
@@ -424,4 +426,41 @@ def test_layouts_are_a_backup_part_that_restores_and_resets(tmp_path, monkeypatc
         assert mgr.layouts.get(KEY).leaf_ids == [1, 2]
         assert mgr._loops['B'].assigned_webviews == {(VIEWER, 0, 2)}             # the windows follow the restore at once
         assert ws.commands('SetWindowLayout')[-1]['tree']['kind'] == 'split'
+    run(go())
+
+
+# ── the API functions ─────────────────────────────────────────────────────
+
+def test_the_api_answers_with_the_layout_or_an_error(tmp_path, monkeypatch):
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    try:
+        import api.ws.endpoints                 # builds the API registry and the upload manager (needs /var/lib/unitotem)
+        from api.viewers import Viewers
+    except OSError:
+        pytest.skip('/var/lib/unitotem is not writable here (runs in autopkgtest, as root)')
+    from api.ws.responses import WSBroadcast, WSResponse
+
+    async def go():
+        mgr, ws = make_manager(tmp_path, monkeypatch)
+        monkeypatch.setattr(WebviewManager, '_instance', mgr)
+        api = Viewers(None, None)
+        for name in ('layout', 'list'):                 # the registry names the functions when it is built
+            getattr(Viewers, name).api_path = f'Viewers/{name}'
+
+        reply = api.split_pane(VIEWER, 0, 1, 'h')
+        assert isinstance(reply, WSBroadcast) and reply.target == 'Viewers/layout'
+        assert reply.kwargs['layout']['tree']['kind'] == 'split' and reply.kwargs['layout']['panes'] == {}
+        assert isinstance(api.split_pane(VIEWER, 0, 9, 'h'), WSResponse) and api.split_pane(VIEWER, 0, 9, 'h').kwargs['error']
+        assert api.split_pane(VIEWER, 7, 1, 'h').kwargs['error']                        # no such window
+        assert api.set_area(VIEWER, 0, margin_color='red; background:url(x)').kwargs['error']
+        reply = api.set_area(VIEWER, 0, top=33.33, height=33.34, margin_color='#112233')
+        assert reply.kwargs['layout']['area']['top'] == 33.33 and reply.kwargs['layout']['area']['margin_color'] == '#112233'
+        assert api.set_split_ratio(VIEWER, 0, '', 0.25).kwargs['layout']['tree']['ratio'] == 0.25
+        assert api.set_split_ratio(VIEWER, 0, 'a', 0.25).kwargs['error']
+        reply = api.assign_playlist(VIEWER, 0, 'B', 2)
+        assert reply.kwargs['viewers'][VIEWER]['windows'][0]['layout']['panes'] == {'2': 'B'}
+        assert api.assign_playlist(VIEWER, 0, 'B', 9).kwargs['error']
+        reply = api.close_pane(VIEWER, 0, 1)                                            # the main pane: the answer is the whole list
+        assert reply.kwargs['viewers'][VIEWER]['windows'][0]['assigned_playlist'] == 'B'
+        assert api.close_pane(VIEWER, 0, 2).kwargs['error']                             # the last pane
     run(go())
