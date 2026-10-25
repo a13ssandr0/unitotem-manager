@@ -90,6 +90,37 @@ class PageCommands:
         self._cef.execute_js(f'setFlip({flip})')
 
 
+class _DisplayWatch:
+    """Windows waiting for the browser to know their output. A new output reaches Qt first and the browser a moment later; the
+    browser says when (cef.Display.AddObserver, a CEF with that API), and without that API the window polls (WebviewWindow.show)."""
+
+    waiting: set = set()
+    registered = False
+
+    @classmethod
+    def available(cls) -> bool:
+        return cef is not None and hasattr(cef.Display, 'AddObserver')
+
+    @classmethod
+    def ensure(cls):
+        if not cls.registered and cls.available():
+            cef.Display.AddObserver(cls)
+            cls.registered = True
+
+    @classmethod
+    def OnDisplayAdded(cls, display):
+        for window in list(cls.waiting):
+            window.show()
+
+    @classmethod
+    def OnDisplayRemoved(cls, display):
+        pass
+
+    @classmethod
+    def OnDisplayMetricsChanged(cls, display):
+        pass
+
+
 class _BrowserViewDelegate:
     """Callbacks of the browser view of a window (cefpython Views API)."""
 
@@ -169,15 +200,27 @@ class WebviewWindow(PageCommands):
         # The browser learns about a new output a moment after Qt does, and the id changes at every plug: look it up now, and wait
         # for it (a window made too early would go fullscreen on whatever output the compositor likes)
         display = cef.Display.FindByOutputName(self.screen.name())
+        if display is None and _DisplayWatch.available() and self._attempts < DISPLAY_WAIT_TRIES:
+            _DisplayWatch.ensure()
+            if self not in _DisplayWatch.waiting:
+                _DisplayWatch.waiting.add(self)
+                QTimer.singleShot(DISPLAY_WAIT_MS * DISPLAY_WAIT_TRIES, self._give_up_waiting)      # the observer may never come
+            return
         if display is None and self._attempts < DISPLAY_WAIT_TRIES:
             self._attempts += 1
             QTimer.singleShot(DISPLAY_WAIT_MS, self.show)
             return
+        _DisplayWatch.waiting.discard(self)
         self._display_id = display.GetID() if display is not None else None
         self._view = cef.BrowserView.CreateBrowserView(
             url=f'{_BOOT_URL}?window={self._window_id}', settings={'background_color': 0xFF000000},
             delegate=_BrowserViewDelegate(self))
         self._window = cef.Window.CreateTopLevelWindow(_WindowDelegate(self))
+
+    def _give_up_waiting(self):
+        if self in _DisplayWatch.waiting and self._window is None:
+            self._attempts = DISPLAY_WAIT_TRIES
+            self.show()
 
     def execute_js(self, js: str):
         if self._browser is not None:
@@ -188,6 +231,7 @@ class WebviewWindow(PageCommands):
     def close(self):
         """Destroys the window for real (the toplevel goes away, the browser is closed)."""
         self.closed = True
+        _DisplayWatch.waiting.discard(self)
         self._pending_js.clear()
         window, self._window = self._window, None
         if window is not None:
