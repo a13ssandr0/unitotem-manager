@@ -1,3 +1,19 @@
+unitotem-manager (3.0.0~dev10) stable; urgency=medium
+
+  * Window layout: a window has a content area (blank margins, in percent of the
+    window, replaces the old xinit window geometry) and can be split into panes like
+    Konsole's split view, each pane with its own playlist; editor on the Viewers page
+    (admin), orientation and flip of each window are reported and kept across restarts
+  * RSS ticker: several sources with their own interval merged in one list, a bar per
+    window (Rich markup with f-string style fields, count/today/range selection, one or
+    two lanes, clock at the start or end, overlay or reserved space) scrolled by the
+    compositor (no jumps); new dependency python3-feedparser
+  * Screens: DPMS is the first choice to switch a screen on or off; a screen switched
+    off over DDC/CEC/serial is remembered and woken with the right sequence (DDC: 05
+    then 01); the UI shows "off (DDC)"
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sun, 25 Oct 2026 22:40:00 +0100
+
 unitotem-manager (3.0.0~dev9) stable; urgency=medium
 
   * unitotem-viewer: the base labwc configuration moves from /etc/unitotem/xdg to
