@@ -92,6 +92,20 @@
                 </div>
               </td>
             </tr>
+            <tr v-if="canTicker">
+              <td class="playlist-col">
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="small" color="primary">mdi-rss</v-icon>
+                  <div>
+                    <div class="font-weight-medium">RSS ticker</div>
+                    <div class="text-caption text-medium-emphasis">A news crawl and clock bar over or beside the content</div>
+                  </div>
+                </div>
+              </td>
+              <td v-for="win in windows" :key="win.key" class="text-center">
+                <TickerSettings :viewer-id="win.viewer_id" :window-id="win.window_id" />
+              </td>
+            </tr>
             <tr>
               <td class="playlist-col">
                 <div class="d-flex align-center ga-2">
@@ -163,6 +177,8 @@
         </v-alert>
       </v-col>
     </v-row>
+
+    <TickerSources v-if="canTicker" />
 
     <!-- Viewer detail cards -->
     <v-row v-if="viewers.length" class="mt-4">
@@ -279,7 +295,8 @@ async function toggle(playlistId, win) {
 // The keyboard of a panel is configuration of the panel, for administrators only: the row is not shown to anyone else
 const currentUser = api.Settings.Security.current_user.use()
 const canConfigureKeyboard = computed(() => canCall('Viewers/set_keyboard', currentUser.value))
-const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
+const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/sources', currentUser.value)) // admin only (the RSS ticker)
+const keyboardPositions =['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
 const keyboardLayouts = ['english', 'italian', 'german', 'french', 'spanish', 'brazilian', 'russian', 'polish', 'czech',
   'greek', 'turkish', 'ukrainian']
 function setKeyboard(win, patch) {
