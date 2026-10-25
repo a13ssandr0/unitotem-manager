@@ -118,6 +118,14 @@ class PlaylistLoop:
             webview_id, 'Show', **show_payload(self.playlist.current, window_id, self.playlist.current_page))
 
 
+    async def send_audio(self, asset: Asset):
+        """Volume and mute of `asset`, edited while it is the one on screen, to every window of this playlist: the media
+        keeps playing, a new Show would restart it."""
+        for webview_id, window_id in list(self.assigned_webviews):
+            await self.remote_ws.multicast(
+                webview_id, 'SetAssetAudio', window_id=window_id, volume=asset.volume, muted=asset.muted)
+
+
 class WebviewManager:
     """
     Manages webview connections and their playlist assignments.
@@ -180,6 +188,12 @@ class WebviewManager:
         loop = PlaylistLoop(playlist, self.remote_ws)
         self._loops[playlist.playlist_id] = loop
         loop.start()
+
+    def asset_audio_changed(self, playlist_id: str, asset: Asset):
+        """The volume or mute of an asset was edited: windows showing it right now follow at once."""
+        loop = self._loops.get(playlist_id)
+        if loop is not None and loop.playlist.current.uuid == asset.uuid:
+            asyncio.create_task(loop.send_audio(asset))
 
     def remove_playlist_loop(self, playlist_id: str):
         loop = self._loops.pop(playlist_id, None)

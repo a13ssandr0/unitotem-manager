@@ -64,6 +64,10 @@ class PageCommands:
             f'{json.dumps(bool(idle))})'
         )
 
+    def set_asset_audio(self, volume: float, muted: bool):
+        """Change volume/mute of the asset being shown, without showing it again."""
+        self._cef.execute_js(f'setAssetAudio({json.dumps(volume)}, {json.dumps(bool(muted))})')
+
     def set_audio_output(self, device: Optional[str]):
         """Send this window's sound to the output with that name (its description, as the browser lists it);
         None means the default one, i.e. whatever the system decides."""
@@ -129,12 +133,20 @@ class _BrowserViewDelegate:
 
     def OnBrowserCreated(self, browser_view, browser):
         self._owner._browser = browser
-        for js in self._owner._pending_js:          # commands that arrived before the window existed
-            browser.ExecuteJavascript(js)
-        self._owner._pending_js.clear()
+        # The browser exists before its page does: a command run now would reach the blank initial document, which the
+        # navigation then replaces (a window restored to its playlist at start showed nothing). They wait for the load.
+        browser.SetClientCallback('OnLoadEnd', self._on_load_end)
+
+    def _on_load_end(self, browser, frame, http_code):
+        if frame.IsMain():
+            self._owner._page_loaded = True
+            for js in self._owner._pending_js:      # commands that arrived before the page was there
+                browser.ExecuteJavascript(js)
+            self._owner._pending_js.clear()
 
     def OnBrowserDestroyed(self, browser_view, browser):
         self._owner._browser = None
+        self._owner._page_loaded = False
 
 
 class _WindowDelegate:
@@ -179,6 +191,7 @@ class WebviewWindow(PageCommands):
         self._view = None
         self._window = None
         self._browser = None
+        self._page_loaded = False           # boot-screen.html is there: its functions can be called
         self._display_id = None
         self._pending_js: list[str] = []
         self.closed = False
@@ -223,7 +236,7 @@ class WebviewWindow(PageCommands):
             self.show()
 
     def execute_js(self, js: str):
-        if self._browser is not None:
+        if self._browser is not None and self._page_loaded:
             self._browser.ExecuteJavascript(js)
         elif not self.closed:
             self._pending_js.append(js)

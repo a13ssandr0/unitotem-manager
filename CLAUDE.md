@@ -858,3 +858,13 @@ the VM-specific ones.
   `FindByOutputName` finds it inside the callback): never poll `FindByOutputName`. `/tmp` of the dev machine is a 16 GB tmpfs: wheels, ceftests packages and docker-built trees fill it (rsync then dies with "No space left" /
   `log.c(245)` code 13); docker-created trees are root-owned (remove them from a container). `rm -rf $VAR/...` is refused by the tool safety check, write `"${VAR:?}"/...`. `tools/cef-wayland-tests/run-suite.sh` runs the
   whole suite on a board in one command (X mode or image mode, see docs/cef-wayland/design.md).
+- **Audio is tested for real with the HDMI capture card (2026-10-25)**: the Pi's HDMI goes into the card and its USB into the dev PC (OBS), so the PC records what the Pi plays:
+  `pw-record -v --target alsa_input.usb-MACROSILICON_USB3._0_capture-02.analog-stereo out.wav` (run it as `( timeout -s INT N pw-record ... & )`, then analyse per second: rms ~61
+  for the 440 Hz test video at sink volume 0.40, scale ~ cube of the sink volume, exactly 0 when muted). A recording with NO frames (44-byte wav) means the card got no HDMI audio at all
+  (muted/idle stream), not a broken recorder. Verified that way: sink volume/mute (`Settings/Audio/*`), per-asset volume/mute, per-window output, and a real video's sound from the viewer.
+- **Editing the volume/mute of the asset on screen applies at once** (`SetAssetAudio` message -> `setAssetAudio()` in boot-screen.html, `WebviewManager.asset_audio_changed`): before, it only
+  took effect the next time the asset was shown. A `Show` would restart the media, so it is its own message (older remote clients ignore an unknown target).
+- **A window's commands wait for the page LOAD, not for the browser** (`_page_loaded`, `OnLoadEnd` of the main frame in window.py): `OnBrowserCreated` comes before the page exists, so a `Show` run
+  there hit the blank initial document and was lost: after a manager restart a window restored to its playlist stayed empty (found testing audio on the Pi).
+- **Testing code on an image board without building a deb**: copy the changed files under `/var/lib/unitotem/<dir>` and `mount --bind` each over `/usr/share/unitotem-manager/<path>`
+  (read-only `/usr` is no obstacle for a bind of a file), then `systemctl restart unitotem-manager`; they vanish at reboot.

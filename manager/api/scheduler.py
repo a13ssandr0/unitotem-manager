@@ -248,10 +248,13 @@ class Scheduler(WSAPIBase):
             asset.ena_date = ena_date
         if dis_date is not None and asset.dis_date != dis_date:
             asset.dis_date = dis_date
+        audio_changed = False
         if volume is not None and asset.volume != volume:
             asset.volume = volume
+            audio_changed = True
         if muted is not None and asset.muted != muted:
             asset.muted = muted
+            audio_changed = True
         if zoom is not None and asset.zoom != zoom:
             asset.zoom = zoom
         if allow_pinch_zoom is not None and asset.allow_pinch_zoom != allow_pinch_zoom:
@@ -262,6 +265,13 @@ class Scheduler(WSAPIBase):
             # and the playback loop cannot notice a flag on its own.
             am.revalidate_current()
         am.save()
+        if audio_changed:
+            # What is playing follows the new volume/mute now, not at its next showing
+            try:
+                from webview.controller import WebviewManager
+                WebviewManager.get_instance().asset_audio_changed(am.playlist_id, asset)
+            except RuntimeError:
+                pass
 
     @UserPerms.requires.scheduler
     def current(self, playlist_id: Optional[str] = None):
