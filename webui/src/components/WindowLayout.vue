@@ -68,6 +68,10 @@
                  :disabled="leafIds.length < 2" :data-test="'close-' + id" @click="close(id)"/>
         </template>
       </div>
+      <div v-if="canEdit" class="mt-4">
+        <div class="text-caption font-weight-medium mb-1">RSS ticker (news crawl and clock bar)</div>
+        <TickerSettings :viewer-id="win.viewer_id" :window-id="win.window_id"/>
+      </div>
     </v-card-text>
   </v-card>
 </template>
@@ -76,6 +80,7 @@
 import {computed, ref, watch} from 'vue'
 import {api} from '@/api'
 import PaneTree from './PaneTree.vue'
+import TickerSettings from './TickerSettings.vue'
 
 const props = defineProps({
   win: {type: Object, required: true},          // viewer_id, window_id, width, height, orientation, layout: {area, tree, main, panes}

@@ -181,6 +181,8 @@
       </v-col>
     </v-row>
 
+    <TickerSources v-if="canTicker" />
+
     <!-- Viewer detail cards -->
     <v-row v-if="viewers.length" class="mt-4">
       <v-col v-for="viewer in viewers" :key="viewer.instance_id" cols="12" sm="6" lg="4">
@@ -307,6 +309,7 @@ async function toggle(playlistId, win) {
 // The keyboard of a panel is configuration of the panel, for administrators only: the row is not shown to anyone else
 const currentUser = api.Settings.Security.current_user.use()
 const canConfigureKeyboard = computed(() => canCall('Viewers/set_keyboard', currentUser.value))
+const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/sources', currentUser.value)) // admin only (the RSS ticker)
 // ... and so are the area and the panes of a window (the playlist of each pane is the scheduler's)
 const canConfigureLayout = computed(() => canCall('Viewers/set_area', currentUser.value))
 const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']

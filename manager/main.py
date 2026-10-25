@@ -313,6 +313,10 @@ from api.notifications import push_all as _push_notifications  # noqa: E402
 from utils.notifications import notifications  # noqa: E402
 notifications.bind(loop, _push_notifications)
 
+# The RSS feeds of the window tickers: one scheduler task, driven by events
+from api.ticker import start as _start_ticker  # noqa: E402
+_start_ticker(loop)
+
 for _plugin, hook in plugins.each('on_startup'):
     hook(loop)
 

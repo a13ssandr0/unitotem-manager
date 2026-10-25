@@ -148,6 +148,7 @@ api.import_class('api.remote', 'Remote', 'Settings')
 api.import_class('api.security', 'Security', 'Settings')
 api.import_class('api.viewers', 'Viewers')
 api.import_class('api.notifications', 'Notifications')
+api.import_class('api.ticker', 'Ticker')
 
 # What the plugins offer (network, audio, displays, power, timers, updates...) is registered the same way. A server
 # without them simply lacks those functions, and /api/schema, which the web UI reads to decide what to show, says so.

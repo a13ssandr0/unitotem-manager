@@ -73,6 +73,7 @@ export default defineConfig({
         main: './src/main.js',
         pdf: './src/pdf-view.js',
         keyboard: './src/keyboard.js',
+        ticker: './src/ticker.js',
         // altre entry point per pagine specifiche
       }
     }
