@@ -91,3 +91,18 @@ Unit tests for every pure part (models/validation, tree operations, Rich-markup 
 Real runs: A on the Pi (192.168.1.173, 1080p on the HDMI capture card, CEF DevTools `Page.captureScreenshot` gives the real pixels), B on venus (192.168.1.128).
 Procedure for code on a board without building a deb: CLAUDE.md "Testing code on an image board". Never `pkill -f` inside an ssh line, no graphical password prompts
 (env -u DISPLAY -u SSH_ASKPASS SSH_ASKPASS_REQUIRE=never sshpass ... as in CLAUDE.md). One package per board at a time.
+
+## As built by package A (what B can rely on)
+
+- `WindowLayout` has one more field than the contract: `panes: dict[int, playlist_id]` (the playlists of the panes that are not the main one). `ticker: TickerSettings`
+  is `models/ticker.py`'s class, stored with the layout in `window_layouts.json` (`WindowLayouts`, `window_layouts` singleton) and untouched by A: B extends the class, and
+  every window that has no entry has `TickerSettings()`. Saving a layout whose ticker differs from the default keeps the entry even if the area/tree are the default.
+- Messages: `SetWindowLayout {window_id, area, tree}` and `Show`/`SetAssetAudio` with `pane` exist as in the contract. The viewer announces `layout: true` in its `WebviewInfo`
+  (`WebviewManager._supports_layout`): a package that pushes a new message to windows should do the same, so a viewer of an older version is not sent what it cannot read.
+- Page: A did NOT write a loader for `ticker.js` and did NOT define `setTicker`/`TickerItems` handlers (that is B's, in the same style as `applyKeyboard()`), but the page already has
+  `#ticker-host` inside `#area`, the CSS that places it, and `window.setTickerPlacement(mode, position)` (`'off'|'overlay'|'reserve'`, `'top'|'bottom'`), which sets
+  `#area[data-ticker]` / `[data-ticker-pos]`. B's handler for `SetTicker` calls it with `enabled/mode/position`, then loads `ticker.js` and calls `utTicker.configure(cfg)`.
+  `--ticker-h` (px) is read from `#area`. The panes' box (`#panes`) shrinks by `--ticker-h` when the mode is `reserve`.
+- The API: `Viewers/layout`, `set_area`, `split_pane`, `close_pane`, `set_split_ratio` (admin except `layout`), `assign_playlist`/`unassign_playlist` take `pane_id`.
+  The Viewers page has a section "Window layout" (`WindowLayout.vue`): B's ticker controls for a window belong in that card (admin only), reading `win.layout.ticker`.
+- Backup: part `layouts` (core, `utils/backup.py`, label "Window layouts (area and panes)"): B adds its own part `ticker` next to it in `CORE_PARTS`.

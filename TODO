@@ -4,6 +4,14 @@
   compositor-driven crawl in chained pages (the old per-frame JS crawl judders: see CLAUDE.md "RSS ticker"), clock, web UI (Sources card, per-window dialog with live preview and presets), tools/ui-ticker.py, node tests
   (`cd webui && npm test`), real runs on venus (screenshots, trace, CPU) with tools/ticker/. TO DO by the lead/package A: switch `utils/ticker/windows.py` to `WindowLayout.ticker`, host `#area/#ticker-host` in
   boot-screen.html (applyTicker is already there), add python3-feedparser to the image; Pi 4 measurements not done (board belongs to package A); the viewer window of venus is the only real-pixel evidence.
+2026-10-25 WINDOW LAYOUT (package A of docs/layout-and-ticker.md; branch `layout-panes`, not merged): DONE and run on a Pi 4: a window's content `area` (percent rectangle + margin colour; replaces the old
+  xinit "third of the height" trick) and a tree of panes (split h/v, close, ratio, max 8 / 4 deep) each with its own playlist; page restructured (`#stage > #area > #panes + #ticker-host`, one flat
+  `.pane`/Stage per leaf, surviving panes keep playing), manager (`WebviewManager._sync_window`, `PlaylistLoop` targets `(viewer, window, pane)`, `window_layouts.json`, backup part `layouts`), API (`Viewers/layout`,
+  `set_area`, `split_pane`, `close_pane`, `set_split_ratio`, `pane_id` in assign/unassign), Viewers page editor (`WindowLayout.vue`, `PaneTree.vue`), see CLAUDE.md "Window layout (area, panes)".
+  Tests: 54 + 21 new pytest, `tools/ui-panes.py` 15/15, real Pi run (screenshots in the session report). NOT done / open: panes of a node that is unpaired are not carried to the client (its layouts are dropped, what
+  they showed stays on the server; adoption of a client with its own layout is not handled either); the preview of a rotated window assumes `orientation` is in the window info (it is not reported at start: a rotated
+  window is drawn unrotated until it is); unplug/replug of a screen with panes is only covered by unit tests (the Pi cannot lose its last output); no real touch test of the editor; viewers of an older version are driven as one pane.
+  Merge notes for the ticker package: `CORE_PARTS` in utils/backup.py and `WindowLayout.ticker` (models/layout.py) are where both packages touch; the page has `setTickerPlacement(mode, position)` and `#ticker-host`.
 
 2026-10-21 CEF WAYLAND PORT (owner: the "CEF on Wayland" agent; design note docs/cef-wayland/design.md): DONE and run on venus and the Pi 4: cefpython Views bindings (branch `wayland-views`
   of a13ssandr0/cefpython, pushed, docs in api/), CEF patch series tools/cef-server/patches/cef/ (SetFullscreenOnDisplay, GetLabel, Wayland GetDisplay/frameless/X11 guards, ceftests), end-to-end
@@ -969,8 +977,8 @@ WAS OPEN, superseded - assignment per viewer instead of per window.
   stale local state; no "reload home page" button.
 
 - (2026-10-25, from the user) NOT STARTED, design questions open (see the conversation):
-  * Split windows: a viewer window divides into sub-windows like Konsole's split view (horizontal/vertical, recursive, draggable
-    splitter, close a pane, each pane with its own playlist). Layout = a tree kept per window in viewer_settings.json, drawn by boot-screen.html.
+  * (DONE 2026-10-25 on branch `layout-panes`, see the first entry) Split windows: a viewer window divides into sub-windows like Konsole's split view (horizontal/vertical, recursive, draggable
+    splitter, close a pane, each pane with its own playlist). Layout = a tree kept per window in window_layouts.json (not viewer_settings.json), drawn by boot-screen.html.
   * RSS: a fetcher with several sources, update time per source, all merged in ONE list; display = a text template (time + headline + colours);
     how many items: a count, a date ("today only") or a time range ("last 2 hours/2 days"); options: one or two lines, text colour and size,
     background, overlay on the viewer or taking space below it.

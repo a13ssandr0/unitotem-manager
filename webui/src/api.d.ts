@@ -263,12 +263,16 @@ export interface Api {
   Viewers: {
     /** [requires: admin] */
     add_window: ApiCall<{ viewer_id: string; display?: number; x?: number; y?: number; width?: number; height?: number }>
-    /** Put one window on one playlist. A window shows a single playlist, [requires: scheduler] */
-    assign_playlist: ApiCall<{ viewer_id: string; window_id: number; playlist_id: string }>
+    /** Put one pane of a window (the main one without pane_id) on one playlist. [requires: scheduler] */
+    assign_playlist: ApiCall<{ viewer_id: string; window_id: number; playlist_id: string; pane_id?: null | number }>
     /** The outputs a window of this viewer can choose from. Only this node's own sound devices are known: a [requires: scheduler] */
     audio_outputs: ApiCall<{ viewer_id: string }>
+    /** Closes a pane: its neighbour takes the space. The last pane of a window cannot be closed. [requires: admin] */
+    close_pane: ApiCall<{ viewer_id: string; window_id: number; pane_id: number }>
     /** The on-screen keyboard of a window. [requires: admin] */
     keyboard: ApiCall<{ viewer_id: string; window_id: number }>
+    /** The layout of a window: the rectangle its content is drawn in, and its panes (a tree of splits) with their playlists. [requires: scheduler] */
+    layout: ApiCall<{ viewer_id: string; window_id: number }>
     /** [requires: scheduler] */
     list: ApiCall<Record<string, never>>
     /** When the web page of a window is reloaded (a window without a screensaver). [requires: scheduler] */
@@ -277,6 +281,8 @@ export interface Api {
     remove_window: ApiCall<{ viewer_id: string; window_id: number }>
     /** The interactive mode of a window: its home page and the idle time after which the playlist is played over it. [requires: scheduler] */
     screensaver: ApiCall<{ viewer_id: string; window_id: number }>
+    /** The rectangle of the window the content is drawn in, in percent (the rest is blank, in margin_color). [requires: admin] */
+    set_area: ApiCall<{ viewer_id: string; window_id: number; left?: number; top?: number; width?: number; height?: number; margin_color?: string }>
     /** Where a window plays its sound: the description of one of the outputs of its host, None for the default. [requires: scheduler] */
     set_audio_output: ApiCall<{ viewer_id: string; window_id: number; device?: null | string }>
     /** Turns the on-screen keyboard of a window on or off, and says where its button is and which layout it has. [requires: admin] */
@@ -285,8 +291,12 @@ export interface Api {
     set_refresh: ApiCall<{ viewer_id: string; window_id: number; refresh_after_idle?: null | number; refresh_schedules?: (string)[] | null }>
     /** Makes a window interactive: home page (http or https) shown indefinitely, playlist as a screensaver after [requires: scheduler] */
     set_screensaver: ApiCall<{ viewer_id: string; window_id: number; enabled: boolean; home_url?: string; idle_timeout?: number }>
+    /** Moves the splitter of one split of the pane tree (ratio = share of the first half, 10 %..90 %). [requires: admin] */
+    set_split_ratio: ApiCall<{ viewer_id: string; window_id: number; path: string; ratio: number }>
+    /** Divides a pane in two ('h': the new pane at its right, 'v': below it); at most 8 panes, 4 levels deep. [requires: admin] */
+    split_pane: ApiCall<{ viewer_id: string; window_id: number; pane_id: number; direction: string }>
     /** [requires: scheduler] */
-    unassign_playlist: ApiCall<{ viewer_id: string; window_id: number }>
+    unassign_playlist: ApiCall<{ viewer_id: string; window_id: number; pane_id?: null | number }>
   }
   Vnc: {
     /** The outputs that can be watched on their own, and whether the VNC server is installed at all. [requires: admin] */

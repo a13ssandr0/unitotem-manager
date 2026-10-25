@@ -76,15 +76,47 @@
       transform-origin: center center;
     }
 
-    /* Each container occupies the full viewport; only one is visible at a time */
+    /* What a window is made of (docs/layout-and-ticker.md): the backdrop (body and #stage, the margin colour) behind #area, a
+       rectangle of the window (percent, in the space of the content) that holds #panes, one .pane per leaf of the layout tree
+       laid out side by side or stacked, and #ticker-host. A pane is a stage of its own: the containers below, its own zoom,
+       audio and refresh. */
+    #area { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    #panes { position: absolute; inset: 0; }
+
+    /* Panes are positioned in percent of #panes, all of them side by side in one flat list rather than nested: the element of
+       a pane stays where it is in the document when the layout changes, which is what keeps its video playing (moving an
+       element to another parent reloads it). Each is a size container, so the boot logo is sized in its own width. */
+    .pane {
+      position: absolute; overflow: hidden;
+      container-type: size;
+      background-color: rgb(0, 0, 0);
+    }
+
+    /* The ticker bar (webui/src/ticker.js) draws in #ticker-host; the placement is decided here from the attributes of #area:
+       data-ticker "off" | "overlay" (over the panes) | "reserve" (the panes make room), data-ticker-pos "top" | "bottom";
+       the script sets --ticker-h (px) on #area. See setTickerPlacement() below. */
+    #ticker-host { display: none; position: absolute; left: 0; right: 0; z-index: 5; overflow: hidden; }
+    #area[data-ticker="overlay"] #ticker-host, #area[data-ticker="reserve"] #ticker-host {
+      display: block; height: var(--ticker-h, 0px);
+    }
+    #area[data-ticker-pos="top"] #ticker-host { top: 0; }
+    #area[data-ticker-pos="bottom"] #ticker-host { bottom: 0; }
+    #area[data-ticker="reserve"][data-ticker-pos="top"] #panes { top: var(--ticker-h, 0px); }
+    #area[data-ticker="reserve"][data-ticker-pos="bottom"] #panes { bottom: var(--ticker-h, 0px); }
+
+    /* Each container occupies the whole pane; only one is visible at a time */
     .container { display: none; width: 100%; height: 100%; }
 
-    #boot-screen {
-      display: flex;           /* shown by default */
+    .boot {
+      /* shown by the script (inline display:flex) */
       align-items: center;
       justify-content: center;
       color: #ffffff;
       user-select: none;
+      /* the wordmark's em is an eighth of the pane's width, which for a pane that fills the window is what Plymouth's
+         unitotem.script draws (and what updateBootScale() used to compute): container units, so a smaller pane has a smaller
+         logo and the first frame is right without waiting for a script */
+      --boot-em: 12.5cqw;
     }
 
     /* No zoom/fade-in here: Plymouth's unitotem.script already fades the
@@ -169,7 +201,7 @@
       to   { transform: rotate(1080deg); }
     }
 
-    #web-frame {
+    .web {
       border: none;
     }
 
@@ -179,7 +211,8 @@
        everything catches the first touch, which ends the screensaver and goes no further; it stays for a moment after
        it so the mouse events a touch is followed by do not reach the page either. The on-screen keyboard layer
        (keyboard.js, z-index at the maximum) stays above the home page but is hidden under the screensaver.
-       Without the attribute none of this applies and #stage is a plain wrapper. */
+       Without the attribute none of this applies and #stage is a plain wrapper. #stage covers the WHOLE window, the margin
+       colour included: the screensaver hides everything behind it, not only the area. */
     #stage { position: relative; width: 100%; height: 100%; }
     #home-frame { display: none; border: none; position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
     #shield { display: none; position: absolute; inset: 0; z-index: 20; touch-action: none; background: transparent; }
@@ -193,16 +226,11 @@
     body[data-saver="up"] #shield, body[data-shield] #shield { display: block; }
     body[data-saver="up"] #ut-kbd-layer { visibility: hidden; }
 
-    #image-display {
-      object-position: center;
-    }
+    .image { object-position: center; }
+    .video { object-position: center; }
 
-    #video-display {
-      object-position: center;
-    }
-
-    /* audio-display is invisible; only the <audio> element matters */
-    #audio-display { background: transparent; }
+    /* the audio container is invisible; only its <audio> element matters */
+    .audio { background: transparent; }
   </style>
 </head>
 <body>
@@ -214,24 +242,33 @@
                allowfullscreen></iframe>
 
       <div id="stage">
-        <div id="boot-screen" class="container">
-          <div class="glow">
-            <span class="loader">UniT&nbsp;&nbsp;tem</span>
-            <span class="loader halo" aria-hidden="true">UniT&nbsp;&nbsp;tem</span>
+        <div id="area">
+          <!-- One .pane per leaf of the layout (setWindowLayout() below). The one of an undivided window is here from the
+               start, showing the boot logo, so the first painted frame does not wait for a script. -->
+          <div id="panes">
+            <div class="pane" data-pane="1" style="left: 0; top: 0; width: 100%; height: 100%">
+              <div class="boot container" style="display: flex">
+                <div class="glow">
+                  <span class="loader">UniT&nbsp;&nbsp;tem</span>
+                  <span class="loader halo" aria-hidden="true">UniT&nbsp;&nbsp;tem</span>
+                </div>
+              </div>
+
+              <iframe  class="web container"
+                       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                       allowfullscreen></iframe>
+
+              <img     class="image container" alt="">
+
+              <video   class="video container"
+                       autoplay loop playsinline></video>
+
+              <div     class="audio container">
+                <audio autoplay loop></audio>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <iframe  id="web-frame"     class="container"
-                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                 allowfullscreen></iframe>
-
-        <img     id="image-display" class="container" alt="">
-
-        <video   id="video-display" class="container"
-                 autoplay loop playsinline></video>
-
-        <div     id="audio-display" class="container">
-          <audio id="audio-player" autoplay loop></audio>
+          <div id="ticker-host" data-ticker-host></div>
         </div>
       </div>
 
@@ -242,34 +279,19 @@
   <script>
     "use strict";
 
-    const containers = {
-      boot : document.getElementById('boot-screen'),
-      web  : document.getElementById('web-frame'),
-      image: document.getElementById('image-display'),
-      video: document.getElementById('video-display'),
-      audio: document.getElementById('audio-display'),
-    };
+    // ── the panes ────────────────────────────────────────────────────────────────────────────────────────────────────
+    //
+    // A window is a tree of panes (utils/models/layout.py); each leaf is a Stage: the containers of one playlist, with its own
+    // zoom, volume and refresh. setWindowLayout() builds/updates them; show() and setAssetAudio() take the pane they talk
+    // about (none: the main pane, the first one - which is also all an older manager knows of).
+    const panesEl = document.getElementById('panes');
+    const areaEl = document.getElementById('area');
+    const stageEl = document.getElementById('stage');
 
-    // What is behind the content: the page body, and the stage that covers the home page in interactive mode
-    function setBackdrop(colour) {
-      document.body.style.backgroundColor = colour;
-      document.getElementById('stage').style.backgroundColor = colour;
-    }
+    // The sound output of this window, for every pane; survives the next show()
+    let audioOutput = null;
+    let touchSet = false;        // a pane has been shown at least once: the page's touch-action follows the panes from then on
 
-    function hideAll() {
-      for (const el of Object.values(containers)) {
-        el.style.display = 'none';
-      }
-    }
-
-    /**
-     * Called by the Python viewer via CEF ExecuteJavascript.
-     *
-     * @param {string} src       - URL or data URI of the asset
-     * @param {string} container - 'boot' | 'web' | 'image' | 'video' | 'audio'
-     * @param {string} fit       - 'contain' | 'cover' | 'fill'
-     * @param {string} bg_color  - CSS colour, e.g. 'rgb(0,0,0)'
-     */
     /**
      * Work out which container an asset belongs in when nobody told us.
      *
@@ -293,47 +315,6 @@
       return 'web';
     }
 
-    /**
-     * Average colour of an image, used as its backdrop when no explicit
-     * bg_color was set, so a picture that does not match the screen's aspect
-     * ratio is letterboxed with something close to its own colour instead of
-     * hard black bars. Scaling to a single pixel makes the browser do the
-     * averaging for us.
-     */
-    function applyDominantColour(img) {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = 1;
-        const context = canvas.getContext('2d');
-        context.drawImage(img, 0, 0, 1, 1);
-        const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
-        const colour = `rgb(${r},${g},${b})`;
-        img.style.backgroundColor = colour;
-        setBackdrop(colour);
-      } catch (err) {
-        // A cross-origin image taints the canvas and getImageData throws;
-        // black is the documented default, so just keep it.
-        console.log('Cannot sample image colour', err);
-      }
-    }
-
-    // Volume of the asset on screen and the output this window plays on; both survive the next show()
-    let audioOutput = null;
-
-    function applyAudio(el, volume, muted) {
-      el.volume = Math.min(1, Math.max(0, volume ?? 1));
-      el.muted = !!muted;
-      routeToOutput(el);
-    }
-
-    // Volume or mute of the asset on screen edited while it plays: no new show(), the media keeps playing
-    function setAssetAudio(volume, muted) {
-      for (const id of ['video-display', 'audio-player']) {
-        const el = document.getElementById(id);
-        if (el) applyAudio(el, volume, muted);
-      }
-    }
-
     async function routeToOutput(el) {
       if (typeof el.setSinkId !== 'function') return;
       try {
@@ -349,94 +330,364 @@
       }
     }
 
-    /** Called by the Python viewer: the output (description) this window plays on, null for the default. */
-    function setAudioOutput(device) {
-      audioOutput = device;
-      routeToOutput(document.getElementById('video-display'));
-      routeToOutput(document.getElementById('audio-player'));
+    function applyAudio(el, volume, muted) {
+      el.volume = Math.min(1, Math.max(0, volume ?? 1));
+      el.muted = !!muted;
+      routeToOutput(el);
+    }
+
+    class Stage {
+      constructor(id, el) {
+        this.id = id;
+        this.el = el;
+        this.containers = {
+          boot : el.querySelector('.boot'),
+          web  : el.querySelector('.web'),
+          image: el.querySelector('.image'),
+          video: el.querySelector('.video'),
+          audio: el.querySelector('.audio'),
+        };
+        this.video = this.containers.video;
+        this.audio = this.containers.audio.querySelector('audio');
+        // What the pane shows, for the screensaver (nothing to play: boot logo, or the "no assets" page of an idle window)
+        this.current = null;
+        this.allowPinch = false;
+        this.seq = 0;
+      }
+
+      // What is behind the content of this pane
+      setBackdrop(colour) {
+        this.el.style.backgroundColor = colour;
+      }
+
+      hideAll() {
+        for (const el of Object.values(this.containers)) {
+          el.style.display = 'none';
+        }
+      }
+
+      /**
+       * Zoom of a web page, like the browser's own: the iframe is made 1/zoom times as large as the pane and scaled up
+       * by zoom from its top-left corner, so the page's layout viewport shrinks (a 2x zoom lays a 960px-wide page out in
+       * 960 CSS px on a 1920px pane) exactly as it does with Ctrl-+. Done on the frame, not with CEF's zoom level, so it
+       * works for cross-origin content and leaves the viewer's own overlays (the keyboard) alone. It is clamped here too:
+       * the factor ends up in a division.
+       *
+       * Pinch zoom of the visitor: touch-action on the frame is intersected with the one of the content inside it, so
+       * 'pan-x pan-y' (no 'pinch-zoom') forbids it whatever the page says; 'auto' leaves it to the page. It is set on the
+       * pane (a touch never gets to another pane's frame without crossing its own) and the page as a whole allows it as soon
+       * as one pane does.
+       */
+      applyWebView(zoom, allowPinch) {
+        const el = this.containers.web;
+        const z = Number.isFinite(+zoom) ? Math.min(5, Math.max(0.25, +zoom)) : 1;
+        const style = el.style;
+        if (z === 1) {
+          style.width = style.height = style.transform = style.transformOrigin = '';
+        } else {
+          style.width = style.height = (100 / z) + '%';
+          style.transform = `scale(${z})`;
+          style.transformOrigin = '0 0';
+        }
+        this.allowPinch = !!allowPinch;
+        const touch = allowPinch ? 'auto' : 'pan-x pan-y';
+        style.touchAction = touch;
+        this.el.style.touchAction = touch;
+        touchSet = true;
+        updateTouchAction();
+      }
+
+      // Volume or mute of the asset on screen edited while it plays: no new show(), the media keeps playing
+      setAssetAudio(volume, muted) {
+        for (const el of [this.video, this.audio]) applyAudio(el, volume, muted);
+      }
+
+      routeAudio() {
+        routeToOutput(this.video);
+        routeToOutput(this.audio);
+      }
+
+      /**
+       * @param {string} src       - URL or data URI of the asset
+       * @param {string} container - 'boot' | 'web' | 'image' | 'video' | 'audio'
+       * @param {string} fit       - 'contain' | 'cover' | 'fill'
+       * @param {string} bg_color  - CSS colour, e.g. 'rgb(0,0,0)'
+       */
+      async show(src, container, fit, bg_color, volume, muted, zoom, allowPinch, idle) {
+        const seq = ++this.seq;
+        if (!container) container = await detectContainer(src);
+        if (seq !== this.seq) return;        // a newer asset arrived while the type was being probed
+
+        this.current = {src, container, idle: !!idle};
+        this.setBackdrop(bg_color || 'rgb(0,0,0)');
+        this.hideAll();
+
+        const el = this.containers[container];
+        if (!el) return;
+        // Zoom and pinch are properties of a web page; never leave them behind on the frame for the next asset
+        if (container !== 'web') this.applyWebView(1, false);
+
+        switch (container) {
+          case 'boot':
+            el.style.display = 'flex';
+            break;
+
+          case 'web':
+            el.style.display = 'block';
+            this.applyWebView(zoom, allowPinch);
+            el.src = src;
+            break;
+
+          case 'image':
+            el.style.display    = 'block';
+            el.style.objectFit  = fit;
+            el.style.backgroundColor = bg_color || '';
+            // Sample the picture only when no colour was chosen for it.
+            el.onload = bg_color ? null : () => { this.applyDominantColour(el); el.onload = null; };
+            el.src = src;
+            break;
+
+          case 'video': {
+            el.style.display   = 'block';
+            el.style.objectFit = fit;
+            el.src = src;
+            applyAudio(el, volume, muted);
+            el.load();
+            if (stageVisible()) el.play().catch(() => {}); else el.pause();    // pause() cancels the autoplay
+            break;
+          }
+
+          case 'audio': {
+            el.style.display = 'block';  // show the wrapper (invisible)
+            this.audio.src = src;
+            applyAudio(this.audio, volume, muted);
+            this.audio.load();
+            if (stageVisible()) this.audio.play().catch(() => {}); else this.audio.pause();
+            break;
+          }
+        }
+      }
+
+      /**
+       * Average colour of an image, used as its backdrop when no explicit
+       * bg_color was set, so a picture that does not match the aspect
+       * ratio of the pane is letterboxed with something close to its own colour instead of
+       * hard black bars. The picture is scaled down to a small canvas and the pixels are averaged here: scaling to
+       * ONE pixel and letting the browser do the averaging, as this used to, gave white on the Pi 4 once its canvas was
+       * in some states (a 64x36 canvas of the same picture was right), so the bars came out white.
+       */
+      applyDominantColour(img) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 16;
+          canvas.height = 9;
+          const context = canvas.getContext('2d', {willReadFrequently: true});
+          context.drawImage(img, 0, 0, 16, 9);
+          const data = context.getImageData(0, 0, 16, 9).data;
+          let r = 0, g = 0, b = 0, n = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            if (!data[i + 3]) continue;        // fully transparent: not part of the picture
+            r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+          }
+          if (!n) return;                      // nothing to average (an empty picture): the backdrop stays as it is
+          const colour = `rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`;
+          img.style.backgroundColor = colour;
+          this.setBackdrop(colour);
+        } catch (err) {
+          // A cross-origin image taints the canvas and getImageData throws;
+          // black is the documented default, so just keep it.
+          console.log('Cannot sample image colour', err);
+        }
+      }
+
+      // The sound of the playlist must not play under the home page
+      syncMedia() {
+        for (const [key, el] of [['video', this.video], ['audio', this.audio]]) {
+          if (!el.getAttribute('src')) continue;
+          if (stageVisible() && this.current && this.current.container === key) el.play().catch(() => {}); else el.pause();
+        }
+      }
+
+      /** Reloads the web page of this pane (not the idle page). Returns whether it did. */
+      refreshPage() {
+        if (!this.current || this.current.container !== 'web' || this.current.idle) return false;
+        this.containers.web.src = this.current.src;
+        return true;
+      }
+
+      /** Removes the pane for good: its media stops and lets go of its decoder, its page is unloaded. */
+      destroy() {
+        for (const el of [this.video, this.audio]) {
+          el.pause();
+          el.removeAttribute('src');
+          el.load();
+        }
+        this.el.remove();
+      }
+    }
+
+    const stages = new Map();            // leaf id -> Stage
+    stages.set(1, new Stage(1, panesEl.querySelector('.pane')));
+    let mainId = 1;                      // the first leaf of the tree: what a command without a pane talks to
+    let layoutSeen = false;              // a SetWindowLayout has arrived
+    const paneTemplate = panesEl.querySelector('.pane').cloneNode(true);
+    const pendingShows = new Map();      // pane -> arguments of a show() for a pane the layout has not created yet
+
+    const mainStage = () => stages.get(mainId);
+    const stageFor = pane => (pane === null || pane === undefined) ? mainStage() : stages.get(+pane);
+    const allStages = () => [...stages.values()];
+
+    // What the main pane shows; kept for whoever asks (the screensaver code used to read it, and it is handy at a console)
+    Object.defineProperty(window, 'current', {get: () => mainStage()?.current ?? null, configurable: true});
+
+    // The page as a whole allows a pinch as soon as one pane does (each pane forbids it for itself, see applyWebView)
+    function updateTouchAction() {
+      if (touchSet) document.documentElement.style.touchAction = allStages().some(s => s.allowPinch) ? 'auto' : 'pan-x pan-y';
     }
 
     /**
-     * Zoom of a web page, like the browser's own: the iframe is made 1/zoom times as large as the screen and scaled up
-     * by zoom from its top-left corner, so the page's layout viewport shrinks (a 2x zoom lays a 960px-wide page out in
-     * 960 CSS px on a 1920px screen) exactly as it does with Ctrl-+. Done on the frame, not with CEF's zoom level, so it
-     * works for cross-origin content and leaves the viewer's own overlays (the keyboard) alone. It is clamped here too:
-     * the factor ends up in a division.
-     *
-     * Pinch zoom of the visitor: touch-action on the frame is intersected with the one of the content inside it, so
-     * 'pan-x pan-y' (no 'pinch-zoom') forbids it whatever the page says; 'auto' leaves it to the page.
+     * Called by the Python viewer via CEF ExecuteJavascript.
+     * `pane` is the leaf id the asset is for; none means the main pane. A pane the layout has not created yet (the commands of
+     * a window can overtake its layout) is waited for, only the latest asset of it is kept.
      */
-    function applyWebView(el, zoom, allowPinch) {
-      const z = Number.isFinite(+zoom) ? Math.min(5, Math.max(0.25, +zoom)) : 1;
-      const style = el.style;
-      if (z === 1) {
-        style.width = style.height = style.transform = style.transformOrigin = '';
+    function show(src, container, fit, bg_color, volume, muted, zoom, allowPinch, idle, pane) {
+      const stage = stageFor(pane);
+      if (pane !== null && pane !== undefined && (!layoutSeen || !stage)) {
+        pendingShows.set(+pane, [src, container, fit, bg_color, volume, muted, zoom, allowPinch, idle]);
+        return;
+      }
+      return stage && stage.show(src, container, fit, bg_color, volume, muted, zoom, allowPinch, idle);
+    }
+
+    // Volume or mute of the asset on screen edited while it plays: no new show(), the media keeps playing
+    function setAssetAudio(volume, muted, pane) {
+      const stage = stageFor(pane);
+      if (stage) stage.setAssetAudio(volume, muted);
+    }
+
+    /** Called by the Python viewer: the output (description) this window plays on, null for the default. */
+    function setAudioOutput(device) {
+      audioOutput = device;
+      for (const stage of allStages()) stage.routeAudio();
+    }
+
+    // The part of the window the page has to be sure of, whatever the manager sent: nothing here may throw or leave the screen
+    // unusable (a layout comes from a file, a web page and, for a remote viewer, another machine)
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    const num = (v, d) => Number.isFinite(+v) && v !== null && v !== '' ? +v : d;
+    const MAX_LEAVES = 8, MAX_DEPTH = 4;
+
+    function sanitizeArea(a) {
+      a = a || {};
+      const width = clamp(num(a.width, 100), 5, 100), height = clamp(num(a.height, 100), 5, 100);
+      const colour = typeof a.margin_color === 'string' && /^(#[0-9a-fA-F]{3,8}|rgba?\([0-9 ,.%]{5,40}\))$/.test(a.margin_color.trim())
+        ? a.margin_color.trim() : 'rgb(0,0,0)';
+      return {width, height, left: clamp(num(a.left, 0), 0, 100 - width), top: clamp(num(a.top, 0), 0, 100 - height),
+              margin_color: colour};
+    }
+
+    /** The tree as it should be, or null if it is not one (duplicate ids, too many panes, too deep): the old one stays. */
+    function sanitizeTree(tree) {
+      const seen = new Set();
+      const walk = (node, depth) => {
+        if (!node || typeof node !== 'object' || depth > MAX_DEPTH || seen.size > MAX_LEAVES) return null;
+        if (node.kind === 'leaf') {
+          const id = Number.isInteger(node.id) ? node.id : NaN;
+          if (!(id >= 1) || seen.has(id)) return null;
+          seen.add(id);
+          return {kind: 'leaf', id};
+        }
+        if (node.kind !== 'split' || (node.dir !== 'h' && node.dir !== 'v')) return null;
+        const a = walk(node.a, depth + 1), b = walk(node.b, depth + 1);
+        return a && b ? {kind: 'split', dir: node.dir, ratio: clamp(num(node.ratio, 0.5), 0.1, 0.9), a, b} : null;
+      };
+      const clean = walk(tree, 0);
+      return clean && seen.size <= MAX_LEAVES ? clean : null;
+    }
+
+    /** leaf id -> [left, top, width, height] in percent of the panes' box, and the ids in tree order */
+    function layoutRects(node, x = 0, y = 0, w = 100, h = 100, out = new Map()) {
+      if (node.kind === 'leaf') { out.set(node.id, [x, y, w, h]); return out; }
+      if (node.dir === 'h') {
+        const wa = w * node.ratio;
+        layoutRects(node.a, x, y, wa, h, out); layoutRects(node.b, x + wa, y, w - wa, h, out);
       } else {
-        style.width = style.height = (100 / z) + '%';
-        style.transform = `scale(${z})`;
-        style.transformOrigin = '0 0';
+        const ha = h * node.ratio;
+        layoutRects(node.a, x, y, w, ha, out); layoutRects(node.b, x, y + ha, w, h - ha, out);
       }
-      const touch = allowPinch ? 'auto' : 'pan-x pan-y';
-      style.touchAction = touch;
-      document.documentElement.style.touchAction = touch;
+      return out;
     }
 
-    // What the stage shows, for the screensaver (nothing to play: boot logo, or the "no assets" page of an idle window)
-    let current = null;
-
-    async function show(src, container, fit, bg_color, volume, muted, zoom, allowPinch, idle) {
-      if (!container) container = await detectContainer(src);
-
-      current = {src, container, idle: !!idle};
-      setBackdrop(bg_color || 'rgb(0,0,0)');
-      hideAll();
-
-      const el = containers[container];
-      if (!el) return;
-      // Zoom and pinch are properties of a web page; never leave them behind on the frame for the next asset
-      if (container !== 'web') applyWebView(containers.web, 1, false);
-
-      switch (container) {
-        case 'boot':
-          el.style.display = 'flex';
-          break;
-
-        case 'web':
-          el.style.display = 'block';
-          applyWebView(el, zoom, allowPinch);
-          el.src = src;
-          break;
-
-        case 'image':
-          el.style.display    = 'block';
-          el.style.objectFit  = fit;
-          el.style.backgroundColor = bg_color || '';
-          // Sample the picture only when no colour was chosen for it.
-          el.onload = bg_color ? null : () => { applyDominantColour(el); el.onload = null; };
-          el.src = src;
-          break;
-
-        case 'video': {
-          el.style.display   = 'block';
-          el.style.objectFit = fit;
-          el.src = src;
-          applyAudio(el, volume, muted);
-          el.load();
-          if (stageVisible()) el.play().catch(() => {}); else el.pause();    // pause() cancels the autoplay
-          break;
-        }
-
-        case 'audio': {
-          el.style.display = 'block';  // show the wrapper (invisible)
-          const audio = document.getElementById('audio-player');
-          audio.src = src;
-          applyAudio(audio, volume, muted);
-          audio.load();
-          if (stageVisible()) audio.play().catch(() => {}); else audio.pause();
-          break;
-        }
-      }
+    function placeStage(stage, [x, y, w, h]) {
+      const style = stage.el.style;
+      style.left = x + '%'; style.top = y + '%'; style.width = w + '%'; style.height = h + '%';
     }
+
+    function newStage(id) {
+      const el = paneTemplate.cloneNode(true);
+      el.dataset.pane = id;
+      for (const c of el.querySelectorAll('.container')) c.style.display = 'none';   // blank until something is shown
+      el.style.touchAction = '';
+      panesEl.appendChild(el);
+      const stage = new Stage(id, el);
+      // an asset the manager already sent for this pane
+      stages.set(id, stage);
+      return stage;
+    }
+
+    /**
+     * Called by the Python viewer (SetWindowLayout), at window creation and at every change: the rectangle the content is drawn
+     * in (percent of the window, in the space of the content) and the tree of panes. One stage per leaf; the stage of a pane
+     * that is still there is left alone, so its media keeps playing whatever happens around it (a split, a closed neighbour,
+     * a moved splitter); the stages of closed panes are destroyed. Nothing about playlists is here: the manager sends each
+     * pane its own show().
+     */
+    function setWindowLayout(area, tree) {
+      const a = sanitizeArea(area);
+      const style = areaEl.style;
+      style.left = a.left + '%'; style.top = a.top + '%'; style.width = a.width + '%'; style.height = a.height + '%';
+      // the blank space around the area (and behind the screensaver, which covers the whole window)
+      document.body.style.backgroundColor = a.margin_color;
+      stageEl.style.backgroundColor = a.margin_color;
+
+      const clean = sanitizeTree(tree);
+      if (!clean) { console.log('Ignoring a layout that is not valid', tree); return; }
+      const rects = layoutRects(clean);
+      const ids = [...rects.keys()];
+
+      // The window's own first pane (shown from the start) becomes the main pane when it has not been used yet: its id
+      // may be another one if the pane that used to be the first was closed on an earlier run
+      const first = stages.get(1);
+      if (!layoutSeen && first && !ids.includes(1) && !first.current) {
+        stages.delete(1);
+        first.id = ids[0];
+        first.el.dataset.pane = ids[0];
+        stages.set(ids[0], first);
+      }
+      for (const id of [...stages.keys()]) {
+        if (!rects.has(id)) { stages.get(id).destroy(); stages.delete(id); }
+      }
+      for (const id of ids) placeStage(stages.get(id) || newStage(id), rects.get(id));
+      mainId = ids[0];
+      layoutSeen = true;
+      updateTouchAction();
+
+      // what the manager said about panes that had not been there
+      for (const [pane, args] of [...pendingShows]) {
+        if (stages.has(pane)) stages.get(pane).show(...args);
+      }
+      pendingShows.clear();
+    }
+
+    /**
+     * Where the ticker bar sits (see the page contract in docs/layout-and-ticker.md): mode 'off' | 'overlay' | 'reserve',
+     * position 'top' | 'bottom'. The CSS above does the placement from these two attributes of #area; ticker.js sets --ticker-h.
+     */
+    function setTickerPlacement(mode, position) {
+      areaEl.dataset.ticker = mode === 'overlay' || mode === 'reserve' ? mode : 'off';
+      areaEl.dataset.tickerPos = position === 'top' ? 'top' : 'bottom';
+    }
+    setTickerPlacement('off', 'bottom');
 
 
     /**
@@ -455,11 +706,7 @@
 
     // The sound of the playlist must not play under the home page
     function syncMedia() {
-      for (const [key, el] of [['video', document.getElementById('video-display')],
-                               ['audio', document.getElementById('audio-player')]]) {
-        if (!el.getAttribute('src')) continue;
-        if (stageVisible() && current && current.container === key) el.play().catch(() => {}); else el.pause();
-      }
+      for (const stage of allStages()) stage.syncMedia();
     }
 
     function applySaver() {
@@ -487,7 +734,9 @@
 
     /** Called by the viewer when the window has been idle. Returns whether the screensaver is now up. */
     function showSaver() {
-      if (!saver.on || saver.up || !current || current.container === 'boot' || current.idle) return false;
+      // the screensaver is the playlist(s) over the home page: there must be something to play in at least one pane
+      const something = allStages().some(s => s.current && s.current.container !== 'boot' && !s.current.idle);
+      if (!saver.on || saver.up || !something) return false;
       saver.up = true;
       document.body.dataset.saver = 'up';
       syncMedia();
@@ -529,13 +778,14 @@
     document.addEventListener('keydown', ev => { if (saver.up) onShield(ev, true); }, true);
 
     /**
-     * Called by the viewer on a schedule, or when the window has been idle: reloads the web page on the stage.
+     * Called by the viewer on a schedule, or when the window has been idle: reloads the web pages of the panes.
      * Interactive windows are left alone and so is anything that is not a page. Returns whether it did.
      */
     function refreshPage() {
-      if (saver.on || !current || current.container !== 'web' || current.idle) return false;
-      containers.web.src = current.src;
-      return true;
+      if (saver.on) return false;
+      let did = false;
+      for (const stage of allStages()) did = stage.refreshPage() || did;
+      return did;
     }
 
     /**
@@ -564,6 +814,7 @@
     function applyTicker() {
       const cfg = window.__utTickerConfig;
       if (!cfg) return;
+      setTickerPlacement(cfg.enabled ? cfg.mode : 'off', cfg.position);   // the CSS of #area places the host; ticker.js sizes it
       if (!tickerLoad) {
         if (!cfg.enabled) return;
         tickerLoad = import(cfg.module);
@@ -601,16 +852,11 @@
     }
 
     /**
-     * Wordmark em size, in px: kept at content_width/8 so the boot-screen
-     * logo is always ~60% of the (post-rotation) content width, matching
-     * unitotem.script's own sizing rule on the Plymouth side.
+     * The wordmark's em size is a CSS container unit now (`.boot { --boot-em: 12.5cqw }`): an eighth of the width of the pane
+     * it is in, which for a pane that fills the window is content_width/8 - the logo ~60% of the (post-rotation) content width,
+     * matching unitotem.script's own sizing rule on the Plymouth side - and follows a rotation, a resize or a split by itself.
      */
-    function updateBootScale() {
-      const width = document.getElementById('content-root').clientWidth;
-      document.documentElement.style.setProperty('--boot-em', (width / 8) + 'px');
-    }
-    window.addEventListener('load', updateBootScale);
-    window.addEventListener('resize', updateBootScale);
+    function updateBootScale() {}
 
     /**
      * Plymouth always renders the splash in the screen's native orientation
