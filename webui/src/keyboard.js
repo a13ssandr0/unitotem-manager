@@ -96,6 +96,22 @@ function placeToggle() {
   toggle.style.top = `${Math.max(0, y)}px`
 }
 
+// The layer changes size when the window is turned (a vertical panel: 1920x1080 becomes 1080x1920) or its screen changes mode: the
+// panel keeps its place and size relative to the screen, instead of staying where it was in pixels and being squeezed back inside
+let lastSize = null
+function resized() {
+  const W = layer.clientWidth
+  const H = layer.clientHeight
+  if (lastSize && lastSize.W && lastSize.H && (lastSize.W !== W || lastSize.H !== H)) {
+    const sx = W / lastSize.W
+    const sy = H / lastSize.H
+    box.x *= sx; box.w *= sx; box.y *= sy; box.h *= sy
+  }
+  lastSize = {W, H}
+  placeToggle()
+  clamp()
+}
+
 function defaultBox() {
   const {W, H} = limits()
   box.w = W * 0.7
@@ -257,8 +273,9 @@ function build() {
   drag(header, (dx, dy) => { box.x += dx; box.y += dy })
   drag(grip, (dx, dy) => { box.w += dx; box.h += dy })
 
-  new ResizeObserver(() => { placeToggle(); clamp() }).observe(layer)
+  new ResizeObserver(resized).observe(layer)
   defaultBox()
+  lastSize = {W: layer.clientWidth, H: layer.clientHeight}
   placeToggle()
   clamp()
 }

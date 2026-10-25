@@ -11,13 +11,13 @@
   </div>
   <div v-else ref="el" class="split" :class="node.dir" :data-path="path">
     <div class="half" :style="{flex: `${node.ratio} 1 0`}">
-      <PaneTree :node="node.a" :path="path + 'a'" :main="main" :labels="labels" :editable="editable"
+      <PaneTree :node="node.a" :path="path + 'a'" :main="main" :labels="labels" :editable="editable" :mirror="mirror"
                 @ratio="(...args) => emit('ratio', ...args)"/>
     </div>
     <div class="gutter" :class="[node.dir, {editable}]" :data-gutter="path"
          @pointerdown.stop.prevent="editable && start($event)"/>
     <div class="half" :style="{flex: `${1 - node.ratio} 1 0`}">
-      <PaneTree :node="node.b" :path="path + 'b'" :main="main" :labels="labels" :editable="editable"
+      <PaneTree :node="node.b" :path="path + 'b'" :main="main" :labels="labels" :editable="editable" :mirror="mirror"
                 @ratio="(...args) => emit('ratio', ...args)"/>
     </div>
   </div>
@@ -32,13 +32,15 @@ const props = defineProps({
   main: {type: Number, default: 1},
   labels: {type: Object, default: () => ({})},    // pane id -> text shown in it
   editable: {type: Boolean, default: false},
+  mirror: {type: String, default: ''},          // 'x' | 'y' | '': the preview is mirrored (the window's content is flipped)
 })
 const emit = defineEmits(['ratio'])
 const el = ref(null)
 
 function ratioAt(event) {
   const box = el.value.getBoundingClientRect()
-  const share = props.node.dir === 'h' ? (event.clientX - box.left) / box.width : (event.clientY - box.top) / box.height
+  let share = props.node.dir === 'h' ? (event.clientX - box.left) / box.width : (event.clientY - box.top) / box.height
+  if ((props.node.dir === 'h' && props.mirror === 'x') || (props.node.dir === 'v' && props.mirror === 'y')) share = 1 - share
   return Math.min(0.9, Math.max(0.1, Math.round(share * 1000) / 1000))
 }
 
