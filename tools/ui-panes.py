@@ -99,6 +99,25 @@ async def main():
             check('a real page in one pane is enough for the screensaver', await c.eval('showSaver()') is True)
             await c.eval('saver.on = saver.up = false; delete document.body.dataset.saver')
 
+            # a turned window (a vertical panel): the area is a percentage of the CONTENT, after the turn
+            third = {'left': 0, 'top': 33.33, 'width': 100, 'height': 33.34, 'margin_color': 'rgb(0,0,0)'}
+            await c.eval(f'setWindowLayout({json.dumps(third)}, {json.dumps(tree)})')
+            await c.eval('setOrientation(1)')
+            await asyncio.sleep(1.2)
+            r = await c.eval('(() => { const r = areaEl.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(Math.round); })()')
+            w, h = await c.eval('[innerWidth, innerHeight]')
+            check('turned 90: the area is the middle third of the content, i.e. a vertical band on the screen',
+                  abs(r[0] - w / 3) <= 2 and abs(r[2] - w / 3) <= 2 and r[1] == 0 and abs(r[3] - h) <= 2, (r, w, h))
+            top = await c.eval(f'document.elementFromPoint({w / 2}, {h * 0.25}).closest(".pane").dataset.pane')
+            bottom = await c.eval(f'document.elementFromPoint({w / 2}, {h * 0.75}).closest(".pane").dataset.pane')
+            check('turned 90: the left pane of the content is on top, the right one below', (top, bottom) == ('1', '2'), (top, bottom))
+            await c.eval('setOrientation(3)')
+            await asyncio.sleep(1.2)
+            top = await c.eval(f'document.elementFromPoint({w / 2}, {h * 0.25}).closest(".pane").dataset.pane')
+            check('turned 270: the other way round', top == '2', top)
+            await c.eval('setOrientation(0)')
+            await asyncio.sleep(1.2)
+
             # junk: sanitised, never fatal
             await c.eval('setWindowLayout({left: "x", width: -1, margin_color: "red;background:url(x)"}, 5)')
             area = await c.eval('areaEl.style.cssText')

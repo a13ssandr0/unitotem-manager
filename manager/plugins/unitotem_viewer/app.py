@@ -744,6 +744,8 @@ class WebviewApp:
                 'screen_name': window_screen.get(wid),
                 'x': g.x(), 'y': g.y(),
                 'width': g.width(), 'height': g.height(),
+                # how the content is turned and mirrored: the editor of the layout draws the window the way it is seen
+                'orientation': win.orientation, 'flip': win.flip,
             })
         await ws.send(json.dumps({
             'target' : 'WebviewInfo',
@@ -803,8 +805,10 @@ class WebviewApp:
             win.set_audio_output(data.get('device'))
         elif target == 'SetOrientation' and win:
             win.set_orientation(data.get('orientation', 0))
+            self._notify_screens_changed()
         elif target == 'SetFlip' and win:
             win.set_flip(data.get('flip', 0))
+            self._notify_screens_changed()
         elif target == 'AddWindow':
             self._open_window(
                 screen_index=data.get('display', 0),

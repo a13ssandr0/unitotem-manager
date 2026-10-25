@@ -141,6 +141,21 @@ class ViewerSettings(BaseModel, validate_assignment=True):
     # The on-screen keyboard of each window, keyed like the audio outputs
     keyboards: dict[str, KeyboardSettings] = {}
 
+    # The orientation (quarter turns, 0..3) and flip (0 none, 1 horizontal, 2 vertical) of the CONTENT of each window, keyed like the
+    # audio outputs: a vertical panel must come back vertical after a reboot. Older versions ignore these keys.
+    orientations: dict[str, int] = {}
+    flips: dict[str, int] = {}
+
+    @field_validator('orientations', mode='before')
+    @classmethod
+    def _orientations(cls, v):
+        return {str(k): int(n) % 4 for k, n in (v or {}).items() if isinstance(n, int) and not isinstance(n, bool)}
+
+    @field_validator('flips', mode='before')
+    @classmethod
+    def _flips(cls, v):
+        return {str(k): int(n) for k, n in (v or {}).items() if n in (0, 1, 2) and not isinstance(n, bool)}
+
     # Touch panels, keyed like the audio outputs: the screensaver over a home page, and the refresh of a plain page
     screensavers: dict[str, ScreensaverSettings] = {}
     refreshes: dict[str, RefreshSettings] = {}
