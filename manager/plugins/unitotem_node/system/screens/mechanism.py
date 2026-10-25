@@ -9,16 +9,16 @@ capability model itself (SCREEN-CONTROL-PLAN.md §2):
     Input source   0x60                     not supported             -
     Volume/mute    0x62 / 0x8D              relative up/down, toggle  -
 
-'auto' order is CEC -> DDC -> output for turning ON (only CEC reliably wakes a
-display that stopped responding on DDC once off - unverified on real hardware
-so far, no CEC adapter has been available anywhere this was tested, but it is
-the documented reason for CEC-first on power-on) and DDC -> CEC -> output for
-turning OFF (DDC/CI reliably powers a monitor down - confirmed real, dev host:
-0xD6 answered SNC values on every monitor tried).
+'auto' order (user decision 2026-10-25: DPMS first, "on that one we have full control"): the compositor's own output first, for
+turning ON and OFF. A monitor switched off over DDC/CI, CEC or serial keeps its link, so the compositor cannot wake it and cannot even
+tell it is off: when WE put it there (`commanded_off`, remembered across restarts) that mechanism is tried first to wake it.
+Measured 2026-10-25 on an LG Ultrafine: 0xD6 <- 04 turns it off, the panel is dark while the output stays active and the 0xD6 read-back
+stays 01; 0xD6 <- 01 alone does NOT wake it, 0xD6 <- 05 and then 01 does (see ddc_ctl.set_power). A DDC power-off is therefore never
+the default: only when asked for explicitly or when the output mechanism is not available.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Optional
 
 Mechanism = Literal['cec', 'ddc', 'output', 'wol', 'serial']
 Action = Literal['on', 'off']
@@ -26,8 +26,8 @@ Action = Literal['on', 'off']
 # 'wol' and 'serial' are only ever available when somebody configured them for the output, which is the intent
 # to use them: a monitor with Wake-on-LAN is woken by it first. WOL has no "off", it is simply never offered there.
 _ORDER: dict[Action, tuple[Mechanism, ...]] = {
-    'on':  ('wol', 'cec', 'ddc', 'serial', 'output'),
-    'off': ('ddc', 'cec', 'serial', 'output'),
+    'on':  ('wol', 'output', 'cec', 'ddc', 'serial'),
+    'off': ('output', 'ddc', 'cec', 'serial'),
 }
 
 
@@ -62,12 +62,17 @@ def resolve_mechanism(available: set[Mechanism], action: Action,
         f'no mechanism available for {action!r} on this output')
 
 
-def candidates(available: set[Mechanism], action: Action, preferred: str = 'auto') -> list[Mechanism]:
+def candidates(available: set[Mechanism], action: Action, preferred: str = 'auto',
+               commanded_off: Optional[str] = None) -> list[Mechanism]:
     """The mechanisms to try, in order. An explicit preference is the only candidate (no silent rerouting); on
     'auto' every available mechanism is a candidate, best first, so a failing one falls through to the next."""
     if preferred != 'auto':
         return [resolve_mechanism(available, action, preferred)]
     ordered = [m for m in _ORDER[action] if m in available]
+    if action == 'on' and commanded_off in ordered:
+        # we switched it off through a mechanism the compositor cannot see: only that one (or its siblings) wakes it
+        ordered.remove(commanded_off)
+        ordered.insert(0, commanded_off)  # type: ignore[arg-type]
     if not ordered:
         raise NoMechanismAvailable(f'no mechanism available for {action!r} on this output')
     return ordered

@@ -871,3 +871,10 @@ the VM-specific ones.
 - **Never ship an image-owned file under `/etc/unitotem`** (found 2026-10-25): the A/B update imports everything under `/etc/unitotem` from the previous slot (`ota-preserve.list` has `unitotem*/**`),
   so such a file stays at the version of the first install (the fixed labwc `rc.xml` never reached an updated board). `/etc/unitotem` is user/device state only; image-owned files go under `/usr/share/unitotem`
   (the base labwc config is `/usr/share/unitotem/xdg/labwc/rc.xml`, `XDG_CONFIG_DIRS` of the compositor unit points there). Checked: no other package ships a file there.
+- **DDC/CI power is blind, and DPMS is the first choice (measured 2026-10-25 on an LG Ultrafine and a Realtek "FHD demoset" board, user decision "always DPMS first").** `0xD6 <- 04` switches the panel off but the link and the EDID stay
+  powered: the compositor goes on listing the output as driven, DRM stays `connected/enabled/On`, and the `0xD6` read-back still says `01` (LG) or `02` (Realtek) - the read-back proves NOTHING. The monitor only
+  drops its link for an instant when it is switched on by hand. A plain `0xD6 <- 01` does NOT wake the LG from it (and neither does its button); `0xD6 <- 05` and then `01` does (found by binary search with the user watching the panel).
+  So: `mechanism._ORDER` puts `output` (wlr-randr/wlopm) first for on and off; a screen WE switched off over DDC/CEC/serial is remembered in `/var/lib/unitotem/screen_state.json` (`control._commanded_off`, shown by the
+  web UI as "off (DDC)", forgotten when the output disappears or on a switch-on), woken through the same mechanism first, DDC with the 05-then-01 reset (`ddc_ctl.set_power(wake_reset=True)`, only for a screen
+  we put to standby: 05 flickers a monitor that is on), and `wake_all` wakes at start only those. Never send DDC power commands to someone's working monitor to "see what happens": the LG stayed dark with its LED lit until the right sequence was found.
+  DDC reliability differs wildly: a Philips 246V5 on DVI answers half the reads (3-7 s each, no 0xD6 at all), a Realtek board answers every read in milliseconds.

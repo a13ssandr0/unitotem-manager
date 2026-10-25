@@ -107,7 +107,19 @@ def power_off_value(caps: dict[str, dict[str, str]]) -> int:
     return 0x04
 
 
-async def set_power(bus: int, on: bool, caps: Optional[dict] = None):
+WAKE_RESET_DELAY = 1.0
+
+
+async def set_power(bus: int, on: bool, caps: Optional[dict] = None, wake_reset: bool = False):
+    """`wake_reset`: the monitor was put to standby with 0xD6 <- 04 by us. Some (measured: LG Ultrafine) ignore a plain 0xD6 <- 01 in
+    that state and wake only after 0xD6 <- 05 and then 01. It is not sent to a monitor believed to be on: 05 would switch it off for
+    a moment."""
+    if on and wake_reset:
+        logger.info('DDC: bus {} wake-up with reset (0xD6 <- 05, then 01)', bus)
+        await setvcp(bus, VCP_POWER, 0x05)
+        await asyncio.sleep(WAKE_RESET_DELAY)
+        await setvcp(bus, VCP_POWER, POWER_ON)
+        return
     value = POWER_ON if on else power_off_value(caps or {})
     logger.info('DDC: bus {} power {} (0xD6 <- {:02x})', bus, 'on' if on else 'off', value)
     await setvcp(bus, VCP_POWER, value)
