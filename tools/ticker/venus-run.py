@@ -250,6 +250,51 @@ async def main():
             run.cpu('1 lane, 500 headlines, 8 em/s (fast)')
             run.shot('15-500-headlines-two-lanes')
 
+        # ── before/after of the crawl: compositor-driven (new) against the main-thread one (control) ─────────
+        if want('trace'):
+            await clear_sources()
+            await add('/big.xml', 'Big', 3600)
+            await wait_fetched(1)
+            sel = {'mode': 'count', 'count': 500, 'seconds': 7200}
+
+            def trace(label, block=False):
+                raw = ssh(args.host, f'python3 {BOARD}/board-trace.py 15 "{label}"' + (' block' if block else ''), timeout=180)
+                run.note('TRACE ' + raw)
+
+            for rows in (1, 2):
+                await cfg(select=sel, rows=rows, speed=2.5, font_size=3.0)
+                run.note(f'NEW rows={rows} inspect ' + json.dumps(run.inspect()))
+                run.note('NEW getAnimations: ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "JSON.stringify(document.getAnimations().map(a => [a.playState, a.effect.getTiming().easing, a.effect.getTiming().duration | 0]))"'))
+                run.note('NEW will-change/layers: ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "JSON.stringify([...document.querySelectorAll(\'.ut-page\')].map(e => getComputedStyle(e).willChange))"'))
+                trace(f'NEW {rows} lane(s) idle main thread')
+                trace(f'NEW {rows} lane(s) main thread blocked 300ms/s', True)
+                run.cpu(f'NEW {rows} lane(s), 500 headlines', 20)
+            run.shot('16-new-crawl')
+            # the control: the old implementation (JS moves the belt every frame) takes the bar over
+            for rows in (1, 2):
+                await cfg(select=sel, rows=rows, speed=2.5, font_size=3.0)
+                ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "(async () => {{ window.utTicker.destroy(); await import(\'/assets/ticker-control.js\'); window.utTicker.configure(window.__utTickerConfig); window.utTicker.setItems(window.__utTickerItems); }})()"')
+                await asyncio.sleep(3)
+                run.note(f'OLD rows={rows} inspect ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py inspect')[:300])
+                trace(f'OLD {rows} lane(s) idle main thread')
+                trace(f'OLD {rows} lane(s) main thread blocked 300ms/s', True)
+                run.cpu(f'OLD {rows} lane(s), 500 headlines', 20)
+                # back to the new one for the next round: the page is reloaded by restarting the manager at the end
+            ssh(args.host, 'systemctl restart unitotem-manager', timeout=120)
+            await asyncio.sleep(15)
+
+        if want('quality'):
+            # fractional translation of a composited text layer: is it blurrier than at a whole pixel?
+            await cfg(rows=1, speed=2.5, font_size=3.0, template='{title}', select={'mode': 'count', 'count': 30, 'seconds': 7200})
+            for name, frac in (('int', 0.0), ('half', 0.5), ('third', 0.33)):
+                expr = ("(() => { const a = document.getAnimations().find(x => x.playState === 'running'); const el = a.effect.target;"
+                        " const px = window.utTicker.inspect().speedPx; a.pause();"
+                        f" a.currentTime = ((200 + {frac}) / px) * 1000; return el.getBoundingClientRect().left; }})()")
+                run.note(f'quality {name}: page left = ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "{expr}"'))
+                await asyncio.sleep(1)
+                run.shot(f'17-quality-{name}')
+            await cfg(rows=1)    # sets it running again
+
         open(os.path.join(args.out, 'notes.txt'), 'w').write('\n'.join(run.results) + '\n')
 
 

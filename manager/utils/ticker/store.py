@@ -25,7 +25,7 @@ from utils.models.ticker import MAX_SOURCES, TickerSource
 CACHE_FILE = Path('/var/lib/unitotem/ticker-cache.json')
 FILE_VERSION = 1
 MERGED_CAP = 500
-MAX_ITEMS_PER_SOURCE = 200
+MAX_ITEMS_PER_SOURCE = 500
 
 
 def sources_file() -> Path:

@@ -1,5 +1,10 @@
 === CURRENT WORK ===
 
+2026-10-25 RSS TICKER (package B, branch `rss-ticker`, pushed): DONE: sources + fetcher + scheduler + merged list + API + backup part (92 python tests), page module with Rich/f-string templates, selection,
+  compositor-driven crawl in chained pages (the old per-frame JS crawl judders: see CLAUDE.md "RSS ticker"), clock, web UI (Sources card, per-window dialog with live preview and presets), tools/ui-ticker.py, node tests
+  (`cd webui && npm test`), real runs on venus (screenshots, trace, CPU) with tools/ticker/. TO DO by the lead/package A: switch `utils/ticker/windows.py` to `WindowLayout.ticker`, host `#area/#ticker-host` in
+  boot-screen.html (applyTicker is already there), add python3-feedparser to the image; Pi 4 measurements not done (board belongs to package A); the viewer window of venus is the only real-pixel evidence.
+
 2026-10-21 CEF WAYLAND PORT (owner: the "CEF on Wayland" agent; design note docs/cef-wayland/design.md): DONE and run on venus and the Pi 4: cefpython Views bindings (branch `wayland-views`
   of a13ssandr0/cefpython, pushed, docs in api/), CEF patch series tools/cef-server/patches/cef/ (SetFullscreenOnDisplay, GetLabel, Wayland GetDisplay/frameless/X11 guards, ceftests), end-to-end
   tests tools/cef-wayland-tests/ (18/18 checks on both boards, 60 fps, same CPU and 2-5% less RAM than the DevTools windows). NEXT: the viewer switches to the Views API (removes the uinput/labwc key
