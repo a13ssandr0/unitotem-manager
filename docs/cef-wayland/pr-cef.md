@@ -12,10 +12,14 @@ CEF's rules (docs/contributing_with_git.md) ask for an issue number in the commi
 Windows machine). Linux only: x86_64 and aarch64 builds, ceftests Views suites on x86_64 under labwc. As a partial check the touched
 translation units (`display_impl.cc`, `window_impl.cc`, `window_view.cc`, `view_util_aura.cc`) were compiled syntax-only with Chromium's
 clang both with and without `USE_OZONE`; without it `BUILDFLAG(IS_OZONE)` is 0, which is what Windows and macOS see (`tools/cef-server/check-nonozone.py`).
-It does not replace a Windows or macOS build. The master-rebased copy (`patches/cef-master`, e537569ec) was checked the same way against the
-Chromium 147 flags (`CEF_OVERLAY`): `display_impl.cc`, `window_view.cc`, `view_util_aura.cc` 0 errors; `window_impl.cc` has 11 errors with and without
-the series, all from master's own keyboard API (`CefKeyboardInputEvent`, a generated header missing there) and a Chromium 147 vs 156 gap
-in files the series does not touch, and `fix_style.py` is "ok" on all 11 files of the rebased series. aarch64: built, and run on a Raspberry Pi 4 image (labwc, real 1080p output): ceftests Views* 105 pass, outputs/views tests pass.
+It does not replace a Windows or macOS build. The master-rebased series (`patches/cef-master`, CEF e537569ec) was built for real: master's `CHROMIUM_BUILD_COMPATIBILITY.txt` asks for
+Chromium `refs/tags/156.0.8078.0`, which was checked out (no history) with CEF master next to the 147 tree (`/nas/cef-master-check`), CEF's patches
+applied (116 of 117, one skipped by CEF's own patcher), `gn gen` of the Linux x64 Release configuration, then `autoninja` of `window_impl.o`,
+`display_impl.o`, `window_view.o` and `view_util_aura.o` of `libcef_static` (42686 steps for the generated headers and the base master: success)
+and, after `git am` of the six patches and `version_manager.py -u`, again (54 steps): success, 0 errors; `ceftests/window_unittest.o` with the new
+tests compiles too (208 steps). The syntax-only check with and without `USE_OZONE` gives 0 errors on all four units for both base master and
+master + series. Not built: the full libcef of master (not linked, not run: runs and measurements were done on the 147 series).
+`fix_style.py` is "ok" on all 11 files of the rebased series. aarch64: built, and run on a Raspberry Pi 4 image (labwc, real 1080p output): ceftests Views* 105 pass, outputs/views tests pass.
 
 ## Title
 
