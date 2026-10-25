@@ -12,13 +12,15 @@
     <v-expansion-panels variant="accordion" multiple>
       <v-expansion-panel v-for="screen in screens" :key="screen.name">
         <v-expansion-panel-title>
-          <v-icon :color="screen.active ? 'green' : 'grey'" class="me-2">
-            {{ screen.active ? 'mdi-monitor' : 'mdi-monitor-off' }}
+          <v-icon :color="screen.active && !screen.commanded_off ? 'green' : 'grey'" class="me-2">
+            {{ screen.active && !screen.commanded_off ? 'mdi-monitor' : 'mdi-monitor-off' }}
           </v-icon>
           <strong>{{ screen.name }}</strong>
           <span v-if="screen.identity" class="ms-3 text-caption text-medium-emphasis">{{ screen.identity }}</span>
-          <v-chip class="ms-3" size="small" :color="screen.active ? 'green' : 'grey'">
-            {{ screen.active ? 'on' : screen.connected ? 'off' : 'not connected' }}
+          <!-- a monitor switched off over DDC/CEC/serial keeps its link: the compositor still drives it, only what was commanded is known -->
+          <v-chip class="ms-3" size="small" :color="screen.active && !screen.commanded_off ? 'green' : 'grey'">
+            {{ screen.commanded_off ? `off (${screen.commanded_off.mechanism.toUpperCase()})`
+               : screen.active ? 'on' : screen.connected ? 'off' : 'not connected' }}
           </v-chip>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
