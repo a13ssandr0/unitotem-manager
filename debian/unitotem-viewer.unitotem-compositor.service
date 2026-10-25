@@ -24,7 +24,7 @@ UnsetEnvironment=TERM
 Environment=XDG_RUNTIME_DIR=/run/unitotem/xdg
 Environment=LIBSEAT_BACKEND=builtin
 # base configuration of the image, then the fragment of the node (touch screens)
-Environment=XDG_CONFIG_DIRS=/etc/unitotem/xdg:/run/unitotem/labwc/node
+Environment=XDG_CONFIG_DIRS=/usr/share/unitotem/xdg:/run/unitotem/labwc/node
 ExecStartPre=-/usr/bin/timeout 5 /usr/bin/plymouth deactivate
 ExecStartPre=/bin/chmod 700 /run/unitotem/xdg
 ExecStartPre=/bin/sh -c 'for n in node; do f=/run/unitotem/labwc/$n/labwc/rc.xml; [ -e "$f" ] || printf \'<?xml version="1.0"?>\\n<labwc_config>\\n</labwc_config>\\n\' > "$f"; done'

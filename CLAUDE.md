@@ -810,7 +810,7 @@ the VM-specific ones.
     but NOT enabled by anything (the manager adds the window once `xrandr --output HDMI-2 --auto` turns it on).
 - **THE KIOSK RUNS WAYLAND (labwc) AND NOTHING ELSE since 2026-10-20 (user decision "via X11, andiamo tutto su Wayland"). Everything X11 in this file is history.**
   Pieces: `unitotem-compositor.service` (shipped by unitotem-viewer, enabled by the image: labwc as root on VT1 with libseat's builtin backend, `RuntimeDirectory=unitotem`,
-  the compositor's private `XDG_RUNTIME_DIR=/run/unitotem/xdg` (the manager gets `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`, an absolute path, and root's `XDG_RUNTIME_DIR=/run/user/0`), `labwc --merge-config` with `XDG_CONFIG_DIRS=/etc/unitotem/xdg:/run/unitotem/labwc/node:/run/unitotem/labwc/viewer`; the base config is
+  the compositor's private `XDG_RUNTIME_DIR=/run/unitotem/xdg` (the manager gets `WAYLAND_DISPLAY=/run/unitotem/xdg/wayland-0`, an absolute path, and root's `XDG_RUNTIME_DIR=/run/user/0`), `labwc --merge-config` with `XDG_CONFIG_DIRS=/usr/share/unitotem/xdg:/run/unitotem/labwc/node:/run/unitotem/labwc/viewer`; the base config is
   `debian/labwc-rc.xml`); `utils/labwc.py` (one configuration FRAGMENT per writer, `reload()` = SIGHUP: the viewer writes the window placement, the node the touch mapping);
   the viewer (Qt wayland only for QScreens and splash; browser windows made by DevTools `Target.createTarget`, see below); the node (`system/screens/wayland.py`: `wlr-randr --json`
   for outputs/power/rotation names, `wlopm` for blanking, EDID from `/sys/class/drm/card*-<output>/edid` for the identity; `touch.py`; `vnc.py` with wayvnc); `bootsplash.py` in QtGui.
@@ -868,3 +868,6 @@ the VM-specific ones.
   there hit the blank initial document and was lost: after a manager restart a window restored to its playlist stayed empty (found testing audio on the Pi).
 - **Testing code on an image board without building a deb**: copy the changed files under `/var/lib/unitotem/<dir>` and `mount --bind` each over `/usr/share/unitotem-manager/<path>`
   (read-only `/usr` is no obstacle for a bind of a file), then `systemctl restart unitotem-manager`; they vanish at reboot.
+- **Never ship an image-owned file under `/etc/unitotem`** (found 2026-10-25): the A/B update imports everything under `/etc/unitotem` from the previous slot (`ota-preserve.list` has `unitotem*/**`),
+  so such a file stays at the version of the first install (the fixed labwc `rc.xml` never reached an updated board). `/etc/unitotem` is user/device state only; image-owned files go under `/usr/share/unitotem`
+  (the base labwc config is `/usr/share/unitotem/xdg/labwc/rc.xml`, `XDG_CONFIG_DIRS` of the compositor unit points there). Checked: no other package ships a file there.
