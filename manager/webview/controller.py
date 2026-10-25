@@ -11,6 +11,8 @@ from api.commons import SHUTDOWN_EVENT
 from utils.outputs import find_renamed
 from utils.models.assets import Asset, AssetsManager, first_boot, idle_asset, no_assets
 from utils.models.command_line import cmdargs
+from utils.models import layout as layouts
+from utils.models.layout import Area, LayoutError, WindowLayout, window_layouts
 from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings, viewer_settings
 
 if TYPE_CHECKING:
@@ -20,8 +22,9 @@ if TYPE_CHECKING:
 _FIT_NAMES = ('contain', 'cover', 'fill')
 
 
-def show_payload(asset: Asset, window_id: int, page: int = 0) -> dict:
-    """The 'Show' command for one asset on one window.
+def show_payload(asset: Asset, window_id: int, page: int = 0, pane: Optional[int] = None) -> dict:
+    """The 'Show' command for one asset on one pane of one window (`pane` None: the main pane, which is also what a viewer
+    that knows nothing of panes does with it).
 
     Built in a single place because the playback loop, the immediate push on
     assignment and the idle push for an unassigned window all need it, and when
@@ -40,6 +43,7 @@ def show_payload(asset: Asset, window_id: int, page: int = 0) -> dict:
             container = 1
         else:
             url = 'https://localhost/uploaded/' + name
+    extra = {} if pane is None else {'pane': pane}
     return dict(
         src=url,
         window_id=window_id,
@@ -62,6 +66,7 @@ def show_payload(asset: Asset, window_id: int, page: int = 0) -> dict:
         allow_pinch_zoom=asset.allow_pinch_zoom,
         # Nothing to play (no enabled asset, no playlist): a screensaver has nothing to show on top of its home page
         idle=asset is no_assets or asset is first_boot,
+        **extra,
     )
 
 
@@ -71,10 +76,11 @@ class PlaylistLoop:
     def __init__(self, playlist: AssetsManager, remote_ws: WSManager):
         self.playlist = playlist
         self.remote_ws = remote_ws
-        # (webview_id, window_id): a totem drives one window per screen, and
+        # (webview_id, window_id, pane): a totem drives one window per screen, and
         # each window gets its own playlist - two monitors on one node can show
-        # different things. The same playlist may of course drive many windows.
-        self.assigned_webviews: set[tuple[str, int]] = set()
+        # different things. A window may be divided in panes, each with a playlist of its own.
+        # The same playlist may of course drive many windows and panes.
+        self.assigned_webviews: set[tuple[str, int, int]] = set()
         self._task: Optional[asyncio.Task] = None
 
     def start(self):
@@ -90,11 +96,11 @@ class PlaylistLoop:
             self._task.cancel()
             self._task = None
 
-    def assign(self, webview_id: str, window_id: int):
-        self.assigned_webviews.add((webview_id, window_id))
+    def assign(self, webview_id: str, window_id: int, pane: int):
+        self.assigned_webviews.add((webview_id, window_id, pane))
 
-    def unassign(self, webview_id: str, window_id: int):
-        self.assigned_webviews.discard((webview_id, window_id))
+    def unassign(self, webview_id: str, window_id: int, pane: int):
+        self.assigned_webviews.discard((webview_id, window_id, pane))
 
     async def _run(self):
         logger.info('Starting playlist loop: {} ({})', self.playlist.name, self.playlist.playlist_id)
@@ -104,26 +110,26 @@ class PlaylistLoop:
                     break
                 if not self.assigned_webviews:
                     continue
-                for webview_id, window_id in list(self.assigned_webviews):
+                for webview_id, window_id, pane in list(self.assigned_webviews):
                     await self.remote_ws.multicast(
-                        webview_id, 'Show', **show_payload(asset, window_id, self.playlist.current_page))
+                        webview_id, 'Show', **show_payload(asset, window_id, self.playlist.current_page, pane))
         except asyncio.CancelledError:
             logger.info('Playlist loop stopped: {}', self.playlist.playlist_id)
 
-    async def send_current(self, webview_id: str, window_id: int):
-        """Push this playlist's current asset to one window straight away,
+    async def send_current(self, webview_id: str, window_id: int, pane: int):
+        """Push this playlist's current asset to one pane straight away,
         so a freshly assigned screen does not sit on the boot logo until the
         next rotation."""
         await self.remote_ws.multicast(
-            webview_id, 'Show', **show_payload(self.playlist.current, window_id, self.playlist.current_page))
+            webview_id, 'Show', **show_payload(self.playlist.current, window_id, self.playlist.current_page, pane))
 
 
     async def send_audio(self, asset: Asset):
-        """Volume and mute of `asset`, edited while it is the one on screen, to every window of this playlist: the media
+        """Volume and mute of `asset`, edited while it is the one on screen, to every pane of this playlist: the media
         keeps playing, a new Show would restart it."""
-        for webview_id, window_id in list(self.assigned_webviews):
+        for webview_id, window_id, pane in list(self.assigned_webviews):
             await self.remote_ws.multicast(
-                webview_id, 'SetAssetAudio', window_id=window_id, volume=asset.volume, muted=asset.muted)
+                webview_id, 'SetAssetAudio', window_id=window_id, pane=pane, volume=asset.volume, muted=asset.muted)
 
 
 class WebviewManager:
@@ -164,10 +170,13 @@ class WebviewManager:
         # file format. Resolved to screen names the first time the viewer
         # reports its windows, since only then is the mapping knowable.
         self._pending_window_assignments: dict[str, dict[int, str]] = {}
-        # Windows already parked on the idle page, so _restore_assignments -
+        # Panes already parked on the idle page, so _restore_assignments -
         # which runs on every info update - does not reload it under them each
         # time a screen is plugged or unplugged elsewhere on the same node.
-        self._idle_windows: set[tuple[str, int]] = set()
+        self._idle_panes: set[tuple[str, int, int]] = set()
+        # The layout (area, panes) of every window, kept per screen like the assignments; the playlist of the main pane
+        # is the assignment above, the others' are in the layout
+        self.layouts = window_layouts
         # (viewer id, window id) whose sound output has been sent: done once per window, when it first shows up
         self._audio_applied: set[tuple[str, int]] = set()
 
@@ -202,17 +211,21 @@ class WebviewManager:
             # Unassign all webviews assigned to this playlist
             for vid, screen_name in [k for k, pid in self._assignments.items() if pid == playlist_id]:
                 del self._assignments[(vid, screen_name)]
-                # Deleting a playlist leaves its windows with nothing to show;
-                # they must fall back to the idle page like any other
-                # unassigned window rather than freeze on the last asset.
-                # Only a screen that currently has a window can be told; one
-                # that is off or unplugged gets the idle page from
-                # _restore_assignments when it comes back.
-                window_id = self._window_of(vid, screen_name)
-                if window_id is not None and (vid, window_id) not in self._idle_windows:
-                    self._idle_windows.add((vid, window_id))
-                    asyncio.create_task(self._send_idle(vid, window_id))
             self._save_assignments()
+            # ... and the panes that showed it
+            for key, layout in list(self.layouts.windows.items()):
+                if playlist_id in layout.panes.values():
+                    self.layouts.put(key, layouts.with_panes(
+                        layout, {p: pid for p, pid in layout.panes.items() if pid != playlist_id}))
+            # Deleting a playlist leaves its windows with nothing to show;
+            # they must fall back to the idle page like any other
+            # unassigned window rather than freeze on the last asset.
+            # Only a screen that currently has a window can be told; one
+            # that is off or unplugged gets the idle page from
+            # _restore_assignments when it comes back.
+            for vid in list(self._webviews):
+                for window_id, screen_name in self._windows_of(vid):
+                    self._sync_window(vid, window_id, screen_name)
 
     # ── Webview registration ───────────────────────────────────────────────
 
@@ -225,8 +238,8 @@ class WebviewManager:
         # screen on the boot logo until somebody reassigns it by hand.
         self._restore_assignments(instance_id)
 
-    async def _send_idle(self, instance_id: str, window_id: int):
-        """Park one window on the idle page.
+    async def _send_idle(self, instance_id: str, window_id: int, pane: Optional[int] = None):
+        """Park one pane of a window on the idle page.
 
         A window with no playlist assigned would otherwise never be told
         anything at all, and would sit on boot-screen.html for as long as it
@@ -239,7 +252,7 @@ class WebviewManager:
         screen included where that still applies - see idle_asset().
         """
         await self.remote_ws.multicast(
-            instance_id, 'Show', **show_payload(idle_asset(), window_id))
+            instance_id, 'Show', **show_payload(idle_asset(), window_id, pane=pane))
 
     def _windows_of(self, instance_id: str) -> list[tuple[int, Optional[str]]]:
         """(window_id, screen_name) for every window a viewer has reported.
@@ -296,13 +309,12 @@ class WebviewManager:
         # be mistaken for a live one.
         live_ids = {window_id for window_id, _ in windows}
         for loop in self._loops.values():
-            for vid, window_id in [k for k in loop.assigned_webviews
-                                   if k[0] == instance_id and k[1] not in live_ids]:
+            for vid, window_id, pane in [k for k in loop.assigned_webviews
+                                         if k[0] == instance_id and k[1] not in live_ids]:
                 logger.info('Detaching gone window {} of {} from playlist {}',
                             window_id, vid, loop.playlist.playlist_id)
-                loop.unassign(vid, window_id)
-        self._idle_windows -= {(vid, window_id) for vid, window_id in self._idle_windows
-                               if vid == instance_id and window_id not in live_ids}
+                loop.unassign(vid, window_id, pane)
+        self._idle_panes -= {k for k in self._idle_panes if k[0] == instance_id and k[1] not in live_ids}
         self._audio_applied = {k for k in self._audio_applied if k[0] != instance_id or k[1] in live_ids}
 
         # assignments saved while the screens had X server names (HDMI-1) follow their output under the compositor's (HDMI-A-1)
@@ -313,6 +325,9 @@ class WebviewManager:
                 logger.info('Output {} of {} is now called {}: its playlist follows', key[1], instance_id, renamed)
                 self._assignments[(instance_id, renamed)] = self._assignments.pop(key)
                 self._save_assignments()
+            if renamed is not None:
+                # the layout of the output follows it as well
+                self.layouts.rename(self._audio_key(instance_id, key[1]), self._audio_key(instance_id, renamed))
 
         legacy = self._legacy_assignments.pop(instance_id, None)
         if legacy is not None:
@@ -369,6 +384,10 @@ class WebviewManager:
             # A window that has just appeared is told where to play its sound
             if (instance_id, window_id) not in self._audio_applied:
                 self._audio_applied.add((instance_id, window_id))
+                # the layout first: the panes the next commands talk about have to exist (the page also keeps what it is
+                # told about a pane it does not know yet until the layout has come)
+                if self._supports_layout(instance_id):
+                    asyncio.create_task(self._push_layout(instance_id, window_id, screen_name))
                 device = viewer_settings.audio_outputs.get(self._audio_key(instance_id, screen_name))
                 if device:
                     asyncio.create_task(self.send_webview_command(
@@ -388,30 +407,63 @@ class WebviewManager:
                 if refresh and (refresh.refresh_after_idle or refresh.refresh_schedules):
                     asyncio.create_task(self.send_webview_command(
                         instance_id, 'SetRefresh', window_id=window_id, **refresh.model_dump()))
-            playlist_id = self._assignments.get((instance_id, screen_name)) if screen_name else None
+            self._sync_window(instance_id, window_id, screen_name)
+
+    def _supports_layout(self, instance_id: str) -> bool:
+        """Whether the viewer knows about panes and the area (SetWindowLayout, `pane` in Show). A viewer of an older version does
+        not say so and is driven as it always was: one pane, which is the whole window."""
+        return bool(self._webviews.get(instance_id, {}).get('layout'))
+
+    def _layout_for(self, instance_id: str, screen_name: Optional[str]) -> WindowLayout:
+        return self.layouts.get(self._audio_key(instance_id, screen_name)) if screen_name else WindowLayout()
+
+    def _wanted_playlists(self, instance_id: str, screen_name: Optional[str],
+                          layout: WindowLayout) -> dict[int, Optional[str]]:
+        """The playlist of every pane of a window: the assignment of the screen for the main pane, the layout's for the others."""
+        wanted = {pane: layout.panes.get(pane) for pane in layout.leaf_ids}
+        wanted[layout.main] = self._assignments.get((instance_id, screen_name)) if screen_name else None
+        return wanted
+
+    def _sync_window(self, instance_id: str, window_id: int, screen_name: Optional[str]):
+        """Makes the playlist loops and the idle panes of one window match what it is meant to show: every pane on its playlist
+        (the current asset pushed to the ones that just got it), the others parked on the idle page. Idempotent, and the only
+        place that does it: assigning, unassigning, splitting, closing and restoring all end here."""
+        layout = self._layout_for(instance_id, screen_name)
+        if not self._supports_layout(instance_id):
+            layout = WindowLayout()             # an older viewer has one pane: the main one
+        wanted = self._wanted_playlists(instance_id, screen_name, layout)
+        for loop in self._loops.values():       # panes that are gone stop receiving
+            for key in [k for k in loop.assigned_webviews if k[:2] == (instance_id, window_id) and k[2] not in wanted]:
+                loop.unassign(*key)
+        self._idle_panes -= {k for k in self._idle_panes if k[:2] == (instance_id, window_id) and k[2] not in wanted}
+        for pane, playlist_id in wanted.items():
+            key = (instance_id, window_id, pane)
             loop = self._loops.get(playlist_id) if playlist_id else None
+            for other in self._loops.values():  # a pane plays one playlist at a time
+                if other is not loop and key in other.assigned_webviews:
+                    other.unassign(*key)
             if loop:
-                self._idle_windows.discard((instance_id, window_id))
-                if (instance_id, window_id) not in loop.assigned_webviews:
-                    logger.info('Restoring window {} ({}) of {} to playlist {}',
-                                window_id, screen_name, instance_id, playlist_id)
-                    loop.assign(instance_id, window_id)
-                    asyncio.create_task(loop.send_current(instance_id, window_id))
-            elif (instance_id, window_id) not in self._idle_windows:
-                logger.info('Window {} ({}) of {} has no playlist: showing the idle page',
-                            window_id, screen_name, instance_id)
-                self._idle_windows.add((instance_id, window_id))
-                asyncio.create_task(self._send_idle(instance_id, window_id))
+                self._idle_panes.discard(key)
+                if key not in loop.assigned_webviews:
+                    logger.info('Restoring pane {} of window {} ({}) of {} to playlist {}',
+                                pane, window_id, screen_name, instance_id, playlist_id)
+                    loop.assign(*key)
+                    asyncio.create_task(loop.send_current(*key))
+            elif key not in self._idle_panes:
+                logger.info('Pane {} of window {} ({}) of {} has no playlist: showing the idle page',
+                            pane, window_id, screen_name, instance_id)
+                self._idle_panes.add(key)
+                asyncio.create_task(self._send_idle(*key))
 
     def refresh_idle(self):
         """The idle page changed (the node has an administrator now: the welcome screen gives way to the placeholder):
         tell the windows that show it."""
         for loop in self._loops.values():
             if not loop.playlist.has_enabled():
-                for vid, wid in loop.assigned_webviews:
-                    asyncio.create_task(loop.send_current(vid, wid))
-        for vid, wid in self._idle_windows:
-            asyncio.create_task(self._send_idle(vid, wid))
+                for vid, wid, pane in loop.assigned_webviews:
+                    asyncio.create_task(loop.send_current(vid, wid, pane))
+        for vid, wid, pane in self._idle_panes:
+            asyncio.create_task(self._send_idle(vid, wid, pane))
 
     def update_webview_info(self, instance_id: str, info: dict):
         if instance_id in self._webviews:
@@ -426,8 +478,7 @@ class WebviewManager:
         # A viewer that comes back has restarted its browser and is on the boot
         # screen again, so forget that its windows were ever parked - otherwise
         # they would be left spinning, with this side believing they are idle.
-        self._idle_windows = {(vid, wid) for vid, wid in self._idle_windows
-                              if vid != instance_id}
+        self._idle_panes = {k for k in self._idle_panes if k[0] != instance_id}
         self._audio_applied = {k for k in self._audio_applied if k[0] != instance_id}
         # Detach from the loop so it stops sending assets to something that is
         # no longer there, but KEEP the assignment: a viewer that disconnects
@@ -438,8 +489,8 @@ class WebviewManager:
         # resolve an output name against - and because it also clears windows
         # the assignments no longer mention.
         for loop in self._loops.values():
-            for vid, window_id in [k for k in loop.assigned_webviews if k[0] == instance_id]:
-                loop.unassign(vid, window_id)
+            for key in [k for k in loop.assigned_webviews if k[0] == instance_id]:
+                loop.unassign(*key)
 
     # ── Assignment persistence ────────────────────────────────────────────
 
@@ -559,7 +610,8 @@ class WebviewManager:
 
     # ── Assignment management ─────────────────────────────────────────────
 
-    def assign(self, webview_id: str, window_id: int, playlist_id: str):
+    def assign(self, webview_id: str, window_id: int, playlist_id: str, pane: Optional[int] = None):
+        """Puts a pane of a window on a playlist; without a pane, the main one (what the assignments of a window always meant)."""
         # Addressed by window from the outside (that is what the web UI has to
         # hand) and stored by output name - see _assignments.
         screen_name = self._screen_of(webview_id, window_id)
@@ -568,34 +620,35 @@ class WebviewManager:
                            'named output, so the assignment could not be restored',
                            window_id, webview_id)
             return
+        layout = self._layout_for(webview_id, screen_name)
+        if pane is not None and pane not in layout.leaf_ids:
+            raise LayoutError(f'There is no pane {pane}')
+        if pane is None or pane == layout.main:
+            self._assignments[(webview_id, screen_name)] = playlist_id
+            self._save_assignments()
+        else:
+            self.layouts.put(self._audio_key(webview_id, screen_name),
+                             layouts.with_pane_playlist(layout, pane, playlist_id))
+        # A pane shows one playlist at a time, so it is detached from the previous one; a playlist may drive any number of
+        # panes and windows. The current asset is pushed at once, so the pane does not sit on the boot logo until the playlist
+        # happens to rotate
+        self._sync_window(webview_id, window_id, screen_name)
 
-        # A window shows one playlist at a time, so detach it from the previous
-        # one first. The reverse is not true: a playlist may drive any number
-        # of windows.
-        old_pid = self._assignments.get((webview_id, screen_name))
-        if old_pid and old_pid in self._loops:
-            self._loops[old_pid].unassign(webview_id, window_id)
-
-        self._assignments[(webview_id, screen_name)] = playlist_id
-        self._save_assignments()
-        if playlist_id in self._loops:
-            self._idle_windows.discard((webview_id, window_id))
-            self._loops[playlist_id].assign(webview_id, window_id)
-            # Push the current asset immediately, so the window does not sit on
-            # the boot logo until the playlist happens to rotate
-            asyncio.create_task(self._loops[playlist_id].send_current(webview_id, window_id))
-
-    def unassign(self, webview_id: str, window_id: int):
+    def unassign(self, webview_id: str, window_id: int, pane: Optional[int] = None):
         screen_name = self._screen_of(webview_id, window_id)
-        playlist_id = self._assignments.pop((webview_id, screen_name), None) if screen_name else None
-        self._save_assignments()
-        if playlist_id and playlist_id in self._loops:
-            self._loops[playlist_id].unassign(webview_id, window_id)
-        # The window keeps showing whatever the playlist last gave it unless it
-        # is told otherwise, so send it back to the idle page explicitly.
-        if (webview_id, window_id) not in self._idle_windows:
-            self._idle_windows.add((webview_id, window_id))
-            asyncio.create_task(self._send_idle(webview_id, window_id))
+        if screen_name is None:
+            return
+        layout = self._layout_for(webview_id, screen_name)
+        if pane is not None and pane not in layout.leaf_ids:
+            raise LayoutError(f'There is no pane {pane}')
+        if pane is None or pane == layout.main:
+            self._assignments.pop((webview_id, screen_name), None)
+            self._save_assignments()
+        else:
+            self.layouts.put(self._audio_key(webview_id, screen_name), layouts.with_pane_playlist(layout, pane, None))
+        # The pane keeps showing whatever the playlist last gave it unless it is told otherwise: the sync sends it back to
+        # the idle page
+        self._sync_window(webview_id, window_id, screen_name)
 
     def assign_screen(self, webview_id: str, screen_name: str, playlist_id: str):
         """Assign a playlist to an output by name, whether or not its window exists right now (the content that came with
@@ -603,6 +656,15 @@ class WebviewManager:
         self._assignments[(webview_id, screen_name)] = playlist_id
         self._save_assignments()
         self._restore_assignments(webview_id)
+
+    def pane_assignments(self) -> list[tuple[str, str, int, str]]:
+        """(viewer id, screen name, pane, playlist id) of every pane that is not the main one: what the main assignments do not say
+        about which playlists are in use."""
+        found = []
+        for key, layout in self.layouts.windows.items():
+            vid, _, screen = key.partition('|')
+            found += [(vid, screen, pane, pid) for pane, pid in layout.panes.items()]
+        return found
 
     def drop_viewer_assignments(self, webview_id: str, idle: bool = True):
         """Forget what every window of a viewer was assigned to (the viewer is leaving for good); its windows, if
@@ -615,9 +677,14 @@ class WebviewManager:
                 else:
                     loop = self._loops.get(self._assignments.pop((webview_id, screen_name)))
                     if loop:
-                        loop.unassign(webview_id, window_id)
+                        for key in [k for k in loop.assigned_webviews if k[:2] == (webview_id, window_id)]:
+                            loop.unassign(*key)
         for key in [k for k in self._assignments if k[0] == webview_id]:
             del self._assignments[key]
+        # the layouts of a viewer that leaves go with it (its panes' playlists stay where they are: see bundle.py)
+        gone = {k: v for k, v in self.layouts.windows.items() if not k.startswith(f'{webview_id}|')}
+        if len(gone) != len(self.layouts.windows):
+            self.layouts.replace_all(gone)
         self._pending_window_assignments.pop(webview_id, None)
         self._legacy_assignments.pop(webview_id, None)
         self._save_assignments()
@@ -728,6 +795,77 @@ class WebviewManager:
     async def remove_window(self, webview_id: str, window_id: int):
         await self.send_webview_command(webview_id, 'RemoveWindow', window_id=window_id)
 
+    # ── Layout: the area and the panes of a window ────────────────────────
+
+    def get_layout(self, webview_id: str, window_id: int) -> WindowLayout:
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        return self._layout_for(webview_id, screen_name)
+
+    def layout_info(self, webview_id: str, window_id: int) -> dict:
+        """The layout of a window as the web UI wants it: the area and tree, and the playlist of EVERY pane (the main
+        one's included, so the page does not have to know which one is the main pane)."""
+        screen_name = self._screen_of(webview_id, window_id)
+        layout = self._layout_for(webview_id, screen_name)
+        return {**layout.model_dump(mode='json', exclude={'panes', 'next_id'}), 'main': layout.main,
+                'panes': {str(p): pid for p, pid in self._wanted_playlists(webview_id, screen_name, layout).items() if pid}}
+
+    def _screen_or_raise(self, webview_id: str, window_id: int) -> str:
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        return screen_name
+
+    def _commit_layout(self, webview_id: str, window_id: int, screen_name: str, layout: WindowLayout):
+        """Keeps a new layout, tells the window and makes its panes play what they should."""
+        self.layouts.put(self._audio_key(webview_id, screen_name), layout)
+        if self._supports_layout(webview_id):
+            asyncio.create_task(self._push_layout(webview_id, window_id, screen_name))
+        self._sync_window(webview_id, window_id, screen_name)
+
+    async def _push_layout(self, webview_id: str, window_id: int, screen_name: Optional[str]):
+        layout = self._layout_for(webview_id, screen_name)
+        await self.send_webview_command(webview_id, 'SetWindowLayout', window_id=window_id, **layout.page_payload())
+
+    def set_area(self, webview_id: str, window_id: int, area: Area):
+        screen_name = self._screen_or_raise(webview_id, window_id)
+        layout = layouts.set_area(self._layout_for(webview_id, screen_name), area)
+        self._commit_layout(webview_id, window_id, screen_name, layout)
+
+    def split_pane(self, webview_id: str, window_id: int, pane: int, direction: str) -> int:
+        """Divides a pane in two; the new one is idle (it has no playlist). Returns its id."""
+        screen_name = self._screen_or_raise(webview_id, window_id)
+        layout, new_pane = layouts.split_leaf(self._layout_for(webview_id, screen_name), pane, direction)
+        self._commit_layout(webview_id, window_id, screen_name, layout)
+        return new_pane
+
+    def close_pane(self, webview_id: str, window_id: int, pane: int):
+        """Closes a pane, its neighbour takes the space. Closing the main pane makes the next one the main one: the playlist
+        it had becomes the assignment of the window, so nothing that stays on screen is restarted."""
+        screen_name = self._screen_or_raise(webview_id, window_id)
+        layout, main_changed, promoted = layouts.close_leaf(self._layout_for(webview_id, screen_name), pane)
+        if main_changed:
+            if promoted and promoted in self._loops:
+                self._assignments[(webview_id, screen_name)] = promoted
+            else:
+                self._assignments.pop((webview_id, screen_name), None)
+            self._save_assignments()
+        self._commit_layout(webview_id, window_id, screen_name, layout)
+
+    def set_split_ratio(self, webview_id: str, window_id: int, path: str, ratio: float):
+        screen_name = self._screen_or_raise(webview_id, window_id)
+        layout = layouts.set_ratio(self._layout_for(webview_id, screen_name), path, ratio)
+        self._commit_layout(webview_id, window_id, screen_name, layout)
+
+    def layouts_reloaded(self):
+        """The stored layouts were replaced as a whole (restore, reset): every window of every viewer follows."""
+        for vid in list(self._webviews):
+            for window_id, screen_name in self._windows_of(vid):
+                if self._supports_layout(vid):
+                    asyncio.create_task(self._push_layout(vid, window_id, screen_name))
+                self._sync_window(vid, window_id, screen_name)
+
     # ── Queries ───────────────────────────────────────────────────────────
 
     def get_webviews(self) -> dict[str, dict]:
@@ -739,6 +877,7 @@ class WebviewManager:
                 **info,
                 'windows': [
                     {**w, 'assigned_playlist': self._assignments.get((vid, w.get('screen_name'))),
+                     'layout': self.layout_info(vid, w['window_id']),
                      'audio_output': viewer_settings.audio_outputs.get(self._audio_key(vid, w.get('screen_name'))),
                      'keyboard': viewer_settings.keyboards.get(
                          self._audio_key(vid, w.get('screen_name')), KeyboardSettings()).model_dump(),
