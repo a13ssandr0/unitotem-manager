@@ -392,6 +392,12 @@ class WebviewManager:
                 if device:
                     asyncio.create_task(self.send_webview_command(
                         instance_id, 'SetAudioOutput', window_id=window_id, device=device))
+                # how its content is turned and mirrored (a vertical panel stays vertical after a reboot)
+                for field, command, saved in (('orientation', 'SetOrientation', viewer_settings.orientations),
+                                              ('flip', 'SetFlip', viewer_settings.flips)):
+                    value = saved.get(self._audio_key(instance_id, screen_name))
+                    if value:
+                        asyncio.create_task(self.send_webview_command(instance_id, command, window_id=window_id, **{field: value}))
                 # and what its on-screen keyboard is like
                 keyboard = viewer_settings.keyboards.get(self._audio_key(instance_id, screen_name))
                 if keyboard:
@@ -698,11 +704,43 @@ class WebviewManager:
     async def send_webview_command(self, webview_id: str, target: str, **kwargs):
         await self.remote_ws.multicast(webview_id, target, nocache=True, **kwargs)
 
+    def _window_info(self, webview_id: str, window_id: int) -> Optional[dict]:
+        for window in self._webviews.get(webview_id, {}).get('windows', []):
+            if window.get('window_id') == window_id:
+                return window
+        return None
+
+    def get_orientation(self, webview_id: str, window_id: int) -> int:
+        """Quarter turns of the content of a window: what the viewer reports, else what was stored for its screen."""
+        window = self._window_info(webview_id, window_id)
+        if window is None:
+            return 0
+        if 'orientation' in window:
+            return window['orientation']
+        return viewer_settings.orientations.get(self._audio_key(webview_id, window.get('screen_name')), 0)
+
+    def get_flip(self, webview_id: str, window_id: int) -> int:
+        window = self._window_info(webview_id, window_id)
+        if window is None:
+            return 0
+        if 'flip' in window:
+            return window['flip']
+        return viewer_settings.flips.get(self._audio_key(webview_id, window.get('screen_name')), 0)
+
     async def set_orientation(self, webview_id: str, window_id: int, orientation: int):
-        if webview_id in self._webviews:
-            windows = self._webviews[webview_id].get('windows', [])
-            if window_id < len(windows):
-                windows[window_id]['orientation'] = orientation
+        """Turns the content of a window (0..3 quarter turns, clockwise); kept for its screen, so it survives a restart and a replug."""
+        orientation = int(orientation) % 4
+        window = self._window_info(webview_id, window_id)
+        if window is not None:
+            window['orientation'] = orientation
+            screen_name = window.get('screen_name')
+            if screen_name:
+                key = self._audio_key(webview_id, screen_name)
+                if orientation:
+                    viewer_settings.orientations[key] = orientation
+                else:
+                    viewer_settings.orientations.pop(key, None)
+                viewer_settings.save()
         await self.send_webview_command(webview_id, 'SetOrientation',
                                        window_id=window_id, orientation=orientation)
 
@@ -781,10 +819,18 @@ class WebviewManager:
         await self.send_webview_command(webview_id, 'SetRefresh', window_id=window_id, **settings.model_dump())
 
     async def set_flip(self, webview_id: str, window_id: int, flip: int):
-        if webview_id in self._webviews:
-            windows = self._webviews[webview_id].get('windows', [])
-            if window_id < len(windows):
-                windows[window_id]['flip'] = flip
+        flip = flip if flip in (1, 2) else 0
+        window = self._window_info(webview_id, window_id)
+        if window is not None:
+            window['flip'] = flip
+            screen_name = window.get('screen_name')
+            if screen_name:
+                key = self._audio_key(webview_id, screen_name)
+                if flip:
+                    viewer_settings.flips[key] = flip
+                else:
+                    viewer_settings.flips.pop(key, None)
+                viewer_settings.save()
         await self.send_webview_command(webview_id, 'SetFlip', window_id=window_id, flip=flip)
 
     async def add_window(self, webview_id: str, display: int = 0, x: int = 0, y: int = 0,
@@ -877,6 +923,8 @@ class WebviewManager:
                 **info,
                 'windows': [
                     {**w, 'assigned_playlist': self._assignments.get((vid, w.get('screen_name'))),
+                     'orientation': self.get_orientation(vid, w['window_id']),
+                     'flip': self.get_flip(vid, w['window_id']),
                      'layout': self.layout_info(vid, w['window_id']),
                      'audio_output': viewer_settings.audio_outputs.get(self._audio_key(vid, w.get('screen_name'))),
                      'keyboard': viewer_settings.keyboards.get(

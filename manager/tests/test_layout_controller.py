@@ -464,3 +464,56 @@ def test_the_api_answers_with_the_layout_or_an_error(tmp_path, monkeypatch):
         assert reply.kwargs['viewers'][VIEWER]['windows'][0]['assigned_playlist'] == 'B'
         assert api.close_pane(VIEWER, 0, 2).kwargs['error']                             # the last pane
     run(go())
+
+
+# ── orientation and flip of the content: reported by the viewer, kept per screen ─────────────────────
+
+@pytest.fixture
+def settings(monkeypatch):
+    from utils.models.viewer import ViewerSettings, viewer_settings
+    monkeypatch.setattr(ViewerSettings, 'save', lambda self: None)
+    old = viewer_settings.orientations, viewer_settings.flips
+    viewer_settings.orientations, viewer_settings.flips = {}, {}
+    yield viewer_settings
+    viewer_settings.orientations, viewer_settings.flips = old
+
+
+def test_orientation_settings_are_validated():
+    from utils.models.viewer import ViewerSettings
+    s = ViewerSettings(orientations={'a|X': 5, 'b|Y': 'x', 'c|Z': True, 'd|W': 1}, flips={'a|X': 2, 'b|Y': 7, 'c|Z': 'x'})
+    assert s.orientations == {'a|X': 1, 'd|W': 1} and s.flips == {'a|X': 2}
+    assert ViewerSettings(**{'allow_insecure_certs': False}).orientations == {}          # a file from before has none
+
+
+def test_the_orientation_a_viewer_reports_reaches_the_web_ui(tmp_path, monkeypatch, settings):
+    async def go():
+        mgr, ws = make_manager(tmp_path, monkeypatch, windows=())
+        mgr.update_webview_info(VIEWER, {'screens': [], 'layout': True,
+                                         'windows': [{**window(0), 'orientation': 1, 'flip': 2}]})
+        win = mgr.get_webviews()[VIEWER]['windows'][0]
+        assert (win['orientation'], win['flip']) == (1, 2)
+        assert (mgr.get_orientation(VIEWER, 0), mgr.get_flip(VIEWER, 0)) == (1, 2)
+        mgr.update_webview_info(VIEWER, {'screens': [], 'windows': [window(0)]})          # an older viewer says nothing
+        assert mgr.get_webviews()[VIEWER]['windows'][0]['orientation'] == 0
+    run(go())
+
+
+def test_orientation_is_kept_per_screen_and_sent_when_the_window_appears(tmp_path, monkeypatch, settings):
+    async def go():
+        mgr, ws = make_manager(tmp_path, monkeypatch)
+        await mgr.set_orientation(VIEWER, 0, 3)
+        await mgr.set_flip(VIEWER, 0, 1)
+        assert settings.orientations == {KEY: 3} and settings.flips == {KEY: 1}
+        assert ws.commands('SetOrientation')[-1] == {'window_id': 0, 'orientation': 3}
+        # the screen is unplugged and plugged back under a new window id: the new window is turned the same way
+        mgr.update_webview_info(VIEWER, {'screens': [], 'windows': [window(1, 'DP-1')]})
+        ws.sent.clear()
+        mgr.update_webview_info(VIEWER, {'screens': [], 'windows': [window(5)]})
+        await settle()
+        assert ws.commands('SetOrientation') == [{'window_id': 5, 'orientation': 3}]
+        assert ws.commands('SetFlip') == [{'window_id': 5, 'flip': 1}]
+        await mgr.set_orientation(VIEWER, 5, 0)                        # back to upright: nothing is kept
+        await mgr.set_flip(VIEWER, 5, 0)
+        assert settings.orientations == {} and settings.flips == {}
+        assert ws.commands('SetOrientation')[-1]['orientation'] == 0
+    run(go())

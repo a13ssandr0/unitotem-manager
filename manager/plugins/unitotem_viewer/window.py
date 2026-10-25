@@ -78,7 +78,11 @@ class PageCommands:
         None means the default one, i.e. whatever the system decides."""
         self._cef.execute_js(f'setAudioOutput({json.dumps(device)})')
 
+    orientation = 0     # what the page has been told: reported to the manager (WebviewInfo)
+    flip = 0
+
     def set_orientation(self, orientation: int):
+        self.orientation = int(orientation) % 4
         # orientation is a quarter-turn index (0/1/2/3 = 0/90/180/270deg),
         # not a raw degree value. boot-screen.html's setOrientation() applies
         # it via a body[r] CSS attribute selector with the correct swapped
@@ -89,6 +93,7 @@ class PageCommands:
         self._cef.execute_js(f'setOrientation({orientation})')
 
     def set_flip(self, flip: int):
+        self.flip = flip if flip in (1, 2) else 0
         # flip: 0=none, 1=horizontal, 2=vertical (mutually exclusive, no
         # "both" state). Applied to a separate wrapper element from
         # orientation (see boot-screen.html's setFlip()) so the two compose
