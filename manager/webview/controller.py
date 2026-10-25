@@ -11,6 +11,7 @@ from api.commons import SHUTDOWN_EVENT
 from utils.outputs import find_renamed
 from utils.models.assets import Asset, AssetsManager, first_boot, idle_asset, no_assets
 from utils.models.command_line import cmdargs
+from utils.ticker import push as ticker_push
 from utils.models import layout as layouts
 from utils.models.layout import Area, LayoutError, WindowLayout, window_layouts
 from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings, viewer_settings
@@ -403,6 +404,10 @@ class WebviewManager:
                 if keyboard:
                     asyncio.create_task(self.send_webview_command(
                         instance_id, 'SetKeyboard', window_id=window_id, **keyboard.model_dump()))
+                # and its RSS bar (utils/ticker/push.py; nothing at all when the bar is off)
+                if self._supports_layout(instance_id):
+                    asyncio.create_task(ticker_push.window_appeared(
+                        self.send_webview_command, instance_id, window_id, screen_name))
                 # whether it is a touch panel with a screensaver, and whether its page is reloaded now and then
                 key = self._audio_key(instance_id, screen_name)
                 saver = viewer_settings.screensavers.get(key)

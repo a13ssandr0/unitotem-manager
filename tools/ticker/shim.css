@@ -1,0 +1,10 @@
+/* What the page's CSS must do for the ticker (the contract of docs/layout-and-ticker.md), as a shim for the test page and for
+   trying the ticker in the real viewer before boot-screen.html has its own #area. The page (package A) owns the real thing.
+   ticker.js sets --ticker-h (px) on #area, the attributes data-ticker / data-ticker-pos, the height of #ticker-host. */
+#area { position: absolute; inset: 0; overflow: hidden; }
+#panes { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+#ticker-host { position: absolute; left: 0; right: 0; z-index: 5; height: 0; display: none; }
+#area[data-ticker-pos="bottom"] #ticker-host { bottom: 0; }
+#area[data-ticker-pos="top"] #ticker-host { top: 0; }
+#area[data-ticker="reserve"][data-ticker-pos="bottom"] #panes { bottom: var(--ticker-h, 0px); }
+#area[data-ticker="reserve"][data-ticker-pos="top"] #panes { top: var(--ticker-h, 0px); }

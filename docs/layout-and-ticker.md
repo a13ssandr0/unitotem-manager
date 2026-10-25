@@ -54,7 +54,7 @@ The sound output stays per window (all panes), a video's own volume stays per as
 
 Core, runs on a plain server: `utils/ticker/` (sources, fetcher with `feedparser` or the stdlib, merged list, per-source interval), `utils/models/ticker.py`
 (`TickerSettings` of a window, `TickerSource`), `api/ticker.py` (`Ticker/*`, admin), part `ticker`. The page side is `webui/src/ticker.js` (a module loaded on demand like
-`keyboard.js`, publishes `window.utTicker`; the page calls `utTicker.configure(cfg)` / `utTicker.setItems(list)`), UI in `webui/src/components/`.
+`keyboard.js`, publishes `window.utTicker`; the page calls `utTicker.update(cfg, items)` (settings and list together; `configure`/`setItems` exist for tests)), UI in `webui/src/components/`.
 
 - Sources: URL, name, `interval` seconds (clamped 60 s .. 1 day, default 15 min), enabled. Fetch with `If-None-Match`/`If-Modified-Since`, timeout, size cap, redirect cap,
   only http/https, no private-address special cases needed beyond that; one failing source never stops the others (notification once per source via `utils/notifications.py`,
@@ -73,9 +73,12 @@ Core, runs on a plain server: `utils/ticker/` (sources, fetcher with `feedparser
 - Speed: units are font-size relative (em per second) so it reads the same on every resolution; the default comes from research (broadcast crawls, digital signage defaults 50-80 px/s
   at 1080p with 24-32 px text, i.e. roughly 2-3 em/s): package B must search the web for the best default and range and justify it in the code comment; adjustable by the user.
 - Clock block: `clock: {enabled, position: 'start'|'end', seconds: bool, date: bool, rows: 1|2}` fixed at the start or end of the bar, not scrolling.
-- Scrolling with MANY items: a recycler, not one long string: only the elements needed to fill the bar plus a buffer exist, positioned with `transform`, taken from a pool as they leave
-  on the left and re-used for the next items on the right; the list wraps around; when the list changes the crawl continues without a jump. Must cost little on a Pi 4 with
-  software-friendly compositing (one animated layer per lane, no paint-property animation; see the CPU notes in CLAUDE.md).
+- Scrolling is done by the COMPOSITOR (user requirement, 2026-10-25: "the headlines jumping is really serious"; a crawl positioned by JavaScript every frame judders by construction: main thread, stepped,
+  rounded to whole pixels). Each lane is a recycler of PAGES: a page is one element with consecutive headlines (2-3 bar widths, at most 8192 px) and ONE linear `transform` Web Animation (`will-change:
+  transform`, fractional px, nothing else animated); the next page is built ahead (three pages per lane) and gets an exact `startTime` on `document.timeline` (start of the previous + the time it needs to
+  move by its own width), so there is no gap and the speed is the same on every page; a page that has left returns to a pool. 500 headlines cost what 5 do; a change of the list never touches the pages
+  already built (only pages not built yet use it), so nothing jumps; a busy main thread cannot make the crawl miss a frame (measured, see below). The clock block is static text. A rebuild (new settings,
+  resize, rotation) restarts the crawl, pre-filled. Measurements (venus, GPU compositing, 1080p, `tools/ticker/venus-run.py --only trace`): see CLAUDE.md "RSS ticker" and the table below.
 
 ## Page contract (package A restructures boot-screen.html, package B only plugs in)
 
@@ -103,3 +106,25 @@ Procedure for code on a board without building a deb: CLAUDE.md "Testing code on
 - The API: `Viewers/layout`, `set_area`, `split_pane`, `close_pane`, `set_split_ratio` (admin except `layout`), `assign_playlist`/`unassign_playlist` take `pane_id`.
   The Viewers page has a section "Window layout" (`WindowLayout.vue`): B's ticker controls for a window belong in that card (admin only), reading `win.layout.ticker`.
 - Backup: part `layouts` (core, `utils/backup.py`, label "Window layouts (area and panes)"): B adds its own part `ticker` next to it in `CORE_PARTS`.
+
+### Measurements of the crawl (venus: Intel Iris Xe, GPU compositing, DP-2 1920x1080 60 Hz, CEF 147; `tools/ticker/venus-run.py --only trace`, 500 headlines, 2.5 em/s = 80 px/s, 15 s traces)
+
+| | frames drawn/s | longest gap between drawn frames | main-thread commits/s (content updates) | CPU, whole tree |
+|---|---|---|---|---|
+| NEW compositor animations, 1 lane | 60.0 | 21.5 ms | 0 | 32.3 % of a core (gpu 14.0, renderer 11.5, python 6.7) |
+| NEW, 1 lane, main thread BLOCKED 300 ms every second | 60.0 | 21.5 ms | 0 | |
+| NEW, 2 lanes (idle / blocked) | 60.0 / 60.0 | 21.3 / 21.6 ms | 0 / 0 | 33.6 % |
+| OLD JS every frame (rAF + setTimeout, rounded px), 1 lane | 30.1 | 42.2 ms | 90 | 24.5 % |
+| OLD, main thread blocked 300 ms/s | 21.7 | **310.7 ms** (the visible jump) | 65 | |
+| OLD, 2 lanes (idle / blocked) | 30.0 / 21.6 | 42.1 / 311.7 ms | 90 / 65 | 24.5 % |
+
+- Hardware acceleration: `document.getAnimations()` lists one linear `transform` animation per page (3 per lane), `getComputedStyle().willChange` is `transform`, raster tasks 0.14-0.28/s (only when a
+  page is built), paint/commit by the main thread 0 per second while crawling. The renderer still gets an (aborted, empty) `BeginMainFrame` per drawn frame: that is the floor of ANY animation in this CEF
+  on Wayland, measured with a single empty animated `<div>` and no ticker at all: 31.6 % of a core. The ticker itself costs what that div costs; the cost is the 60 fps compositing of the surface, which
+  is why the old stepped 30 fps loop was cheaper (24.5 %) and also why it was not smooth. On a machine without a GPU (the Pi 4 keeps GPU compositing; a software one does not) this floor grows with
+  the area of the layer: measure there before promising anything.
+- Position over time is linear (headless Chrome, `tools/ui-ticker.py`: residual < 1.5 px over 1 s, fractional pixels, measured speed = configured speed).
+- Text quality: a composited layer at a fractional offset is bilinearly resampled. Measured on the real screenshots (paused at x = -200, -200.5, -200.33): the share of strong edges to
+  mid-level edges falls from 1.52 (whole pixel) to 0.97 / 0.83: slightly softer text while it moves, still crisp enough to read; it is inherent to smooth sub-pixel motion (rounding the position
+  from script is what produced the 1/2 px steps), so it is accepted.
+- The frame spacing of `Display::DrawAndSwap` is 8/20/20 ms at 60 Hz on this compositor (mean 16.7 ms) with or without the ticker: not something the crawl can change.

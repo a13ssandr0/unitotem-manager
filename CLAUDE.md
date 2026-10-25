@@ -926,6 +926,31 @@ the VM-specific ones.
 - **Never ship an image-owned file under `/etc/unitotem`** (found 2026-10-25): the A/B update imports everything under `/etc/unitotem` from the previous slot (`ota-preserve.list` has `unitotem*/**`),
   so such a file stays at the version of the first install (the fixed labwc `rc.xml` never reached an updated board). `/etc/unitotem` is user/device state only; image-owned files go under `/usr/share/unitotem`
   (the base labwc config is `/usr/share/unitotem/xdg/labwc/rc.xml`, `XDG_CONFIG_DIRS` of the compositor unit points there). Checked: no other package ships a file there.
+
+## RSS ticker (window bar with a news crawl and a clock, 2026-10-25; design in docs/layout-and-ticker.md)
+Core, all in English, configured from the web UI only (admin). Pieces: `utils/models/ticker.py` (`TickerSettings` of a window, `TickerSource`; numbers are CLAMPED, a colour/URL/template that cannot be
+repaired is refused; the module docstring justifies the default speed, 2.5 em/s, with sources), `utils/ticker/` (`feed.py` feedparser + plain-text cleaning, `fetcher.py` aiohttp conditional GET with
+timeout/size/redirect caps, `store.py` sources + cache + merge/dedup, `service.py` the ONE asyncio task, `push.py` events to the windows, `windows.py` per-window storage), `api/ticker.py` (`Ticker/*`, admin; the
+sources list goes only to administrators), backup part `ticker` (sources + the interim per-window settings; the feeds' cache `/var/lib/unitotem/ticker-cache.json` is NOT in the backup),
+`webui/src/ticker-core.js` (pure: Rich markup + f-string template, time formats, selection; tested with `cd webui && npm test`), `webui/src/ticker.js` (the page module), `TickerSources.vue`/`TickerSettings.vue`.
+Tests: `manager/tests/test_ticker_*.py` (models, feeds against local http servers, scheduler with a fake clock, pushes, backup), `webui/tests/ticker-core.test.mjs`, `tools/ui-ticker.py` (headless Chrome against
+`tools/ticker/testpage.html`, which has the page contract of the design), `tools/ticker/` (board deploy, feed server, DevTools/CPU/trace helpers, `venus-run.py` scenarios).
+- **Per-window settings are INTERIM in `window_tickers.json`** (`utils/ticker/windows.py`, three functions): package A's `WindowLayout.ticker` replaces it. The page contract is `window.__utTickerConfig` /
+  `__utTickerItems` + `applyTicker()` (boot-screen.html) -> `utTicker.update(cfg, items)`; the module path comes from the Vite manifest (`src/ticker.js`) like keyboard.js.
+- **The scheduler never polls**: it sleeps until the earliest `next_due` or a poke (source added/edited/enabled, fetch now, stop); a failure is retried at 60 s, 120 s... up to the interval; a notification
+  (`ticker.source.<id>`, admin) is raised after TWO failures in a row and resolved by the first success, on disabling or deleting.
+- **feedparser needs `io.BytesIO(data)`, never the bytes**: it tries to open a bytes argument as a FILE NAME (`feed.parse` is tested with a path as content). Feed fields are cleaned to plain text and capped
+  server side; the page only ever uses `textContent`, and feed text is never parsed as Rich markup (the template is tokenised first, fields are substituted as text).
+- **Pi/venus have no `python3-feedparser` in the image until the deb with the new Depends is installed**: for board tests `tools/ticker/deploy-board.sh` puts it on PYTHONPATH by a volatile drop-in.
+  A new package directory cannot be bind-mounted file by file (no mount point under read-only /usr): the script mounts whole directories (api, utils, webview, static, the viewer plugin).
+- **A crawl moved by JavaScript judders by construction; the compositor must move it.** The first version positioned the text from a `setTimeout`+`requestAnimationFrame` loop (`translate3d(round(x))`):
+  main-thread driven, stepped, snapped to whole pixels (at ~100 px/s the step alternates 1/2 px), so any main-thread work shows as a visible jump. Now every lane is a chain of PAGES (one element with
+  several consecutive headlines, 2-3 bar widths, at most 8192 px, `will-change: transform`) each with ONE `element.animate()` transform animation, linear, fractional px, the next page given an exact
+  `startTime` on `document.timeline`; nothing else is animated and nothing is positioned per frame. See the measurements in docs/layout-and-ticker.md. Do not "improve" it with `steps()`, rounding
+  or per-frame scripts. Measured before/after on venus (docs/layout-and-ticker.md): 60 vs 30 frames/s, longest gap 21.5 ms vs 311 ms with the main thread blocked, 0 main-thread commits per second.
+- **Any animation costs ~31 % of a core in this CEF on Wayland (60 fps compositing + an empty BeginMainFrame per frame)**, a single animated empty div included: do not chase that number in the ticker's code.
+- **`Display::DrawAndSwap` gaps are not vsync gaps**: under labwc the compositor frame times came out as a 8/20/20 ms pattern at 60 Hz (mean 16.7 ms) on venus, with or without the ticker; judge a crawl by frames drawn
+  per second and the longest gap (no frame skipped), and by the trace's `Raster`/`Paint` counts, not by the spacing of draw events.
 - **DDC/CI power is blind, and DPMS is the first choice (measured 2026-10-25 on an LG Ultrafine and a Realtek "FHD demoset" board, user decision "always DPMS first").** `0xD6 <- 04` switches the panel off but the link and the EDID stay
   powered: the compositor goes on listing the output as driven, DRM stays `connected/enabled/On`, and the `0xD6` read-back still says `01` (LG) or `02` (Realtek) - the read-back proves NOTHING. The monitor only
   drops its link for an instant when it is switched on by hand. A plain `0xD6 <- 01` does NOT wake the LG from it (and neither does its button); `0xD6 <- 05` and then `01` does (found by binary search with the user watching the panel).

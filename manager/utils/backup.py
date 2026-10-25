@@ -72,6 +72,7 @@ def _layouts_changed():
         WebviewManager.get_instance().layouts_reloaded()
     except (RuntimeError, AttributeError):
         pass        # no viewer manager yet (or no event loop): the windows read the layouts when they connect
+    _ticker_changed()   # the bar of each window is part of its layout
 
 
 # ── users ────────────────────────────────────────────────────────────────────
@@ -161,6 +162,44 @@ def _remote_changed():
         pass        # no loop: the next start reads the new state anyway
 
 
+# ── RSS ticker (the sources and the bar of each window; what the feeds said is cache, not backed up) ──
+
+def _export_ticker():
+    import utils.ticker as ticker
+    return {'sources': [s.model_dump() for s in ticker.store().sources]}      # the bars are in the window layouts (part `layouts`)
+
+
+def _restore_ticker(data, _version):
+    import utils.ticker as ticker
+    ticker.store().set_sources(data.get('sources', []))
+    _ticker_changed()
+
+
+def _reset_ticker():
+    import utils.ticker as ticker
+    ticker.store().set_sources([])
+    _ticker_changed()
+
+
+def _ticker_changed():
+    """The scheduler and the windows were working from the old state: tell them (nothing to do before the loop runs)."""
+    import asyncio
+    import utils.ticker as ticker
+    from utils.ticker import push
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+
+    async def tell():
+        from webview.controller import WebviewManager
+        ticker.service().poke()
+        await ticker.service().items_changed()
+        vm = WebviewManager.get_instance()
+        await push.refresh_all(vm.send_webview_command, vm.get_webviews())
+    loop.create_task(tell())
+
+
 # ── uploaded files ───────────────────────────────────────────────────────────
 
 def _export_files(zip_file):
@@ -186,6 +225,7 @@ CORE_PARTS = [
     BackupPart('users', 'Users', _export_users, _restore_users, _reset_users),
     BackupPart('security', 'Security settings', _export_security, _restore_security, _reset_security),
     BackupPart('remote', 'Pairing and certificates', _export_remote, _restore_remote, _reset_remote),
+    BackupPart('ticker', 'News ticker (RSS sources)', _export_ticker, _restore_ticker, _reset_ticker),
     BackupPart('uploads', 'Uploaded files', None, None, _reset_files, _export_files, _restore_files,
                optional_in_backup=True),
 ]
