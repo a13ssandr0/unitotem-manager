@@ -60,12 +60,14 @@ async def main():
     try:
         for _ in range(50):
             try:
-                ver = json.load(urllib.request.urlopen('http://127.0.0.1:9355/json/version'))['webSocketDebuggerUrl']
-                page = next(t for t in json.load(urllib.request.urlopen('http://127.0.0.1:9355/json/list')) if t['type'] == 'page')['webSocketDebuggerUrl']
+                ver = json.load(urllib.request.urlopen('http://127.0.0.1:9355/json/version', timeout=2))['webSocketDebuggerUrl']
+                page = next(t for t in json.load(urllib.request.urlopen('http://127.0.0.1:9355/json/list', timeout=2)) if t['type'] == 'page')['webSocketDebuggerUrl']
                 break
             except Exception:
                 time.sleep(0.2)
+        print('connecting', flush=True)
         async with websockets.connect(ver, max_size=None) as bws, websockets.connect(page, max_size=None) as pws:
+            print('connected', flush=True)
             b, p = Conn(bws), Conn(pws)
             trace, done = [], asyncio.Event()
 
