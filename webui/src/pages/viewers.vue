@@ -271,6 +271,7 @@ const windows = computed(() =>
       screensaver: {enabled: false, home_url: '', idle_timeout: 120, ...win.screensaver},
       refresh: {refresh_after_idle: null, refresh_schedules: [], ...win.refresh},
       orientation: win.orientation ?? 0,
+      flip: win.flip ?? 0,
       hostname_label: viewer.hostname,
       layout: {...DEFAULT_LAYOUT, ...win.layout},
       pane_count: countLeaves((win.layout ?? DEFAULT_LAYOUT).tree),

@@ -266,6 +266,20 @@ splitters dragged, per-pane playlist, split/close buttons); **admin** for `set_a
   (`bundle.plan_for`), the panes of the leaving client are not carried over (its layouts are dropped, what they showed stays on the server); `Viewers/layout` is a read AND the broadcast after
   every change, `close_pane` answers `Viewers/list` (the main assignment may have changed); tests that touch `utils.backup`/`remote.bundle` need `/var/lib/unitotem` (use a conftest-free
   plugin that skips the mkdir, as `tools/gen-api-types.py` does, on a dev host).
+- **Turned and mirrored windows (the 55" vertical panel)**: the area, the panes, the screensaver overlay and the keyboard all live in CONTENT space inside `body[r]`/`main[f]`, so a window
+  turned by the content orientation (`Settings/Display/set_orientation`, 1/3 quarter turns) or by the compositor (`wlr-randr --output X --transform 90`: the window becomes 1080x1920,
+  orientation stays 0) is laid out the same way: area `top 33.33, height 33.34` is the middle third of the LONG side. Checked on the Pi with DevTools pixels and real
+  `Input.dispatchMouseEvent`/`dispatchTouchEvent` at known points: the right pane (or the stage, in the margin) receives each press for 90/270 and for the transform, `#stage` is the whole window
+  under the screensaver, the keyboard is rotated with the content. `--transform 90` leaves the 1920x1080 mode alone (safe with the HDMI capture card) and `--transform normal` restores it;
+  start a `sleep N; wlr-randr ... --transform normal` safety net on the board before trying it.
+  The VIEWER reports `orientation` and `flip` of every window in `WebviewInfo` (and again when they change); the manager keeps them per screen in `viewer_settings.json`
+  (`orientations`, `flips`, unknown keys are ignored by older versions) and sends them when a window appears, so a vertical panel stays vertical after a reboot or a replug (before, they were
+  lost, and read by list position instead of window id). The editor preview follows them (aspect swapped, mirrored, presets named "portrait screen" or "of the height").
+- **`keyboard.js` rescales its panel when the layer changes size** (a turned window swaps width and height): it used to keep the pixels and be clamped, so in a turned window it stayed in the middle.
+- **Practical limit of panes with video on a Pi 4** (measured 2026-10-25 on an idle board, 1080p window, software H.264 decode, whole process tree, 40 s): 1 pane 90 % of one core, 2 panes 155 %, **4 panes 263 % and
+  30 fps with 0 dropped frames**, 6 panes 370 % and 26 fps, 8 panes 376 % and 20 fps (the CPU is full, frames are late rather than dropped). Pictures and static web pages cost ~1 % per pane (4 web panes 4.7 %, with a
+  CSS animation 4.3 %); the animated BOOT logo costs 28 % for one pane and 73 % for four (a pane with no playlist shows the idle page, not the logo, so this only matters for a pane left on `boot`). The editor
+  shows a hint above 4 panes; it cannot know which panes play video, so it is not a detector. Do not measure while something else compresses an image: the first runs here were useless for that reason.
 - **Tests of the layout**: `tests/test_layout.py` (model, operations, file), `tests/test_layout_controller.py` (per-pane assignments, restart, unplug/plug under a new window id,
   renamed outputs, close/promote, old viewers, backup part, API answers), `tools/ui-panes.py` (the page's logic in a local headless Chrome: zoom/pinch/refresh/screensaver per pane,
   junk layouts). Verified for real on a Pi 4 (1080p, DevTools screenshots): full window, centre third with a margin colour, 2 and 4 panes with different playlists, ratio/split/close while two
