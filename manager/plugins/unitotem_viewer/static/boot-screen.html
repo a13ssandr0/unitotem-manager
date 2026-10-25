@@ -472,17 +472,25 @@
        * Average colour of an image, used as its backdrop when no explicit
        * bg_color was set, so a picture that does not match the aspect
        * ratio of the pane is letterboxed with something close to its own colour instead of
-       * hard black bars. Scaling to a single pixel makes the browser do the
-       * averaging for us.
+       * hard black bars. The picture is scaled down to a small canvas and the pixels are averaged here: scaling to
+       * ONE pixel and letting the browser do the averaging, as this used to, gave white on the Pi 4 once its canvas was
+       * in some states (a 64x36 canvas of the same picture was right), so the bars came out white.
        */
       applyDominantColour(img) {
         try {
           const canvas = document.createElement('canvas');
-          canvas.width = canvas.height = 1;
-          const context = canvas.getContext('2d');
-          context.drawImage(img, 0, 0, 1, 1);
-          const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
-          const colour = `rgb(${r},${g},${b})`;
+          canvas.width = 16;
+          canvas.height = 9;
+          const context = canvas.getContext('2d', {willReadFrequently: true});
+          context.drawImage(img, 0, 0, 16, 9);
+          const data = context.getImageData(0, 0, 16, 9).data;
+          let r = 0, g = 0, b = 0, n = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            if (!data[i + 3]) continue;        // fully transparent: not part of the picture
+            r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+          }
+          if (!n) return;                      // nothing to average (an empty picture): the backdrop stays as it is
+          const colour = `rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`;
           img.style.backgroundColor = colour;
           this.setBackdrop(colour);
         } catch (err) {
