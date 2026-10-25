@@ -24,6 +24,16 @@ def _first_error(error: ValidationError) -> str:
     return error.errors()[0]['msg'].removeprefix('Value error, ')
 
 
+def _layout_reply(target, viewer_id: str, window_id: int):
+    """The layout of a window, to every page (it is also what a change answers with). A module function, not a method: a
+    method of an API class is an API function."""
+    try:
+        _vm().get_layout(viewer_id, window_id)
+    except KeyError as e:
+        return WSResponse(target, error=str(e))
+    return WSBroadcast(target, viewer_id=viewer_id, window_id=window_id, layout=_vm().layout_info(viewer_id, window_id))
+
+
 class Viewers(WSAPIBase):
     # note: a method called `list` shadows the builtin in annotations here, hence typing.List
 
@@ -69,15 +79,7 @@ class Viewers(WSAPIBase):
     @UserPerms.requires.scheduler
     def layout(self, viewer_id: str, window_id: int):
         """The layout of a window: the rectangle its content is drawn in, and its panes (a tree of splits) with their playlists."""
-        return self._layout_message(viewer_id, window_id)
-
-    def _layout_message(self, viewer_id: str, window_id: int):
-        try:
-            _vm().get_layout(viewer_id, window_id)
-        except KeyError as e:
-            return WSResponse(self.layout, error=str(e))
-        return WSBroadcast(self.layout, viewer_id=viewer_id, window_id=window_id,
-                           layout=_vm().layout_info(viewer_id, window_id))
+        return _layout_reply(self.layout, viewer_id, window_id)
 
     @UserPerms.requires.admin
     def set_area(self, viewer_id: str, window_id: int, left: float = 0, top: float = 0, width: float = 100,
@@ -92,7 +94,7 @@ class Viewers(WSAPIBase):
                                                       margin_color=margin_color))
         except (KeyError, LayoutError) as e:
             return WSResponse(self.layout, error=str(e))
-        return self._layout_message(viewer_id, window_id)
+        return _layout_reply(self.layout, viewer_id, window_id)
 
     @UserPerms.requires.admin
     def split_pane(self, viewer_id: str, window_id: int, pane_id: int, direction: str):
@@ -101,7 +103,7 @@ class Viewers(WSAPIBase):
             _vm().split_pane(viewer_id, window_id, pane_id, direction)
         except (KeyError, LayoutError) as e:
             return WSResponse(self.layout, error=str(e))
-        return self._layout_message(viewer_id, window_id)
+        return _layout_reply(self.layout, viewer_id, window_id)
 
     @UserPerms.requires.admin
     def close_pane(self, viewer_id: str, window_id: int, pane_id: int):
@@ -122,7 +124,7 @@ class Viewers(WSAPIBase):
             _vm().set_split_ratio(viewer_id, window_id, path, ratio)
         except (KeyError, LayoutError) as e:
             return WSResponse(self.layout, error=str(e))
-        return self._layout_message(viewer_id, window_id)
+        return _layout_reply(self.layout, viewer_id, window_id)
 
     @UserPerms.requires.scheduler
     def set_audio_output(self, viewer_id: str, window_id: int, device: Optional[str] = None):
