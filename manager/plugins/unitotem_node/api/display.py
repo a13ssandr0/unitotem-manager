@@ -90,18 +90,14 @@ class Display(WSAPIBase):
         return WSBroadcast()
 
     def orientation(self, viewer_id: str, window_id: int = 0):
-        windows = _vm().get_webview_windows(viewer_id)
-        orientation = windows[window_id].get('orientation', 0) if window_id < len(windows) else 0
-        return WSBroadcast(orientation=orientation)
+        return WSBroadcast(orientation=_vm().get_orientation(viewer_id, window_id))
 
     def set_orientation(self, viewer_id: str, window_id: int, orientation: int):
         asyncio.create_task(_vm().set_orientation(viewer_id, window_id, orientation))
         return WSBroadcast(self.orientation, orientation=orientation)
 
     def flip(self, viewer_id: str, window_id: int = 0):
-        windows = _vm().get_webview_windows(viewer_id)
-        flip = windows[window_id].get('flip', 0) if window_id < len(windows) else 0
-        return WSBroadcast(flip=flip)
+        return WSBroadcast(flip=_vm().get_flip(viewer_id, window_id))
 
     def set_flip(self, viewer_id: str, window_id: int, flip: int):
         asyncio.create_task(_vm().set_flip(viewer_id, window_id, flip))
