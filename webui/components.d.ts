@@ -21,6 +21,8 @@ declare module 'vue' {
     ScreenControl: typeof import('./src/components/ScreenControl.vue')['default']
     SuspendDialog: typeof import('./src/components/SuspendDialog.vue')['default']
     TerminalWindow: typeof import('./src/components/TerminalWindow.vue')['default']
+    TickerSettings: typeof import('./src/components/TickerSettings.vue')['default']
+    TickerSources: typeof import('./src/components/TickerSources.vue')['default']
     TouchMapping: typeof import('./src/components/TouchMapping.vue')['default']
     VncWindow: typeof import('./src/components/VncWindow.vue')['default']
     WindowLayout: typeof import('./src/components/WindowLayout.vue')['default']

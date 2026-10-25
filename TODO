@@ -1,5 +1,9 @@
 === CURRENT WORK ===
 
+2026-10-25 RSS TICKER (package B, branch `rss-ticker`, pushed): DONE: sources + fetcher + scheduler + merged list + API + backup part (92 python tests), page module with Rich/f-string templates, selection,
+  compositor-driven crawl in chained pages (the old per-frame JS crawl judders: see CLAUDE.md "RSS ticker"), clock, web UI (Sources card, per-window dialog with live preview and presets), tools/ui-ticker.py, node tests
+  (`cd webui && npm test`), real runs on venus (screenshots, trace, CPU) with tools/ticker/. TO DO by the lead/package A: switch `utils/ticker/windows.py` to `WindowLayout.ticker`, host `#area/#ticker-host` in
+  boot-screen.html (applyTicker is already there), add python3-feedparser to the image; Pi 4 measurements not done (board belongs to package A); the viewer window of venus is the only real-pixel evidence.
 2026-10-25 WINDOW LAYOUT (package A of docs/layout-and-ticker.md; branch `layout-panes`, not merged): DONE and run on a Pi 4: a window's content `area` (percent rectangle + margin colour; replaces the old
   xinit "third of the height" trick) and a tree of panes (split h/v, close, ratio, max 8 / 4 deep) each with its own playlist; page restructured (`#stage > #area > #panes + #ticker-host`, one flat
   `.pane`/Stage per leaf, surviving panes keep playing), manager (`WebviewManager._sync_window`, `PlaylistLoop` targets `(viewer, window, pane)`, `window_layouts.json`, backup part `layouts`), API (`Viewers/layout`,
