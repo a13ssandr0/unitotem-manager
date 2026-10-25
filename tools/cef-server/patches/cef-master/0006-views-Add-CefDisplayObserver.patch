@@ -1,0 +1,296 @@
+From 1407cfb2f3cbd702f734d2db6b8b7103eadb35e6 Mon Sep 17 00:00:00 2001
+From: Alessandro Campolo <campolo.alex@gmail.com>
+Date: Wed, 21 Oct 2026 09:07:50 +0000
+Subject: [PATCH 6/6] views: Add CefDisplayObserver
+
+Applications that follow monitors being plugged in or switched on have
+to poll CefDisplay::GetAllDisplays(): Chromium learns of a new output
+asynchronously, so right after an output is switched on the list does
+not have it yet (measured on Wayland with labwc: about 220 ms), and a
+window sent to that display before it is listed ends up on another one.
+
+Add CefDisplayObserver (OnDisplayAdded, OnDisplayRemoved,
+OnDisplayMetricsChanged) and CefDisplay::AddObserver/RemoveObserver
+(experimental API), a thin wrapper of display::DisplayObserver. The
+adapter uses display::ScopedOptionalDisplayObserver, which does nothing
+once the display::Screen is gone at shutdown.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ include/views/cef_display.h             | 20 +++++++
+ include/views/cef_display_observer.h    | 79 +++++++++++++++++++++++++
+ libcef/browser/views/display_impl.cc    | 76 ++++++++++++++++++++++++
+ tests/ceftests/views/window_unittest.cc | 29 +++++++++
+ 4 files changed, 204 insertions(+)
+ create mode 100644 include/views/cef_display_observer.h
+
+diff --git a/include/views/cef_display.h b/include/views/cef_display.h
+index 4436f6c6a..fadc8f67e 100644
+--- a/include/views/cef_display.h
++++ b/include/views/cef_display.h
+@@ -43,6 +43,10 @@
+ #include "include/cef_api_hash.h"
+ #include "include/cef_base.h"
+ 
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++class CefDisplayObserver;
++#endif
++
+ ///
+ /// This class typically, but not always, corresponds to a physical display
+ /// connected to the system. A fake Display may exist on a headless system, or a
+@@ -95,6 +99,22 @@ class CefDisplay : public CefBaseRefCounted {
+   /*--cef(count_func=displays:GetDisplayCount)--*/
+   static void GetAllDisplays(std::vector<CefRefPtr<CefDisplay>>& displays);
+ 
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++  ///
++  /// Register |observer| to be notified of display changes. Adding an observer
++  /// that is already registered has no effect. The observer is kept alive until
++  /// RemoveObserver is called. Must be called on the browser process UI thread.
++  ///
++  /*--cef(added=experimental)--*/
++  static void AddObserver(CefRefPtr<CefDisplayObserver> observer);
++
++  ///
++  /// Unregister an observer that was registered with AddObserver.
++  ///
++  /*--cef(added=experimental)--*/
++  static void RemoveObserver(CefRefPtr<CefDisplayObserver> observer);
++#endif
++
+   ///
+   /// Convert |point| from DIP screen coordinates to pixel screen coordinates.
+   /// This method is only used on Windows.
+diff --git a/include/views/cef_display_observer.h b/include/views/cef_display_observer.h
+new file mode 100644
+index 000000000..9422dc487
+--- /dev/null
++++ b/include/views/cef_display_observer.h
+@@ -0,0 +1,79 @@
++// Copyright (c) 2016 Marshall A. Greenblatt. All rights reserved.
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions are
++// met:
++//
++//    * Redistributions of source code must retain the above copyright
++// notice, this list of conditions and the following disclaimer.
++//    * Redistributions in binary form must reproduce the above
++// copyright notice, this list of conditions and the following disclaimer
++// in the documentation and/or other materials provided with the
++// distribution.
++//    * Neither the name of Google Inc. nor the name Chromium Embedded
++// Framework nor the names of its contributors may be used to endorse
++// or promote products derived from this software without specific prior
++// written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
++// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
++// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
++// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
++// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
++// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
++// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++//
++// ---------------------------------------------------------------------------
++//
++// The contents of this file must follow a specific format in order to
++// support the CEF translator tool. See the translator.README.txt file in the
++// tools directory for more information.
++//
++
++#ifndef CEF_INCLUDE_VIEWS_CEF_DISPLAY_OBSERVER_H_
++#define CEF_INCLUDE_VIEWS_CEF_DISPLAY_OBSERVER_H_
++#pragma once
++
++#include "include/cef_api_hash.h"
++#include "include/cef_base.h"
++#include "include/views/cef_display.h"
++
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++
++///
++/// Implement this interface to be notified of changes to the set of displays
++/// and to their metrics. Register with CefDisplay::AddObserver. The methods of
++/// this interface will be called on the browser process UI thread.
++///
++/*--cef(source=client,added=experimental)--*/
++class CefDisplayObserver : public virtual CefBaseRefCounted {
++ public:
++  ///
++  /// Called after |display| has been added, e.g. a monitor was plugged in or
++  /// switched on. CefDisplay::GetAllDisplays includes it from now on.
++  ///
++  /*--cef()--*/
++  virtual void OnDisplayAdded(CefRefPtr<CefDisplay> display) {}
++
++  ///
++  /// Called after |display| has been removed, e.g. a monitor was unplugged or
++  /// switched off. The CefDisplay is a snapshot of the removed display.
++  ///
++  /*--cef()--*/
++  virtual void OnDisplayRemoved(CefRefPtr<CefDisplay> display) {}
++
++  ///
++  /// Called when the metrics (bounds, work area, scale factor, rotation,
++  /// label, ...) of |display| changed.
++  ///
++  /*--cef()--*/
++  virtual void OnDisplayMetricsChanged(CefRefPtr<CefDisplay> display) {}
++};
++
++#endif  // CEF_API_ADDED(CEF_EXPERIMENTAL)
++
++#endif  // CEF_INCLUDE_VIEWS_CEF_DISPLAY_OBSERVER_H_
+diff --git a/libcef/browser/views/display_impl.cc b/libcef/browser/views/display_impl.cc
+index 6a16816ee..0a50d3d84 100644
+--- a/libcef/browser/views/display_impl.cc
++++ b/libcef/browser/views/display_impl.cc
+@@ -4,9 +4,61 @@
+ 
+ #include "cef/libcef/browser/views/display_impl.h"
+ 
++#include <memory>
++#include <vector>
++
++#include "base/no_destructor.h"
++#include "cef/include/views/cef_display_observer.h"
+ #include "cef/libcef/browser/views/view_util.h"
++#include "ui/display/display_observer.h"
+ #include "ui/display/screen.h"
+ 
++namespace {
++
++// Forwards the notifications of display::Screen to a CefDisplayObserver.
++class CefDisplayObserverAdapter : public display::DisplayObserver {
++ public:
++  explicit CefDisplayObserverAdapter(CefRefPtr<CefDisplayObserver> observer)
++      : observer_(observer), scoped_observer_(this) {}
++
++  CefDisplayObserverAdapter(const CefDisplayObserverAdapter&) = delete;
++  CefDisplayObserverAdapter& operator=(const CefDisplayObserverAdapter&) =
++      delete;
++
++  CefDisplayObserver* observer() const { return observer_.get(); }
++
++  // display::DisplayObserver methods:
++  void OnDisplayAdded(const display::Display& new_display) override {
++    observer_->OnDisplayAdded(new CefDisplayImpl(new_display));
++  }
++
++  void OnDisplaysRemoved(const display::Displays& removed_displays) override {
++    for (const auto& display : removed_displays) {
++      observer_->OnDisplayRemoved(new CefDisplayImpl(display));
++    }
++  }
++
++  void OnDisplayMetricsChanged(const display::Display& display,
++                               uint32_t changed_metrics) override {
++    observer_->OnDisplayMetricsChanged(new CefDisplayImpl(display));
++  }
++
++ private:
++  CefRefPtr<CefDisplayObserver> observer_;
++  // Does nothing when there is no display::Screen (at shutdown).
++  display::ScopedOptionalDisplayObserver scoped_observer_;
++};
++
++using AdapterList = std::vector<std::unique_ptr<CefDisplayObserverAdapter>>;
++
++// Only accessed on the UI thread.
++AdapterList& GetAdapters() {
++  static base::NoDestructor<AdapterList> adapters;
++  return *adapters;
++}
++
++}  // namespace
++
+ // static
+ CefRefPtr<CefDisplay> CefDisplay::GetPrimaryDisplay() {
+   CEF_REQUIRE_UIT_RETURN(nullptr);
+@@ -51,6 +103,30 @@ void CefDisplay::GetAllDisplays(std::vector<CefRefPtr<CefDisplay>>& displays) {
+   }
+ }
+ 
++// static
++void CefDisplay::AddObserver(CefRefPtr<CefDisplayObserver> observer) {
++  CEF_REQUIRE_UIT_RETURN_VOID();
++  if (!observer) {
++    return;
++  }
++  auto& adapters = GetAdapters();
++  for (const auto& adapter : adapters) {
++    if (adapter->observer() == observer.get()) {
++      return;
++    }
++  }
++  adapters.push_back(std::make_unique<CefDisplayObserverAdapter>(observer));
++}
++
++// static
++void CefDisplay::RemoveObserver(CefRefPtr<CefDisplayObserver> observer) {
++  CEF_REQUIRE_UIT_RETURN_VOID();
++  auto& adapters = GetAdapters();
++  std::erase_if(adapters, [&](const auto& adapter) {
++    return adapter->observer() == observer.get();
++  });
++}
++
+ // static
+ CefPoint CefDisplay::ConvertScreenPointToPixels(const CefPoint& point) {
+   CEF_REQUIRE_UIT_RETURN(CefPoint());
+diff --git a/tests/ceftests/views/window_unittest.cc b/tests/ceftests/views/window_unittest.cc
+index 8531dd9da..9a77a70a6 100644
+--- a/tests/ceftests/views/window_unittest.cc
++++ b/tests/ceftests/views/window_unittest.cc
+@@ -8,6 +8,7 @@
+ #include "include/base/cef_callback.h"
+ #include "include/cef_api_hash.h"
+ #include "include/views/cef_box_layout.h"
++#include "include/views/cef_display_observer.h"
+ #include "include/views/cef_layout.h"
+ #include "include/views/cef_panel.h"
+ #include "include/wrapper/cef_closure_task.h"
+@@ -801,6 +802,34 @@ void WindowKeyboardLegacyFallthroughImpl(CefRefPtr<CefWaitableEvent> event) {
+ // Test window functionality. This is primarily to exercise exposed CEF APIs
+ // and is not intended to comprehensively test window-related behavior (which
+ // we presume that Chromium is testing).
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++namespace {
++
++class TestDisplayObserver : public CefDisplayObserver {
++ public:
++  TestDisplayObserver() = default;
++
++ private:
++  IMPLEMENT_REFCOUNTING(TestDisplayObserver);
++};
++
++void DisplayObserverAddRemoveImpl(CefRefPtr<CefWaitableEvent> event) {
++  CefRefPtr<CefDisplayObserver> observer = new TestDisplayObserver();
++  // Adding twice is ignored, removing something that is not registered too.
++  CefDisplay::AddObserver(observer);
++  CefDisplay::AddObserver(observer);
++  CefDisplay::RemoveObserver(observer);
++  CefDisplay::RemoveObserver(observer);
++  CefDisplay::AddObserver(nullptr);
++  CefDisplay::RemoveObserver(nullptr);
++  event->Signal();
++}
++
++}  // namespace
++
++WINDOW_TEST_ASYNC(DisplayObserverAddRemove)
++#endif
++
+ WINDOW_TEST_ASYNC(WindowCreate)
+ WINDOW_TEST_ASYNC(WindowCreateFrameless)
+ WINDOW_TEST_ASYNC(WindowCreateWithOrigin)
+-- 
+2.53.0
+

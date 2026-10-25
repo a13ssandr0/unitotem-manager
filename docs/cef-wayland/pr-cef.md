@@ -1,7 +1,9 @@
 # Draft upstream pull request: chromiumembedded/cef
 
-Not opened. Series: `tools/cef-server/patches/cef/0001..0006` (`git am`). Checked: applies with plain `git am` on a fresh clone of master
-(7f8a5ec28, Chromium 156.0.8078.0) and on `d58e84d17` (147.0.7727.118); `tools/fix_style.py` reports "ok" for every touched file.
+Not opened. Series: `tools/cef-server/patches/cef/0001..0006` (`git am`, base `d58e84d17`, 147.0.7727.118) and the same six rebased on master
+(`patches/cef-master/`, base e537569ec on 2026-10-25). Checked 2026-10-25: the 147 series applies with plain `git am` on `d58e84d17`; on master
+it needed `--3way` for 0002 (master's "Implement unified keyboard API" c5ca80128 touches the same `#include` list of `window_impl.cc`), one trivial
+include conflict, resolved in `patches/cef-master/`, which applies with plain `git am` on e537569ec; `tools/fix_style.py` reports "ok" for every touched file.
 CEF's rules (docs/contributing_with_git.md) ask for an issue number in the commit descriptions: open the issue first (text below), then add
 "Fixes #N" to the commits. No CLA is mentioned in the repository docs.
 
