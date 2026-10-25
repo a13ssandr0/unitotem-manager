@@ -148,8 +148,7 @@ class Ticker(WSAPIBase):
 
     @UserPerms.requires.admin
     async def set_settings(self, viewer_id: str, window_id: int, settings: dict):
-        """Sets the bar of a window (see TickerSettings): numbers are clamped, a field that cannot be repaired is
-        refused with a message and nothing is changed."""
+        """Sets the bar of a window (see TickerSettings); numbers are clamped, anything else wrong is refused and nothing changes."""
         try:
             key = self._key(viewer_id, window_id)
             new = TickerSettings.model_validate(settings)

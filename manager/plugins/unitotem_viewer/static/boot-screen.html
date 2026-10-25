@@ -555,6 +555,26 @@
     }
 
     /**
+     * The RSS ticker (webui/src/ticker.js, served by the manager; package B of docs/layout-and-ticker.md). The viewer puts the
+     * settings of the window in window.__utTickerConfig and the merged list in window.__utTickerItems over the DevTools
+     * connection and calls this, or they were there first and this runs when the page has loaded. The module is loaded only
+     * once the bar is enabled; it draws in #ticker-host inside #area and sets --ticker-h on #area.
+     */
+    let tickerLoad = null;
+    function applyTicker() {
+      const cfg = window.__utTickerConfig;
+      if (!cfg) return;
+      if (!tickerLoad) {
+        if (!cfg.enabled) return;
+        tickerLoad = import(cfg.module);
+      }
+      tickerLoad.then(() => {
+        window.utTicker.configure(cfg);
+        window.utTicker.setItems(window.__utTickerItems || []);
+      }).catch(e => { tickerLoad = null; console.error('ticker', e); });
+    }
+
+    /**
      * Called by the Python viewer via CEF ExecuteJavascript.
      * orientation: 0=0deg, 1=90deg, 2=180deg, 3=270deg (clockwise)
      */
@@ -638,6 +658,7 @@
     }
     applyKeyboard();
     applySaver();
+    applyTicker();
 
     // The viewer keeps its own splash over this window until this page has really drawn a frame: the browser's first paint
     // is not ours (it can be white), so a fixed delay would show it. Two animation frames are the first one that is on
