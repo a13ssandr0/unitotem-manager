@@ -99,6 +99,11 @@ async def main():
         'commits_per_s': round(per_second('ProxyMain::BeginMainFrame', 'LayerTreeHostImpl::CommitComplete'), 2),
         'related_event_names': {n: c for n, c in names.most_common() if any(k in n for k in ('Display::DrawAndSwap', 'RasterTask', 'PrePaint', 'UpdateLayoutTree', 'BeginMainFrameAborted', 'ProxyMain::BeginMainFrame', 'AnimationFrame'))},
     }
+    commits = sorted(e['ts'] for e in ev if e['name'] == 'ProxyMain::BeginMainFrame::commit')
+    cg = [(b - a) / 1000 for a, b in zip(commits, commits[1:])]
+    # a commit is the main thread putting new content on screen: a crawl moved by the main thread only moves when it commits
+    out['main_thread_commits_per_s'] = round(len(commits) / span, 1)
+    out['max_gap_between_commits_ms'] = round(max(cg), 1) if cg else None
     out['draw_and_swap_phases'] = dict(collections.Counter(f"{e.get('ph')}:{e.get('pid')}" for e in ev if e['name'] == 'Display::DrawAndSwap'))
     out['gap_histogram_ms'] = dict(sorted(collections.Counter(int(g // 2) * 2 for g in gaps).items()))
     print(json.dumps(out))
