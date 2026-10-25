@@ -190,6 +190,15 @@ async def main():
             await cfg(font_size=64, font_unit='px', rows=1)
             run.shot('05-64px-text')
 
+        if want('matrix'):
+            n = 0
+            for rows in (1, 2):
+                for mode in ('overlay', 'reserve'):
+                    for position in ('top', 'bottom'):
+                        n += 1
+                        await cfg(rows=rows, mode=mode, position=position, speed=2.5)
+                        run.shot(f'm{n:02d}-{rows}row-{mode}-{position}')
+
         if want('template'):
             await cfg(template='[bold black on yellow] {source!u} [/] {time:dd MMM HH:mm} [cyan]{title:.90}[/] [dim italic]{summary:.60}[/]',
                       font_size=3.5)
