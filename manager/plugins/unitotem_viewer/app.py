@@ -763,6 +763,8 @@ class WebviewApp:
                 'layout': data.get('layout', 'english')}
             if self._ws_loop is not None:
                 asyncio.run_coroutine_threadsafe(self._apply_keyboard(data['window_id']), self._ws_loop)
+        elif target == 'SetAssetAudio' and win:
+            win.set_asset_audio(data.get('volume', 1.0), data.get('muted', False))
         elif target == 'SetAudioOutput' and win:
             win.set_audio_output(data.get('device'))
         elif target == 'SetOrientation' and win:
