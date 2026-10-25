@@ -728,6 +728,9 @@ class WebviewApp:
             'target' : 'WebviewInfo',
             'screens': screens,
             'windows': windows,
+            # this viewer knows about the area and the panes of a window (SetWindowLayout, `pane` in Show): an older one
+            # does not say so, and the manager keeps driving it as one pane
+            'layout' : True,
         }))
 
     # ── command dispatch (Qt main thread via Signal) ──────────────────────
@@ -748,7 +751,10 @@ class WebviewApp:
                 zoom     = data.get('zoom', 1.0),
                 allow_pinch_zoom = data.get('allow_pinch_zoom', False),
                 idle     = data.get('idle', False),
+                pane     = data.get('pane'),
             )
+        elif target == 'SetWindowLayout' and win:
+            win.set_window_layout(data.get('area') or {}, data.get('tree') or {})
         elif target == 'SetScreensaver' and win and self._ws_loop is not None:
             asyncio.run_coroutine_threadsafe(self._set_touch_settings(window_id, saver={
                 'enabled': bool(data.get('enabled')), 'home_url': data.get('home_url', ''),
@@ -764,7 +770,7 @@ class WebviewApp:
             if self._ws_loop is not None:
                 asyncio.run_coroutine_threadsafe(self._apply_keyboard(data['window_id']), self._ws_loop)
         elif target == 'SetAssetAudio' and win:
-            win.set_asset_audio(data.get('volume', 1.0), data.get('muted', False))
+            win.set_asset_audio(data.get('volume', 1.0), data.get('muted', False), data.get('pane'))
         elif target == 'SetAudioOutput' and win:
             win.set_audio_output(data.get('device'))
         elif target == 'SetOrientation' and win:
