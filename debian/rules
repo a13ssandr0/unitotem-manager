@@ -44,7 +44,7 @@ override_dh_auto_install-indep:
 	cp -r plymouth/unitotem/. debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem/
 	chmod 644 debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem/*
 	# base configuration of the compositor
-	install -D -m 644 debian/labwc-rc.xml debian/unitotem-viewer/etc/unitotem/xdg/labwc/rc.xml
+	install -D -m 644 debian/labwc-rc.xml debian/unitotem-viewer/usr/share/unitotem/xdg/labwc/rc.xml
 	# launcher
 	install -D -m 755 debian/unitotem-manager.sh debian/unitotem-manager/usr/sbin/unitotem-manager
 
