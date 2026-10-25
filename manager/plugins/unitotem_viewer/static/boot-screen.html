@@ -326,6 +326,14 @@
       routeToOutput(el);
     }
 
+    // Volume or mute of the asset on screen edited while it plays: no new show(), the media keeps playing
+    function setAssetAudio(volume, muted) {
+      for (const id of ['video-display', 'audio-player']) {
+        const el = document.getElementById(id);
+        if (el) applyAudio(el, volume, muted);
+      }
+    }
+
     async function routeToOutput(el) {
       if (typeof el.setSinkId !== 'function') return;
       try {
