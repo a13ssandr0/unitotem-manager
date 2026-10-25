@@ -53,7 +53,7 @@ class Conn:
         return (await fut).get('result', {})
 
 
-async def main():
+async def main(only):
     profile = tempfile.mkdtemp()
     chrome = subprocess.Popen(['google-chrome', '--headless=new', '--remote-debugging-port=9355', '--no-sandbox', f'--user-data-dir={profile}',
                                '--window-size=1280,720', 'about:blank'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -78,13 +78,16 @@ async def main():
                     done.set()
             b.sink = sink
             tasks = [asyncio.create_task(b.pump()), asyncio.create_task(p.pump())]
-            for name, js in VARIANTS.items():
-                await p.call('Page.navigate', url='data:text/html,' + PAGE.replace('#', '%23').replace('\n', ''))
+            for name, js in [v for i, v in enumerate(VARIANTS.items()) if i == only]:
+                await p.call('Page.navigate', url='about:blank')
+                await asyncio.sleep(0.5)
+                await p.call('Runtime.evaluate', expression='document.open();document.write(' + json.dumps(PAGE) + ');document.close()')
                 await asyncio.sleep(1)
+                print('variant', name, flush=True)
                 await p.call('Runtime.evaluate', expression=f'(()=>{{const a=document.getElementById("a"),b=document.getElementById("b");{js}}})()')
                 await asyncio.sleep(1)
                 trace.clear(); done.clear()
-                await b.call('Tracing.start', traceConfig={'includedCategories': ['cc', 'viz', 'devtools.timeline', 'toplevel'], 'recordMode': 'recordContinuously'})
+                await b.call('Tracing.start', traceConfig={'includedCategories': ['cc', 'viz', 'devtools.timeline'], 'recordMode': 'recordContinuously'})
                 await asyncio.sleep(5)
                 await b.call('Tracing.end')
                 await asyncio.wait_for(done.wait(), 30)
@@ -93,10 +96,16 @@ async def main():
                 names = collections.Counter(e['name'] for e in trace if e.get('ph') != 'M' and e['ts'] > min(ts) + 1_000_000)
                 print(flush=True, *[f"{name:55} style/layout {names['UpdateLayoutTree'] / span:5.1f}/s  prepaint {names['PrePaint'] / span:5.1f}/s  "
                       f"main frames {names['ProxyMain::BeginMainFrame'] / span:5.1f}/s  drawn {names['Display::DrawAndSwap'] / span:5.1f}/s"])
-            for t in tasks:
-                t.cancel()
+            chrome.terminate()
+            import os
+            os._exit(0)    # closing the websockets after the tasks were cancelled can hang
     finally:
         chrome.terminate()
 
 
-asyncio.run(main())
+import sys
+if len(sys.argv) > 1:
+    asyncio.run(main(int(sys.argv[1])))
+else:
+    for i in range(len(VARIANTS)):
+        subprocess.run([sys.executable, '-u', __file__, str(i)], timeout=170)

@@ -273,7 +273,7 @@ async def main():
             # the control: the old implementation (JS moves the belt every frame) takes the bar over
             for rows in (1, 2):
                 await cfg(select=sel, rows=rows, speed=2.5, font_size=3.0)
-                ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "(async () => {{ window.utTicker.destroy(); await import(\'/assets/ticker-control.js\'); window.utTicker.configure(window.__utTickerConfig); window.utTicker.setItems(window.__utTickerItems); }})()"')
+                ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "(async () => {{ window.utTicker.destroy(); await import(new URL(window.__utTickerConfig.module).origin + \'/assets/ticker-control.js\'); window.utTicker.configure(window.__utTickerConfig); window.utTicker.setItems(window.__utTickerItems); }})()"')
                 await asyncio.sleep(3)
                 run.note(f'OLD rows={rows} inspect ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py inspect')[:300])
                 trace(f'OLD {rows} lane(s) idle main thread')
@@ -294,6 +294,40 @@ async def main():
                 await asyncio.sleep(1)
                 run.shot(f'17-quality-{name}')
             await cfg(rows=1)    # sets it running again
+
+        # ── in the real page of package A: an area of one third of the height with the bar anchored to it, and two panes ──
+        if want('integration'):
+            await clear_sources()
+            await add('/live.xml', 'Live', 60)
+            await add('/atom.xml', 'Atom', 300)
+            await add('/dated.xml', 'Dated', 600)
+            await wait_fetched(3)
+            geometry = ('JSON.stringify(["area","panes","ticker-host"].map(id => { const r = document.getElementById(id).getBoundingClientRect();'
+                        ' return [id, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; }))')
+            tpl = '[b]{time:HH:mm}[/b] {source!u}: {title}'
+            sel = {'mode': 'count', 'count': 30, 'seconds': 7200}
+
+            async def layout(**kw):
+                await api.send('Viewers/set_area', viewer_id=viewer_id, window_id=win_id, **kw)
+                await asyncio.sleep(2)
+
+            await layout(left=0, top=33.3, width=100, height=33.4, margin_color='rgb(40,40,40)')
+            await cfg(select=sel, template=tpl, mode='reserve', position='bottom')
+            run.note('area 1/3, bar bottom, reserve: [id, x, y, w, h] ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "{geometry}"'))
+            run.shot('20-area-third-bar-bottom-reserve')
+            await cfg(select=sel, template=tpl, mode='overlay', position='top', rows=2)
+            run.note('area 1/3, bar top, overlay, 2 rows: ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "{geometry}"'))
+            run.shot('21-area-third-bar-top-overlay-2rows')
+            await api.send('Viewers/split_pane', viewer_id=viewer_id, window_id=win_id, pane_id=1, direction='h')
+            await asyncio.sleep(2)
+            await cfg(select=sel, template=tpl, mode='reserve', position='bottom',
+                      clock={'enabled': True, 'position': 'end', 'seconds': True, 'date': True, 'rows': 1})
+            run.note('area 1/3, two panes, bar bottom + clock: ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "{geometry}"'))
+            run.shot('22-area-third-two-panes-bar-and-clock')
+            await layout(left=0, top=0, width=100, height=100, margin_color='rgb(0,0,0)')
+            await api.send('Viewers/close_pane', viewer_id=viewer_id, window_id=win_id, pane_id=2)
+            await asyncio.sleep(2)
+            await cfg(enabled=False)
 
         open(os.path.join(args.out, 'notes.txt'), 'w').write('\n'.join(run.results) + '\n')
 
