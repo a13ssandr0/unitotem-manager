@@ -240,6 +240,26 @@ export interface Api {
       status: ApiCall<Record<string, never>>
     }
   }
+  Ticker: {
+    /** Adds an RSS/Atom feed (http or https). `interval` is in seconds (60 to 86400). [requires: admin] */
+    add_source: ApiCall<{ url: string; name?: string; interval?: number; enabled?: boolean }>
+    /** [requires: admin] */
+    delete_source: ApiCall<{ id: string }>
+    /** Changes a source; what is left out stays as it is. A new address is fetched at once. [requires: admin] */
+    edit_source: ApiCall<{ id: string; url?: null | string; name?: null | string; interval?: null | number; enabled?: boolean | null }>
+    /** Turns a source on or off without forgetting it. [requires: admin] */
+    enable_source: ApiCall<{ id: string; enabled: boolean }>
+    /** Fetches one source (or all of them) now instead of at their next time. [requires: admin] */
+    fetch_now: ApiCall<{ id?: null | string }>
+    /** The merged list, newest first (what the bars select from). [requires: admin] */
+    preview: ApiCall<Record<string, never>>
+    /** Sets the bar of a window (see TickerSettings); numbers are clamped, anything else wrong is refused and nothing changes. [requires: admin] */
+    set_settings: ApiCall<{ viewer_id: string; window_id: number; settings: any }>
+    /** The bar of a window. [requires: admin] */
+    settings: ApiCall<{ viewer_id: string; window_id: number }>
+    /** The news sources with their state (last result, items, error). [requires: admin] */
+    sources: ApiCall<Record<string, never>>
+  }
   Viewers: {
     /** [requires: admin] */
     add_window: ApiCall<{ viewer_id: string; display?: number; x?: number; y?: number; width?: number; height?: number }>
