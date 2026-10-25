@@ -309,6 +309,8 @@ class WebviewApp:
         self._cdp: Optional[Cdp] = None
         self._gpu_checked = False
         self._keyboard_config: dict[int, dict] = {}     # window -> settings of its on-screen keyboard
+        self._ticker_config: dict[int, dict] = {}       # window -> settings of its RSS bar, and the list it shows
+        self._ticker_items: dict[int, list] = {}
         self._text_focus: dict[int, dict[str, Optional[str]]] = {}      # window -> frames with a text field focused
         self._keyboard_wanted: dict[int, bool] = {}
         # touch panels, all of it on the websocket thread: settings per window, and the idle logic that uses them
@@ -569,6 +571,7 @@ class WebviewApp:
         # the page may have drawn before we were attached: ask
         asyncio.ensure_future(self._cdp.evaluate(window, "window.__utFramed && typeof utFrame === 'function' && utFrame('{}')"))
         asyncio.ensure_future(self._apply_saver(window))
+        asyncio.ensure_future(self._apply_ticker(window))
         watch = self._watches.get(window)
         if watch:
             watch.reset()       # a page that has just loaded is not showing a screensaver
@@ -584,6 +587,22 @@ class WebviewApp:
         module = f'https://{urlparse(self.manager_url).netloc}{get_vite_assets("src/keyboard.js")["js"]}'
         settings = json.dumps({**config, 'module': module})
         await self._cdp.evaluate(window, f'window.__utKeyboardConfig = {settings}; window.applyKeyboard && window.applyKeyboard();')
+
+    # ── the RSS bar (webui/src/ticker.js), on the websocket thread ──
+
+    async def _apply_ticker(self, window: int):
+        """Hands the bar's settings and list to the page, like the keyboard's: safe at any moment (the page applies them
+        itself when it has loaded). The page loads ticker.js only once the bar is enabled."""
+        config = self._ticker_config.get(window)
+        if config is None or self._cdp is None:
+            return
+        from templates import get_vite_assets
+        from urllib.parse import urlparse
+        module = f'https://{urlparse(self.manager_url).netloc}{get_vite_assets("src/ticker.js")["js"]}'
+        settings = json.dumps({**config, 'module': module})
+        items = json.dumps(self._ticker_items.get(window, []))
+        await self._cdp.evaluate(window, f'window.__utTickerConfig = {settings}; window.__utTickerItems = {items}; '
+                                         f'window.applyTicker && window.applyTicker();')
 
     # ── touch panels: screensaver over a home page, scheduled refresh (see idle.py), on the websocket thread ──
 
@@ -614,6 +633,8 @@ class WebviewApp:
         watch.configure(saver.get('idle_timeout') if interactive else None, refresh.get('refresh_after_idle'))
 
     def _drop_window(self, window: int):
+        self._ticker_config.pop(window, None)
+        self._ticker_items.pop(window, None)
         self._saver_config.pop(window, None)
         self._refresh_config.pop(window, None)
         watch = self._watches.pop(window, None)
@@ -763,6 +784,13 @@ class WebviewApp:
                 'layout': data.get('layout', 'english')}
             if self._ws_loop is not None:
                 asyncio.run_coroutine_threadsafe(self._apply_keyboard(data['window_id']), self._ws_loop)
+        elif target in ('SetTicker', 'TickerItems') and win:
+            if target == 'SetTicker':
+                self._ticker_config[window_id] = {k: v for k, v in data.items() if k not in ('target', 'window_id')}
+            else:
+                self._ticker_items[window_id] = data.get('items') or []
+            if self._ws_loop is not None:
+                asyncio.run_coroutine_threadsafe(self._apply_ticker(window_id), self._ws_loop)
         elif target == 'SetAssetAudio' and win:
             win.set_asset_audio(data.get('volume', 1.0), data.get('muted', False))
         elif target == 'SetAudioOutput' and win:
