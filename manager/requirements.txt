@@ -28,3 +28,4 @@ requests
 uvloop
 watchdog
 sdnotify
+feedparser
