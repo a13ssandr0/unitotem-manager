@@ -9,6 +9,7 @@ import utils.plugins as plugins
 from utils.models.user import UserPerms
 from pydantic import ValidationError
 
+from utils.models.layout import Area, LayoutError, normalize_color
 from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings
 from webview.controller import WebviewManager
 
@@ -35,15 +36,21 @@ class Viewers(WSAPIBase):
         )
 
     @UserPerms.requires.scheduler
-    def assign_playlist(self, viewer_id: str, window_id: int, playlist_id: str):
-        """Put one window on one playlist. A window shows a single playlist,
-        while a playlist may drive as many windows as wanted."""
-        _vm().assign(viewer_id, window_id, playlist_id)
+    def assign_playlist(self, viewer_id: str, window_id: int, playlist_id: str, pane_id: Optional[int] = None):
+        """Put one pane of a window on one playlist (without pane_id, the main pane: a window that is not divided has only
+        that one). A pane shows a single playlist, while a playlist may drive as many panes and windows as wanted."""
+        try:
+            _vm().assign(viewer_id, window_id, playlist_id, pane_id)
+        except LayoutError as e:
+            return WSResponse(error=str(e))
         return self.list()
 
     @UserPerms.requires.scheduler
-    def unassign_playlist(self, viewer_id: str, window_id: int):
-        _vm().unassign(viewer_id, window_id)
+    def unassign_playlist(self, viewer_id: str, window_id: int, pane_id: Optional[int] = None):
+        try:
+            _vm().unassign(viewer_id, window_id, pane_id)
+        except LayoutError as e:
+            return WSResponse(error=str(e))
         return self.list()
 
     @UserPerms.requires.admin
@@ -56,6 +63,61 @@ class Viewers(WSAPIBase):
     def remove_window(self, viewer_id: str, window_id: int):
         asyncio.create_task(_vm().remove_window(viewer_id, window_id))
         return WSBroadcast()
+
+    @UserPerms.requires.scheduler
+    def layout(self, viewer_id: str, window_id: int):
+        """The layout of a window: the rectangle its content is drawn in, and its panes (a tree of splits) with their playlists."""
+        return self._layout_message(viewer_id, window_id)
+
+    def _layout_message(self, viewer_id: str, window_id: int):
+        try:
+            _vm().get_layout(viewer_id, window_id)
+        except KeyError as e:
+            return WSResponse(self.layout, error=str(e))
+        return WSBroadcast(self.layout, viewer_id=viewer_id, window_id=window_id,
+                           layout=_vm().layout_info(viewer_id, window_id))
+
+    @UserPerms.requires.admin
+    def set_area(self, viewer_id: str, window_id: int, left: float = 0, top: float = 0, width: float = 100,
+                 height: float = 100, margin_color: str = 'rgb(0,0,0)'):
+        """The rectangle of the window the content is drawn in, in percent of the window (after its orientation); the rest
+        is blank, margin_color. The values are clamped: at least 5 % each way, inside the window."""
+        if normalize_color(margin_color) is None:
+            return WSResponse(self.layout, error='The margin colour must be a plain colour (#rrggbb, rgb(r,g,b) or rgba(r,g,b,a))')
+        try:
+            _vm().set_area(viewer_id, window_id, Area(left=left, top=top, width=width, height=height,
+                                                      margin_color=margin_color))
+        except (KeyError, LayoutError) as e:
+            return WSResponse(self.layout, error=str(e))
+        return self._layout_message(viewer_id, window_id)
+
+    @UserPerms.requires.admin
+    def split_pane(self, viewer_id: str, window_id: int, pane_id: int, direction: str):
+        """Divides a pane in two: direction 'h' puts the new pane at its right, 'v' below it. At most 8 panes, 4 levels deep."""
+        try:
+            _vm().split_pane(viewer_id, window_id, pane_id, direction)
+        except (KeyError, LayoutError) as e:
+            return WSResponse(self.layout, error=str(e))
+        return self._layout_message(viewer_id, window_id)
+
+    @UserPerms.requires.admin
+    def close_pane(self, viewer_id: str, window_id: int, pane_id: int):
+        """Closes a pane: its neighbour takes the space. The last pane of a window cannot be closed."""
+        try:
+            _vm().close_pane(viewer_id, window_id, pane_id)
+        except (KeyError, LayoutError) as e:
+            return WSResponse(self.layout, error=str(e))
+        return self.list()      # closing the main pane changes the playlist of the window as well
+
+    @UserPerms.requires.admin
+    def set_split_ratio(self, viewer_id: str, window_id: int, path: str, ratio: float):
+        """Moves the splitter of one split: `path` leads to it from the root ('' is the root split, 'a' and 'b' its
+        first and second half, 'ab' the second half of the first...), `ratio` is the share of the first half (10 %..90 %)."""
+        try:
+            _vm().set_split_ratio(viewer_id, window_id, path, ratio)
+        except (KeyError, LayoutError) as e:
+            return WSResponse(self.layout, error=str(e))
+        return self._layout_message(viewer_id, window_id)
 
     @UserPerms.requires.scheduler
     def set_audio_output(self, viewer_id: str, window_id: int, device: Optional[str] = None):
