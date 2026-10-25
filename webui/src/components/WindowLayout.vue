@@ -82,11 +82,14 @@ const preview = ref(null)
 // server's own layout arrives (the answer to the last change), or after a moment if it never does.
 const draft = ref(null)
 let dragging = false
+let holdUntil = 0
 let settle = null
 const layout = computed(() => draft.value ?? props.win.layout)
-watch(() => props.win.layout, () => { if (!dragging) draft.value = null })
+// the answers to the updates sent during a drag arrive after it ended, older than what is drawn: they are not shown
+watch(() => props.win.layout, () => { if (!dragging && Date.now() >= holdUntil) draft.value = null })
 function holdDraft() {
   clearTimeout(settle)
+  holdUntil = Date.now() + 800
   settle = setTimeout(() => { if (!dragging) draft.value = null }, 1500)
 }
 
@@ -191,18 +194,18 @@ function startDrag(event, how) {
     sendArea(a, false)
   }
   const end = e => {
-    target.removeEventListener('pointermove', move)
-    target.removeEventListener('pointerup', end)
-    target.removeEventListener('pointercancel', end)
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', end)
+    window.removeEventListener('pointercancel', end)
     dragging = false
     const a = area(e)
     draft.value = {...layout.value, area: a}
     holdDraft()
     sendArea(a, true)
   }
-  target.addEventListener('pointermove', move)
-  target.addEventListener('pointerup', end)
-  target.addEventListener('pointercancel', end)
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', end)
+  window.addEventListener('pointercancel', end)
 }
 
 // ── the panes ──────────────────────────────────────────────────────────────
