@@ -10,7 +10,10 @@ resolved). Suggested base: `cefpython147-qt` of `linesight/cefpython` (so it rid
 (there are none open there). The older branch `wayland-views` (on `cefpython147-qt` f86bdbf of the fork, with vendored headers and the fork's
 arm64 commits) is what the UniTotem repository builds.
 
-**Not tested on Windows or macOS** (everything new is platform independent Views code; the Linux parts are inside `IF UNAME_SYSNAME ==
+**The Views API is cross-platform, everything Wayland specific is Linux/Wayland only and the other platforms are unchanged by construction**: the backend selection and
+the parentless-`WindowInfo` change are inside `IF UNAME_SYSNAME == "Linux"` and only act on the Wayland backend; `Window.SetFullscreenOnDisplay`, `Display.GetLabel`,
+`Display.FindByOutputName` and `Display.AddObserver` are honored by Wayland only (elsewhere `SetFullscreen(True)`, empty label, `None`, observer never called; the
+docs in `api/` say so); nothing Wayland specific runs at import or window creation on Windows/macOS. **Not tested on Windows or macOS** (everything new is platform independent Views code; the Linux parts are inside `IF UNAME_SYSNAME ==
 "Linux"`). Tested on Linux x86_64, Python 3.13 (and 3.14 for the Views test from the wheel); aarch64 (Raspberry Pi 4, Python 3.13): `views_test.py`, `outputs.py` pass.
 
 ## Title
