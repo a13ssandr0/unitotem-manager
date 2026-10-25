@@ -963,6 +963,13 @@ WAS OPEN, superseded - assignment per viewer instead of per window.
   restart does not reconnect the touch listener on a node without the viewer; Viewers page setKeyboard merges from possibly
   stale local state; no "reload home page" button.
 
+- (2026-10-25, from the user) NOT STARTED, design questions open (see the conversation):
+  * Split windows: a viewer window divides into sub-windows like Konsole's split view (horizontal/vertical, recursive, draggable
+    splitter, close a pane, each pane with its own playlist). Layout = a tree kept per window in viewer_settings.json, drawn by boot-screen.html.
+  * RSS: a fetcher with several sources, update time per source, all merged in ONE list; display = a text template (time + headline + colours);
+    how many items: a count, a date ("today only") or a time range ("last 2 hours/2 days"); options: one or two lines, text colour and size,
+    background, overlay on the viewer or taking space below it.
+
 === API REVIEW (2026-10-11) ===
 DONE: API follows the user's naming convention (snake_case, one function per job, reads named after the state,
 mutations broadcast under the getter's target, network under Settings/Network, default duration under Scheduler).
