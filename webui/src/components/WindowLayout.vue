@@ -50,6 +50,9 @@
       </div>
 
       <div class="text-caption font-weight-medium mt-4 mb-1">Panes</div>
+      <v-alert v-if="leafIds.length > 4" type="info" variant="tonal" density="compact" class="mb-2" data-test="many-panes-hint">
+        Videos are decoded by the CPU on a Raspberry Pi 4: it plays about four 720p videos at once, more panes with a video play slower (still pictures and web pages cost little).
+      </v-alert>
       <div v-for="id in leafIds" :key="id" class="d-flex align-center ga-2 mb-2" :data-test="'pane-row-' + id">
         <v-chip size="small" :color="id === layout.main ? 'primary' : undefined" style="min-width: 56px; justify-content: center">
           {{ id }}<template v-if="id === layout.main">&nbsp;main</template>
