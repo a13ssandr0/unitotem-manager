@@ -26,6 +26,14 @@ cp "$ROOT/manager/main.py" "$STAGE/main.py"
 cp -r "$ROOT/manager/plugins/unitotem_viewer" "$STAGE/unitotem_viewer"
 find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} +
 
+# the OLD crawl (main thread moves the text every frame), bundled as a control for before/after measurements:
+# tools/ticker/control/ticker-raf.js, served as /assets/ticker-control.js (never loaded by the product)
+mkdir -p "$STAGE/ctl"
+sed "s#'./ticker-core.js'#'$ROOT/webui/src/ticker-core.js'#" "$ROOT/tools/ticker/control/ticker-raf.js" > "$STAGE/ctl/ticker-raf.js"
+"$ROOT/webui/node_modules/.bin/esbuild" "$STAGE/ctl/ticker-raf.js" --bundle --format=esm --log-level=error \
+  --outfile="$STAGE/static/assets/ticker-control.js"
+rm -rf "$STAGE/ctl"
+
 # SHIM=1: the staged copy of boot-screen.html gets the page contract of the ticker (#area, #ticker-host and the CSS of
 # tools/ticker/shim.css) until package A's page has it for real. Only the copy that goes to the board is patched.
 if [ -n "${SHIM:-}" ]; then

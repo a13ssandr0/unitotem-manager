@@ -99,7 +99,7 @@ def test_clean_text_and_limits():
 
 
 def test_many_entries_are_cut():
-    body = ''.join(f'<item><title>t{i}</title><link>http://e/{i}</link></item>' for i in range(500))
+    body = ''.join(f'<item><title>t{i}</title><link>http://e/{i}</link></item>' for i in range(800))
     items = feed.parse(f'<rss version="2.0"><channel><title>x</title>{body}</channel></rss>'.encode())
     assert len(items) == feed.MAX_ENTRIES_PER_FEED
 

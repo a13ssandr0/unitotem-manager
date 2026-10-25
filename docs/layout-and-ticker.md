@@ -54,7 +54,7 @@ The sound output stays per window (all panes), a video's own volume stays per as
 
 Core, runs on a plain server: `utils/ticker/` (sources, fetcher with `feedparser` or the stdlib, merged list, per-source interval), `utils/models/ticker.py`
 (`TickerSettings` of a window, `TickerSource`), `api/ticker.py` (`Ticker/*`, admin), part `ticker`. The page side is `webui/src/ticker.js` (a module loaded on demand like
-`keyboard.js`, publishes `window.utTicker`; the page calls `utTicker.configure(cfg)` / `utTicker.setItems(list)`), UI in `webui/src/components/`.
+`keyboard.js`, publishes `window.utTicker`; the page calls `utTicker.update(cfg, items)` (settings and list together; `configure`/`setItems` exist for tests)), UI in `webui/src/components/`.
 
 - Sources: URL, name, `interval` seconds (clamped 60 s .. 1 day, default 15 min), enabled. Fetch with `If-None-Match`/`If-Modified-Since`, timeout, size cap, redirect cap,
   only http/https, no private-address special cases needed beyond that; one failing source never stops the others (notification once per source via `utils/notifications.py`,
@@ -73,9 +73,12 @@ Core, runs on a plain server: `utils/ticker/` (sources, fetcher with `feedparser
 - Speed: units are font-size relative (em per second) so it reads the same on every resolution; the default comes from research (broadcast crawls, digital signage defaults 50-80 px/s
   at 1080p with 24-32 px text, i.e. roughly 2-3 em/s): package B must search the web for the best default and range and justify it in the code comment; adjustable by the user.
 - Clock block: `clock: {enabled, position: 'start'|'end', seconds: bool, date: bool, rows: 1|2}` fixed at the start or end of the bar, not scrolling.
-- Scrolling with MANY items: a recycler, not one long string: only the elements needed to fill the bar plus a buffer exist, positioned with `transform`, taken from a pool as they leave
-  on the left and re-used for the next items on the right; the list wraps around; when the list changes the crawl continues without a jump. Must cost little on a Pi 4 with
-  software-friendly compositing (one animated layer per lane, no paint-property animation; see the CPU notes in CLAUDE.md).
+- Scrolling is done by the COMPOSITOR (user requirement, 2026-10-25: "the headlines jumping is really serious"; a crawl positioned by JavaScript every frame judders by construction: main thread, stepped,
+  rounded to whole pixels). Each lane is a recycler of PAGES: a page is one element with consecutive headlines (2-3 bar widths, at most 8192 px) and ONE linear `transform` Web Animation (`will-change:
+  transform`, fractional px, nothing else animated); the next page is built ahead (three pages per lane) and gets an exact `startTime` on `document.timeline` (start of the previous + the time it needs to
+  move by its own width), so there is no gap and the speed is the same on every page; a page that has left returns to a pool. 500 headlines cost what 5 do; a change of the list never touches the pages
+  already built (only pages not built yet use it), so nothing jumps; a busy main thread cannot make the crawl miss a frame (measured, see below). The clock block is static text. A rebuild (new settings,
+  resize, rotation) restarts the crawl, pre-filled. Measurements (venus, GPU compositing, 1080p, `tools/ticker/venus-run.py --only trace`): see CLAUDE.md "RSS ticker" and the table below.
 
 ## Page contract (package A restructures boot-screen.html, package B only plugs in)
 
