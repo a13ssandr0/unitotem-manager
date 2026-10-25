@@ -106,3 +106,25 @@ Procedure for code on a board without building a deb: CLAUDE.md "Testing code on
 - The API: `Viewers/layout`, `set_area`, `split_pane`, `close_pane`, `set_split_ratio` (admin except `layout`), `assign_playlist`/`unassign_playlist` take `pane_id`.
   The Viewers page has a section "Window layout" (`WindowLayout.vue`): B's ticker controls for a window belong in that card (admin only), reading `win.layout.ticker`.
 - Backup: part `layouts` (core, `utils/backup.py`, label "Window layouts (area and panes)"): B adds its own part `ticker` next to it in `CORE_PARTS`.
+
+### Measurements of the crawl (venus: Intel Iris Xe, GPU compositing, DP-2 1920x1080 60 Hz, CEF 147; `tools/ticker/venus-run.py --only trace`, 500 headlines, 2.5 em/s = 80 px/s, 15 s traces)
+
+| | frames drawn/s | longest gap between drawn frames | main-thread commits/s (content updates) | CPU, whole tree |
+|---|---|---|---|---|
+| NEW compositor animations, 1 lane | 60.0 | 21.5 ms | 0 | 32.3 % of a core (gpu 14.0, renderer 11.5, python 6.7) |
+| NEW, 1 lane, main thread BLOCKED 300 ms every second | 60.0 | 21.5 ms | 0 | |
+| NEW, 2 lanes (idle / blocked) | 60.0 / 60.0 | 21.3 / 21.6 ms | 0 / 0 | 33.6 % |
+| OLD JS every frame (rAF + setTimeout, rounded px), 1 lane | 30.1 | 42.2 ms | 90 | 24.5 % |
+| OLD, main thread blocked 300 ms/s | 21.7 | **310.7 ms** (the visible jump) | 65 | |
+| OLD, 2 lanes (idle / blocked) | 30.0 / 21.6 | 42.1 / 311.7 ms | 90 / 65 | 24.5 % |
+
+- Hardware acceleration: `document.getAnimations()` lists one linear `transform` animation per page (3 per lane), `getComputedStyle().willChange` is `transform`, raster tasks 0.14-0.28/s (only when a
+  page is built), paint/commit by the main thread 0 per second while crawling. The renderer still gets an (aborted, empty) `BeginMainFrame` per drawn frame: that is the floor of ANY animation in this CEF
+  on Wayland, measured with a single empty animated `<div>` and no ticker at all: 31.6 % of a core. The ticker itself costs what that div costs; the cost is the 60 fps compositing of the surface, which
+  is why the old stepped 30 fps loop was cheaper (24.5 %) and also why it was not smooth. On a machine without a GPU (the Pi 4 keeps GPU compositing; a software one does not) this floor grows with
+  the area of the layer: measure there before promising anything.
+- Position over time is linear (headless Chrome, `tools/ui-ticker.py`: residual < 1.5 px over 1 s, fractional pixels, measured speed = configured speed).
+- Text quality: a composited layer at a fractional offset is bilinearly resampled. Measured on the real screenshots (paused at x = -200, -200.5, -200.33): the share of strong edges to
+  mid-level edges falls from 1.52 (whole pixel) to 0.97 / 0.83: slightly softer text while it moves, still crisp enough to read; it is inherent to smooth sub-pixel motion (rounding the position
+  from script is what produced the 1/2 px steps), so it is accepted.
+- The frame spacing of `Display::DrawAndSwap` is 8/20/20 ms at 60 Hz on this compositor (mean 16.7 ms) with or without the ticker: not something the crawl can change.

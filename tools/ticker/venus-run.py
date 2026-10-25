@@ -287,7 +287,7 @@ async def main():
             # fractional translation of a composited text layer: is it blurrier than at a whole pixel?
             await cfg(rows=1, speed=2.5, font_size=3.0, template='{title}', select={'mode': 'count', 'count': 30, 'seconds': 7200})
             for name, frac in (('int', 0.0), ('half', 0.5), ('third', 0.33)):
-                expr = ("(() => { const a = document.getAnimations().find(x => x.playState === 'running'); const el = a.effect.target;"
+                expr = ("(() => { const a = document.getAnimations()[0]; const el = a.effect.target;"
                         " const px = window.utTicker.inspect().speedPx; a.pause();"
                         f" a.currentTime = ((200 + {frac}) / px) * 1000; return el.getBoundingClientRect().left; }})()")
                 run.note(f'quality {name}: page left = ' + ssh(args.host, f'python3 {BOARD}/board-cdp.py eval "{expr}"'))
@@ -302,7 +302,7 @@ async def main():
             await add('/atom.xml', 'Atom', 300)
             await add('/dated.xml', 'Dated', 600)
             await wait_fetched(3)
-            geometry = ('JSON.stringify(["area","panes","ticker-host"].map(id => { const r = document.getElementById(id).getBoundingClientRect();'
+            geometry = ('JSON.stringify([\'area\',\'panes\',\'ticker-host\'].map(id => { const r = document.getElementById(id).getBoundingClientRect();'
                         ' return [id, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; }))')
             tpl = '[b]{time:HH:mm}[/b] {source!u}: {title}'
             sel = {'mode': 'count', 'count': 30, 'seconds': 7200}
