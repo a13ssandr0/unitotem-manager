@@ -180,7 +180,7 @@ unchanged by construction. What each new or changed piece does outside Wayland:
 | frameless windows (`remove_standard_frame`), X11 handling skipped, `GetDisplay` by entered output | under `BUILDFLAG(IS_OZONE)` and `IsRunningOnWayland()` | unchanged: the Windows branch is textually the original (the comment edit of the first draft was reverted); the X11-only code only gets `is_x11 &&` / `!IsRunningOnWayland()` conditions inside the existing `IS_LINUX` + `SUPPORTS_OZONE_X11` blocks, true on X11 |
 
 `tools/cef-server/list-nonozone-changes.py CEF_DIR BASE` lists every added or removed line outside a `BUILDFLAG(IS_OZONE)` or
-`CEF_API_ADDED` conditional (73 lines for the master series, 40 of them the license text of the new header). The rest: the `#include
+`CEF_API_ADDED` conditional (73 lines for the master series, about half of them the license text of the new header). The rest: the `#include
 "include/cef_api_hash.h"` lines, the new header's include guard, `#include "cef/libcef/browser/views/view_util.h"` in `window_view.cc` (declares nothing
 outside `IS_OZONE`), the shells of `SetFullscreenOnDisplay`/`GetLabel`/`AddObserver`/`RemoveObserver` whose non-Wayland path is the fallback of the
 table above, the two `IS_LINUX`+X11 lines, and the test includes. ceftests: `WindowFullscreenOnDisplay` is `SetFullscreen(true)` outside Wayland (the
