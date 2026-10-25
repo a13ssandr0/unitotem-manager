@@ -38,9 +38,9 @@ class PageCommands:
 
     def show_asset(self, src: str, container: int, fit: int, bg_color: str,
                    volume: float = 1.0, muted: bool = False, zoom: float = 1.0,
-                   allow_pinch_zoom: bool = False, idle: bool = False):
+                   allow_pinch_zoom: bool = False, idle: bool = False, pane: Optional[int] = None):
         """
-        Display an asset.
+        Display an asset in a pane of the window (None: the main pane).
 
         container: index into ['boot','web','image','video','audio'] (= media_type + 1)
         fit:       FitEnum int value → 'contain' | 'cover' | 'fill'
@@ -61,12 +61,17 @@ class PageCommands:
         self._cef.execute_js(
             f'show({json.dumps(src)}, {json.dumps(cont)}, {json.dumps(fit_s)}, {json.dumps(bg_color)}, '
             f'{json.dumps(volume)}, {json.dumps(muted)}, {json.dumps(zoom)}, {json.dumps(bool(allow_pinch_zoom))}, '
-            f'{json.dumps(bool(idle))})'
+            f'{json.dumps(bool(idle))}, {json.dumps(pane)})'
         )
 
-    def set_asset_audio(self, volume: float, muted: bool):
-        """Change volume/mute of the asset being shown, without showing it again."""
-        self._cef.execute_js(f'setAssetAudio({json.dumps(volume)}, {json.dumps(bool(muted))})')
+    def set_asset_audio(self, volume: float, muted: bool, pane: Optional[int] = None):
+        """Change volume/mute of the asset being shown in a pane (None: the main one), without showing it again."""
+        self._cef.execute_js(f'setAssetAudio({json.dumps(volume)}, {json.dumps(bool(muted))}, {json.dumps(pane)})')
+
+    def set_window_layout(self, area: dict, tree: dict):
+        """The rectangle the content is drawn in and the tree of panes (see utils/models/layout.py): the page builds one stage
+        per pane, keeps the ones that survive playing and drops the others. The page sanitises what it is given."""
+        self._cef.execute_js(f'setWindowLayout({json.dumps(area)}, {json.dumps(tree)})')
 
     def set_audio_output(self, device: Optional[str]):
         """Send this window's sound to the output with that name (its description, as the browser lists it);

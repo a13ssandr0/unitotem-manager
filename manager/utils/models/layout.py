@@ -189,7 +189,7 @@ class WindowLayout(BaseModel):
 
     @property
     def is_default(self) -> bool:
-        return self.area.is_full and isinstance(self.tree, Leaf) and not self.panes
+        return self.area.is_full and self.tree == Leaf(id=1) and not self.panes
 
     def page_payload(self) -> dict:
         """What the page of the window needs (`SetWindowLayout`): the area and the tree, nothing about playlists."""
@@ -298,6 +298,10 @@ def with_pane_playlist(layout: WindowLayout, pane: int, playlist_id: Optional[st
     panes = {p: pid for p, pid in layout.panes.items() if p != pane}
     if playlist_id:
         panes[pane] = playlist_id
+    return _rebuild(layout, panes=panes)
+
+
+def with_panes(layout: WindowLayout, panes: dict[int, str]) -> WindowLayout:
     return _rebuild(layout, panes=panes)
 
 
