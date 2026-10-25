@@ -16,10 +16,13 @@
     </v-card-title>
     <v-card-text>
       <!-- the window, in the space of its content: what the area and the panes are percentages of -->
-      <div class="preview-wrap"><div ref="preview" class="preview" :style="previewStyle" data-test="preview">
+      <div class="text-caption text-medium-emphasis text-center mb-1" data-test="orientation-note">
+        {{ portrait ? 'Portrait' : 'Landscape' }} content<template v-if="turned">, turned {{ turned }}&deg;</template><template v-if="mirror">, mirrored {{ mirror === 'x' ? 'left-right' : 'top-bottom' }}</template>
+      </div>
+      <div class="preview-wrap"><div ref="preview" class="preview" :class="mirror && 'mirror-' + mirror" :style="previewStyle" data-test="preview">
         <div class="area" :class="{editable: canEdit}" :style="areaStyle" data-test="area"
              @pointerdown="canEdit && startDrag($event, 'move')">
-          <PaneTree :node="layout.tree" :main="layout.main" :labels="labels" :editable="canEdit" @ratio="onRatio"/>
+          <PaneTree :node="layout.tree" :main="layout.main" :labels="labels" :editable="canEdit" :mirror="mirror" @ratio="onRatio"/>
           <template v-if="canEdit">
             <div v-for="h in handles" :key="h" class="handle" :class="h" :data-handle="h"
                  @pointerdown.stop.prevent="startDrag($event, h)"/>
@@ -30,7 +33,7 @@
       <div v-if="canEdit" class="mt-4">
         <div class="text-caption font-weight-medium mb-1">Content area</div>
         <div class="d-flex flex-wrap ga-1 mb-2">
-          <v-chip v-for="p in presets" :key="p.name" size="small" variant="outlined" :color="isPreset(p) ? 'primary' : undefined"
+          <v-chip v-for="p in presets" :key="p.area.top + ':' + p.area.left + ':' + p.area.width + ':' + p.area.height" size="small" variant="outlined" :color="isPreset(p) ? 'primary' : undefined"
                   @click="setArea(p.area)">{{ p.name }}</v-chip>
         </div>
         <div class="d-flex flex-wrap ga-2 align-center">
@@ -93,9 +96,15 @@ function holdDraft() {
   settle = setTimeout(() => { if (!dragging) draft.value = null }, 1500)
 }
 
+// The preview is the window in the space of its CONTENT, the one the area and the panes are percentages of: turned by the
+// content orientation (the width and height of a vertical screen swap), mirrored by the flip, the way it is seen
 const rotated = computed(() => [1, 3].includes(props.win.orientation))
+const turned = computed(() => (props.win.orientation || 0) * 90)
+const mirror = computed(() => props.win.flip === 1 ? 'x' : props.win.flip === 2 ? 'y' : '')
+const contentSize = computed(() => rotated.value ? [props.win.height, props.win.width] : [props.win.width, props.win.height])
+const portrait = computed(() => contentSize.value[1] > contentSize.value[0])
 const previewStyle = computed(() => {
-  const [w, h] = rotated.value ? [props.win.height, props.win.width] : [props.win.width, props.win.height]
+  const [w, h] = contentSize.value
   return {aspectRatio: `${w || 16} / ${h || 9}`, backgroundColor: layout.value.area.margin_color}
 })
 const areaStyle = computed(() => {
@@ -116,14 +125,15 @@ const MIN = 5
 const handles = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
 const fields = [{key: 'left', label: 'Left'}, {key: 'top', label: 'Top'}, {key: 'width', label: 'Width'},
   {key: 'height', label: 'Height'}]
-const presets = [
+// Full width, a part of the HEIGHT: for a portrait screen (a tall panel, most of it out of reach) this is the usable band
+const presets = computed(() => [
   {name: 'Full window', area: {left: 0, top: 0, width: 100, height: 100}},
-  {name: 'Centre third (vertical screen)', area: {left: 0, top: 33.33, width: 100, height: 33.34}},
-  {name: 'Centre half (vertical screen)', area: {left: 0, top: 25, width: 100, height: 50}},
-  {name: 'Top half', area: {left: 0, top: 0, width: 100, height: 50}},
-  {name: 'Bottom half', area: {left: 0, top: 50, width: 100, height: 50}},
+  {name: portrait.value ? 'Centre third (portrait screen)' : 'Centre third of the height', area: {left: 0, top: 33.33, width: 100, height: 33.34}},
+  {name: portrait.value ? 'Centre half (portrait screen)' : 'Centre half of the height', area: {left: 0, top: 25, width: 100, height: 50}},
+  {name: portrait.value ? 'Top third (portrait screen)' : 'Top half', area: portrait.value ? {left: 0, top: 0, width: 100, height: 33.33} : {left: 0, top: 0, width: 100, height: 50}},
+  {name: portrait.value ? 'Bottom third (portrait screen)' : 'Bottom half', area: portrait.value ? {left: 0, top: 66.67, width: 100, height: 33.33} : {left: 0, top: 50, width: 100, height: 50}},
   {name: 'Centre, half each way', area: {left: 25, top: 25, width: 50, height: 50}},
-]
+])
 const isPreset = p => ['left', 'top', 'width', 'height'].every(k => Math.abs(layout.value.area[k] - p.area[k]) < 0.05)
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
@@ -175,7 +185,8 @@ function startDrag(event, how) {
   dragging = true
   draft.value = {...layout.value, area: from}
   const area = e => {
-    const dx = (e.clientX - x0) / box.width * 100, dy = (e.clientY - y0) / box.height * 100
+    const dx = (e.clientX - x0) / box.width * 100 * (mirror.value === 'x' ? -1 : 1)
+    const dy = (e.clientY - y0) / box.height * 100 * (mirror.value === 'y' ? -1 : 1)
     if (how === 'move') return fit(from, {left: from.left + dx, top: from.top + dy})
     let {left, top, width, height} = from
     if (how.includes('e')) width = from.width + dx
@@ -240,6 +251,10 @@ function assign(id, playlistId) {
   position: relative; width: 100%;
   border: 2px solid rgba(var(--v-theme-on-surface), 0.4); border-radius: 4px; user-select: none;
 }
+.preview.mirror-x { transform: scaleX(-1); }
+.preview.mirror-y { transform: scaleY(-1); }
+.preview.mirror-x :deep(.leaf-id), .preview.mirror-x :deep(.leaf-name) { display: inline-block; transform: scaleX(-1); }
+.preview.mirror-y :deep(.leaf-id), .preview.mirror-y :deep(.leaf-name) { display: inline-block; transform: scaleY(-1); }
 .area { position: absolute; box-shadow: 0 0 0 1px rgb(var(--v-theme-primary)); }
 .area.editable { cursor: move; touch-action: none; }
 .handle { position: absolute; background: rgb(var(--v-theme-primary)); z-index: 2; touch-action: none; }
