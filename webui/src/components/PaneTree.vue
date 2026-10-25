@@ -47,14 +47,14 @@ function start(event) {
   target.setPointerCapture(event.pointerId)
   const move = e => emit('ratio', props.path, ratioAt(e), false)
   const end = e => {
-    target.removeEventListener('pointermove', move)
-    target.removeEventListener('pointerup', end)
-    target.removeEventListener('pointercancel', end)
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', end)
+    window.removeEventListener('pointercancel', end)
     emit('ratio', props.path, ratioAt(e), true)
   }
-  target.addEventListener('pointermove', move)
-  target.addEventListener('pointerup', end)
-  target.addEventListener('pointercancel', end)
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', end)
+  window.addEventListener('pointercancel', end)
 }
 </script>
 
