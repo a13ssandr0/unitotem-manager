@@ -199,6 +199,13 @@ For the Pi (no `--off` of the last output, so no hot-plug there):
 `CEFTESTS_PKG=/tmp/ceftests-pkg-aarch64 OUTPUT=HDMI-A-1 tools/cef-wayland-tests/run-suite.sh 192.168.1.173 aarch64`. Validated in X mode on
 venus (all parts) and in image mode on the Pi (this run: `W=/run/cefsuite CEFPY=dev OUTPUT=HDMI-A-1`, everything in `/run` because `/tmp` of the image is 256 MB).
 
+### CEF master (Chromium 156) compile check
+
+`/nas/cef-master-check` on the build server holds Chromium 156.0.8078.0 (the tag master's `CHROMIUM_BUILD_COMPATIBILITY.txt` names) and CEF master e537569ec,
+separate from the 147 tree (29 GB, kept). `gn gen` needed `GN_DEFINES="use_sysroot=true symbol_level=0 proprietary_codecs=true ffmpeg_branding=Chrome
+is_component_build=false"` and `python3 cef/tools/gclient_hook.py` run as the owner of the tree. The four touched libcef_static objects and `window_unittest.o` build
+with the six `patches/cef-master` applied (details in `pr-cef.md`); the full libcef of master was not built.
+
 ## Not verified
 
 * Windows and macOS: not built (reasons above). `SetFullscreenOnDisplay` on Windows and macOS only passes the id to Chromium's widgets
