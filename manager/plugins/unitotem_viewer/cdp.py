@@ -40,7 +40,9 @@ FOCUS_SCRIPT = r"""
     (el.tagName === 'INPUT' && !NO_TEXT.includes((el.type || 'text').toLowerCase())));
   const report = () => {
     try {
-      const el = document.activeElement;
+      // pages built from web components (Home Assistant) keep the real field inside shadow roots
+      let el = document.activeElement;
+      while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
       utFocus(JSON.stringify({on: editable(el), type: editable(el) ? (el.type || el.tagName.toLowerCase()) : null, frame: me}));
     } catch (e) {}
   };
