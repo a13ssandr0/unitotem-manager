@@ -32,8 +32,9 @@ const REPEAT_DELAY_MS = 400
 const REPEAT_MS = 60
 const DOUBLE_TAP_MS = 400
 const SYMBOLS = {
-  sym1: ['1 2 3 4 5 6 7 8 9 0 {bksp}', '@ # $ _ & - + ( ) / {enter}', '{sym2} % * " \' : ; ! ? {sym2}', '{abc} , {space} . {abc}'],
-  sym2: ['~ ` | • √ π ÷ × ¶ ∆ {bksp}', '£ ¢ € ¥ ^ ° = { } \\ {enter}', '{sym1} < > [ ] © ® ™ ✓ {sym1}', '{abc} , {space} . {abc}'],
+  sym1: ['1 2 3 4 5 6 7 8 9 0 {bksp}', '@ # $ _ & - + ( ) / {enter}', '{sym2} % * " \' : ; ! ? {sym2}', '{abc} {emoji} {space} {left} {right} {hide}'],
+  sym2: ['~ ` | • √ π ÷ × ¶ ∆ {bksp}', '£ ¢ € ¥ ^ ° = { } \\ {enter}', '{sym1} < > [ ] © ® ™ ✓ {sym1}', '{abc} {emoji} {space} {left} {right} {hide}'],
+  emoji: ['😀 😂 😍 😊 😎 😢 😡 👍 👎 🙏', '❤️ 💔 🔥 ⭐ ✨ 🎉 ✅ ❌ ⚠️ ❓', '🙂 😉 😅 🤔 😴 🤗 😇 🙄 😬 😱', '{abc} {space} {bksp} {hide}'],
 }
 // What a long press on a key offers, in the order of Gboard / AOSP's LatinIME (OpenBoard's `donottranslate-more-keys.xml`, the
 // accents of every Latin language it ships merged and sorted by how many languages use them). Lower case: the upper case of
@@ -62,14 +63,17 @@ const css = `${keyboardCss}
   align-items: center; justify-content: space-between; padding: 0 0 0 14px; cursor: move; font-size: 14px; }
 #ut-kbd-close { width: ${HEADER_PX}px; height: ${HEADER_PX}px; border: 0; background: transparent; color: #fff;
   font-size: 22px; cursor: pointer; }
-#ut-kbd-body { flex: 1 1 auto; min-height: 0; padding: 4px; }
+#ut-kbd-body { flex: 1 1 auto; min-height: 0; padding: 8px; background: #eff4fa; }
 #ut-kbd-body .simple-keyboard { height: 100%; background: transparent; padding: 0; }
 #ut-kbd-body .hg-rows { height: 100%; display: flex; flex-direction: column; }
-#ut-kbd-body .hg-row { flex: 1 1 0; display: flex; margin-bottom: 4px; }
+#ut-kbd-body .hg-row { flex: 1 1 0; display: flex; margin-bottom: 8px; }
+#ut-kbd-body .hg-row .hg-button:not(:last-child) { margin-right: 8px; }
 #ut-kbd-body .hg-row:last-child { margin-bottom: 0; }
 #ut-kbd-body .hg-button { height: auto; font-size: clamp(12px, 2.4vmin, 40px); }
 /* The size of every key is set by sizeKeys() below (Android tablet geometry); here only the colours. */
-#ut-kbd-body .hg-button { position: relative; transition: background-color .08s; }
+#ut-kbd-body .hg-button { position: relative; transition: background-color .08s; border: 0; border-radius: 10px; box-shadow: none; color: #1f1f1f; }
+#ut-kbd-body .hg-button[data-skbtn="{enter}"] { border-radius: 999px; background: #0b57cf !important; color: #fff; }
+#ut-kbd-body .hg-button[data-skbtn="{enter}"]:hover { background: #0a4cb4 !important; }
 /* feedback like Android's: a key lights up under the pointer and while it is pressed */
 #ut-kbd-body .hg-button:hover { background: #e3e7ec !important; }
 #ut-kbd-body .hg-button.ut-down, #ut-kbd-body .hg-button.hg-activeButton { background: #b8c4d6 !important; }
@@ -77,7 +81,7 @@ const css = `${keyboardCss}
   align-items: center; justify-content: center; background: #fff; color: #111; font-size: 34px; border-radius: 10px;
   box-shadow: 0 2px 14px #000a; pointer-events: none; }
 #ut-kbd-body .hg-button { min-width: 0; }
-#ut-kbd-body .hg-button[data-skbtn^="{"][data-skbtn$="}"] { background: #d5d9de; }
+#ut-kbd-body .hg-button[data-skbtn^="{"][data-skbtn$="}"] { background: #e1e3e0; }
 #ut-kbd-body .hg-button[data-skbtn="{space}"][data-skbtn="{space}"] { background: #fff; }
 .ut-hint { position: absolute; top: 3px; right: 6px; font-size: .55em; line-height: 1; color: #8a8f98; pointer-events: none; }
 #ut-kbd-body.ut-numeric .hg-button { flex: 1 1 0; }
@@ -101,6 +105,7 @@ let openedByUser = false
 let shift = false
 let caps = false
 let numeric = false
+let topDigits = {} // letter of the top row -> its digit (the first long press, like Gboard)
 let page = 'letters' // letters | sym1 | sym2
 let lastShiftTap = 0
 const box = {x: 0, y: 0, w: 0, h: 0} // the panel, in the coordinates of the layer
@@ -242,39 +247,44 @@ function drag(handle, onMove, moveOnly = false) {
 
 // ── keys ────────────────────────────────────────────────────────────────
 
-const SPECIAL = {'{bksp}': 'Backspace', '{enter}': 'Enter', '{tab}': 'Tab'}
+const SPECIAL = {'{bksp}': 'Backspace', '{enter}': 'Enter', '{tab}': 'Tab', '{left}': 'ArrowLeft', '{right}': 'ArrowRight'}
+const REPEATING = new Set(['{bksp}', '{left}', '{right}'])
 const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': '⇪', '{tab}': '⇥', '{space}': ' ',
-  '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC'}
+  '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC', '{emoji}': '☺', '{left}': '◀', '{right}': '▶', '{hide}': '⌨'}
 
 // Accented letters that a long press already offers (è on `e`...): the national layouts put them on keys of their own, Gboard does not
 const ACCENTED = new Set(Object.entries(VARIANTS).filter(([k]) => /^[a-z]$/.test(k))
-  .flatMap(([, list]) => list.split(' ').flatMap(v => [v, v === 'ß' ? 'ẞ' : v.toUpperCase()])))
+  .flatMap(([, list]) => list.split(' ').flatMap(v => [v, v === 'ß' ? 'ẞ' : v.toUpperCase()])).filter(v => !/^[A-Za-z]$/.test(v))) // dotless ı upper-cases to a plain I
 
-/** A layout of simple-keyboard-layouts turned into the tablet layout of Android's keyboard (AOSP `xml-sw600dp/rows_qwerty.xml`, which is
- *  what Gboard on a tablet follows): the row of digits, then `tab` + the first letter row + backspace, `caps` + the second + enter,
- *  `shift` + the third + `! ?` + `shift`, and `?123 , space . ?123`. Only letters on the letter rows. */
+/** A layout of simple-keyboard-layouts turned into the tablet layout of the real Gboard (screenshots of Gboard 12.3+ on a tablet, 9to5Google
+ *  2022-10-10; AOSP `xml-sw600dp` agrees): NO row of digits (they are the first long-press of the top row, drawn as grey hints),
+ *  `tab` + letters + backspace, `caps lock` + letters + enter, `shift` + letters + `,` `.` + `shift`, and
+ *  `?123 emoji space ◀ ▶ hide`. Only letters on the letter rows. */
 function gboard(rows) {
   const isFn = k => /^\{.+\}$/.test(k)
   const split = rows.filter(row => !row.includes('{space}')).map(row => row.split(' '))
-  const digits = split[0].filter(k => /^\d$/.test(k))
-  const hasDigits = digits.length >= 10
+  const hasDigits = split[0].filter(k => !isFn(k) && !/\p{L}/u.test(k)).length >= 8 // a row of digits (or of their shifted symbols)
   const letterRows = split.slice(hasDigits ? 1 : 0, hasDigits ? 4 : 3)
     .map(row => row.filter(k => !isFn(k) && /\p{L}/u.test(k) && !ACCENTED.has(k)))
-  const out = [hasDigits ? digits : '1 2 3 4 5 6 7 8 9 0'.split(' ')]
+  const out = []
   letterRows.forEach((row, i) => {
     const left = ['{tab}', '{lock}', '{shift}'][i]
     const right = ['{bksp}', '{enter}', '{shift}'][i]
-    out.push([left, ...row, ...(i === 2 ? ['!', '?'] : []), right])
+    out.push([left, ...row, ...(i === 2 ? [',', '.'] : []), right])
   })
-  out.push('{sym1} , {space} . {sym1}'.split(' '))
+  out.push('{sym1} {emoji} {space} {left} {right} {hide}'.split(' '))
+  topDigits = {}
+  letterRows[0]?.forEach((k, i) => { topDigits[k.toLowerCase()] = String((i + 1) % 10) })
   return out.map(row => row.join(' '))
 }
 
-// Android's tablet geometry in units of one letter key: 12.5 units per row (a letter is 8 % of the row), the keys that are not
-// characters have the width Android gives them and the LAST one of a row stretches, so every character key is the same size
-const SIDE_UNITS = {'{tab}': 1.25, '{lock}': 1.75, '{bksp}': 1.25, '{enter}': 1.75, '{sym1}': 1.5, '{sym2}': 1.5, '{abc}': 1.5}
-const ROW_UNITS = 12.5
-const unitsOf = (key, index) => key === '{shift}' ? (index === 0 ? 2.25 : 1.25) : (SIDE_UNITS[key] ?? 1)
+// The real Gboard's tablet geometry, measured on its screenshots (1600 px wide: key 111 px + gap 16 = 127 px = one unit): a row is 12.39
+// units; tab/backspace 1.18, caps 1.43, enter 1.88, shifts 1.92 and 1.44, ?123 and emoji 1.46, the arrows 0.97, hide 1; the LAST key of a
+// row that has no space bar stretches, so every character key is the same size
+const SIDE_UNITS = {'{tab}': 1.18, '{lock}': 1.43, '{bksp}': 1.18, '{enter}': 1.88, '{sym1}': 1.46, '{sym2}': 1.46, '{abc}': 1.46,
+  '{emoji}': 1.46, '{left}': 0.97, '{right}': 0.97, '{hide}': 1}
+const ROW_UNITS = 12.39
+const unitsOf = (key, index) => key === '{shift}' ? (index === 0 ? 1.92 : 1.44) : (SIDE_UNITS[key] ?? 1)
 
 /** Sets the size of every key of the page on show (called after every render): all characters one unit wide, rows as tall as each other. */
 function sizeKeys() {
@@ -282,14 +292,14 @@ function sizeKeys() {
   const layout = keyboard.options.layout
   const rows = (layout[keyboard.options.layoutName] ?? []).map(row => row.split(' '))
   const isFn = k => /^\{.+\}$/.test(k)
-  const total = Math.max(ROW_UNITS, ...rows.map(row => row.reduce((sum, k, i) => sum + (k === '{space}' ? 4 : unitsOf(k, i)), 0)))
+  const total = Math.max(ROW_UNITS, ...rows.map(row => row.reduce((sum, k, i) => sum + (k === '{space}' ? 6.5 : unitsOf(k, i)), 0)))
   body.querySelectorAll('.hg-row').forEach((el, i) => {
     const keys = rows[i]
     if (!keys) return
     el.style.justifyContent = keys.some(isFn) ? 'flex-start' : 'center'
     el.querySelectorAll('.hg-button').forEach((button, j) => {
       if (numeric) { button.style.flex = ''; return }
-      const basis = `calc(${(100 * unitsOf(keys[j], j) / total).toFixed(3)}% - 5px)`
+      const basis = `calc(${(100 * unitsOf(keys[j], j) / total).toFixed(3)}% - 8px)`
       button.style.flex = keys[j] === '{space}' ? '1 1 0' : (isFn(keys[j]) && j === keys.length - 1 && !keys.includes('{space}') ? `1 1 ${basis}` : `0 0 ${basis}`)
     })
   })
@@ -323,8 +333,9 @@ function typeKey(button) {
     refreshLayout()
     return
   }
+  if (button === '{hide}') { setOpen(false); return }
   if (button === '{lock}') { caps = !caps; shift = false; refreshLayout(); return }
-  if (button === '{sym1}' || button === '{sym2}' || button === '{abc}') {
+  if (button === '{sym1}' || button === '{sym2}' || button === '{abc}' || button === '{emoji}') {
     page = button === '{abc}' ? 'letters' : button.slice(1, -1)
     refreshLayout()
     return
@@ -339,7 +350,7 @@ function typeKey(button) {
 function variantsOf(button) {
   if (/^\{.+\}$/.test(button)) return []
   const base = button.toLowerCase()
-  const list = (VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ').filter(Boolean)
+  const list = [topDigits[base], ...(VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ')].filter(Boolean)
   if (button === base || button.length !== 1) return list
   return list.map(v => v === 'ß' ? 'ẞ' : v.toUpperCase()).filter(v => [...v].length === 1)
 }
@@ -381,14 +392,33 @@ function openVariants(press) {
   alts.style.display = 'flex'
   const [bx, by] = offsetIn(press.btn, panel)
   const W = layer.clientWidth
-  const x = box.x + bx + press.btn.offsetWidth / 2 - alts.offsetWidth / 2
+  // like Gboard: the first variant is right above the key, the others follow to the side (pulled back when they would leave the screen)
+  const x = box.x + bx
   const y = box.y + by - alts.offsetHeight - 6
   alts.style.left = `${Math.min(Math.max(x, 0), Math.max(0, W - alts.offsetWidth))}px`
   alts.style.top = `${Math.max(y, 0)}px`
   press.long = true
+  press.origin = [box.x + bx + press.btn.offsetWidth / 2, box.y + by + press.btn.offsetHeight / 2] // where the finger went down, in the layer
+  pickVariant(press, null)
 }
 
-const variantAt = e => document.elementFromPoint(e.clientX, e.clientY)?.closest('#ut-kbd-alts span') ?? null
+/** The variant under the finger, Gboard style: only the movement ALONG the popup counts. The finger does not have to reach the popup, it
+ *  can slide sideways on the key row it is on; the popup's row is the nearest one to the finger (a single row ignores the height). */
+function pickVariant(press, e) {
+  const [dx, dy] = e ? toLayer(e.clientX - press.from[0], e.clientY - press.from[1]) : [0, 0]
+  const px = press.origin[0] + dx
+  const py = press.origin[1] + dy
+  const spans = [...alts.children]
+  const rows = [...new Set(spans.map(sp => sp.offsetTop))]
+  // the row nearest to the finger's height (the bottom row is the one above the key, a finger on the key row or below it stays on it)
+  const rowTop = rows.length === 1 ? rows[0] : rows.reduce((best, top) => Math.abs(alts.offsetTop + top + spans[0].offsetHeight / 2 - py) < Math.abs(alts.offsetTop + best + spans[0].offsetHeight / 2 - py) ? top : best, rows[0])
+  const inRow = spans.filter(sp => sp.offsetTop === rowTop)
+  const x = px - alts.offsetLeft
+  let chosen = inRow[0]
+  for (const sp of inRow) if (x >= sp.offsetLeft) chosen = sp
+  for (const sp of spans) sp.classList.toggle('on', sp === chosen)
+  return chosen
+}
 
 /** Gboard's behaviour on the keys of the panel: typed on release, long press for the variants, repeat on backspace. */
 function wireKeys(host) {
@@ -409,10 +439,10 @@ function wireKeys(host) {
     if (!btn) return
     stop()
     const key = btn.getAttribute('data-skbtn')
-    press = {btn, key, long: false, timer: null, repeat: null}
+    press = {btn, key, long: false, timer: null, repeat: null, from: [e.clientX, e.clientY]}
     btn.classList.add('ut-down')
     if (!/^\{.+\}$/.test(key)) showPreview(btn)
-    if (key === '{bksp}') {
+    if (REPEATING.has(key)) {
       typeKey(key)
       press.timer = setTimeout(() => { press.repeat = setInterval(() => typeKey(key), REPEAT_MS) }, REPEAT_DELAY_MS)
     } else if (variantsOf(key).length) {
@@ -421,13 +451,12 @@ function wireKeys(host) {
   })
   window.addEventListener('pointermove', e => {
     if (!press || !press.long) return
-    const on = variantAt(e)
-    for (const span of alts.children) span.classList.toggle('on', span === on)
+    pickVariant(press, e)
   })
   window.addEventListener('pointerup', e => {
-    const on = press?.long ? variantAt(e) : null // before stop() hides the variants
+    const on = press?.long ? pickVariant(press, e) : null // before stop() hides the variants
     const p = stop()
-    if (!p || p.key === '{bksp}') return
+    if (!p || REPEATING.has(p.key)) return
     if (p.long) {
       if (on) { send({text: on.textContent}); if (shift && !caps) { shift = false; refreshLayout() } }
       return
