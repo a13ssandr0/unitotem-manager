@@ -256,6 +256,7 @@ const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': 
 // What Gboard draws at the top right of a letter and offers first on a long press: a symbol (screenshot of Gboard on a tablet, Italian layout)
 const SYMBOL_HINT = {q: '%', w: '\\', e: '|', r: '=', t: '[', y: ']', u: '<', i: '>', o: '{', p: '}', a: '@', s: '#', d: '€', f: '_', g: '&',
   h: '-', j: '+', k: '(', l: ')', z: '*', x: '"', c: "'", v: ':', b: ';', n: '!', m: '?'}
+let topDigits = {} // letter of the top row -> its digit (first long press), for layouts with no row of digits
 const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
 // Layouts Gboard draws differently from the national keyboard layout, copied from its screenshots (the rest go through gboard())
 const GBOARD_ROWS = {
@@ -263,17 +264,22 @@ const GBOARD_ROWS = {
     '{shift} z x c v b n m , . - {shift}', BOTTOM],
 }
 
-/** A layout of simple-keyboard-layouts turned into Gboard's tablet layout (screenshots of Gboard on a tablet): a row of digits ending
- *  with backspace, `tab` + letters, `caps lock` + letters + enter, `shift` + letters + `,` `.` + `shift`, and `?123 space ◀ ▶ ?123`.
- *  Letters (national ones too) stay on their keys, punctuation lives on the symbol pages and the long presses. */
+/** A layout of simple-keyboard-layouts turned into Gboard's tablet layout (screenshots of Gboard on a tablet). A national layout that has
+ *  letters on its row of digits (ß, ё...) keeps that row (digits + those letters), the others have none and the digits are the first long
+ *  press of the top letter row, like the Gboard on the 9to5Google pictures. Then `tab` + letters + backspace, `caps lock` + letters +
+ *  enter, `shift` + letters + `,` `.` + `shift`, and `?123 space ◀ ▶ ?123`. Letters (national ones too) stay on their keys,
+ *  punctuation lives on the symbol pages and the long presses. */
 function gboard(rows) {
   const isFn = k => /^\{.+\}$/.test(k)
   const split = rows.filter(row => !row.includes('{space}')).map(row => row.split(' '))
   const hasDigits = split[0].filter(k => !isFn(k) && !/\p{L}/u.test(k)).length >= 8
   const letterRows = split.slice(hasDigits ? 1 : 0, hasDigits ? 4 : 3).map(row => row.filter(k => !isFn(k) && /\p{L}/u.test(k)))
-  const digits = [...'1234567890', ...(hasDigits ? split[0].filter(k => !isFn(k) && /\p{L}/u.test(k)) : [])]
-  const out = [[...digits, '{bksp}']]
-  letterRows.forEach((row, i) => out.push([['{tab}', '{lock}', '{shift}'][i], ...row, ...(i === 2 ? [',', '.'] : []), ['', '{enter}', '{shift}'][i]].filter(Boolean)))
+  const digitRowLetters = hasDigits ? split[0].filter(k => !isFn(k) && /\p{L}/u.test(k)) : []
+  const out = []
+  topDigits = {}
+  if (digitRowLetters.length) out.push([...'1234567890', ...digitRowLetters])
+  else letterRows[0]?.forEach((k, i) => { topDigits[k.toLowerCase()] = String((i + 1) % 10) })
+  letterRows.forEach((row, i) => out.push([['{tab}', '{lock}', '{shift}'][i], ...row, ...(i === 2 ? [',', '.'] : []), ['{bksp}', '{enter}', '{shift}'][i]]))
   out.push(BOTTOM.split(' '))
   return out.map(row => row.join(' '))
 }
@@ -309,6 +315,7 @@ function sizeKeys() {
 
 function layoutOf(name) {
   const source = (layouts.get(name)?.layout ?? layouts.get('english').layout)
+  topDigits = {} // gboard() fills it for a layout with no row of digits
   const base = GBOARD_ROWS[name] ?? gboard(source.default)
   return {default: base, shift: upperRows(base), ...SYMBOLS}
 }
@@ -354,7 +361,7 @@ function variantsOf(button) {
   if (/^\{.+\}$/.test(button)) return []
   if (page === 'sym2' && button === '%') return ['℅'] // HeliBoard: the shifted symbols page has another popup on %
   const base = button.toLowerCase()
-  const list = [SYMBOL_HINT[base], ...(VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ')].filter(Boolean)
+  const list = [topDigits[base], SYMBOL_HINT[base], ...(VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ')].filter(Boolean)
   if (button === base || button.length !== 1) return list
   return list.map(v => v === 'ß' ? 'ẞ' : v.toUpperCase()).filter(v => [...v].length === 1)
 }
@@ -365,7 +372,7 @@ function addHints() {
     button.querySelector('.ut-hint')?.remove()
     const key = button.getAttribute('data-skbtn')
     // on the letter page only the letters carry a hint (the symbol), like Gboard; the symbol pages show the first variant
-    const first = key && key.length <= 2 && (page !== 'letters' || SYMBOL_HINT[key.toLowerCase()]) ? variantsOf(key)[0] : null
+    const first = key && key.length <= 2 && (page !== 'letters' || SYMBOL_HINT[key.toLowerCase()] || topDigits[key.toLowerCase()]) ? variantsOf(key)[0] : null
     if (first) button.appendChild(Object.assign(document.createElement('span'), {className: 'ut-hint', textContent: first}))
   }
 }
