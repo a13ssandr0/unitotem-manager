@@ -7,6 +7,10 @@ frame (and every cross-origin frame, which the browser puts in a process of its 
 tell when an editable field gets or loses the focus. And text typed on an on-screen keyboard has to reach whatever has
 the focus, in any frame: `Input.insertText` and `Input.dispatchKeyEvent` sent to the page do exactly that.
 
+One more job: what the browser reports as wrong (a document that cannot be loaded, a page that refuses to be framed, a security
+error such as mixed content, an exception in the viewer's own page) is raised as a notification, so it reaches the web UI
+instead of dying in a log nobody reads.
+
 Runs on the asyncio loop of the viewer's websocket thread. Reconnects by itself: the browser opens the port some time
 after it starts.
 """
@@ -18,6 +22,7 @@ import urllib.request
 from typing import Awaitable, Callable, Optional
 
 from loguru import logger
+from utils.notifications import notifications
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
@@ -96,6 +101,7 @@ class Cdp:
         self._sessions: dict[str, dict] = {}        # sessionId -> {'type', 'window', 'page'}
         self._pages: dict[int, str] = {}            # window id -> session of its top-level page
         self._attached_targets: set[str] = set()    # pages we are attached to or about to be: one session each
+        self._documents: dict[tuple[str, str], str] = {}    # (session, requestId) -> URL of a document being loaded
         self._handlers: dict[str, Callable[[int, dict], Awaitable[None] | None]] = {}
 
     def on_binding(self, name: str, handler):
@@ -122,6 +128,7 @@ class Cdp:
                 self._sessions.clear()
                 self._pages.clear()
                 self._attached_targets.clear()
+                self._documents.clear()
                 for future in self._pending.values():
                     future.cancel()
                 self._pending.clear()
@@ -177,10 +184,23 @@ class Cdp:
                 self._forget(params['sessionId'])
             elif method == 'Runtime.bindingCalled':
                 await self._binding(session, params['name'], params['payload'])
+            elif method == 'Network.requestWillBeSent':
+                if params.get('type') == 'Document' and session:
+                    self._documents[(session, params['requestId'])] = params.get('request', {}).get('url', '')
+            elif method == 'Network.loadingFailed':
+                self._load_failed(session, params)
+            elif method == 'Log.entryAdded':
+                self._log_entry(session, params.get('entry', {}))
+            elif method == 'Runtime.exceptionThrown':
+                self._exception(session, params.get('exceptionDetails', {}))
         except Exception:
             logger.exception('DevTools event failed: {}', message.get('method'))
 
     async def _attached(self, session: str, info: dict, parent: Optional[str]):
+        if info['type'] in ('page', 'iframe'):
+            await self._set_up(session, info, parent)
+
+    async def _set_up(self, session: str, info: dict, parent: Optional[str]):
         kind = info['type']
         page = session if kind == 'page' else (self._sessions.get(parent, {}).get('page') if parent else None)
         window = None
@@ -199,6 +219,8 @@ class Cdp:
             await self._send('Runtime.addBinding', {'name': 'utFrame'}, session)
             await self._send('Runtime.addBinding', {'name': 'utSaver'}, session)
         await self._send('Page.enable', session=session)
+        await self._send('Network.enable', session=session)
+        await self._send('Log.enable', session=session)
         await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': FOCUS_SCRIPT + ACTIVITY_SCRIPT}, session)
         await self._send('Runtime.evaluate', {'expression': FOCUS_SCRIPT + ACTIVITY_SCRIPT}, session)
         # frames of other origins appear as targets of their own
@@ -213,6 +235,51 @@ class Cdp:
             self._attached_targets.discard(gone['target'])
         if gone and gone['window'] is not None and self._pages.get(gone['window']) == session:
             del self._pages[gone['window']]
+
+    # ── framing and errors ────────────────────────────────────────────────
+
+    def _window_of(self, session: Optional[str]) -> Optional[int]:
+        info = self._sessions.get(session or '')
+        page = info['page'] if info else None
+        return self._sessions.get(page, {}).get('window') if page else None
+
+    def _load_failed(self, session: Optional[str], params: dict):
+        url = self._documents.pop((session or '', params.get('requestId', '')), '')
+        window = self._window_of(session)
+        if params.get('type') != 'Document' or params.get('canceled') or window is None:
+            return
+        if not url.startswith(('http://', 'https://', 'ftp://')):
+            return
+        reason = params.get('errorText', 'unknown error')
+        if 'BLOCKED_BY_RESPONSE' in reason:
+            reason += ' (the page forbids being shown inside another page, see the other notification)'
+        logger.warning('Window {}: {} could not be loaded: {}', window, url, reason)
+        notifications.notify(f'viewer.load.{window}', 'warning', f'Window {window}: a page cannot be shown',
+                             f'{url}\n{reason}', source='viewer', audience='scheduler')
+
+    def _log_entry(self, session: Optional[str], entry: dict):
+        # only what the browser itself calls a security problem (mixed content, CORS, CSP) or a refusal to display a frame: javascript
+        # and network noise from the pages the totem shows is not the operator's to fix
+        window = self._window_of(session)
+        text = entry.get('text', '')
+        if entry.get('level') != 'error' or window is None or not (entry.get('source') == 'security' or text.startswith('Refused to')):
+            return
+        if 'X-Frame-Options' in text or 'frame-ancestors' in text:
+            text += ('\nThe page forbids being shown inside another page. The site has to allow it '
+                     '(Home Assistant: `http: use_x_frame_options: false` in configuration.yaml).')
+        logger.warning('Window {}: {}', window, text)
+        notifications.notify(f'viewer.security.{window}', 'warning', f'Window {window}: the browser refused something',
+                             text, source='viewer', audience='scheduler')
+
+    def _exception(self, session: Optional[str], details: dict):
+        info = self._sessions.get(session or '')
+        window = info['window'] if info and info['type'] == 'page' else None
+        if window is None or not str(details.get('url', '')).startswith('file://'):
+            return              # an exception in somebody else's page is not ours (with site isolation off it arrives here too)
+        text = (details.get('exception') or {}).get('description') or details.get('text', 'exception')
+        logger.warning('Window {}: exception in the viewer page: {}', window, text)
+        notifications.notify(f'viewer.page.{window}', 'error', f'Window {window}: error in the viewer page',
+                             f"{text}\n{details.get('url', '')}".strip(), source='viewer', audience='admin')
 
     async def _binding(self, session: Optional[str], name: str, payload: str):
         info = self._sessions.get(session or '')
