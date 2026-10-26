@@ -209,14 +209,14 @@ the viewer's own Qt splash (splash.py), which looks the same, is showing.
 
 
 ## On-screen keyboard (touch panels)
-Per window (`Viewers/set_keyboard`, kept per screen in viewer_settings.json, off by default): enabled, the position of the
+Per window (`Viewers/set_keyboard`, kept per screen in viewer_settings.json, ON by default since 2026-10-26): enabled, the position of the
 button that opens it, a layout. It opens by itself when a text field gets the focus in ANY frame of the page and closes when
 the focus leaves (unless the visitor opened it with the button). Pieces: `plugins/unitotem_viewer/cdp.py` (the viewer's
 DevTools connection: injects a focus watcher into every frame, cross-origin ones included, which are separate targets,
 and delivers text with `Input.insertText` and keys with `Input.dispatchKeyEvent`), `webui/src/keyboard.js` (simple-keyboard
 UI drawn inside the page's rotated container, loaded by `boot-screen.html` on demand), and the window id in the page address
-(`boot-screen.html?window=N`), which is how a DevTools target is tied to a window. The keyboard can be moved and resized
-but is clamped inside the screen and to a minimum size after every gesture, every size change and every rotation.
+(`boot-screen.html?window=N`), which is how a DevTools target is tied to a window. The keyboard can be moved and resized, partly off the screen (160 px of its header stay visible, so what it covers can be reached)
+and is clamped to a minimum size after every gesture, every size change and every rotation.
 
 ## Touch panels
 Everything per window and per screen, off by default, kept in viewer_settings.json (core) or touch_map.json (node):
@@ -972,3 +972,4 @@ Tests: `manager/tests/test_ticker_*.py` (models, feeds against local http server
   attaches only after the commit, also with `waitForDebuggerOnStart`). Real fixes: the site's own setting (HA: `http: use_x_frame_options: false`) or exposing CEF's `OnResourceResponse` in cefpython (not exposed, issue #229).
 - **Wired + Wi-Fi on one subnet**: see the ARP note above; the network page now offers the new address after a static address of an active connection is saved (and re-activates it, a saved profile alone does nothing).
 - **The on-screen keyboard did not open on Home Assistant (2026-10-26)** for two reasons: it is off by default per window (`Viewers/set_keyboard`), and HA keeps its fields inside shadow roots, so `document.activeElement` was the host (`HA-INPUT`), not an `INPUT`: the focus watcher in `cdp.py` now descends through `shadowRoot.activeElement`. The X-Frame-Options gotcha above is resolved by CEF patch 0003 (`unitotem-allow-framing` switch, passed by the viewer; needs the rebuilt libcef).
+- **The keyboard works like Gboard (2026-10-26)**: keys type on RELEASE (`wireKeys` in keyboard.js handles the pointer events itself, simple-keyboard only draws; its `onKeyPress` is a no-op), long press (380 ms) opens the variants of a key (`VARIANTS`) to slide onto, `?123`/`=\<` pages, shift twice = caps, backspace repeats. The popup's pick must be read BEFORE hiding it (`elementFromPoint` ignores hidden elements). Layouts of simple-keyboard-layouts are converted by `gboard()` (no tab/caps/enter keys, bottom row `?123 , space . enter`). Tested on the Pi with real mouse events through DevTools.

@@ -7,10 +7,14 @@
  * settings of the window. Keys go back through the function `utKey` that the viewer adds to the page; it types them into
  * whatever has the focus.
  *
- * Whoever touches the screen is treated as the worst possible user: the keyboard can be moved and resized, but only
- * inside the screen, never below a minimum size, and its header (with the close button) cannot shrink or leave. The
- * limits are applied after every gesture, on every change of the size of the screen and on every rotation, not just
- * while dragging. Moving and resizing is done here with pointer events instead of a library because the content can be
+ * Whoever touches the screen is treated as the worst possible user: the keyboard can be moved and resized, and pushed
+ * partly off the screen (to reach what it covers) but a part of its header always stays visible, never below a minimum
+ * size, and its header cannot shrink or leave. The limits are applied after every gesture, on every change of the size
+ * of the screen and on every rotation, not just while dragging.
+ *
+ * It behaves like Gboard: a key types when it is released, a long press on a letter or a symbol opens its variants
+ * (accents, currencies...) to slide onto, the key `?123` switches to a page of symbols and `=\\<` to a second one, shift
+ * pressed twice is caps lock and the backspace repeats while held. Moving and resizing is done here with pointer events instead of a library because the content can be
  * rotated and flipped with CSS (the page's orientation settings), and the libraries do not follow a transformed parent.
  */
 import Keyboard from 'simple-keyboard'
@@ -21,6 +25,24 @@ const BUTTON_PX = 56
 const HEADER_PX = 40
 const POSITIONS = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
 const NUMERIC = {default: ['1 2 3', '4 5 6', '7 8 9', '{bksp} 0 {enter}']}
+// the part of the panel's header that always stays on the screen, whatever the visitor does with it
+const KEEP_PX = 160
+const LONG_PRESS_MS = 380
+const REPEAT_DELAY_MS = 400
+const REPEAT_MS = 60
+const DOUBLE_TAP_MS = 400
+const SYMBOLS = {
+  sym1: ['1 2 3 4 5 6 7 8 9 0', '@ # $ _ & - + ( ) /', '{sym2} * " \' : ; ! ? {bksp}', '{abc} , {space} . {enter}'],
+  sym2: ['~ ` | • √ π ÷ × ¶ ∆', '£ ¢ € ¥ ^ ° = { } \\', '{sym1} % © ® ™ ✓ [ ] {bksp}', '{abc} < {space} > {enter}'],
+}
+// what a long press on a key offers (lower case: the upper case of the key gives the upper case of these)
+const VARIANTS = {
+  q: '1', w: '2', e: '3 è é ê ë ē ę', r: '4 ŕ ř', t: '5 ţ ť', y: '6 ý ÿ', u: '7 ù ú û ü ū', i: '8 ì í î ï ī', o: '9 ò ó ô ö œ õ ø ō', p: '0',
+  a: 'à á â ä æ ã å ā ª', s: 'ß ś š ş', d: 'đ ď', g: 'ğ', l: 'ł', z: 'ž ź ż', c: 'ç ć č', n: 'ñ ń ň', k: 'ķ',
+  '.': ', ? ! \' " - : ; …', ',': '; : …', '-': '– — • _', '\'': '‘ ’ ‚ "', '"': '“ ” „ «  »', '?': '¿', '!': '¡',
+  '$': '€ £ ¥ ¢ ₹ ₩', '%': '‰', '0': 'º ∅', '1': '¹ ½ ⅓ ¼', '2': '² ⅔', '3': '³ ¾', '4': '⁴', '/': '\\', '=': '≠ ≈ ≤ ≥', '+': '± ∓',
+  '&': '§', '*': '† ‡ ★', '<': '≤ « ‹', '>': '≥ » ›', '(': '[ { <', ')': '] } >',
+}
 
 const css = `${keyboardCss}
 #ut-kbd-layer { position: absolute; inset: 0; z-index: 2147483647; pointer-events: none; overflow: hidden;
@@ -40,20 +62,31 @@ const css = `${keyboardCss}
 #ut-kbd-body .hg-row { flex: 1 1 0; display: flex; margin-bottom: 4px; }
 #ut-kbd-body .hg-row:last-child { margin-bottom: 0; }
 #ut-kbd-body .hg-button { height: auto; font-size: clamp(12px, 2.4vmin, 40px); }
+#ut-kbd-body .hg-button[data-skbtn="{space}"] { flex-grow: 5; }
+#ut-kbd-body .hg-button[data-skbtn="{shift}"], #ut-kbd-body .hg-button[data-skbtn="{bksp}"],
+#ut-kbd-body .hg-button[data-skbtn="{sym1}"], #ut-kbd-body .hg-button[data-skbtn="{sym2}"],
+#ut-kbd-body .hg-button[data-skbtn="{abc}"], #ut-kbd-body .hg-button[data-skbtn="{enter}"] { flex-grow: 1.5; background: #d5d9de; }
+#ut-kbd-alts { position: absolute; display: none; background: #fff; border-radius: 10px; box-shadow: 0 4px 24px #000a;
+  padding: 4px; pointer-events: auto; gap: 4px; }
+#ut-kbd-alts span { min-width: ${BUTTON_PX}px; height: ${BUTTON_PX}px; display: flex; align-items: center;
+  justify-content: center; border-radius: 8px; font-size: 26px; color: #111; }
+#ut-kbd-alts span.on { background: #4a90e2; color: #fff; }
 #ut-kbd-grip { position: absolute; right: 0; bottom: 0; width: 36px; height: 36px; cursor: nwse-resize;
   background: linear-gradient(135deg, transparent 50%, #888 50%, #888 58%, transparent 58%, transparent 70%, #888 70%,
   #888 78%, transparent 78%); }`
 
 const layouts = new SimpleKeyboardLayouts()
 
-let layer, toggle, panel, closeButton, body, grip, keyboard
+let layer, toggle, panel, closeButton, body, grip, keyboard, alts
 let enabled = false
-let config = {enabled: false, button_position: 'bottom-right', layout: 'english'}
+let config = {enabled: true, button_position: 'bottom-right', layout: 'english'}
 let open = false
 let openedByUser = false
 let shift = false
 let caps = false
 let numeric = false
+let page = 'letters' // letters | sym1 | sym2
+let lastShiftTap = 0
 const box = {x: 0, y: 0, w: 0, h: 0} // the panel, in the coordinates of the layer
 
 const send = payload => {
@@ -77,8 +110,11 @@ function clamp() {
   const {W, H, minW, minH} = limits()
   box.w = Math.min(Math.max(box.w, minW), W)
   box.h = Math.min(Math.max(box.h, minH), H)
-  box.x = Math.min(Math.max(box.x, 0), W - box.w)
-  box.y = Math.min(Math.max(box.y, 0), H - box.h)
+  // partly off the screen is allowed (to reach what the keyboard covers), but not out of reach: the top of the panel
+  // (its header) stays on the screen, and so do KEEP_PX of its width
+  const keep = Math.min(KEEP_PX, box.w)
+  box.x = Math.min(Math.max(box.x, keep - box.w), W - keep)
+  box.y = Math.min(Math.max(box.y, 0), H - HEADER_PX)
   panel.style.left = `${box.x}px`
   panel.style.top = `${box.y}px`
   panel.style.width = `${box.w}px`
@@ -179,16 +215,126 @@ function drag(handle, onMove) {
 // ── keys ────────────────────────────────────────────────────────────────
 
 const SPECIAL = {'{bksp}': 'Backspace', '{enter}': 'Enter', '{tab}': 'Tab'}
+const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': '⇪', '{tab}': '⇥', '{space}': ' ',
+  '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC'}
 
-function refreshLayout() {
-  keyboard.setOptions({layoutName: shift || caps ? 'shift' : 'default'})
+/** A layout of simple-keyboard-layouts turned into a Gboard-like one: no tab/caps/enter keys in the letter rows, the
+ *  backspace at the end of the last letter row and a bottom row with the symbols key, comma, space, full stop and enter. */
+function gboard(rows) {
+  const out = rows.filter(row => !row.includes('{space}')).map(row => row.split(' ').filter(k => k !== '{tab}' &&
+    k !== '{lock}' && k !== '{enter}' && k !== '{bksp}'))
+  const last = out.length - 1
+  const at = out[last].lastIndexOf('{shift}')
+  if (at > 0) out[last][at] = '{bksp}'
+  else out[last].push('{bksp}')
+  out.push('{sym1} , {space} . {enter}'.split(' '))
+  return out.map(row => row.join(' '))
 }
 
-function onKeyPress(button) {
-  if (button === '{shift}') { shift = !shift; refreshLayout(); return }
-  if (button === '{lock}') { caps = !caps; refreshLayout(); return }
-  if (SPECIAL[button]) { send({key: SPECIAL[button]}) } else if (button === '{space}') { send({text: ' '}) } else if (!button.startsWith('{')) { send({text: button}) }
-  if (shift) { shift = false; refreshLayout() }
+function layoutOf(name) {
+  const source = (layouts.get(name)?.layout ?? layouts.get('english').layout)
+  return {default: gboard(source.default), shift: gboard(source.shift ?? source.default), ...SYMBOLS}
+}
+
+const layoutName = () => page !== 'letters' ? page : (shift || caps ? 'shift' : 'default')
+
+function refreshLayout() {
+  keyboard.setOptions({
+    layoutName: layoutName(),
+    display: {...DISPLAY, '{shift}': caps ? '⇪' : '⇧'},
+  })
+}
+
+function typeKey(button) {
+  if (button === '{shift}') {
+    const now = Date.now()
+    if (caps) { caps = false; shift = false } else if (shift && now - lastShiftTap < DOUBLE_TAP_MS) { caps = true; shift = false } else { shift = !shift }
+    lastShiftTap = now
+    refreshLayout()
+    return
+  }
+  if (button === '{sym1}' || button === '{sym2}' || button === '{abc}') {
+    page = button === '{abc}' ? 'letters' : button.slice(1, -1)
+    refreshLayout()
+    return
+  }
+  if (SPECIAL[button]) send({key: SPECIAL[button]})
+  else if (button === '{space}') send({text: ' '})
+  else if (!/^\{.+\}$/.test(button)) send({text: button}) // a lone '{' is a character
+  if (shift && !caps) { shift = false; refreshLayout() }
+}
+
+/** The variants offered by a long press on a key, in the case of the key. */
+function variantsOf(button) {
+  const base = button.toLowerCase()
+  const list = (VARIANTS[base] ?? VARIANTS[button] ?? '').split(' ').filter(Boolean)
+  return button !== base && button.length === 1 ? list.map(v => v.toUpperCase()) : list
+}
+
+function offsetIn(element, ancestor) {
+  let x = 0
+  let y = 0
+  for (let e = element; e && e !== ancestor; e = e.offsetParent) { x += e.offsetLeft; y += e.offsetTop }
+  return [x, y]
+}
+
+function openVariants(press) {
+  const list = variantsOf(press.key)
+  if (!list.length) return
+  alts.replaceChildren(...list.map(v => Object.assign(document.createElement('span'), {textContent: v})))
+  alts.style.display = 'flex'
+  const [bx, by] = offsetIn(press.btn, panel)
+  const W = layer.clientWidth
+  const x = box.x + bx + press.btn.offsetWidth / 2 - alts.offsetWidth / 2
+  const y = box.y + by - alts.offsetHeight - 6
+  alts.style.left = `${Math.min(Math.max(x, 0), Math.max(0, W - alts.offsetWidth))}px`
+  alts.style.top = `${Math.max(y, 0)}px`
+  press.long = true
+}
+
+const variantAt = e => document.elementFromPoint(e.clientX, e.clientY)?.closest('#ut-kbd-alts span') ?? null
+
+/** Gboard's behaviour on the keys of the panel: typed on release, long press for the variants, repeat on backspace. */
+function wireKeys(host) {
+  let press = null
+  const stop = () => {
+    if (!press) return null
+    const p = press
+    press = null
+    clearTimeout(p.timer)
+    clearInterval(p.repeat)
+    alts.style.display = 'none'
+    return p
+  }
+  host.addEventListener('pointerdown', e => {
+    const btn = e.target.closest('.hg-button')
+    if (!btn) return
+    stop()
+    const key = btn.getAttribute('data-skbtn')
+    press = {btn, key, long: false, timer: null, repeat: null}
+    if (key === '{bksp}') {
+      typeKey(key)
+      press.timer = setTimeout(() => { press.repeat = setInterval(() => typeKey(key), REPEAT_MS) }, REPEAT_DELAY_MS)
+    } else if (variantsOf(key).length) {
+      press.timer = setTimeout(() => openVariants(press), LONG_PRESS_MS)
+    }
+  })
+  window.addEventListener('pointermove', e => {
+    if (!press || !press.long) return
+    const on = variantAt(e)
+    for (const span of alts.children) span.classList.toggle('on', span === on)
+  })
+  window.addEventListener('pointerup', e => {
+    const on = press?.long ? variantAt(e) : null // before stop() hides the variants
+    const p = stop()
+    if (!p || p.key === '{bksp}') return
+    if (p.long) {
+      if (on) { send({text: on.textContent}); if (shift && !caps) { shift = false; refreshLayout() } }
+      return
+    }
+    if (e.target.closest?.('.hg-button') === p.btn) typeKey(p.key)
+  })
+  window.addEventListener('pointercancel', stop)
 }
 
 function applyLayout() {
@@ -196,8 +342,7 @@ function applyLayout() {
     keyboard.setOptions({layout: NUMERIC, layoutName: 'default'})
     return
   }
-  const wanted = layouts.get(config.layout)?.layout ?? layouts.get('english').layout
-  keyboard.setOptions({layout: wanted, layoutName: shift || caps ? 'shift' : 'default'})
+  keyboard.setOptions({layout: layoutOf(config.layout), layoutName: layoutName(), display: {...DISPLAY, '{shift}': caps ? '⇪' : '⇧'}})
 }
 
 // ── showing and hiding ──────────────────────────────────────────────────
@@ -250,7 +395,9 @@ function build() {
   grip = document.createElement('div')
   grip.id = 'ut-kbd-grip'
   panel.append(header, body, grip)
-  layer.append(panel, toggle)
+  alts = document.createElement('div')
+  alts.id = 'ut-kbd-alts'
+  layer.append(panel, toggle, alts)
 
   // Taps on the keyboard must not move the focus out of the field being typed in
   for (const element of [toggle, panel]) {
@@ -260,16 +407,17 @@ function build() {
   }
 
   keyboard = new Keyboard(host, {
-    onKeyPress,
+    onKeyPress: () => {}, // the keys are handled by wireKeys(): they type on release, like Gboard
     theme: 'hg-theme-default hg-layout-default',
-    layout: layouts.get('english').layout,
-    display: {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': '⇪', '{tab}': '⇥', '{space}': ' '},
+    layout: layoutOf('english'),
+    display: DISPLAY,
     preventMouseDownDefault: true,
     preventMouseUpDefault: true,
     stopMouseDownPropagation: false,
     useTouchEvents: false,
   })
 
+  wireKeys(host)
   drag(header, (dx, dy) => { box.x += dx; box.y += dy })
   drag(grip, (dx, dy) => { box.w += dx; box.h += dy })
 
