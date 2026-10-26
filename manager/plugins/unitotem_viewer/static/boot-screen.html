@@ -876,6 +876,9 @@
      * combined final state.
      */
     let introScheduled = false;
+    // What the content looked like when the last animation ended (the first one starts from Plymouth's native look):
+    // every later change animates from there, not from the native orientation.
+    let shownR = 0, shownF = 0;
     function scheduleOrientationIntro() {
       if (introScheduled) return;
       introScheduled = true;
@@ -883,16 +886,28 @@
     }
 
     function beginOrientationIntro() {
+      introScheduled = false;   // without this only the first change ever animated
       const wrap = document.getElementById('orient-intro');
       const r = getOrientation();
       const f = getFlip();
+      if (r === shownR && f === shownF && wrap.dataset.done) return;
+      wrap.dataset.done = '1';
+      // width of the content the animation starts from, against the one it ends at (a quarter turn swaps the sides)
+      const fromWidth = shownR % 2 ? window.innerHeight : window.innerWidth;
       const contentWidth = document.getElementById('content-root').clientWidth;
-      const k = contentWidth ? window.innerWidth / contentWidth : 1;
-      const flipX = f === 1 ? -1 : 1;
-      const flipY = f === 2 ? -1 : 1;
+      const k = contentWidth ? fromWidth / contentWidth : 1;
+      // a flip is its own inverse: the start is the previous flip undone by the current one
+      const sign = x => (x === 1 ? [-1, 1] : x === 2 ? [1, -1] : [1, 1]);
+      const [px, py] = sign(shownF), [cx, cy] = sign(f);
+      // body[r] rotates by r quarter turns: start with the previous angle (shortest way round is not needed, a
+      // turn of 90/180/270 either way is what the person asked for)
+      let delta = (shownR - r) * 90;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      shownR = r; shownF = f;
 
       wrap.style.transition = 'none';
-      wrap.style.transform = `scale(${k * flipX}, ${k * flipY}) rotate(${-r * 90}deg)`;
+      wrap.style.transform = `scale(${k * px * cx}, ${k * py * cy}) rotate(${delta}deg)`;
       void wrap.offsetWidth; // force layout so the start transform is painted before animating
       wrap.style.transition = 'transform 0.6s ease-out';
       wrap.style.transform = 'none';
