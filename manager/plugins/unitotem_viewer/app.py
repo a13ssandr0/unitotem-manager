@@ -211,6 +211,8 @@ class WebviewApp:
             # Touch/pointer events are predicted a frame ahead (Kalman, blink's InputEventPrediction): dragging something (the
             # on-screen keyboard) otherwise trails the finger by the touch -> compositor -> frame latency. Merged with the profile's features.
             'enable-features': 'ResamplingInputEvents',
+            # no scrollbars on a kiosk (content_switches.cc kHideScrollbars): the pages in the window scroll by touch
+            'hide-scrollbars': '',
         }
         # See _own_cert_spki_hash(): trust this node's own certificate, and
         # only that one, so its locally served pages render instead of an error.
@@ -555,7 +557,7 @@ class WebviewApp:
 
     # ── focus in the pages and the on-screen keyboard (see cdp.py), on the websocket thread ──
 
-    def _on_focus_changed(self, window: int, frame: str, on: bool, kind: Optional[str]):
+    def _on_focus_changed(self, window: int, frame: str, on: bool, kind: Optional[str], touch: bool = False):
         # Every frame of the page reports for itself, and when the focus moves from a field in one frame to a field in
         # another the two reports can arrive in either order: the window has a text field focused if any frame says so.
         frames = self._text_focus.setdefault(window, {})
@@ -564,7 +566,8 @@ class WebviewApp:
         else:
             frames.pop(frame, None)
         focused = bool(frames)
-        if self._keyboard_wanted.get(window) == focused:
+        # a touch on the field that already has the focus asks again: the visitor may have closed the keyboard with its X
+        if self._keyboard_wanted.get(window) == focused and not (touch and focused):
             return
         self._keyboard_wanted[window] = focused
         logger.debug('Window {}: text field focus {} ({})', window, focused, kind)

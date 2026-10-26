@@ -38,24 +38,24 @@ FOCUS_SCRIPT = r"""
   const NO_TEXT = ['button', 'checkbox', 'radio', 'submit', 'reset', 'file', 'image', 'range', 'color', 'hidden'];
   const editable = el => !!el && !el.disabled && !el.readOnly && (el.isContentEditable || el.tagName === 'TEXTAREA' ||
     (el.tagName === 'INPUT' && !NO_TEXT.includes((el.type || 'text').toLowerCase())));
-  const report = () => {
+  const report = (touch) => {
     try {
       // pages built from web components (Home Assistant) keep the real field inside shadow roots
       let el = document.activeElement;
       while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
       const r = editable(el) ? el.getBoundingClientRect() : null;
       utFocus(JSON.stringify({on: editable(el), type: editable(el) ? (el.type || el.tagName.toLowerCase()) : null, frame: me,
-        rect: r ? [r.left, r.top, r.width, r.height, innerWidth, innerHeight] : null}));
+        rect: r ? [r.left, r.top, r.width, r.height, innerWidth, innerHeight] : null, touch: touch === true}));
     } catch (e) {}
   };
   // a touch on the field that already has the focus gives no focus event, but the keyboard goes back next to it
   document.addEventListener('pointerup', () => setTimeout(() => {
     let el = document.activeElement;
     while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
-    if (editable(el)) report();
+    if (editable(el)) report(true);
   }, 60), true);
-  document.addEventListener('focusin', report, true);
-  document.addEventListener('focusout', () => setTimeout(report, 0), true);
+  document.addEventListener('focusin', () => report(), true);
+  document.addEventListener('focusout', () => setTimeout(() => report(), 0), true);
   window.addEventListener('pagehide', () => { try { utFocus(JSON.stringify({on: false, type: null, frame: me})); } catch (e) {} });
 })();
 """
@@ -96,8 +96,8 @@ SPECIAL_KEYS = {
 
 _WINDOW_RE = re.compile(r'[?&]window=(\d+)')
 
-# (window, frame, on, kind): `frame` tells the frames apart, the focus can move from a field in one to a field in another
-FocusCallback = Callable[[int, str, bool, Optional[str]], None]
+# (window, frame, on, kind, touch): `touch` is a touch on a field that already had the focus (no focus event: the keyboard may have been closed); `frame` tells the frames apart, the focus can move from a field in one to a field in another
+FocusCallback = Callable[[int, str, bool, Optional[str], bool], None]
 
 
 class Cdp:
@@ -301,7 +301,7 @@ class Cdp:
             return
         data = json.loads(payload)
         if name == 'utFocus':
-            self._on_focus(window, f"{session}/{data.get('frame', '')}", bool(data.get('on')), data.get('type'))
+            self._on_focus(window, f"{session}/{data.get('frame', '')}", bool(data.get('on')), data.get('type'), bool(data.get('touch')))
             if data.get('on') and data.get('rect') and info['type'] == 'iframe':
                 try:
                     await self._place_keyboard(info, window, data['rect'])

@@ -656,7 +656,7 @@ export function focusChanged(on, kind) {
   if (on) {
     const wantsNumeric = kind === 'number' || kind === 'tel'
     if (wantsNumeric !== numeric) { numeric = wantsNumeric; applyLayout() }
-    setOpen(true, false)
+    if (!open) setOpen(true, false) // already open (by the button too): leave it as it is
     if (anchor && Date.now() - anchor.at < 1500) placeBelowAnchor() // the position arrived before the keyboard was open
   } else if (!openedByUser) {
     setOpen(false) // what opened itself closes itself; what the visitor opened stays until they close it
