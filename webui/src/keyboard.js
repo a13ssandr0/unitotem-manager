@@ -18,8 +18,8 @@
  * rotated and flipped with CSS (the page's orientation settings), and the libraries do not follow a transformed parent.
  */
 import Keyboard from 'simple-keyboard'
-import keyboardCss from 'simple-keyboard/build/css/index.css?inline'
 import SimpleKeyboardLayouts from 'simple-keyboard-layouts'
+import keyboardCss from 'simple-keyboard/build/css/index.css?inline'
 
 const BUTTON_PX = 56
 const HEADER_PX = 40
@@ -97,7 +97,6 @@ const css = `${keyboardCss}
   background: linear-gradient(135deg, transparent 50%, #888 50%, #888 58%, transparent 58%, transparent 70%, #888 70%,
   #888 78%, transparent 78%); }`
 
-const layouts = new SimpleKeyboardLayouts()
 
 let hostEl, layer, toggle, panel, closeButton, body, grip, keyboard, alts, preview
 let enabled = false
@@ -256,35 +255,40 @@ const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': 
 // What Gboard draws at the top right of a letter and offers first on a long press: a symbol (screenshot of Gboard on a tablet, Italian layout)
 const SYMBOL_HINT = {q: '%', w: '\\', e: '|', r: '=', t: '[', y: ']', u: '<', i: '>', o: '{', p: '}', a: '@', s: '#', d: '€', f: '_', g: '&',
   h: '-', j: '+', k: '(', l: ')', z: '*', x: '"', c: "'", v: ':', b: ';', n: '!', m: '?'}
-let topDigits = {} // letter of the top row -> its digit (first long press), for layouts with no row of digits
 const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
-// Layouts Gboard draws differently from the national keyboard layout, copied from its screenshots (the rest go through gboard())
+const layouts = new SimpleKeyboardLayouts()
+// Gboard's own Italian layout, copied from a screenshot of it (it has the accented letters as keys)
 const GBOARD_ROWS = {
   italian: ['\\ 1 2 3 4 5 6 7 8 9 0 \' ì {bksp}', '{tab} q w e r t y u i o p è ù +', '{lock} a s d f g h j k l ò à {enter}',
     '{shift} z x c v b n m , . - {shift}', BOTTOM],
 }
 
-/** A layout of simple-keyboard-layouts turned into Gboard's tablet layout (screenshots of Gboard on a tablet). A national layout that has
- *  letters on its row of digits (ß, ё...) keeps that row (digits + those letters), the others have none and the digits are the first long
- *  press of the top letter row, like the Gboard on the 9to5Google pictures. Then `tab` + letters + backspace, `caps lock` + letters +
- *  enter, `shift` + letters + `,` `.` + `shift`, and `?123 space ◀ ▶ ?123`. Letters (national ones too) stay on their keys,
- *  punctuation lives on the symbol pages and the long presses. */
+/** The national layout of simple-keyboard-layouts (the PC layout of the language, which is what Gboard's own national keyboards are too, see the
+ *  Italian one copied from a screenshot above) dressed like Gboard's tablet keyboard: the row of numbers ends with backspace, `tab` and
+ *  `caps lock` open the next two rows, enter closes the second, the shifts the third (its extra `<` or `\` key goes away), and
+ *  `?123 space ◀ ▶ ?123` at the bottom. Every key of the language stays a key of its own (ß, ñ, ç, ü...). */
 function gboard(rows) {
   const isFn = k => /^\{.+\}$/.test(k)
-  const split = rows.filter(row => !row.includes('{space}')).map(row => row.split(' '))
-  const hasDigits = split[0].filter(k => !isFn(k) && !/\p{L}/u.test(k)).length >= 8
-  const letterRows = split.slice(hasDigits ? 1 : 0, hasDigits ? 4 : 3).map(row => row.filter(k => !isFn(k) && /\p{L}/u.test(k)))
-  const digitRowLetters = hasDigits ? split[0].filter(k => !isFn(k) && /\p{L}/u.test(k)) : []
-  const out = []
-  topDigits = {}
-  if (digitRowLetters.length) out.push([...'1234567890', ...digitRowLetters])
-  else letterRows[0]?.forEach((k, i) => { topDigits[k.toLowerCase()] = String((i + 1) % 10) })
-  letterRows.forEach((row, i) => out.push([['{tab}', '{lock}', '{shift}'][i], ...row, ...(i === 2 ? [',', '.'] : []), ['{bksp}', '{enter}', '{shift}'][i]]))
-  out.push(BOTTOM.split(' '))
-  return out.map(row => row.join(' '))
+  const plain = rows.filter(row => !row.includes('{space}')).map(row => row.split(' ').filter(k => !isFn(k)))
+  const [r0, r1, r2, r3] = plain
+  // a layout whose number row holds letters instead of digits (Czech) gets the digits, and keeps its other symbols
+  const row0 = r0.filter(k => /^\d$/.test(k)).length >= 10 ? r0 : [...'1234567890', ...r0.filter(k => !/[\p{L}\d]/u.test(k))]
+  if (r3.length > 10 && !/\p{L}/u.test(r3[0])) r3.shift()
+  return [
+    [...row0, '{bksp}'],
+    ['{tab}', ...r1],
+    ['{lock}', ...r2, '{enter}'],
+    ['{shift}', ...r3, '{shift}'],
+    BOTTOM.split(' '),
+  ].map(row => row.join(' '))
 }
 
-const upperRows = rows => rows.map(row => row.split(' ').map(k => (/^\{.+\}$/.test(k) || k.length !== 1 || !/\p{L}/u.test(k)) ? k : (k === 'ß' ? 'ẞ' : k.toUpperCase())).join(' '))
+/** The capitals of a page (a Turkish i is İ and ı is I). */
+const upperRows = (rows, name) => rows.map(row => row.split(' ').map(k => {
+  if (/^\{.+\}$/.test(k) || k.length !== 1 || !/\p{L}/u.test(k)) return k
+  if (k === 'ß') return 'ẞ'
+  return name === 'turkish' ? k.toLocaleUpperCase('tr') : k.toUpperCase()
+}).join(' '))
 
 // The real Gboard's tablet geometry, measured on its screenshots (1600 px wide: key 111 px + gap 16 = 127 px = one unit): a row is 12.39
 // units; tab/backspace 1.18, caps 1.43, enter 1.88, shifts 1.92 and 1.44, ?123 1.46, the arrows 0.97, hide 1; the LAST key of a
@@ -292,6 +296,7 @@ const upperRows = rows => rows.map(row => row.split(' ').map(k => (/^\{.+\}$/.te
 const SIDE_UNITS = {'{tab}': 1.18, '{lock}': 1.43, '{bksp}': 1.18, '{enter}': 1.88, '{sym1}': 1.46, '{sym2}': 1.46, '{abc}': 1.46,
   '{left}': 0.97, '{right}': 0.97, '{hide}': 1}
 const ROW_UNITS = 12.39
+const MAX_STRETCH = 3.2 // units
 const unitsOf = (key, index) => key === '{shift}' ? (index === 0 ? 1.92 : 1.44) : (SIDE_UNITS[key] ?? 1)
 
 /** Sets the size of every key of the page on show (called after every render): all characters one unit wide, rows as tall as each other. */
@@ -300,24 +305,28 @@ function sizeKeys() {
   const layout = keyboard.options.layout
   const rows = (layout[keyboard.options.layoutName] ?? []).map(row => row.split(' '))
   const isFn = k => /^\{.+\}$/.test(k)
-  const total = Math.max(ROW_UNITS, ...rows.map(row => row.reduce((sum, k, i) => sum + (k === '{space}' ? 6.5 : unitsOf(k, i)), 0)))
+  const used = row => row.reduce((sum, k, i) => sum + (k === '{space}' ? 6.5 : unitsOf(k, i)), 0)
+  const total = Math.max(ROW_UNITS, ...rows.map(used))
   body.querySelectorAll('.hg-row').forEach((el, i) => {
     const keys = rows[i]
     if (!keys) return
     el.style.justifyContent = keys.some(isFn) ? 'flex-start' : 'center'
+    // a row shorter than the widest one gives the rest to ONE function key (the last, or the first when the row has none at the end), but
+    // never more than MAX_STRETCH of it: a backspace a third of the keyboard wide is what a row of 9 letters used to get
+    const spare = total - used(keys)
+    const stretch = keys.includes('{space}') || !(spare > 0.01) ? -1 : (isFn(keys[keys.length - 1]) ? keys.length - 1 : (isFn(keys[0]) ? 0 : -1))
     el.querySelectorAll('.hg-button').forEach((button, j) => {
       if (numeric) { button.style.flex = ''; return }
-      const basis = `calc(${(100 * unitsOf(keys[j], j) / total).toFixed(3)}% - 8px)`
-      button.style.flex = keys[j] === '{space}' ? '1 1 0' : (isFn(keys[j]) && j === keys.length - 1 && !keys.includes('{space}') ? `1 1 ${basis}` : `0 0 ${basis}`)
+      const units = unitsOf(keys[j], j) + (j === stretch ? Math.min(spare, MAX_STRETCH - unitsOf(keys[j], j)) : 0)
+      button.style.flex = keys[j] === '{space}' ? '1 1 0' : `0 0 calc(${(100 * units / total).toFixed(3)}% - 8px)`
     })
   })
 }
 
 function layoutOf(name) {
-  const source = (layouts.get(name)?.layout ?? layouts.get('english').layout)
-  topDigits = {} // gboard() fills it for a layout with no row of digits
+  const source = layouts.get(name)?.layout ?? layouts.get('english').layout
   const base = GBOARD_ROWS[name] ?? gboard(source.default)
-  return {default: base, shift: upperRows(base), ...SYMBOLS}
+  return {default: base, shift: upperRows(base, name), ...SYMBOLS}
 }
 
 const layoutName = () => page !== 'letters' ? page : (shift || caps ? 'shift' : 'default')
@@ -361,7 +370,7 @@ function variantsOf(button) {
   if (/^\{.+\}$/.test(button)) return []
   if (page === 'sym2' && button === '%') return ['℅'] // HeliBoard: the shifted symbols page has another popup on %
   const base = button.toLowerCase()
-  const list = [topDigits[base], SYMBOL_HINT[base], ...(VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ')].filter(Boolean)
+  const list = [SYMBOL_HINT[base], ...(VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ')].filter(Boolean)
   if (button === base || button.length !== 1) return list
   return list.map(v => v === 'ß' ? 'ẞ' : v.toUpperCase()).filter(v => [...v].length === 1)
 }
@@ -372,7 +381,7 @@ function addHints() {
     button.querySelector('.ut-hint')?.remove()
     const key = button.getAttribute('data-skbtn')
     // on the letter page only the letters carry a hint (the symbol), like Gboard; the symbol pages show the first variant
-    const first = key && key.length <= 2 && (page !== 'letters' || SYMBOL_HINT[key.toLowerCase()] || topDigits[key.toLowerCase()]) ? variantsOf(key)[0] : null
+    const first = key && key.length <= 2 && (page !== 'letters' || SYMBOL_HINT[key.toLowerCase()]) ? variantsOf(key)[0] : null
     if (first) button.appendChild(Object.assign(document.createElement('span'), {className: 'ut-hint', textContent: first}))
   }
 }
