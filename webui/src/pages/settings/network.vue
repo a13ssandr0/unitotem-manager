@@ -448,6 +448,21 @@
       </v-card>
     </v-dialog>
 
+    <!-- ── New address ─────────────────────────────────────────────────── -->
+    <v-dialog v-model="newAddrOpen" max-width="460">
+      <v-card title="Address changed">
+        <v-card-text>
+          <strong>{{ newAddrConn }}</strong> now uses <strong>{{ newAddr }}</strong>. This page is still on
+          {{ currentHost }}: if that was the address being changed it will stop answering.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn @click="newAddrOpen = false">Stay here</v-btn>
+          <v-btn color="primary" :href="newAddrUrl">Open {{ newAddr }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Error snackbar -->
     <v-snackbar v-model="errorSnack" color="error" :timeout="4000">{{ errorMsg }}</v-snackbar>
 
@@ -508,6 +523,13 @@ const compatibleConnections = computed(() => {
 })
 
 // Delete
+const newAddrOpen = ref(false)
+const newAddr = ref('')
+const newAddrConn = ref('')
+const currentHost = window.location.hostname
+const newAddrUrl = computed(() => `${window.location.protocol}//${newAddr.value}${window.location.port ? ':' + window.location.port : ''}/settings/network`)
+// Set by saveEditor when a static address of an active connection was saved: applied and offered once the save is answered
+let pendingAddr = null
 const deleteDialogOpen = ref(false)
 const connToDelete = ref(null)
 
@@ -536,6 +558,17 @@ api.Settings.Network.connections.on(data => {
   if (editorSaving.value) {
     editorSaving.value = false
     editorOpen.value = false
+    if (pendingAddr) {
+      const p = pendingAddr
+      pendingAddr = null
+      // a saved profile does nothing until it is activated again
+      activateConn(p.path)
+      if (p.address !== currentHost) {
+        newAddr.value = p.address
+        newAddrConn.value = p.id
+        newAddrOpen.value = true
+      }
+    }
   }
 }, {init: true})
 
@@ -667,6 +700,8 @@ const openEditor = (conn) => {
 const saveEditor = () => {
   if (!editorConn.value) return
   editorSaving.value = true
+  pendingAddr = (editorForm.ip_method === 'manual' && editorForm.ip_address && isActive(editorConn.value.uuid))
+    ? { path: editorConn.value.path, address: editorForm.ip_address.trim(), id: editorForm.id } : null
   api.Settings.Network.edit_connection({
     conn_path   : editorConn.value.path,
     conn_id     : editorForm.id,
