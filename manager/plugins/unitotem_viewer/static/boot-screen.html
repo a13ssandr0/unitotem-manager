@@ -214,6 +214,10 @@
        Without the attribute none of this applies and #stage is a plain wrapper. #stage covers the WHOLE window, the margin
        colour included: the screensaver hides everything behind it, not only the area. */
     #stage { position: relative; width: 100%; height: 100%; }
+    /* The on-screen keyboard slides the content up (like iOS) when a text field is too low for it: keyboard.js sets
+       --ut-kbd-shift and the attribute on #orient-intro, the transform is only there while it is needed. */
+    #stage, #home-frame { transition: transform .35s ease-in-out; }
+    #orient-intro[data-kbd-shift] > #stage, #orient-intro[data-kbd-shift] > #home-frame { transform: translateY(var(--ut-kbd-shift, 0px)); }
     #home-frame { display: none; border: none; position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
     #shield { display: none; position: absolute; inset: 0; z-index: 20; touch-action: none; background: transparent; }
     body[data-saver] #home-frame { display: block; }

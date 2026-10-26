@@ -32,8 +32,8 @@ const REPEAT_DELAY_MS = 400
 const REPEAT_MS = 60
 const DOUBLE_TAP_MS = 400
 const SYMBOLS = {
-  sym1: ['1 2 3 4 5 6 7 8 9 0', '@ # $ _ & - + ( ) /', '{sym2} * " \' : ; ! ? {bksp}', '{abc} , {space} . {enter}'],
-  sym2: ['~ ` | • √ π ÷ × ¶ ∆', '£ ¢ € ¥ ^ ° = { } \\', '{sym1} % © ® ™ ✓ [ ] {bksp}', '{abc} < {space} > {enter}'],
+  sym1: ['1 2 3 4 5 6 7 8 9 0 {bksp}', '@ # $ _ & - + ( ) / {enter}', '{sym2} % * " \' : ; ! ? {sym2}', '{abc} , {space} . {abc}'],
+  sym2: ['~ ` | • √ π ÷ × ¶ ∆ {bksp}', '£ ¢ € ¥ ^ ° = { } \\ {enter}', '{sym1} < > [ ] © ® ™ ✓ {sym1}', '{abc} , {space} . {abc}'],
 }
 // What a long press on a key offers, in the order of Gboard / AOSP's LatinIME (OpenBoard's `donottranslate-more-keys.xml`, the
 // accents of every Latin language it ships merged and sorted by how many languages use them). Lower case: the upper case of
@@ -67,10 +67,7 @@ const css = `${keyboardCss}
 #ut-kbd-body .hg-row { flex: 1 1 0; display: flex; margin-bottom: 4px; }
 #ut-kbd-body .hg-row:last-child { margin-bottom: 0; }
 #ut-kbd-body .hg-button { height: auto; font-size: clamp(12px, 2.4vmin, 40px); }
-#ut-kbd-body .hg-button[data-skbtn="{space}"] { flex-grow: 5; }
-#ut-kbd-body .hg-button[data-skbtn="{shift}"], #ut-kbd-body .hg-button[data-skbtn="{bksp}"],
-#ut-kbd-body .hg-button[data-skbtn="{sym1}"], #ut-kbd-body .hg-button[data-skbtn="{sym2}"],
-#ut-kbd-body .hg-button[data-skbtn="{abc}"], #ut-kbd-body .hg-button[data-skbtn="{enter}"] { flex-grow: 1.5; background: #d5d9de; }
+/* The size of every key is set by sizeKeys() below (Android tablet geometry); here only the colours. */
 #ut-kbd-body .hg-button { position: relative; transition: background-color .08s; }
 /* feedback like Android's: a key lights up under the pointer and while it is pressed */
 #ut-kbd-body .hg-button:hover { background: #e3e7ec !important; }
@@ -78,7 +75,12 @@ const css = `${keyboardCss}
 #ut-kbd-preview { position: absolute; display: none; min-width: ${BUTTON_PX}px; height: ${BUTTON_PX * 1.3}px; padding: 0 10px;
   align-items: center; justify-content: center; background: #fff; color: #111; font-size: 34px; border-radius: 10px;
   box-shadow: 0 2px 14px #000a; pointer-events: none; }
+#ut-kbd-body .hg-button { min-width: 0; }
+#ut-kbd-body .hg-button[data-skbtn^="{"][data-skbtn$="}"] { background: #d5d9de; }
+#ut-kbd-body .hg-button[data-skbtn="{space}"][data-skbtn="{space}"] { background: #fff; }
 .ut-hint { position: absolute; top: 3px; right: 6px; font-size: .55em; line-height: 1; color: #8a8f98; pointer-events: none; }
+#ut-kbd-body.ut-numeric .hg-button { flex: 1 1 0; }
+#ut-kbd-body .hg-button.ut-on { background: #4a90e2 !important; color: #fff; }
 #ut-kbd-alts { position: absolute; display: none; flex-wrap: wrap; justify-content: center; max-width: 80%; background: #fff; border-radius: 10px; box-shadow: 0 4px 24px #000a;
   padding: 4px; pointer-events: auto; gap: 4px; }
 #ut-kbd-alts span { min-width: ${BUTTON_PX}px; height: ${BUTTON_PX}px; display: flex; align-items: center;
@@ -90,7 +92,7 @@ const css = `${keyboardCss}
 
 const layouts = new SimpleKeyboardLayouts()
 
-let layer, toggle, panel, closeButton, body, grip, keyboard, alts, preview
+let hostEl, layer, toggle, panel, closeButton, body, grip, keyboard, alts, preview
 let enabled = false
 let config = {enabled: true, button_position: 'bottom-right', layout: 'english'}
 let open = false
@@ -231,22 +233,53 @@ const SPECIAL = {'{bksp}': 'Backspace', '{enter}': 'Enter', '{tab}': 'Tab'}
 const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': '⇪', '{tab}': '⇥', '{space}': ' ',
   '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC'}
 
-/** A layout of simple-keyboard-layouts turned into a Gboard-like one: no tab/caps/enter keys in the letter rows, the
- *  backspace at the end of the last letter row and a bottom row with the symbols key, comma, space, full stop and enter. */
+// Accented letters that a long press already offers (è on `e`...): the national layouts put them on keys of their own, Gboard does not
+const ACCENTED = new Set(Object.entries(VARIANTS).filter(([k]) => /^[a-z]$/.test(k))
+  .flatMap(([, list]) => list.split(' ').flatMap(v => [v, v === 'ß' ? 'ẞ' : v.toUpperCase()])))
+
+/** A layout of simple-keyboard-layouts turned into the tablet layout of Android's keyboard (AOSP `xml-sw600dp/rows_qwerty.xml`, which is
+ *  what Gboard on a tablet follows): the row of digits, then `tab` + the first letter row + backspace, `caps` + the second + enter,
+ *  `shift` + the third + `! ?` + `shift`, and `?123 , space . ?123`. Only letters on the letter rows. */
 function gboard(rows) {
-  const out = rows.filter(row => !row.includes('{space}')).map(row => row.split(' ').filter(k => k !== '{tab}' &&
-    k !== '{lock}' && k !== '{enter}' && k !== '{bksp}'))
-  // a Latin layout's first row is digits plus a few symbols (and the symbols page has the rest): keep the digits
-  if (out[0].filter(k => /^\d$/.test(k)).length >= 10) out[0] = out[0].filter(k => /^\d$/.test(k))
-  // the letter rows have letters only (the punctuation of the national layouts is on the symbol pages and the long presses)
-  const numberRow = out[0].some(k => /^\d$/.test(k)) ? 0 : -1
-  for (let i = 0; i < out.length; i++) if (i !== numberRow && i !== 0) out[i] = out[i].filter(k => /^\{.+\}$/.test(k) || /\p{L}/u.test(k))
-  const last = out.length - 1
-  const at = out[last].lastIndexOf('{shift}')
-  if (at > 0) out[last][at] = '{bksp}'
-  else out[last].push('{bksp}')
-  out.push('{sym1} , {space} . {enter}'.split(' '))
+  const isFn = k => /^\{.+\}$/.test(k)
+  const split = rows.filter(row => !row.includes('{space}')).map(row => row.split(' '))
+  const digits = split[0].filter(k => /^\d$/.test(k))
+  const hasDigits = digits.length >= 10
+  const letterRows = split.slice(hasDigits ? 1 : 0, hasDigits ? 4 : 3)
+    .map(row => row.filter(k => !isFn(k) && /\p{L}/u.test(k) && !ACCENTED.has(k)))
+  const out = [hasDigits ? digits : '1 2 3 4 5 6 7 8 9 0'.split(' ')]
+  letterRows.forEach((row, i) => {
+    const left = ['{tab}', '{lock}', '{shift}'][i]
+    const right = ['{bksp}', '{enter}', '{shift}'][i]
+    out.push([left, ...row, ...(i === 2 ? ['!', '?'] : []), right])
+  })
+  out.push('{sym1} , {space} . {sym1}'.split(' '))
   return out.map(row => row.join(' '))
+}
+
+// Android's tablet geometry in units of one letter key: 12.5 units per row (a letter is 8 % of the row), the keys that are not
+// characters have the width Android gives them and the LAST one of a row stretches, so every character key is the same size
+const SIDE_UNITS = {'{tab}': 1.25, '{lock}': 1.75, '{bksp}': 1.25, '{enter}': 1.75, '{sym1}': 1.5, '{sym2}': 1.5, '{abc}': 1.5}
+const ROW_UNITS = 12.5
+const unitsOf = (key, index) => key === '{shift}' ? (index === 0 ? 2.25 : 1.25) : (SIDE_UNITS[key] ?? 1)
+
+/** Sets the size of every key of the page on show (called after every render): all characters one unit wide, rows as tall as each other. */
+function sizeKeys() {
+  if (!keyboard) return // simple-keyboard renders once while it is being constructed
+  const layout = keyboard.options.layout
+  const rows = (layout[keyboard.options.layoutName] ?? []).map(row => row.split(' '))
+  const isFn = k => /^\{.+\}$/.test(k)
+  const total = Math.max(ROW_UNITS, ...rows.map(row => row.reduce((sum, k, i) => sum + (k === '{space}' ? 4 : unitsOf(k, i)), 0)))
+  body.querySelectorAll('.hg-row').forEach((el, i) => {
+    const keys = rows[i]
+    if (!keys) return
+    el.style.justifyContent = keys.some(isFn) ? 'flex-start' : 'center'
+    el.querySelectorAll('.hg-button').forEach((button, j) => {
+      if (numeric) { button.style.flex = ''; return }
+      const basis = `calc(${(100 * unitsOf(keys[j], j) / total).toFixed(3)}% - 5px)`
+      button.style.flex = keys[j] === '{space}' ? '1 1 0' : (isFn(keys[j]) && j === keys.length - 1 && !keys.includes('{space}') ? `1 1 ${basis}` : `0 0 ${basis}`)
+    })
+  })
 }
 
 function layoutOf(name) {
@@ -256,11 +289,17 @@ function layoutOf(name) {
 
 const layoutName = () => page !== 'letters' ? page : (shift || caps ? 'shift' : 'default')
 
+/** What simple-keyboard is told after every change of state: the page, which keys are lit (shift, caps) and the key size. */
+function appearance() {
+  body.classList.toggle('ut-numeric', numeric)
+  const themes = []
+  if (shift && !caps) themes.push({class: 'ut-on', buttons: '{shift}'})
+  if (caps) themes.push({class: 'ut-on', buttons: '{lock}'})
+  return {layoutName: numeric ? 'default' : layoutName(), display: DISPLAY, buttonTheme: themes}
+}
+
 function refreshLayout() {
-  keyboard.setOptions({
-    layoutName: layoutName(),
-    display: {...DISPLAY, '{shift}': caps ? '⇪' : '⇧'},
-  })
+  keyboard.setOptions(appearance())
 }
 
 function typeKey(button) {
@@ -271,6 +310,7 @@ function typeKey(button) {
     refreshLayout()
     return
   }
+  if (button === '{lock}') { caps = !caps; shift = false; refreshLayout(); return }
   if (button === '{sym1}' || button === '{sym2}' || button === '{abc}') {
     page = button === '{abc}' ? 'letters' : button.slice(1, -1)
     refreshLayout()
@@ -386,10 +426,11 @@ function wireKeys(host) {
 
 function applyLayout() {
   if (numeric) {
-    keyboard.setOptions({layout: NUMERIC, layoutName: 'default'})
+    keyboard.setOptions({layout: NUMERIC, ...appearance()})
     return
   }
-  keyboard.setOptions({layout: layoutOf(config.layout), layoutName: layoutName(), display: {...DISPLAY, '{shift}': caps ? '⇪' : '⇧'}})
+  const layout = layoutOf(config.layout)
+  keyboard.setOptions({layout, ...appearance()})
 }
 
 // ── showing and hiding ──────────────────────────────────────────────────
@@ -399,6 +440,7 @@ function render() {
   panel.style.display = visible ? 'flex' : 'none'
   toggle.style.display = enabled ? 'block' : 'none'
   if (visible) clamp()
+  else setContentShift(0)
 }
 
 function setOpen(value, byUser = false) {
@@ -443,6 +485,7 @@ function build() {
   const host = document.createElement('div')
   host.className = 'simple-keyboard'
   body.appendChild(host)
+  hostEl = host
   grip = document.createElement('div')
   grip.id = 'ut-kbd-grip'
   panel.append(header, body, grip)
@@ -460,7 +503,7 @@ function build() {
   }
 
   keyboard = new Keyboard(host, {
-    onRender: addHints,
+    onRender: () => { sizeKeys(); addHints() },
     onKeyPress: () => {}, // the keys are handled by wireKeys(): they type on release, like Gboard
     theme: 'hg-theme-default hg-layout-default',
     layout: layoutOf('english'),
@@ -471,6 +514,8 @@ function build() {
     useTouchEvents: false,
   })
 
+  sizeKeys()
+  addHints()
   wireKeys(host)
   drag(header, (dx, dy) => { box.x += dx; box.y += dy })
   drag(grip, (dx, dy) => { box.w += dx; box.h += dy })
@@ -495,24 +540,52 @@ export function configure(settings) {
 }
 
 /** `kind` is the type of the field that has the focus (text, password, number, email, tel...) or null. */
-/** The keyboard goes just below the text field that was touched (above it when there is no room below).
+/** A field that has no room for the keyboard below it is brought up instead (like iOS does): the whole content of the window
+ *  slides up, off the screen if it has to, and slides back when the keyboard goes. The transform is applied to #stage and
+ *  #home-frame by the page's stylesheet (boot-screen.html), with the animation. */
+let contentShift = 0
+let anchor = null // the last text field that was touched: {top, bottom, at}, in layer coordinates, BEFORE any shift
+function setContentShift(px) {
+  const wrap = layer.parentElement
+  if (!wrap) return
+  contentShift = px
+  if (px) {
+    wrap.style.setProperty('--ut-kbd-shift', `${px}px`)
+    wrap.setAttribute('data-kbd-shift', '')
+  } else if (wrap.hasAttribute('data-kbd-shift')) {
+    wrap.style.setProperty('--ut-kbd-shift', '0px')
+    setTimeout(() => { if (!contentShift) wrap.removeAttribute('data-kbd-shift') }, 500)
+  }
+}
+
+function placeBelowAnchor() {
+  if (!anchor || !open) return
+  const {W, H} = limits()
+  const gap = 12
+  box.x = (W - box.w) / 2 // always centred on the screen
+  if (anchor.bottom + gap + box.h <= H) {
+    setContentShift(0)
+    box.y = anchor.bottom + gap
+  } else {
+    // not comfortable: the field goes to the top of the screen and the keyboard sits under it
+    const margin = Math.max(gap, H * 0.08)
+    setContentShift(Math.min(0, margin - anchor.top))
+    box.y = Math.min(margin + (anchor.bottom - anchor.top) + gap, H - box.h)
+  }
+  clamp()
+}
+
+/** The keyboard goes just below the text field that was touched (the content slides up when there is no room).
  *  `frame` is the iframe element that holds the field, `rect` = [left, top, width, height, frameInnerWidth, frameInnerHeight]
  *  of the field inside that frame. */
 export function placeNear(frame, rect) {
   if (!enabled || !layer || !frame || !rect) return
-  const [fx, fy, fw, fh] = rect
-  const [ox, oy] = offsetIn(frame, layer.offsetParent)
+  const [, fy, , fh] = rect
+  const [, oy] = offsetIn(frame, layer.offsetParent)
   const m = new DOMMatrix(getComputedStyle(frame).transform === 'none' ? undefined : getComputedStyle(frame).transform)
   const k = Math.hypot(m.a, m.b) || 1 // a page shown with a zoom is an iframe scaled by CSS
-  const left = ox + fx * k
-  const top = oy + fy * k
-  const bottom = top + fh * k
-  const {W, H} = limits()
-  const gap = 12
-  box.y = bottom + gap + box.h <= H ? bottom + gap : (top - gap - box.h >= 0 ? top - gap - box.h : H - box.h)
-  box.x = Math.min(Math.max(left + fw * k / 2 - box.w / 2, 0), W - box.w)
-  clamp()
-  if (open) render()
+  anchor = {top: oy + fy * k, bottom: oy + (fy + fh) * k, at: Date.now()}
+  placeBelowAnchor()
 }
 
 export function focusChanged(on, kind) {
@@ -521,6 +594,7 @@ export function focusChanged(on, kind) {
     const wantsNumeric = kind === 'number' || kind === 'tel'
     if (wantsNumeric !== numeric) { numeric = wantsNumeric; applyLayout() }
     setOpen(true, false)
+    if (anchor && Date.now() - anchor.at < 1500) placeBelowAnchor() // the position arrived before the keyboard was open
   } else if (!openedByUser) {
     setOpen(false) // what opened itself closes itself; what the visitor opened stays until they close it
   }
