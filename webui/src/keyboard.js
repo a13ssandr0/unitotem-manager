@@ -18,7 +18,6 @@
  * rotated and flipped with CSS (the page's orientation settings), and the libraries do not follow a transformed parent.
  */
 import Keyboard from 'simple-keyboard'
-import SimpleKeyboardLayouts from 'simple-keyboard-layouts'
 import keyboardCss from 'simple-keyboard/build/css/index.css?inline'
 
 const BUTTON_PX = 56
@@ -256,31 +255,39 @@ const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': 
 const SYMBOL_HINT = {q: '%', w: '\\', e: '|', r: '=', t: '[', y: ']', u: '<', i: '>', o: '{', p: '}', a: '@', s: '#', d: '€', f: '_', g: '&',
   h: '-', j: '+', k: '(', l: ')', z: '*', x: '"', c: "'", v: ':', b: ';', n: '!', m: '?'}
 const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
-const layouts = new SimpleKeyboardLayouts()
-// Gboard's own Italian layout, copied from a screenshot of it (it has the accented letters as keys)
-const GBOARD_ROWS = {
-  italian: ['\\ 1 2 3 4 5 6 7 8 9 0 \' ì {bksp}', '{tab} q w e r t y u i o p è ù +', '{lock} a s d f g h j k l ò à {enter}',
-    '{shift} z x c v b n m , . - {shift}', BOTTOM],
+// One layout per language, all built the same way (the way Gboard's own tablet keyboard with the number row on is, copied from the user's
+// screenshot of its Italian layout): number row + backspace, `tab` + row 1, `caps lock` + row 2 + enter, `shift` + row 3 + `, . -` + `shift`,
+// `?123 space ◀ ▶ ?123`. What differs is the language: its letters (and, for Italian, the symbols its keyboard puts on the same rows).
+// Base letter rows: HeliBoard (HeliBorg/HeliBoard, assets/layouts/main: qwerty.txt, qwertz.txt, azerty.json, greek.json, russian.txt,
+// turkish.txt, ukrainian.txt); the keys a language adds to them are Gboard's (German ü ö ä, Spanish ñ, Turkish ğ ü ş i ö ç, Italian è ù ò à ì),
+// the other accents are long-press popups there as here.
+const QWERTY = ['q w e r t y u i o p', 'a s d f g h j k l', 'z x c v b n m']
+const QWERTZ = ['q w e r t z u i o p', 'a s d f g h j k l', 'y x c v b n m']
+const DIGITS = '1 2 3 4 5 6 7 8 9 0'
+const LAYOUT_SPECS = {
+  english: {rows: QWERTY},
+  italian: {numbers: `\\ ${DIGITS} ' ì`, rows: ['q w e r t y u i o p è ù +', 'a s d f g h j k l ò à', QWERTY[2]]},
+  german: {numbers: `${DIGITS} ß`, rows: [QWERTZ[0] + ' ü', QWERTZ[1] + ' ö ä', QWERTZ[2]]},
+  french: {rows: ['a z e r t y u i o p', 'q s d f g h j k l m', 'w x c v b n']},
+  spanish: {rows: [QWERTY[0], QWERTY[1] + ' ñ', QWERTY[2]]},
+  brazilian: {rows: QWERTY},
+  polish: {rows: QWERTY},
+  czech: {rows: QWERTZ},
+  greek: {numbers: `${DIGITS} - =`, rows: ['; ς ε ρ τ υ θ ι ο π', 'α σ δ φ γ η ξ κ λ', 'ζ χ ψ ω β ν μ']},
+  turkish: {numbers: `${DIGITS} * -`, rows: ['q w e r t y u ı o p ğ ü', 'a s d f g h j k l ş i', 'z x c v b n m ö ç']},
+  russian: {numbers: `${DIGITS} - =`, rows: ['й ц у к е н г ш щ з х ъ', 'ф ы в а п р о л д ж э', 'я ч с м и т ь б ю']},
+  ukrainian: {numbers: `${DIGITS} - =`, rows: ['й ц у к е н г ш щ з х ї', 'ф і в а п р о л д ж є', 'я ч с м и т ь б ю ґ']},
 }
 
-/** The national layout of simple-keyboard-layouts (the PC layout of the language, which is what Gboard's own national keyboards are too, see the
- *  Italian one copied from a screenshot above) dressed like Gboard's tablet keyboard: the row of numbers ends with backspace, `tab` and
- *  `caps lock` open the next two rows, enter closes the second, the shifts the third (its extra `<` or `\` key goes away), and
- *  `?123 space ◀ ▶ ?123` at the bottom. Every key of the language stays a key of its own (ß, ñ, ç, ü...). */
-function gboard(rows) {
-  const isFn = k => /^\{.+\}$/.test(k)
-  const plain = rows.filter(row => !row.includes('{space}')).map(row => row.split(' ').filter(k => !isFn(k)))
-  const [r0, r1, r2, r3] = plain
-  // a layout whose number row holds letters instead of digits (Czech) gets the digits, and keeps its other symbols
-  const row0 = r0.filter(k => /^\d$/.test(k)).length >= 10 ? r0 : [...'1234567890', ...r0.filter(k => !/[\p{L}\d]/u.test(k))]
-  if (r3.length > 10 && !/\p{L}/u.test(r3[0])) r3.shift()
+function gboard(spec) {
+  const [r1, r2, r3] = spec.rows
   return [
-    [...row0, '{bksp}'],
-    ['{tab}', ...r1],
-    ['{lock}', ...r2, '{enter}'],
-    ['{shift}', ...r3, '{shift}'],
-    BOTTOM.split(' '),
-  ].map(row => row.join(' '))
+    `${spec.numbers ?? DIGITS} {bksp}`,
+    `{tab} ${r1}`,
+    `{lock} ${r2} {enter}`,
+    `{shift} ${r3} , .${r3.split(' ').length > 9 ? '' : ' -'} {shift}`, // a long third row has no room for the dash
+    BOTTOM,
+  ]
 }
 
 /** The capitals of a page (a Turkish i is İ and ı is I). */
@@ -296,7 +303,7 @@ const upperRows = (rows, name) => rows.map(row => row.split(' ').map(k => {
 const SIDE_UNITS = {'{tab}': 1.18, '{lock}': 1.43, '{bksp}': 1.18, '{enter}': 1.88, '{sym1}': 1.46, '{sym2}': 1.46, '{abc}': 1.46,
   '{left}': 0.97, '{right}': 0.97, '{hide}': 1}
 const ROW_UNITS = 12.39
-const MAX_STRETCH = 3.2 // units
+const MAX_STRETCH = 3.6 // units
 const unitsOf = (key, index) => key === '{shift}' ? (index === 0 ? 1.92 : 1.44) : (SIDE_UNITS[key] ?? 1)
 
 /** Sets the size of every key of the page on show (called after every render): all characters one unit wide, rows as tall as each other. */
@@ -314,18 +321,19 @@ function sizeKeys() {
     // a row shorter than the widest one gives the rest to ONE function key (the last, or the first when the row has none at the end), but
     // never more than MAX_STRETCH of it: a backspace a third of the keyboard wide is what a row of 9 letters used to get
     const spare = total - used(keys)
-    const stretch = keys.includes('{space}') || !(spare > 0.01) ? -1 : (isFn(keys[keys.length - 1]) ? keys.length - 1 : (isFn(keys[0]) ? 0 : -1))
+    // keys that take the spare: both ends when both are function keys (shifts, caps/enter), else the one at the end that is
+    const ends = keys.includes('{space}') || !(spare > 0.01) ? [] : (isFn(keys[0]) && isFn(keys[keys.length - 1]) ? [0, keys.length - 1]
+      : (isFn(keys[keys.length - 1]) ? [keys.length - 1] : (isFn(keys[0]) ? [0] : [])))
     el.querySelectorAll('.hg-button').forEach((button, j) => {
       if (numeric) { button.style.flex = ''; return }
-      const units = unitsOf(keys[j], j) + (j === stretch ? Math.min(spare, MAX_STRETCH - unitsOf(keys[j], j)) : 0)
+      const units = unitsOf(keys[j], j) + (ends.includes(j) ? Math.min(spare / ends.length, MAX_STRETCH - unitsOf(keys[j], j)) : 0)
       button.style.flex = keys[j] === '{space}' ? '1 1 0' : `0 0 calc(${(100 * units / total).toFixed(3)}% - 8px)`
     })
   })
 }
 
 function layoutOf(name) {
-  const source = layouts.get(name)?.layout ?? layouts.get('english').layout
-  const base = GBOARD_ROWS[name] ?? gboard(source.default)
+  const base = gboard(LAYOUT_SPECS[name] ?? LAYOUT_SPECS.english)
   return {default: base, shift: upperRows(base, name), ...SYMBOLS}
 }
 
