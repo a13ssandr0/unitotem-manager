@@ -421,7 +421,11 @@ function build() {
   toggle.id = 'ut-kbd-toggle'
   toggle.textContent = '⌨'
   toggle.setAttribute('aria-label', 'Keyboard')
-  onTap(toggle, () => setOpen(!open, true))
+  onTap(toggle, () => {
+    // opened with the button, the keyboard is where it always starts (it may have been dragged or placed under a field)
+    if (!open) { defaultBox(); clamp() }
+    setOpen(!open, true)
+  })
 
   panel = document.createElement('div')
   panel.id = 'ut-kbd-panel'
@@ -491,6 +495,26 @@ export function configure(settings) {
 }
 
 /** `kind` is the type of the field that has the focus (text, password, number, email, tel...) or null. */
+/** The keyboard goes just below the text field that was touched (above it when there is no room below).
+ *  `frame` is the iframe element that holds the field, `rect` = [left, top, width, height, frameInnerWidth, frameInnerHeight]
+ *  of the field inside that frame. */
+export function placeNear(frame, rect) {
+  if (!enabled || !layer || !frame || !rect) return
+  const [fx, fy, fw, fh] = rect
+  const [ox, oy] = offsetIn(frame, layer.offsetParent)
+  const m = new DOMMatrix(getComputedStyle(frame).transform === 'none' ? undefined : getComputedStyle(frame).transform)
+  const k = Math.hypot(m.a, m.b) || 1 // a page shown with a zoom is an iframe scaled by CSS
+  const left = ox + fx * k
+  const top = oy + fy * k
+  const bottom = top + fh * k
+  const {W, H} = limits()
+  const gap = 12
+  box.y = bottom + gap + box.h <= H ? bottom + gap : (top - gap - box.h >= 0 ? top - gap - box.h : H - box.h)
+  box.x = Math.min(Math.max(left + fw * k / 2 - box.w / 2, 0), W - box.w)
+  clamp()
+  if (open) render()
+}
+
 export function focusChanged(on, kind) {
   if (!enabled || !layer) return
   if (on) {
@@ -502,4 +526,4 @@ export function focusChanged(on, kind) {
   }
 }
 
-window.utKeyboard = {configure, focusChanged}
+window.utKeyboard = {configure, focusChanged, placeNear}

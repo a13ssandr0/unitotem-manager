@@ -43,9 +43,17 @@ FOCUS_SCRIPT = r"""
       // pages built from web components (Home Assistant) keep the real field inside shadow roots
       let el = document.activeElement;
       while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
-      utFocus(JSON.stringify({on: editable(el), type: editable(el) ? (el.type || el.tagName.toLowerCase()) : null, frame: me}));
+      const r = editable(el) ? el.getBoundingClientRect() : null;
+      utFocus(JSON.stringify({on: editable(el), type: editable(el) ? (el.type || el.tagName.toLowerCase()) : null, frame: me,
+        rect: r ? [r.left, r.top, r.width, r.height, innerWidth, innerHeight] : null}));
     } catch (e) {}
   };
+  // a touch on the field that already has the focus gives no focus event, but the keyboard goes back next to it
+  document.addEventListener('pointerup', () => setTimeout(() => {
+    let el = document.activeElement;
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+    if (editable(el)) report();
+  }, 60), true);
   document.addEventListener('focusin', report, true);
   document.addEventListener('focusout', () => setTimeout(report, 0), true);
   window.addEventListener('pagehide', () => { try { utFocus(JSON.stringify({on: false, type: null, frame: me})); } catch (e) {} });
@@ -294,6 +302,11 @@ class Cdp:
         data = json.loads(payload)
         if name == 'utFocus':
             self._on_focus(window, f"{session}/{data.get('frame', '')}", bool(data.get('on')), data.get('type'))
+            if data.get('on') and data.get('rect') and info['type'] == 'iframe':
+                try:
+                    await self._place_keyboard(info, window, data['rect'])
+                except Exception as e:
+                    logger.debug('Window {}: could not tell the keyboard where the field is: {}', window, e)
         elif name in ('utKey', 'utSaver', 'utActivity', 'utFrame') and (name == 'utActivity' or info['type'] == 'page'):
             # utActivity comes from every frame, the others from the page of the window only
             handler = self._handlers.get(name)
@@ -301,6 +314,19 @@ class Cdp:
                 result = handler(window, data)
                 if asyncio.iscoroutine(result):
                     await result
+
+    async def _place_keyboard(self, info: dict, window: int, rect: list):
+        """Tells the page where the text field that has the focus is: the frame says where it is INSIDE the frame, the page
+        finds the iframe element that holds it (the frame's id is its target id) and works out the rest."""
+        page = self._pages.get(window)
+        if not page:
+            return
+        owner = await self._send('DOM.getFrameOwner', {'frameId': info['target']}, page)
+        node = await self._send('DOM.resolveNode', {'backendNodeId': owner['backendNodeId']}, page)
+        await self._send('Runtime.callFunctionOn', {
+            'objectId': node['object']['objectId'],
+            'functionDeclaration': 'function(r){return window.utKeyboard && window.utKeyboard.placeNear(this, r)}',
+            'arguments': [{'value': rect}]}, page)
 
     # ── what the viewer asks for ──────────────────────────────────────────
 
