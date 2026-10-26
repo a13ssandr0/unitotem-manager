@@ -1,3 +1,17 @@
+unitotem-manager (3.0.0~dev11) stable; urgency=medium
+
+  * CEF: pages that forbid being framed (X-Frame-Options, CSP frame-ancestors; Home Assistant
+    does) are shown in a window (libcef patch 0003, switch unitotem-allow-framing, rebuilt
+    for both architectures)
+  * The viewer raises what the browser refuses or cannot load, and exceptions of its own
+    page, as notifications
+  * Network page offers the new address after a static address is saved; the node answers
+    ARP only on the interface that owns the address (cable lost when Wi-Fi shared its subnet)
+  * Rotation animation of a window runs at every change, not only the first; adding a URL
+    asset no longer blocks the server or fails on empty dates
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Mon, 26 Oct 2026 08:47:12 +0100
+
 unitotem-manager (3.0.0~dev10) stable; urgency=medium
 
   * Window layout: a window has a content area (blank margins, in percent of the
