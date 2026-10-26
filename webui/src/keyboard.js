@@ -57,6 +57,7 @@ const css = `${keyboardCss}
   background: rgba(30, 30, 30, .85); color: #fff; font-size: 28px; pointer-events: auto; cursor: pointer; padding: 0; }
 #ut-kbd-panel { position: absolute; background: #222; border-radius: 10px; box-shadow: 0 4px 24px #000a;
   pointer-events: auto; display: none; flex-direction: column; overflow: hidden; will-change: transform; }
+#ut-kbd-panel.ut-moving { box-shadow: none; }
 #ut-kbd-header { flex: 0 0 ${HEADER_PX}px; height: ${HEADER_PX}px; background: #111; color: #ccc; display: flex;
   align-items: center; justify-content: space-between; padding: 0 0 0 14px; cursor: move; font-size: 14px; }
 #ut-kbd-close { width: ${HEADER_PX}px; height: ${HEADER_PX}px; border: 0; background: transparent; color: #fff;
@@ -216,22 +217,21 @@ function drag(handle, onMove, moveOnly = false) {
     handle.setPointerCapture(event.pointerId)
     let lastX = event.clientX
     let lastY = event.clientY
-    let frame = 0
-    // pointer events can come faster than frames: the position is applied once per frame
-    const apply = () => { frame = 0; clamp(moveOnly) }
+    // pointermove is already aligned to the frames by the browser: applying at once (not from a requestAnimationFrame of
+    // our own) saves one frame of lag behind the finger; no shadow while it moves (a big blur to repaint)
+    panel.classList.add('ut-moving')
     const move = e => {
       const [dx, dy] = toLayer(e.clientX - lastX, e.clientY - lastY)
       lastX = e.clientX
       lastY = e.clientY
       onMove(dx, dy)
-      if (!frame) frame = requestAnimationFrame(apply)
+      clamp(moveOnly)
     }
     const end = () => {
       handle.removeEventListener('pointermove', move)
       handle.removeEventListener('pointerup', end)
       handle.removeEventListener('pointercancel', end)
-      if (frame) cancelAnimationFrame(frame)
-      frame = 0
+      panel.classList.remove('ut-moving')
       clamp()
     }
     handle.addEventListener('pointermove', move)
