@@ -35,13 +35,18 @@ const SYMBOLS = {
   sym1: ['1 2 3 4 5 6 7 8 9 0', '@ # $ _ & - + ( ) /', '{sym2} * " \' : ; ! ? {bksp}', '{abc} , {space} . {enter}'],
   sym2: ['~ ` | • √ π ÷ × ¶ ∆', '£ ¢ € ¥ ^ ° = { } \\', '{sym1} % © ® ™ ✓ [ ] {bksp}', '{abc} < {space} > {enter}'],
 }
-// what a long press on a key offers (lower case: the upper case of the key gives the upper case of these)
+// What a long press on a key offers, in the order of Gboard / AOSP's LatinIME (OpenBoard's `donottranslate-more-keys.xml`, the
+// accents of every Latin language it ships merged and sorted by how many languages use them). Lower case: the upper case of
+// the key gives the upper case of these. The first one is also drawn on the key as a grey hint, like Gboard does.
 const VARIANTS = {
-  q: '1', w: '2', e: '3 è é ê ë ē ę', r: '4 ŕ ř', t: '5 ţ ť', y: '6 ý ÿ', u: '7 ù ú û ü ū', i: '8 ì í î ï ī', o: '9 ò ó ô ö œ õ ø ō', p: '0',
-  a: 'à á â ä æ ã å ā ª', s: 'ß ś š ş', d: 'đ ď', g: 'ğ', l: 'ł', z: 'ž ź ż', c: 'ç ć č', n: 'ñ ń ň', k: 'ķ',
-  '.': ', ? ! \' " - : ; …', ',': '; : …', '-': '– — • _', '\'': '‘ ’ ‚ "', '"': '“ ” „ «  »', '?': '¿', '!': '¡',
-  '$': '€ £ ¥ ¢ ₹ ₩', '%': '‰', '0': 'º ∅', '1': '¹ ½ ⅓ ¼', '2': '² ⅔', '3': '³ ¾', '4': '⁴', '/': '\\', '=': '≠ ≈ ≤ ≥', '+': '± ∓',
-  '&': '§', '*': '† ‡ ★', '<': '≤ « ‹', '>': '≥ » ›', '(': '[ { <', ')': '] } >',
+  a: 'à á â ä æ ã å ā ą ă ª', e: 'è é ê ë ē ė ę ě ə', i: 'ì í î ï ī į ı ĳ', o: 'ò ó ô ö œ õ ø ō ő º', u: 'ù ú û ü ū ů ű ų',
+  s: 'ś š ß ş ș', n: 'ñ ń ň ņ', c: 'ç ć č', y: 'ý ÿ', z: 'ž ź ż', d: 'ď đ ð', t: 'ť ţ ț þ', l: 'ł ļ ĺ ľ', g: 'ğ ģ', r: 'ř ŕ ŗ', k: 'ķ',
+  // symbols page 1 (rowkeys_symbols1/2/3 and morekeys_* of AOSP)
+  '1': '¹ ½ ⅓ ¼ ⅛', '2': '² ⅔', '3': '³ ¾ ⅜', '4': '⁴', '5': '⅝', '7': '⅞', '0': 'ⁿ ∅',
+  '.': '! ? , # ) ( / ; \' @ : - " + % &', '-': '_ – — ·', '+': '±', '*': '† ‡ ★', '%': '‰', '=': '≠ ≈ ≤ ≥',
+  '"': '„ “ ” « »', '\'': '‚ ‘ ’ ‹ ›', '!': '¡', '?': '¿', '$': '¢ £ € ¥ ₱', '€': '$ ¢ £ ¥ ₱', '£': '$ ¢ € ¥ ₱', '¥': '$ ¢ € £ ₱',
+  '(': '< { [', ')': '> } ]', '[': '( { <', ']': ') } >', '{': '( [ <', '}': ') ] >', '<': '‹ ≤ «', '>': '› ≥ »', '/': '\\', '&': '§',
+  '•': '♪ ♥ ♠ ♦ ♣', '°': '′ ″', '^': 'ˆ', '~': '≈', '|': '¦', '_': '‾',
 }
 
 const css = `${keyboardCss}
@@ -66,7 +71,15 @@ const css = `${keyboardCss}
 #ut-kbd-body .hg-button[data-skbtn="{shift}"], #ut-kbd-body .hg-button[data-skbtn="{bksp}"],
 #ut-kbd-body .hg-button[data-skbtn="{sym1}"], #ut-kbd-body .hg-button[data-skbtn="{sym2}"],
 #ut-kbd-body .hg-button[data-skbtn="{abc}"], #ut-kbd-body .hg-button[data-skbtn="{enter}"] { flex-grow: 1.5; background: #d5d9de; }
-#ut-kbd-alts { position: absolute; display: none; background: #fff; border-radius: 10px; box-shadow: 0 4px 24px #000a;
+#ut-kbd-body .hg-button { position: relative; transition: background-color .08s; }
+/* feedback like Android's: a key lights up under the pointer and while it is pressed */
+#ut-kbd-body .hg-button:hover { background: #e3e7ec !important; }
+#ut-kbd-body .hg-button.ut-down, #ut-kbd-body .hg-button.hg-activeButton { background: #b8c4d6 !important; }
+#ut-kbd-preview { position: absolute; display: none; min-width: ${BUTTON_PX}px; height: ${BUTTON_PX * 1.3}px; padding: 0 10px;
+  align-items: center; justify-content: center; background: #fff; color: #111; font-size: 34px; border-radius: 10px;
+  box-shadow: 0 2px 14px #000a; pointer-events: none; }
+.ut-hint { position: absolute; top: 3px; right: 6px; font-size: .55em; line-height: 1; color: #8a8f98; pointer-events: none; }
+#ut-kbd-alts { position: absolute; display: none; flex-wrap: wrap; justify-content: center; max-width: 80%; background: #fff; border-radius: 10px; box-shadow: 0 4px 24px #000a;
   padding: 4px; pointer-events: auto; gap: 4px; }
 #ut-kbd-alts span { min-width: ${BUTTON_PX}px; height: ${BUTTON_PX}px; display: flex; align-items: center;
   justify-content: center; border-radius: 8px; font-size: 26px; color: #111; }
@@ -77,7 +90,7 @@ const css = `${keyboardCss}
 
 const layouts = new SimpleKeyboardLayouts()
 
-let layer, toggle, panel, closeButton, body, grip, keyboard, alts
+let layer, toggle, panel, closeButton, body, grip, keyboard, alts, preview
 let enabled = false
 let config = {enabled: true, button_position: 'bottom-right', layout: 'english'}
 let open = false
@@ -223,6 +236,11 @@ const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': 
 function gboard(rows) {
   const out = rows.filter(row => !row.includes('{space}')).map(row => row.split(' ').filter(k => k !== '{tab}' &&
     k !== '{lock}' && k !== '{enter}' && k !== '{bksp}'))
+  // a Latin layout's first row is digits plus a few symbols (and the symbols page has the rest): keep the digits
+  if (out[0].filter(k => /^\d$/.test(k)).length >= 10) out[0] = out[0].filter(k => /^\d$/.test(k))
+  // the letter rows have letters only (the punctuation of the national layouts is on the symbol pages and the long presses)
+  const numberRow = out[0].some(k => /^\d$/.test(k)) ? 0 : -1
+  for (let i = 0; i < out.length; i++) if (i !== numberRow && i !== 0) out[i] = out[i].filter(k => /^\{.+\}$/.test(k) || /\p{L}/u.test(k))
   const last = out.length - 1
   const at = out[last].lastIndexOf('{shift}')
   if (at > 0) out[last][at] = '{bksp}'
@@ -266,9 +284,21 @@ function typeKey(button) {
 
 /** The variants offered by a long press on a key, in the case of the key. */
 function variantsOf(button) {
+  if (/^\{.+\}$/.test(button)) return []
   const base = button.toLowerCase()
-  const list = (VARIANTS[base] ?? VARIANTS[button] ?? '').split(' ').filter(Boolean)
-  return button !== base && button.length === 1 ? list.map(v => v.toUpperCase()) : list
+  const list = (VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ').filter(Boolean)
+  if (button === base || button.length !== 1) return list
+  return list.map(v => v === 'ß' ? 'ẞ' : v.toUpperCase()).filter(v => [...v].length === 1)
+}
+
+/** Draws, on every key that has variants, the first of them in grey at the top right (called by simple-keyboard after each render). */
+function addHints() {
+  for (const button of body.querySelectorAll('.hg-button')) {
+    button.querySelector('.ut-hint')?.remove()
+    const key = button.getAttribute('data-skbtn')
+    const first = key && key.length <= 2 ? variantsOf(key)[0] : null
+    if (first) button.appendChild(Object.assign(document.createElement('span'), {className: 'ut-hint', textContent: first}))
+  }
 }
 
 function offsetIn(element, ancestor) {
@@ -278,9 +308,22 @@ function offsetIn(element, ancestor) {
   return [x, y]
 }
 
+function showPreview(btn) {
+  const text = btn.querySelector('span:not(.ut-hint)')?.textContent ?? ''
+  if (!text.trim()) return
+  preview.textContent = text
+  preview.style.display = 'flex'
+  const [bx, by] = offsetIn(btn, panel)
+  const W = layer.clientWidth
+  const x = box.x + bx + btn.offsetWidth / 2 - preview.offsetWidth / 2
+  preview.style.left = `${Math.min(Math.max(x, 0), Math.max(0, W - preview.offsetWidth))}px`
+  preview.style.top = `${Math.max(box.y + by - preview.offsetHeight - 4, 0)}px`
+}
+
 function openVariants(press) {
   const list = variantsOf(press.key)
   if (!list.length) return
+  preview.style.display = 'none'
   alts.replaceChildren(...list.map(v => Object.assign(document.createElement('span'), {textContent: v})))
   alts.style.display = 'flex'
   const [bx, by] = offsetIn(press.btn, panel)
@@ -304,6 +347,8 @@ function wireKeys(host) {
     clearTimeout(p.timer)
     clearInterval(p.repeat)
     alts.style.display = 'none'
+    preview.style.display = 'none'
+    p.btn.classList.remove('ut-down')
     return p
   }
   host.addEventListener('pointerdown', e => {
@@ -312,6 +357,8 @@ function wireKeys(host) {
     stop()
     const key = btn.getAttribute('data-skbtn')
     press = {btn, key, long: false, timer: null, repeat: null}
+    btn.classList.add('ut-down')
+    if (!/^\{.+\}$/.test(key)) showPreview(btn)
     if (key === '{bksp}') {
       typeKey(key)
       press.timer = setTimeout(() => { press.repeat = setInterval(() => typeKey(key), REPEAT_MS) }, REPEAT_DELAY_MS)
@@ -397,7 +444,9 @@ function build() {
   panel.append(header, body, grip)
   alts = document.createElement('div')
   alts.id = 'ut-kbd-alts'
-  layer.append(panel, toggle, alts)
+  preview = document.createElement('div')
+  preview.id = 'ut-kbd-preview'
+  layer.append(panel, toggle, alts, preview)
 
   // Taps on the keyboard must not move the focus out of the field being typed in
   for (const element of [toggle, panel]) {
@@ -407,6 +456,7 @@ function build() {
   }
 
   keyboard = new Keyboard(host, {
+    onRender: addHints,
     onKeyPress: () => {}, // the keys are handled by wireKeys(): they type on release, like Gboard
     theme: 'hg-theme-default hg-layout-default',
     layout: layoutOf('english'),
