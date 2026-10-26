@@ -208,6 +208,9 @@ class WebviewApp:
             # A page that forbids being framed (X-Frame-Options, CSP frame-ancestors: Home Assistant does) is shown anyway.
             # Read by our Chromium patch (tools/cef-server/patches/0003); a libcef without it ignores the switch.
             'unitotem-allow-framing': '',
+            # Touch/pointer events are predicted a frame ahead (Kalman, blink's InputEventPrediction): dragging something (the
+            # on-screen keyboard) otherwise trails the finger by the touch -> compositor -> frame latency. Merged with the profile's features.
+            'enable-features': 'ResamplingInputEvents',
         }
         # See _own_cert_spki_hash(): trust this node's own certificate, and
         # only that one, so its locally served pages render instead of an error.
