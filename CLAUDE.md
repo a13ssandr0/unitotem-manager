@@ -961,3 +961,6 @@ Tests: `manager/tests/test_ticker_*.py` (models, feeds against local http server
   DDC reliability differs wildly: a Philips 246V5 on DVI answers half the reads (3-7 s each, no 0xD6 at all), a Realtek board answers every read in milliseconds.
 - **A DDC input-source write (`0x60`) is accepted (rc 0) but ignored when the target input has no signal** (Philips 246V5, 2026-10-25: VGA-1 with nothing plugged in never took the switch, the read-back correctly stayed on HDMI-1): a successful
   `setvcp 60` proves nothing, only a read-back does, and on such monitors reads fail about half of the time. The web UI must say "sent", not "switched", and offer only inputs the monitor advertises (it already does).
+- **The content rotation animation ran only once per page load** (`introScheduled` in boot-screen.html was never reset) and always started from the native orientation; it now resets and animates from the
+  orientation/flip last shown (`shownR`/`shownF`). **A sync API function runs ON the event loop**: `add_url_assets` probed the URL with blocking `requests` (up to 10 s) and froze every websocket meanwhile;
+  it is async and probes in a thread. A cleared date field of the URL dialog arrives as `''` and failed validation silently (the modal closes at once and nothing happens): normalised to None.
