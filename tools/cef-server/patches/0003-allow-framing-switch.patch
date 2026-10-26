@@ -1,0 +1,29 @@
+diff --git a/content/browser/renderer_host/ancestor_throttle.cc b/content/browser/renderer_host/ancestor_throttle.cc
+index 59437d789d..3004e5e1fc 100644
+--- a/content/browser/renderer_host/ancestor_throttle.cc
++++ b/content/browser/renderer_host/ancestor_throttle.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <algorithm>
+ 
++#include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/memory/ptr_util.h"
+ #include "base/metrics/histogram_macros.h"
+@@ -133,6 +134,16 @@ NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
+     return NavigationThrottle::PROCEED;
+   }
+ 
++  // UniTotem: a kiosk shows exactly the pages its operator chose, so a page that
++  // forbids being framed (X-Frame-Options, CSP frame-ancestors) is shown anyway.
++  // Only when the embedder passes --unitotem-allow-framing; without it nothing changes.
++  static const bool allow_framing =
++      base::CommandLine::ForCurrentProcess()->HasSwitch(
++          "unitotem-allow-framing");
++  if (allow_framing) {
++    return NavigationThrottle::PROCEED;
++  }
++
+   // 204/205 responses and downloads are not sent to the renderer and don't need
+   // to be checked.
+   if (is_response_check && !request->response_should_be_rendered()) {

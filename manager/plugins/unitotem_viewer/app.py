@@ -205,6 +205,9 @@ class WebviewApp:
             'user-data-dir': cache_path,
             'disable-web-security': '',
             'allow-file-access-from-files': '',
+            # A page that forbids being framed (X-Frame-Options, CSP frame-ancestors: Home Assistant does) is shown anyway.
+            # Read by our Chromium patch (tools/cef-server/patches/0003); a libcef without it ignores the switch.
+            'unitotem-allow-framing': '',
         }
         # See _own_cert_spki_hash(): trust this node's own certificate, and
         # only that one, so its locally served pages render instead of an error.
