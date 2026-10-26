@@ -964,3 +964,5 @@ Tests: `manager/tests/test_ticker_*.py` (models, feeds against local http server
 - **The content rotation animation ran only once per page load** (`introScheduled` in boot-screen.html was never reset) and always started from the native orientation; it now resets and animates from the
   orientation/flip last shown (`shownR`/`shownF`). **A sync API function runs ON the event loop**: `add_url_assets` probed the URL with blocking `requests` (up to 10 s) and froze every websocket meanwhile;
   it is async and probes in a thread. A cleared date field of the URL dialog arrives as `''` and failed validation silently (the modal closes at once and nothing happens): normalised to None.
+- **Cable lost when the Wi-Fi address was changed (2026-10-26, board 192.168.0.254)**: wlan0 had a static 192.168.0.254/23 and the cable 192.168.1.196/23 (the same subnet, `ip neigh` showed one MAC on both
+  interfaces), with `arp_ignore=0` so the router learnt the cable's address at the Wi-Fi MAC. unitotem-node ships `/usr/lib/sysctl.d/90-unitotem-arp.conf` (arp_ignore=1, arp_announce=2). Not yet verified by reproducing it.
