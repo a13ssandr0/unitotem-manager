@@ -56,7 +56,7 @@ const css = `${keyboardCss}
 #ut-kbd-toggle { position: absolute; width: ${BUTTON_PX}px; height: ${BUTTON_PX}px; border-radius: 12px; border: 0;
   background: rgba(30, 30, 30, .85); color: #fff; font-size: 28px; pointer-events: auto; cursor: pointer; padding: 0; }
 #ut-kbd-panel { position: absolute; background: #222; border-radius: 10px; box-shadow: 0 4px 24px #000a;
-  pointer-events: auto; display: none; flex-direction: column; overflow: hidden; }
+  pointer-events: auto; display: none; flex-direction: column; overflow: hidden; will-change: transform; }
 #ut-kbd-header { flex: 0 0 ${HEADER_PX}px; height: ${HEADER_PX}px; background: #111; color: #ccc; display: flex;
   align-items: center; justify-content: space-between; padding: 0 0 0 14px; cursor: move; font-size: 14px; }
 #ut-kbd-close { width: ${HEADER_PX}px; height: ${HEADER_PX}px; border: 0; background: transparent; color: #fff;
@@ -121,7 +121,8 @@ const limits = () => {
 }
 
 /** Puts the panel back inside the screen and inside its size limits: called after anything that could break them. */
-function clamp() {
+let placed = {x: 0, y: 0}
+function clamp(moveOnly = false) {
   const {W, H, minW, minH} = limits()
   box.w = Math.min(Math.max(box.w, minW), W)
   box.h = Math.min(Math.max(box.h, minH), H)
@@ -130,6 +131,13 @@ function clamp() {
   const keep = Math.min(KEEP_PX, box.w)
   box.x = Math.min(Math.max(box.x, keep - box.w), W - keep)
   box.y = Math.min(Math.max(box.y, 0), H - HEADER_PX)
+  if (moveOnly) {
+    // while the panel is dragged only a compositor transform changes (no layout of the ~40 keys at every pointer event)
+    panel.style.transform = `translate3d(${box.x - placed.x}px, ${box.y - placed.y}px, 0)`
+    return
+  }
+  panel.style.transform = ''
+  placed = {x: box.x, y: box.y}
   panel.style.left = `${box.x}px`
   panel.style.top = `${box.y}px`
   panel.style.width = `${box.w}px`
@@ -201,24 +209,29 @@ function onTap(button, action) {
   })
 }
 
-function drag(handle, onMove) {
+function drag(handle, onMove, moveOnly = false) {
   handle.addEventListener('pointerdown', event => {
     if (event.target.closest('button')) return
     event.preventDefault()
     handle.setPointerCapture(event.pointerId)
     let lastX = event.clientX
     let lastY = event.clientY
+    let frame = 0
+    // pointer events can come faster than frames: the position is applied once per frame
+    const apply = () => { frame = 0; clamp(moveOnly) }
     const move = e => {
       const [dx, dy] = toLayer(e.clientX - lastX, e.clientY - lastY)
       lastX = e.clientX
       lastY = e.clientY
       onMove(dx, dy)
-      clamp()
+      if (!frame) frame = requestAnimationFrame(apply)
     }
     const end = () => {
       handle.removeEventListener('pointermove', move)
       handle.removeEventListener('pointerup', end)
       handle.removeEventListener('pointercancel', end)
+      if (frame) cancelAnimationFrame(frame)
+      frame = 0
       clamp()
     }
     handle.addEventListener('pointermove', move)
@@ -517,7 +530,7 @@ function build() {
   sizeKeys()
   addHints()
   wireKeys(host)
-  drag(header, (dx, dy) => { box.x += dx; box.y += dy })
+  drag(header, (dx, dy) => { box.x += dx; box.y += dy }, true)
   drag(grip, (dx, dy) => { box.w += dx; box.h += dy })
 
   new ResizeObserver(resized).observe(layer)
