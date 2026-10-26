@@ -31,10 +31,12 @@ const LONG_PRESS_MS = 380
 const REPEAT_DELAY_MS = 400
 const REPEAT_MS = 60
 const DOUBLE_TAP_MS = 400
+// The symbol pages follow HeliBoard (HeliBorg/HeliBoard, app/src/main/assets/layouts/symbols/symbols.txt and more_symbols/symbols_shifted.txt):
+// the number row stays, then the three rows of each page (the currency keys are its locale's, $ £ € ¥ here)
+const BOTTOM_SYM = '{abc} {space} {left} {right} {hide}'
 const SYMBOLS = {
-  sym1: ['1 2 3 4 5 6 7 8 9 0 {bksp}', '@ # $ _ & - + ( ) / {enter}', '{sym2} % * " \' : ; ! ? {sym2}', '{abc} {emoji} {space} {left} {right} {hide}'],
-  sym2: ['~ ` | • √ π ÷ × ¶ ∆ {bksp}', '£ ¢ € ¥ ^ ° = { } \\ {enter}', '{sym1} < > [ ] © ® ™ ✓ {sym1}', '{abc} {emoji} {space} {left} {right} {hide}'],
-  emoji: ['😀 😂 😍 😊 😎 😢 😡 👍 👎 🙏', '❤️ 💔 🔥 ⭐ ✨ 🎉 ✅ ❌ ⚠️ ❓', '🙂 😉 😅 🤔 😴 🤗 😇 🙄 😬 😱', '{abc} {space} {bksp} {hide}'],
+  sym1: ['1 2 3 4 5 6 7 8 9 0 {bksp}', '% \\ | = [ ] < > { }', '@ # $ _ & - + ( ) / {enter}', '{sym2} * " \' : ; ! ? {sym2}', BOTTOM_SYM],
+  sym2: ['1 2 3 4 5 6 7 8 9 0 {bksp}', '~ ` | • √ π ÷ × ¶ ∆', '£ ¢ € ¥ ^ ° = { } \\ {enter}', '{sym1} © ® ™ % [ ] < > {sym1}', BOTTOM_SYM],
 }
 // What a long press on a key offers, in the order of Gboard / AOSP's LatinIME (OpenBoard's `donottranslate-more-keys.xml`, the
 // accents of every Latin language it ships merged and sorted by how many languages use them). Lower case: the upper case of
@@ -42,12 +44,12 @@ const SYMBOLS = {
 const VARIANTS = {
   a: 'à á â ä æ ã å ā ą ă ª', e: 'è é ê ë ē ė ę ě ə', i: 'ì í î ï ī į ı ĳ', o: 'ò ó ô ö œ õ ø ō ő º', u: 'ù ú û ü ū ů ű ų',
   s: 'ś š ß ş ș', n: 'ñ ń ň ņ', c: 'ç ć č', y: 'ý ÿ', z: 'ž ź ż', d: 'ď đ ð', t: 'ť ţ ț þ', l: 'ł ļ ĺ ľ', g: 'ğ ģ', r: 'ř ŕ ŗ', k: 'ķ',
-  // symbols page 1 (rowkeys_symbols1/2/3 and morekeys_* of AOSP)
-  '1': '¹ ½ ⅓ ¼ ⅛', '2': '² ⅔', '3': '³ ¾ ⅜', '4': '⁴', '5': '⅝', '7': '⅞', '0': 'ⁿ ∅',
-  '.': '! ? , # ) ( / ; \' @ : - " + % &', '-': '_ – — ·', '+': '±', '*': '† ‡ ★', '%': '‰', '=': '≠ ≈ ≤ ≥',
-  '"': '„ “ ” « »', '\'': '‚ ‘ ’ ‹ ›', '!': '¡', '?': '¿', '$': '¢ £ € ¥ ₱', '€': '$ ¢ £ ¥ ₱', '£': '$ ¢ € ¥ ₱', '¥': '$ ¢ € £ ₱',
-  '(': '< { [', ')': '> } ]', '[': '( { <', ']': ') } >', '{': '( [ <', '}': ') ] >', '<': '‹ ≤ «', '>': '› ≥ »', '/': '\\', '&': '§',
-  '•': '♪ ♥ ♠ ♦ ♣', '°': '′ ″', '^': 'ˆ', '~': '≈', '|': '¦', '_': '‾',
+  // numbers and symbols: HeliBoard's popups (number_row.json, symbols.txt, symbols_shifted.txt, more keys of the locale)
+  '1': '¹ ½ ⅓ ¼ ⅛', '2': '² ⅔', '3': '³ ¾ ⅜', '4': '⁴', '5': '⁵ ⅝', '6': '⁶', '7': '⁷ ⅞', '8': '⁸', '9': '⁹', '0': '⁰ ⁿ ∅',
+  '.': '! ? , # ) ( / ; \' @ : - " + % &', '-': '– ⁻ — ·', '+': '± ⁺', '*': '† ‡ ★', '%': '‰', '_': '% ‰', '=': '≠ ⁼ ≈ ∞', '^': '↑ ↓ ← →',
+  '"': '„ “ ” « »', '\'': '‚ ‘ ’ ‹ ›', '!': '¡', '?': '¿', '$': '¢ £ € ¥ ₱', '€': '$ ¢ £ ¥ ₱', '£': '$ ¢ € ¥ ₱', '¥': '$ ¢ € £ ₱', '¢': '$ £ € ¥ ₱',
+  '(': '⁽ < { [', ')': '⁾ > } ]', '<': '‹ ≤ «', '>': '› ≥ »',
+  '•': '♪ ♥ ♠ ♦ ♣', '°': '′ ″', 'π': 'Π', '¶': '§',
 }
 
 const css = `${keyboardCss}
@@ -80,7 +82,7 @@ const css = `${keyboardCss}
 #ut-kbd-preview { position: absolute; display: none; min-width: ${BUTTON_PX}px; height: ${BUTTON_PX * 1.3}px; padding: 0 10px;
   align-items: center; justify-content: center; background: #fff; color: #111; font-size: 34px; border-radius: 10px;
   box-shadow: 0 2px 14px #000a; pointer-events: none; }
-#ut-kbd-body .hg-button { min-width: 0; }
+#ut-kbd-body .hg-button, #ut-kbd-body .hg-button.hg-standardBtn[data-skbtn] { min-width: 0; max-width: none; } /* simple-keyboard caps the @ key at 60 px */
 #ut-kbd-body .hg-button[data-skbtn^="{"][data-skbtn$="}"] { background: #e1e3e0; }
 #ut-kbd-body .hg-button[data-skbtn="{space}"][data-skbtn="{space}"] { background: #fff; }
 .ut-hint { position: absolute; top: 3px; right: 6px; font-size: .55em; line-height: 1; color: #8a8f98; pointer-events: none; }
@@ -105,7 +107,6 @@ let openedByUser = false
 let shift = false
 let caps = false
 let numeric = false
-let topDigits = {} // letter of the top row -> its digit (the first long press, like Gboard)
 let page = 'letters' // letters | sym1 | sym2
 let lastShiftTap = 0
 const box = {x: 0, y: 0, w: 0, h: 0} // the panel, in the coordinates of the layer
@@ -250,39 +251,40 @@ function drag(handle, onMove, moveOnly = false) {
 const SPECIAL = {'{bksp}': 'Backspace', '{enter}': 'Enter', '{tab}': 'Tab', '{left}': 'ArrowLeft', '{right}': 'ArrowRight'}
 const REPEATING = new Set(['{bksp}', '{left}', '{right}'])
 const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': '⇪', '{tab}': '⇥', '{space}': ' ',
-  '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC', '{emoji}': '☺', '{left}': '◀', '{right}': '▶', '{hide}': '⌨'}
+  '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC', '{left}': '◀', '{right}': '▶', '{hide}': '⌨'}
 
-// Accented letters that a long press already offers (è on `e`...): the national layouts put them on keys of their own, Gboard does not
-const ACCENTED = new Set(Object.entries(VARIANTS).filter(([k]) => /^[a-z]$/.test(k))
-  .flatMap(([, list]) => list.split(' ').flatMap(v => [v, v === 'ß' ? 'ẞ' : v.toUpperCase()])).filter(v => !/^[A-Za-z]$/.test(v))) // dotless ı upper-cases to a plain I
+// What Gboard draws at the top right of a letter and offers first on a long press: a symbol (screenshot of Gboard on a tablet, Italian layout)
+const SYMBOL_HINT = {q: '%', w: '\\', e: '|', r: '=', t: '[', y: ']', u: '<', i: '>', o: '{', p: '}', a: '@', s: '#', d: '€', f: '_', g: '&',
+  h: '-', j: '+', k: '(', l: ')', z: '*', x: '"', c: "'", v: ':', b: ';', n: '!', m: '?'}
+const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
+// Layouts Gboard draws differently from the national keyboard layout, copied from its screenshots (the rest go through gboard())
+const GBOARD_ROWS = {
+  italian: ['\\ 1 2 3 4 5 6 7 8 9 0 \' ì {bksp}', '{tab} q w e r t y u i o p è ù +', '{lock} a s d f g h j k l ò à {enter}',
+    '{shift} z x c v b n m , . - {shift}', BOTTOM],
+}
 
-/** A layout of simple-keyboard-layouts turned into the tablet layout of the real Gboard (screenshots of Gboard 12.3+ on a tablet, 9to5Google
- *  2022-10-10; AOSP `xml-sw600dp` agrees): NO row of digits (they are the first long-press of the top row, drawn as grey hints),
- *  `tab` + letters + backspace, `caps lock` + letters + enter, `shift` + letters + `,` `.` + `shift`, and
- *  `?123 emoji space ◀ ▶ hide`. Only letters on the letter rows. */
+/** A layout of simple-keyboard-layouts turned into Gboard's tablet layout (screenshots of Gboard on a tablet): a row of digits ending
+ *  with backspace, `tab` + letters, `caps lock` + letters + enter, `shift` + letters + `,` `.` + `shift`, and `?123 space ◀ ▶ ?123`.
+ *  Letters (national ones too) stay on their keys, punctuation lives on the symbol pages and the long presses. */
 function gboard(rows) {
   const isFn = k => /^\{.+\}$/.test(k)
   const split = rows.filter(row => !row.includes('{space}')).map(row => row.split(' '))
-  const hasDigits = split[0].filter(k => !isFn(k) && !/\p{L}/u.test(k)).length >= 8 // a row of digits (or of their shifted symbols)
-  const letterRows = split.slice(hasDigits ? 1 : 0, hasDigits ? 4 : 3)
-    .map(row => row.filter(k => !isFn(k) && /\p{L}/u.test(k) && !ACCENTED.has(k)))
-  const out = []
-  letterRows.forEach((row, i) => {
-    const left = ['{tab}', '{lock}', '{shift}'][i]
-    const right = ['{bksp}', '{enter}', '{shift}'][i]
-    out.push([left, ...row, ...(i === 2 ? [',', '.'] : []), right])
-  })
-  out.push('{sym1} {emoji} {space} {left} {right} {hide}'.split(' '))
-  topDigits = {}
-  letterRows[0]?.forEach((k, i) => { topDigits[k.toLowerCase()] = String((i + 1) % 10) })
+  const hasDigits = split[0].filter(k => !isFn(k) && !/\p{L}/u.test(k)).length >= 8
+  const letterRows = split.slice(hasDigits ? 1 : 0, hasDigits ? 4 : 3).map(row => row.filter(k => !isFn(k) && /\p{L}/u.test(k)))
+  const digits = [...'1234567890', ...(hasDigits ? split[0].filter(k => !isFn(k) && /\p{L}/u.test(k)) : [])]
+  const out = [[...digits, '{bksp}']]
+  letterRows.forEach((row, i) => out.push([['{tab}', '{lock}', '{shift}'][i], ...row, ...(i === 2 ? [',', '.'] : []), ['', '{enter}', '{shift}'][i]].filter(Boolean)))
+  out.push(BOTTOM.split(' '))
   return out.map(row => row.join(' '))
 }
 
+const upperRows = rows => rows.map(row => row.split(' ').map(k => (/^\{.+\}$/.test(k) || k.length !== 1 || !/\p{L}/u.test(k)) ? k : (k === 'ß' ? 'ẞ' : k.toUpperCase())).join(' '))
+
 // The real Gboard's tablet geometry, measured on its screenshots (1600 px wide: key 111 px + gap 16 = 127 px = one unit): a row is 12.39
-// units; tab/backspace 1.18, caps 1.43, enter 1.88, shifts 1.92 and 1.44, ?123 and emoji 1.46, the arrows 0.97, hide 1; the LAST key of a
+// units; tab/backspace 1.18, caps 1.43, enter 1.88, shifts 1.92 and 1.44, ?123 1.46, the arrows 0.97, hide 1; the LAST key of a
 // row that has no space bar stretches, so every character key is the same size
 const SIDE_UNITS = {'{tab}': 1.18, '{lock}': 1.43, '{bksp}': 1.18, '{enter}': 1.88, '{sym1}': 1.46, '{sym2}': 1.46, '{abc}': 1.46,
-  '{emoji}': 1.46, '{left}': 0.97, '{right}': 0.97, '{hide}': 1}
+  '{left}': 0.97, '{right}': 0.97, '{hide}': 1}
 const ROW_UNITS = 12.39
 const unitsOf = (key, index) => key === '{shift}' ? (index === 0 ? 1.92 : 1.44) : (SIDE_UNITS[key] ?? 1)
 
@@ -307,7 +309,8 @@ function sizeKeys() {
 
 function layoutOf(name) {
   const source = (layouts.get(name)?.layout ?? layouts.get('english').layout)
-  return {default: gboard(source.default), shift: gboard(source.shift ?? source.default), ...SYMBOLS}
+  const base = GBOARD_ROWS[name] ?? gboard(source.default)
+  return {default: base, shift: upperRows(base), ...SYMBOLS}
 }
 
 const layoutName = () => page !== 'letters' ? page : (shift || caps ? 'shift' : 'default')
@@ -335,7 +338,7 @@ function typeKey(button) {
   }
   if (button === '{hide}') { setOpen(false); return }
   if (button === '{lock}') { caps = !caps; shift = false; refreshLayout(); return }
-  if (button === '{sym1}' || button === '{sym2}' || button === '{abc}' || button === '{emoji}') {
+  if (button === '{sym1}' || button === '{sym2}' || button === '{abc}') {
     page = button === '{abc}' ? 'letters' : button.slice(1, -1)
     refreshLayout()
     return
@@ -349,8 +352,9 @@ function typeKey(button) {
 /** The variants offered by a long press on a key, in the case of the key. */
 function variantsOf(button) {
   if (/^\{.+\}$/.test(button)) return []
+  if (page === 'sym2' && button === '%') return ['℅'] // HeliBoard: the shifted symbols page has another popup on %
   const base = button.toLowerCase()
-  const list = [topDigits[base], ...(VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ')].filter(Boolean)
+  const list = [SYMBOL_HINT[base], ...(VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ')].filter(Boolean)
   if (button === base || button.length !== 1) return list
   return list.map(v => v === 'ß' ? 'ẞ' : v.toUpperCase()).filter(v => [...v].length === 1)
 }
@@ -360,7 +364,8 @@ function addHints() {
   for (const button of body.querySelectorAll('.hg-button')) {
     button.querySelector('.ut-hint')?.remove()
     const key = button.getAttribute('data-skbtn')
-    const first = key && key.length <= 2 ? variantsOf(key)[0] : null
+    // on the letter page only the letters carry a hint (the symbol), like Gboard; the symbol pages show the first variant
+    const first = key && key.length <= 2 && (page !== 'letters' || SYMBOL_HINT[key.toLowerCase()]) ? variantsOf(key)[0] : null
     if (first) button.appendChild(Object.assign(document.createElement('span'), {className: 'ut-hint', textContent: first}))
   }
 }
@@ -441,7 +446,7 @@ function wireKeys(host) {
     const key = btn.getAttribute('data-skbtn')
     press = {btn, key, long: false, timer: null, repeat: null, from: [e.clientX, e.clientY]}
     btn.classList.add('ut-down')
-    if (!/^\{.+\}$/.test(key)) showPreview(btn)
+    if (variantsOf(key).length) showPreview(btn) // only a key with other symbols behind it gets a bubble (user)
     if (REPEATING.has(key)) {
       typeKey(key)
       press.timer = setTimeout(() => { press.repeat = setInterval(() => typeKey(key), REPEAT_MS) }, REPEAT_DELAY_MS)
