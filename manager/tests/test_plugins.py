@@ -77,12 +77,12 @@ def test_no_default_route_means_not_connected(tmp_path):
     assert default_interface(str(tmp_path / 'missing')) is None
 
 
-def test_keyboard_settings_are_validated_and_off_by_default():
+def test_keyboard_settings_are_validated_and_on_by_default():
     from pydantic import ValidationError
 
     from utils.models.viewer import KeyboardSettings
     default = KeyboardSettings()
-    assert (default.enabled, default.button_position, default.layout) == (False, 'bottom-right', 'english')
+    assert (default.enabled, default.button_position, default.layout) == (True, 'bottom-right', 'english')
     for bad in ({'button_position': 'middle'}, {'layout': '../../etc'}, {'layout': ''}):
         with pytest.raises(ValidationError):
             KeyboardSettings(**bad)
