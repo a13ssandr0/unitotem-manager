@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional, Union
 
 import requests
@@ -168,14 +169,19 @@ class Scheduler(WSAPIBase):
                            disk_total=upload_manager.disk_totalh, used_in=playlists_manager.referenced_files())
 
     @UserPerms.requires.scheduler
-    def add_url_assets(self, items: list, playlist_id: Optional[str] = None):
+    async def add_url_assets(self, items: list, playlist_id: Optional[str] = None):
         am = playlists_manager.get(playlist_id)
         for element in items:
             if isinstance(element, str):
                 element = {'url': element}
             element.pop('uuid', None)
+            # A cleared date field arrives as an empty string: that is "no date", not an invalid datetime
+            for key in ('ena_date', 'dis_date'):
+                if element.get(key) == '':
+                    element[key] = None
             if 'media_type' not in element:
-                element['media_type'] = probe_media_type(element['url'])
+                # The probe is blocking network I/O (up to 10 s): in a thread, or every client's websocket stalls with it
+                element['media_type'] = await asyncio.to_thread(probe_media_type, element['url'])
             am.append(element)
         # An asset that arrives already enabled must be able to restart a
         # playlist that had nothing to play.
