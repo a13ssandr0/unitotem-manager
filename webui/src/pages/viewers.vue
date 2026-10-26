@@ -267,7 +267,7 @@ const windows = computed(() =>
       height: win.height,
       assigned_playlist: win.assigned_playlist,
       audio_output: win.audio_output,
-      keyboard: {enabled: false, button_position: 'bottom-right', layout: 'english', ...win.keyboard},
+      keyboard: {enabled: true, button_position: 'bottom-right', layout: 'english', ...win.keyboard},
       screensaver: {enabled: false, home_url: '', idle_timeout: 120, ...win.screensaver},
       refresh: {refresh_after_idle: null, refresh_schedules: [], ...win.refresh},
       orientation: win.orientation ?? 0,

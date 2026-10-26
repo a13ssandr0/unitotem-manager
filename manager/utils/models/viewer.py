@@ -19,8 +19,8 @@ from utils.models.command_line import cmdargs
 
 
 class KeyboardSettings(BaseModel, validate_assignment=True):
-    """The on-screen keyboard of one window (a touch panel): off unless asked for."""
-    enabled: bool = False
+    """The on-screen keyboard of one window (a touch panel): on unless switched off."""
+    enabled: bool = True
     # where the button that opens it is, on the screen
     button_position: Literal['top-left', 'top', 'top-right', 'left', 'right',
                              'bottom-left', 'bottom', 'bottom-right'] = 'bottom-right'
