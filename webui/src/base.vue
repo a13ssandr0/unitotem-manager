@@ -11,6 +11,7 @@
         <v-icon>mdi-monitor-eye</v-icon>
       </v-btn>
       <NotificationMenu />
+      <NotificationToasts />
       <v-btn icon @click="cycleTheme">
         <v-icon>{{ themeIcon }}</v-icon>
       </v-btn>
@@ -141,6 +142,7 @@ import VncWindow from '@/components/VncWindow.vue'
 import WindowTaskbar from '@/components/WindowTaskbar.vue'
 import SuspendDialog from '@/components/SuspendDialog.vue'
 import NotificationMenu from '@/components/NotificationMenu.vue'
+import NotificationToasts from '@/components/NotificationToasts.vue'
 import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, send} from '@/api'
 
 const theme = useTheme()

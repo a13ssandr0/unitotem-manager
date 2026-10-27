@@ -15,6 +15,7 @@ declare module 'vue' {
     CardColumn: typeof import('./src/components/CardColumn.vue')['default']
     FloatingWindow: typeof import('./src/components/FloatingWindow.vue')['default']
     NotificationMenu: typeof import('./src/components/NotificationMenu.vue')['default']
+    NotificationToasts: typeof import('./src/components/NotificationToasts.vue')['default']
     PaneTree: typeof import('./src/components/PaneTree.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

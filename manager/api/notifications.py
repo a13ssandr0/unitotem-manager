@@ -55,3 +55,10 @@ class Notifications(WSAPIBase):
     def dismiss_all(ctx: Context):
         """Remove every notification this user can see."""
         notifications.dismiss_all(_perms(ctx))
+
+    @staticmethod
+    @UserPerms.requires.none
+    def invoke(ctx: Context, id: str, action: str = 'default'):
+        """Click on a notification (`default`) or on one of its action buttons: the sender is told, and the notification closes
+        unless the sender said it stays (freedesktop `resident`). Does nothing when the sender is not there any more."""
+        notifications.invoke(id, action[:60], _perms(ctx))

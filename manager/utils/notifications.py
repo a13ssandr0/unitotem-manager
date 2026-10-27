@@ -23,6 +23,11 @@ How a producer uses it (core code and plugins alike: a plugin may import this mo
 * `progress` (0-100, or -1 for "working, unknown how far") turns a notification into a progress bar and `persistent` makes it
   impossible to dismiss while the work lasts: `notifications.set_progress(key, percent, text)` moves the bar without making
   the notification unread again, `resolve(key)` removes it when the work ends (the updater's download and repair).
+* `timeout` is how long the page shows the notification as a pop-up, in milliseconds, with the meaning of the freedesktop
+  `expire_timeout`: None = the default of its level (`DEFAULT_TIMEOUT`), 0 = until somebody clicks it, > 0 = that long. The bell keeps
+  it either way (it is the notification center, the freedesktop `persistence` capability). `actions` are freedesktop (id, label) pairs:
+  the one named `default` is what a click on the notification does besides following its `link`; `invoke()` runs one and
+  tells the listeners (`listen_action`), after which a notification that is not `resident` is dismissed.
 * The list is bounded, kept in /var/lib/unitotem (it is state, not configuration: it is not part of a backup) and
   survives a restart. The file has a version and every field is optional on reading, so the previous release can read
   what this one wrote and the other way round (rollback rule).
@@ -51,6 +56,9 @@ MAX_TEXT = 1000
 MAX_KEY = 120
 FILE_VERSION = 1
 NOTIFICATIONS_FILE = Path('/var/lib/unitotem/notifications.json')
+# milliseconds of pop-up by level when the producer does not say (freedesktop: "a sane expiration timeout dependent on the urgency")
+DEFAULT_TIMEOUT = {'info': 6000, 'warning': 9000, 'error': 12000}
+MAX_ACTIONS = 6
 
 
 class Notification(BaseModel):
@@ -71,11 +79,17 @@ class Notification(BaseModel):
     dismissed: bool = False
     progress: Optional[float] = None        # 0-100, -1 = unknown, None = no bar
     persistent: bool = False                # cannot be dismissed (it is about work in progress)
+    timeout: Optional[int] = None           # ms of pop-up: None = level default, 0 = until clicked
+    actions: list = Field(default_factory=list)      # [id, label] pairs, only while the sender can be told (any shape is read, cleared on load)
+    resident: bool = False                  # stays after an action was invoked
 
     def public(self) -> dict:
         return {'id': self.id, 'level': self.level, 'title': self.title, 'text': self.text, 'source': self.source,
                 'audience': self.audience, 'link': self.link, 'created': self.created, 'updated': self.updated,
-                'read': self.read, 'progress': self.progress, 'persistent': self.persistent}
+                'read': self.read, 'progress': self.progress, 'persistent': self.persistent,
+                'timeout': self.timeout if self.timeout is not None else DEFAULT_TIMEOUT.get(self.level, 6000),
+                'actions': [{'id': a[0], 'label': a[1]} for a in self.actions if a[0] != 'default'],
+                'default_action': any(a[0] == 'default' for a in self.actions)}
 
 
 def _clip(value, limit: int) -> str:
@@ -91,6 +105,19 @@ def _clean_link(link: Optional[str]) -> Optional[str]:
             and all(c.isprintable() and c not in ' \\' for c in link) and len(link) <= 200:
         return link
     return None
+
+
+def _clean_actions(actions) -> list[list[str]]:
+    """(id, label) pairs, as plain strings and no more than MAX_ACTIONS."""
+    out = []
+    for pair in actions or []:
+        try:
+            ident, label = _clip(pair[0], 60), _clip(pair[1], 60)
+        except (TypeError, IndexError):
+            continue
+        if ident and len(out) < MAX_ACTIONS:
+            out.append([ident, label])
+    return out
 
 
 def _perms(perms: Iterable) -> set[str]:
@@ -117,6 +144,7 @@ class NotificationCenter:
         self._push: Optional[Callable[[], Awaitable[None]]] = None
         self._push_scheduled = False
         self._closed_listeners: list[Callable[[Notification, bool], None]] = []
+        self._action_listeners: list[Callable[[Notification, str], None]] = []
 
     # ── storage ──────────────────────────────────────────────────────────────
 
@@ -142,6 +170,7 @@ class NotificationCenter:
             if item.audience not in (None, *AUDIENCES):
                 item.audience = 'admin'     # unknown audience (a newer release's): the safe reading is the strictest
             item.link = _clean_link(item.link)
+            item.actions = []        # the sender of an action does not outlive the manager
             item.title, item.text = _clip(item.title, MAX_TITLE), _clip(item.text, MAX_TEXT)
             self._items.append(item)
         self._trim()
@@ -171,7 +200,8 @@ class NotificationCenter:
 
     def notify(self, key: Optional[str], level: str, title: str, text: str = '', *, source: str = '',
                audience: Optional[str] = None, link: Optional[str] = None, progress: Optional[float] = None,
-               persistent: bool = False) -> Optional[str]:
+               persistent: bool = False, timeout: Optional[int] = None, actions: Optional[list] = None,
+               resident: bool = False) -> Optional[str]:
         """Raise a notification (see the module docstring). Returns its id, or None if it could not be raised. Never raises."""
         try:
             if level not in LEVELS:
@@ -183,6 +213,8 @@ class NotificationCenter:
             source = _clip(source, 40)
             link = _clean_link(link)
             progress = None if progress is None else max(-1.0, min(100.0, float(progress)))
+            timeout = None if timeout is None or timeout < 0 else min(int(timeout), 3600_000)
+            actions = _clean_actions(actions)
         except Exception as exc:        # a producer's bug is logged, it must not take the producer down
             logger.error('Invalid notification {!r}: {}', title, exc)
             return None
@@ -191,19 +223,21 @@ class NotificationCenter:
             now = self._now()
             same = next((i for i in self._items if key and i.key == key), None)
             if same is not None:
-                content = (level, title, text, audience, link, source, progress, persistent)
+                content = (level, title, text, audience, link, source, progress, persistent, timeout, actions, resident)
                 if content == (same.level, same.title, same.text, same.audience, same.link, same.source, same.progress,
-                               same.persistent):
+                               same.persistent, same.timeout, same.actions, same.resident):
                     return same.id      # the same thing again: nothing to tell
                 same.level, same.title, same.text = level, title, text
                 same.audience, same.link, same.source = audience, link, source
                 same.progress, same.persistent = progress, persistent
+                same.timeout, same.actions, same.resident = timeout, actions, resident
                 same.updated, same.read, same.dismissed = now, False, False
                 item = same
             else:
                 item = Notification(key=key, level=level, title=title, text=text, source=source,
                                     audience=audience, link=link, created=now, updated=now,
-                                    progress=progress, persistent=persistent)
+                                    progress=progress, persistent=persistent, timeout=timeout, actions=actions,
+                                    resident=resident)
                 self._items.append(item)
                 self._trim()
             self._changed()
@@ -282,6 +316,40 @@ class NotificationCenter:
         self._items = [i for i in self._items if i.key or i not in hit]
         self._changed()
         return hit
+
+    def listen_action(self, callback: Callable[[Notification, str], None]):
+        """`callback(notification, action_id)` runs when somebody invokes an action in the web UI (it tells the sender)."""
+        self._action_listeners.append(callback)
+
+    def invoke(self, nid: str, action: str, perms: Iterable) -> bool:
+        """Somebody clicked the notification (`default`) or one of its action buttons. True if there was such an action to run."""
+        with self._lock:
+            self._load()
+            item = next((i for i in self._items if i.id == nid and not i.dismissed and visible_to(i, perms)), None)
+            if item is None or not any(a[0] == action for a in item.actions):
+                return False
+            resident = item.resident
+        for callback in self._action_listeners:
+            try:
+                callback(item, action)
+            except Exception:
+                logger.exception('A notification action listener failed')
+        if not resident:
+            with self._lock:
+                hit = self._dismiss([item]) if not item.dismissed else []
+            self._tell_closed(hit, dismissed=True)
+        return True
+
+    def expire(self, key: str) -> bool:
+        """The pop-up time of `key` is over: its sender can no longer be told anything (its actions go). It stays in the list."""
+        with self._lock:
+            self._load()
+            item = next((i for i in self._items if i.key == key), None)
+            if item is None or not item.actions:
+                return item is not None
+            item.actions = []
+            self._changed()
+        return True
 
     def listen_closed(self, callback: Callable[[Notification, bool], None]):
         """`callback(notification, dismissed)` runs (in the thread that did it) when a notification leaves the list: dismissed by

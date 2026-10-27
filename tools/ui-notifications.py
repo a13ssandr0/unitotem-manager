@@ -154,7 +154,7 @@ async def main(args):
                 check('a notification raised while the page is open appears by itself',
                       await settle(lambda: _has(items(), 'Devices ask to be paired')))
                 check('the pushed one is escaped too', await cdp.eval("!document.querySelector('.notification-menu img[src=x]')") is True)
-                await click('.notification-item[data-title="Devices ask to be paired"] .notification-link')
+                await click('.notification-item[data-title="Devices ask to be paired"]')
                 path = await cdp.eval('location.pathname')
                 check(f'a link opens its page ({path})', path == '/settings/remote')
                 await click('.notification-bell')
