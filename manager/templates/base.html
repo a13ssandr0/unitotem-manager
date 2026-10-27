@@ -18,6 +18,7 @@
     </div>
 
     <script>
+        window.__BOOT_ID__ = {{ boot_id|tojson }};
         window.__INITIAL_STATE__ = {{ (state or {})|tojson }};
     </script>
     {% if assets.dev %}<script type="module" src="/@vite/client"></script>{% endif %}
