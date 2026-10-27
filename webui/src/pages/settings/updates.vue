@@ -2,7 +2,7 @@
   <div class="d-flex justify-center flex-column align-center">
     <v-card
       class="ma-4"
-      max-width="1000"
+      max-width="720"
       width="100%"
       :title="String($route.name)"
     >
@@ -21,7 +21,7 @@
         <v-table v-if="status && status.supported && !status.error && status.ab" density="compact">
           <tbody>
             <tr v-for="slot in slots" :key="slot.name">
-              <td>Slot {{ slot.name }}</td>
+              <td class="slot-name">Slot {{ slot.name }}</td>
               <td>
                 {{ slot.version || 'no system installed' }}
                 <v-chip v-if="slot.running" size="x-small" color="green" class="ml-2">running</v-chip>
@@ -29,7 +29,7 @@
                 <v-chip v-if="!slot.running && status.armed" size="x-small" color="primary" class="ml-2">armed for next boot</v-chip>
                 <v-chip v-else-if="slot.next && !slot.running" size="x-small" color="primary" class="ml-2">starts at next boot</v-chip>
               </td>
-              <td class="text-right">
+              <td class="slot-action text-right">
                 <v-btn
                   v-if="slot.running"
                   variant="text"
@@ -149,6 +149,11 @@
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+/* name and action take only what they need, the version and its chips take the rest */
+.slot-name, .slot-action { width: 1%; white-space: nowrap; }
+</style>
 
 <script setup>
 import {computed, ref} from 'vue'
