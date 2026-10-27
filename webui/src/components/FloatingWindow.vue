@@ -5,6 +5,10 @@
         <v-icon v-if="icon" class="floating-title-icon">{{ icon }}</v-icon>
         <span class="floating-title-text text-subtitle-2 text-truncate">{{ title }}</span>
         <v-spacer></v-spacer>
+        <!-- controls of the content that live in the title bar (a window can put its own buttons here) -->
+        <div class="floating-actions d-flex align-center" @dblclick.stop @pointerdown.stop>
+          <slot name="titlebar"></slot>
+        </div>
         <button type="button" class="fw-btn" title="Minimise" @click.stop="minimize" @dblclick.stop>
           <v-icon>mdi-window-minimize</v-icon>
         </button>
@@ -240,6 +244,27 @@ onBeforeUnmount(() => {
   background: rgb(var(--v-theme-error));
   color: rgb(var(--v-theme-on-error));
 }
+.floating-actions {
+  gap: 2px;
+  margin-right: 6px;
+}
+/* The grips to resize from: a thin strip on each edge and a square on each corner, over the border, above the content */
+.resize-handle {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+}
+.resize-n, .resize-s { left: 10px; right: 10px; height: 8px; cursor: ns-resize; }
+.resize-n { top: -4px; }
+.resize-s { bottom: -4px; }
+.resize-e, .resize-w { top: 10px; bottom: 10px; width: 8px; cursor: ew-resize; }
+.resize-e { right: -4px; }
+.resize-w { left: -4px; }
+.resize-ne, .resize-nw, .resize-se, .resize-sw { width: 14px; height: 14px; }
+.resize-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.resize-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.resize-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.resize-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
 .floating-body {
   flex: 1;
   min-height: 0;
