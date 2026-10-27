@@ -289,23 +289,27 @@ def resolve(apk, kb, ids):
     return press, label, popup
 
 
-def keys_of_rows(apk, kb, geometry, lower, upper, functions=None):
-    """The rows of a page: one entry per position with its weight; the function keys are named, a position with
-    nothing at it is a gap."""
+def keys_of_rows(apk, kb, geometry, lower, upper, shifted=None, functions=None):
+    """The rows of a page: one entry per position with its weight (out of 786); the function keys are named, a position with
+    nothing at it is a gap. `upper` is the page with caps lock, `shifted` the one with shift pressed (on a tablet shift also changes
+    the digits and the punctuation, as on a PC keyboard)."""
     rows = []
     for row in geometry:
         positions = [(i, w) for i, w, visible in row['keys'] if visible]
-        if not any(i[:1] in 'EDCB' and i[1:].isdigit() for i, _ in positions):
+        if not any(i[:1] in 'FEDCB' and i[1:].isdigit() for i, _ in positions):
             continue
+        total = row['sum'] or sum(w for _, w in positions)  # a row without weightSum is as wide as its keys together
+        scale = 786.0 / total
         out = []
         for position, weight in positions:
+            weight = round(weight * scale, 2)
             if position in (functions or FUNCTION_KEYS):
                 out.append({'f': (functions or FUNCTION_KEYS)[position], 'w': weight})
                 continue
             if position == 'key_pos_empty':
                 out.append({'w': weight})
                 continue
-            if not (position[:1] in 'EDCB' and position[1:].isdigit()):
+            if not (position[:1] in 'FEDCB' and position[1:].isdigit()):
                 continue
             press, label, popup = resolve(apk, kb, lower.get(position, []))
             if press is None:
@@ -325,6 +329,14 @@ def keys_of_rows(apk, kb, geometry, lower, upper, functions=None):
                 key['l'] = popup
             if up_popup and up_popup != [x.upper() if len(x.upper()) == len(x) else x for x in popup]:
                 key['L'] = up_popup
+            if shifted is not None:
+                sh_press, _, sh_popup = resolve(apk, kb, shifted.get(position, []))
+                caps_press = key.get('u', capital)
+                if sh_press is not None and sh_press != caps_press:
+                    key['s'] = sh_press
+                caps_popup = key.get('L', [x.upper() if len(x.upper()) == len(x) else x for x in popup])
+                if sh_popup and sh_popup != caps_popup:
+                    key['S'] = sh_popup
             out.append(key)
         rows.append(out)
     return rows
@@ -420,8 +432,8 @@ def letters(apk, item):
         geometry = apk.rows(kb.body_layouts[-1])  # the last body layout is the one with the number row
     except UnresolvedWeight:
         return None
-    rows = keys_of_rows(apk, kb, geometry, mapping_for(kb, []), mapping_for(kb, ['SHIFT,CAPS']))
-    return rows if len(rows) == 4 else None
+    rows = keys_of_rows(apk, kb, geometry, mapping_for(kb, []), mapping_for(kb, ['SHIFT,CAPS']), mapping_for(kb, ['SHIFT,CAPS', 'SHIFT']))
+    return rows if len(rows) in (4, 5) else None
 
 
 def symbols(apk, lang):
@@ -432,8 +444,9 @@ def symbols(apk, lang):
     for states, toggle in (([], 'sym2'), (['SUB_CATEGORY_1'], 'sym1')):
         page = mapping_for(kb, states)
         # on these pages the keys at the places of caps lock and shift are the switch to the other page (descriptions "More symbols" / "Symbols")
-        functions = dict(FUNCTION_KEYS, key_pos_caps=toggle, key_pos_shift=toggle, key_pos_shift_right='none')
-        pages.append(keys_of_rows(apk, kb, geometry, page, page, functions))
+        # (descriptions "More symbols" / "Symbols"): the one at caps lock's place has an icon, the one at shift's place the text =\\< / ?123
+        functions = dict(FUNCTION_KEYS, key_pos_caps='icon-' + toggle, key_pos_shift=toggle, key_pos_shift_right='none')
+        pages.append(keys_of_rows(apk, kb, geometry, page, page, functions=functions))
     return pages
 
 
