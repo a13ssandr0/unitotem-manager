@@ -36,10 +36,30 @@ PHASES = {'check': 'Checking', 'download': 'Downloading', 'write': 'Writing', 'v
 OnStatus = Callable[[dict], Awaitable[None]]
 
 
-def describe(op: str, phase: str, slot: Optional[str]) -> tuple[str, str]:
+# Why the updater rebuilt a slot (`cause` of `slot_sound` in unitotem-update): a slot that is damaged is not the same thing as one that was
+# never a complete system (a recovery, an interrupted download), and neither is an update.
+DAMAGED = ('label', 'fsck', 'mount')
+CAUSES = {'label': 'its partition label is wrong', 'fsck': 'its filesystem is damaged', 'mount': 'it cannot be mounted',
+          'empty': 'it did not hold a complete system'}
+
+
+def cause_text(cause: Optional[str]) -> Optional[str]:
+    """The updater's `cause` of a repair in words, or None when it did not say."""
+    if not cause:
+        return None
+    if cause.startswith('bootfile:'):
+        return f'its boot file {cause.split(":", 1)[1]} is missing'
+    return CAUSES.get(cause)
+
+
+def describe(op: str, phase: str, slot: Optional[str], cause: Optional[str] = None) -> tuple[str, str]:
     """(title, what is happening now) of an operation, with slot names in capitals."""
-    titles = {'fetch': 'Downloading the update', 'apply': 'Installing the update', 'rollback': 'Going back to the previous version',
-              'repair': f'Repairing slot {slot}' if slot else 'Repairing the other slot'}
+    if op == 'repair':
+        what = 'Rebuilding' + (f' slot {slot}' if slot else ' the other slot')
+        title = what + (' after damage' if cause and (cause in DAMAGED or cause.startswith('bootfile:')) else
+                        ' (incomplete system)' if cause == 'empty' else '')
+        return title, PHASES.get(phase, phase or 'Working')
+    titles = {'fetch': 'Downloading the update', 'apply': 'Installing the update', 'rollback': 'Going back to the previous version'}
     return titles.get(op, f'Update: {op}'), PHASES.get(phase, phase or 'Working')
 
 
@@ -124,7 +144,7 @@ class UpdateProgress:
         progress = (op or {}).get('progress') or {}
         if op:
             name = progress.get('op') or 'update'
-            title, phase = describe(name, progress.get('phase', ''), status.get('other_slot'))
+            title, phase = describe(name, progress.get('phase', ''), status.get('other_slot'), progress.get('cause'))
             percent = progress.get('percent')
             text = phase + (f", about {progress['eta_s']} s left" if progress.get('eta_s') else '')
             if notifications.set_progress(KEY, -1 if percent is None else percent, text) is False \
@@ -146,13 +166,15 @@ class UpdateProgress:
         result = status.get('last_result') or {}
         if name == 'repair' and result.get('op') == 'repair':
             slot = result.get('slot')
+            why = cause_text(result.get('cause'))
             if result.get('result') == 'ok':
                 notifications.resolve('update.failed')
-                notifications.notify('update.repaired', 'info', f'Slot {slot} repaired' if slot else 'Slot repaired',
-                                     'The other system slot was rebuilt from the running one.', source='updates',
+                notifications.notify('update.repaired', 'info', f'Slot {slot} rebuilt' if slot else 'Slot rebuilt',
+                                     'The other system slot was rebuilt from the running one' + (f' because {why}.' if why else '.'),
+                                     source='updates',
                                      audience='admin', link='/settings/updates')
             elif result.get('result') == 'failed':
-                notifications.notify('update.failed', 'error', 'Repair failed', result.get('error') or 'The repair did not complete.',
+                notifications.notify('update.failed', 'error', 'Rebuilding the slot failed', result.get('error') or 'The repair did not complete.',
                                      source='updates', audience='admin', link='/settings/updates')
         elif result.get('op') == name and result.get('result') in ('failed', 'error'):
             notifications.notify('update.failed', 'error', 'Update failed', result.get('error') or 'The operation did not complete.',
