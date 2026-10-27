@@ -87,13 +87,18 @@
                   <v-select :items="keyboardPositions" :model-value="win.keyboard.button_position" label="Button position"
                             density="compact" variant="outlined" hide-details min-width="160" :disabled="!win.keyboard.enabled"
                             @update:model-value="v => setKeyboard(win, {button_position: v})"></v-select>
-                  <v-autocomplete :items="keyboardLanguages" :model-value="keyboardLanguage(win)" label="Language"
-                                  density="compact" variant="outlined" hide-details min-width="220"
+                  <!-- fixed width on purpose: the column must not grow or shrink with the name that is selected -->
+                  <v-autocomplete :items="keyboardLanguages" :model-value="keyboardLanguage(win)" label="Keyboard language"
+                                  density="compact" variant="outlined" hide-details class="keyboard-field"
                                   :disabled="!win.keyboard.enabled"
-                                  @update:model-value="v => v && setKeyboard(win, {layout: layoutId(v, undefined, languageVariants(v))})"></v-autocomplete>
-                  <v-select v-if="languageVariants(keyboardLanguage(win)).length > 1" :items="languageVariants(keyboardLanguage(win))"
-                            :model-value="keyboardVariant(win)" label="Variant" density="compact" variant="outlined" hide-details
-                            min-width="220" :disabled="!win.keyboard.enabled"
+                                  @update:model-value="v => v && setKeyboard(win, {layout: layoutId(v, undefined, languageVariants(v))})">
+                    <template #item="{props, item}">
+                      <v-list-item v-bind="props" :title="item.raw.title" :subtitle="item.raw.value"></v-list-item>
+                    </template>
+                  </v-autocomplete>
+                  <v-select :items="variantItems(keyboardLanguage(win))" :model-value="keyboardVariant(win)" label="Key arrangement"
+                            density="compact" variant="outlined" hide-details class="keyboard-field"
+                            :disabled="!win.keyboard.enabled || languageVariants(keyboardLanguage(win)).length < 2"
                             @update:model-value="v => setKeyboard(win, {layout: layoutId(keyboardLanguage(win), v, languageVariants(keyboardLanguage(win)))})"></v-select>
                 </div>
               </td>
@@ -321,12 +326,15 @@ const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/s
 const canConfigureLayout = computed(() => canCall('Viewers/set_area', currentUser.value))
 const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
 // The layouts of the on-screen keyboard are Gboard's: one per language, some with variants (see keyboard-layouts.js)
-const languageNames = new Intl.DisplayNames(['en'], {type: 'language', fallback: 'code'})
-const languageName = lang => { try { return languageNames.of(lang.id) } catch { return lang.id } }
-const keyboardLanguages = gboardLanguages.map(lang => ({title: `${languageName(lang)} (${lang.id})`, value: lang.id}))
+// Gboard's own names of its languages ('english united states', 'arabic gulf'), capitalised; the id goes under it
+const capitalise = text => text.replace(/\b\p{L}/gu, c => c.toUpperCase())
+const keyboardLanguages = gboardLanguages.map(lang => ({title: capitalise(lang.name), value: lang.id}))
   .sort((a, b) => a.title.localeCompare(b.title))
 const variantsByLanguage = Object.fromEntries(gboardLanguages.map(lang => [lang.id, lang.variants]))
 const languageVariants = lang => variantsByLanguage[lang] ?? []
+// 'de_neo2' -> 'De neo2'; the first one is the language's own arrangement
+const variantItems = lang => languageVariants(lang).map((v, i) =>
+  ({title: capitalise(v.replace(/_/g, ' ')) + (i === 0 ? ' (default)' : ''), value: v}))
 const keyboardLanguage = win => parseLayoutId(win.keyboard.layout).lang
 const keyboardVariant = win => parseLayoutId(win.keyboard.layout).variant ?? languageVariants(keyboardLanguage(win))[0]
 function setKeyboard(win, patch) {
@@ -380,6 +388,7 @@ api.Viewers.list.on(msg => {
 </script>
 
 <style scoped>
+.keyboard-field { width: 220px; max-width: 220px; }
 .assignment-table {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;
