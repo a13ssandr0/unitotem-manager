@@ -129,7 +129,7 @@
         >Download</v-btn>
       </v-card-actions>
     </v-card>
-    <v-card v-if="status && status.ab && status.auto" class="ma-4 mt-0" max-width="600" width="100%" title="Automatic updates">
+    <v-card v-if="status && status.ab" class="ma-4 mt-0" max-width="600" width="100%" title="Automatic updates">
       <v-card-text>
         <div class="d-flex flex-wrap align-center ga-4">
           <v-select
