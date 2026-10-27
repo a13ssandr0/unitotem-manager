@@ -5,7 +5,7 @@ images itself.
 """
 import asyncio
 import json
-from typing import Any
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -73,8 +73,28 @@ async def run(*args: str) -> dict[str, Any]:
     return parse_output(proc.returncode, out.decode(errors='replace'))
 
 
+# The slot a forced copy was started from (the running one), while that copy runs: the updater reports it as a plain `repair`.
+copy_from: Optional[str] = None
+
+
 async def status() -> dict[str, Any]:
-    return await run('status')
+    global copy_from
+    result = await run('status')
+    if not result.get('op'):
+        copy_from = None
+    elif copy_from:
+        result['copy_from'] = copy_from
+    return result
+
+
+async def copy_to_other() -> dict[str, Any]:
+    """Replaces the other slot with a copy of the running one; detached like fetch, progress is read from status()."""
+    global copy_from
+    running = (await run('status')).get('slot')
+    result = await run('repair', '--force')
+    if result.get('started') and running:
+        copy_from = running
+    return result
 
 
 async def check() -> dict[str, Any]:

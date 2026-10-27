@@ -52,8 +52,10 @@ def cause_text(cause: Optional[str]) -> Optional[str]:
     return CAUSES.get(cause)
 
 
-def describe(op: str, phase: str, slot: Optional[str], cause: Optional[str] = None) -> tuple[str, str]:
+def describe(op: str, phase: str, slot: Optional[str], cause: Optional[str] = None, copy_from: Optional[str] = None) -> tuple[str, str]:
     """(title, what is happening now) of an operation, with slot names in capitals."""
+    if op == 'repair' and copy_from:
+        return f'Copying slot {copy_from} to slot {slot}', PHASES.get(phase, phase or 'Working')
     if op == 'repair':
         what = 'Rebuilding' + (f' slot {slot}' if slot else ' the other slot')
         title = what + (' after damage' if cause and (cause in DAMAGED or cause.startswith('bootfile:')) else
@@ -94,6 +96,7 @@ class UpdateProgress:
         self._timer: Optional[asyncio.TimerHandle] = None
         self._last = 0.0
         self._seen: Optional[str] = None       # the operation whose notification is up
+        self._copy_from: Optional[str] = None  # set while that operation is a forced copy
 
     async def start(self, on_status: OnStatus):
         self._loop = asyncio.get_running_loop()
@@ -144,7 +147,8 @@ class UpdateProgress:
         progress = (op or {}).get('progress') or {}
         if op:
             name = progress.get('op') or 'update'
-            title, phase = describe(name, progress.get('phase', ''), status.get('other_slot'), progress.get('cause'))
+            title, phase = describe(name, progress.get('phase', ''), status.get('other_slot'), progress.get('cause'),
+                                  status.get('copy_from'))
             percent = progress.get('percent')
             text = phase + (f", about {progress['eta_s']} s left" if progress.get('eta_s') else '')
             if notifications.set_progress(KEY, -1 if percent is None else percent, text) is False \
@@ -152,6 +156,7 @@ class UpdateProgress:
                 notifications.notify(KEY, 'info', title, text, source='updates', audience='admin', link='/settings/updates',
                                      progress=-1 if percent is None else percent, persistent=True)
             self._seen = name
+            self._copy_from = status.get('copy_from')
         elif self._seen is not None:
             await self._finished(self._seen, status)
         else:
@@ -167,14 +172,20 @@ class UpdateProgress:
         if name == 'repair' and result.get('op') == 'repair':
             slot = result.get('slot')
             why = cause_text(result.get('cause'))
-            if result.get('result') == 'ok':
+            copied, self._copy_from = self._copy_from, None
+            if result.get('result') == 'ok' and copied:
+                notifications.resolve('update.failed')
+                notifications.notify('update.repaired', 'info', f'Slot {slot} copied', f'Slot {slot} is now a copy of slot {copied}.',
+                                     source='updates', audience='admin', link='/settings/updates')
+            elif result.get('result') == 'ok':
                 notifications.resolve('update.failed')
                 notifications.notify('update.repaired', 'info', f'Slot {slot} rebuilt' if slot else 'Slot rebuilt',
                                      'The other system slot was rebuilt from the running one' + (f' because {why}.' if why else '.'),
                                      source='updates',
                                      audience='admin', link='/settings/updates')
             elif result.get('result') == 'failed':
-                notifications.notify('update.failed', 'error', 'Rebuilding the slot failed', result.get('error') or 'The repair did not complete.',
+                notifications.notify('update.failed', 'error', 'Copying the slot failed' if copied else 'Rebuilding the slot failed',
+                                     result.get('error') or 'The copy did not complete.',
                                      source='updates', audience='admin', link='/settings/updates')
         elif result.get('op') == name and result.get('result') in ('failed', 'error'):
             notifications.notify('update.failed', 'error', 'Update failed', result.get('error') or 'The operation did not complete.',

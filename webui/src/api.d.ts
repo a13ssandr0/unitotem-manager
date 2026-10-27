@@ -12,6 +12,8 @@ export interface Api {
     dismiss: ApiCall<{ ids: (string)[] }>
     /** Remove every notification this user can see. */
     dismiss_all: ApiCall<Record<string, never>>
+    /** Click on a notification (`default`) or on one of its action buttons: the sender is told, and the notification closes */
+    invoke: ApiCall<{ id: string; action?: string }>
     /** The notifications this user may see, newest first (pushed again to every page whenever they change). */
     list: ApiCall<Record<string, never>>
     /** Mark notifications as read (they stop counting in the badge). */
@@ -232,6 +234,8 @@ export interface Api {
       check: ApiCall<Record<string, never>>
       /** [requires: admin] */
       confirm: ApiCall<Record<string, never>>
+      /** [requires: admin] */
+      copy_to_other: ApiCall<Record<string, never>>
       /** [requires: admin] */
       fetch: ApiCall<{ force?: boolean }>
       /** [requires: admin] */

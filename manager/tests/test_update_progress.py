@@ -97,3 +97,8 @@ def test_rebuild_titles_tell_damage_from_an_incomplete_system():
     assert up.describe('repair', 'write', 'B')[0] == 'Rebuilding slot B'
     assert up.describe('fetch', 'download', 'B')[0] == 'Downloading the update'
     assert up.cause_text('fsck') == 'its filesystem is damaged' and up.cause_text('bootfile:x') == 'its boot file x is missing'
+
+
+def test_forced_copy_has_its_own_title():
+    assert up.describe('repair', 'write', 'B', None, 'A')[0] == 'Copying slot A to slot B'
+    assert up.describe('repair', 'write', 'B', 'fsck', None)[0] == 'Rebuilding slot B after damage'
