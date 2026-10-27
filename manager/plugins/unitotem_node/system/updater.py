@@ -118,6 +118,19 @@ async def rollback(reboot: bool = True) -> dict[str, Any]:
     return await run('rollback', *(['--reboot'] if reboot else []))
 
 
+POLICY_MODES = ('off', 'download', 'stage', 'reboot', 'scheduled')
+
+
+async def set_policy(mode: str, time: str) -> dict[str, Any]:
+    """Sets the automatic update policy: what to do with a newer release, and the time of day for the scheduled restart."""
+    return await run('policy', '--set-mode', mode, '--time', time)
+
+
+async def reboot() -> dict[str, Any]:
+    """Restarts the device; when an update is armed this is the restart that starts it (the only one that does on a Raspberry)."""
+    return await run('reboot')
+
+
 async def cancel() -> dict[str, Any]:
     return await run('cancel')
 
