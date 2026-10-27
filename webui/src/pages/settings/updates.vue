@@ -29,6 +29,24 @@
                 <v-chip v-if="!slot.running && status.armed" size="x-small" color="primary" class="ml-2">armed for next boot</v-chip>
                 <v-chip v-else-if="slot.next && !slot.running" size="x-small" color="primary" class="ml-2">starts at next boot</v-chip>
               </td>
+              <td class="text-right">
+                <v-btn
+                  v-if="slot.running"
+                  variant="text"
+                  color="red"
+                  prepend-icon="mdi-content-copy"
+                  :disabled="!canCopy"
+                  @click="confirmAction = 'copy_to_other'"
+                >Copy to slot {{ slotName(status.other_slot) }}</v-btn>
+                <v-btn
+                  v-else
+                  variant="text"
+                  color="red"
+                  prepend-icon="mdi-swap-horizontal"
+                  :disabled="!canSwitch"
+                  @click="confirmAction = 'rollback'"
+                >Restart on slot {{ slot.name }}</v-btn>
+              </td>
             </tr>
           </tbody>
         </v-table>
@@ -108,20 +126,6 @@
           :disabled="!canInstall"
           @click="confirmAction = 'apply'"
         >Install and restart</v-btn>
-        <v-btn
-          variant="text"
-          color="red"
-          prepend-icon="mdi-content-copy"
-          :disabled="!canCopy"
-          @click="confirmAction = 'copy_to_other'"
-        >Copy slot {{ slotName(status?.slot) }} to {{ slotName(status?.other_slot) }}</v-btn>
-        <v-btn
-          variant="text"
-          color="red"
-          prepend-icon="mdi-swap-horizontal"
-          :disabled="!canSwitch"
-          @click="confirmAction = 'rollback'"
-        >Restart on slot {{ slotName(status?.other_slot) }}</v-btn>
       </v-card-actions>
     </v-card>
     <v-dialog v-model="confirmDialog" max-width="420">
