@@ -356,6 +356,8 @@ function updateWindow(msg, key, value) {
 }
 api.Viewers.screensaver.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'screensaver', settings))
 api.Viewers.refresh.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'refresh', settings))
+// the keyboard of one window, pushed by the server after every change (and the reply to asking for it)
+api.Viewers.keyboard.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'keyboard', settings))
 // the layout of one window, pushed by the server after every change (a refusal comes with `error` and no layout)
 api.Viewers.layout.on(({viewer_id, window_id, layout}) => { if (layout) updateWindow({viewer_id, window_id}, 'layout', layout) })
 

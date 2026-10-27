@@ -127,15 +127,13 @@ class Viewers(WSAPIBase):
         return _layout_reply(self.layout, viewer_id, window_id)
 
     @UserPerms.requires.scheduler
-    def set_audio_output(self, viewer_id: str, window_id: int, device: Optional[str] = None):
+    async def set_audio_output(self, viewer_id: str, window_id: int, device: Optional[str] = None):
         """Where a window plays its sound: the description of one of the outputs of its host, None for the default."""
-        async def apply():
-            try:
-                await _vm().set_audio_output(viewer_id, window_id, device)
-            except KeyError:
-                pass
-        asyncio.create_task(apply())
-        return None
+        try:
+            await _vm().set_audio_output(viewer_id, window_id, device)
+        except KeyError as e:
+            return WSResponse(error=str(e))
+        return self.list()      # every page shows the output the window really has now
 
     @UserPerms.requires.admin
     def keyboard(self, viewer_id: str, window_id: int):
