@@ -28,11 +28,11 @@
             </tr>
             <tr v-if="status.ab">
               <td>Running slot</td>
-              <td>{{ status.slot }}<span v-if="status.trial"> (on trial, not confirmed yet)</span></td>
+              <td>{{ slotName(status.slot) }}<span v-if="status.trial"> (on trial, not confirmed yet)</span></td>
             </tr>
             <tr v-if="status.ab && status.other_version">
               <td>Other slot</td>
-              <td>{{ status.other_slot }}: {{ status.other_version }}<span v-if="status.armed"> (armed for next boot)</span></td>
+              <td>{{ slotName(status.other_slot) }}: {{ status.other_version }}<span v-if="status.armed"> (armed for next boot)</span></td>
             </tr>
           </tbody>
         </v-table>
@@ -43,13 +43,14 @@
           ({{ status.last_result.reason }})</span>.
         </v-alert>
 
-        <div v-if="progress" class="mt-4">
+        <div v-if="busy" class="mt-4 update-progress">
           <div class="mb-1">
-            {{ progress.op }}: {{ progress.phase }}
-            <span v-if="progress.eta_s"> - about {{ progress.eta_s }} s left</span>
+            {{ progressTitle }}<span v-if="progress && progress.phase">: {{ phaseNames[progress.phase] ?? progress.phase }}</span>
+            <span v-if="progress && progress.eta_s"> - about {{ progress.eta_s }} s left</span>
           </div>
-          <v-progress-linear :model-value="progress.percent || 0" height="14" color="primary" rounded>
-            <small>{{ Math.round(progress.percent || 0) }}%</small>
+          <v-progress-linear :model-value="progress?.percent || 0" :indeterminate="!progress || progress.percent == null"
+                             height="14" color="primary" rounded>
+            <small v-if="progress && progress.percent != null">{{ Math.round(progress.percent) }}%</small>
           </v-progress-linear>
           <div class="text-caption mt-1">
             While the new image is being written there is no rollback available.
@@ -150,6 +151,17 @@ const confirmDialog = computed({
 })
 const progress = computed(() => status.value?.op?.progress ?? null)
 const busy = computed(() => !!status.value?.op)
+const phaseNames = {check: 'checking', download: 'downloading', write: 'writing', verify: 'verifying', arm: 'preparing the restart',
+  reboot: 'restarting'}
+const progressTitle = computed(() => {
+  const op = progress.value?.op
+  const titles = {fetch: 'Downloading the update', apply: 'Installing the update', rollback: 'Going back to the previous version',
+    repair: `Repairing slot ${slotName(status.value?.other_slot)}`}
+  return titles[op] ?? 'Working'
+})
+
+// Slot names are always shown in capitals (the server already sends them so; this is the second lock)
+const slotName = slot => (slot ?? '').toUpperCase()
 
 const errors = {
   12: 'Another update operation is already running.',

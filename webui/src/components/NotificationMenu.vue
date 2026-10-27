@@ -13,7 +13,7 @@
       <v-card-title class="d-flex align-center text-subtitle-1 py-2">
         Notifications
         <v-spacer></v-spacer>
-        <v-btn v-if="items.length" size="small" variant="text" class="notification-clear"
+        <v-btn v-if="items.some(n => !n.persistent)" size="small" variant="text" class="notification-clear"
                @click="api.Notifications.dismiss_all()">Clear all</v-btn>
       </v-card-title>
       <v-divider></v-divider>
@@ -27,11 +27,13 @@
           </template>
           <v-list-item-title class="text-wrap" :class="{'font-weight-bold': !n.read}">{{ n.title }}</v-list-item-title>
           <v-list-item-subtitle v-if="n.text" class="text-wrap notification-text">{{ n.text }}</v-list-item-subtitle>
+          <v-progress-linear v-if="n.progress != null" class="my-1 notification-progress" height="8" rounded color="primary"
+                             :indeterminate="n.progress < 0" :model-value="Math.max(n.progress, 0)"></v-progress-linear>
           <div class="text-caption text-medium-emphasis">
-            {{ ago(n.updated) }}
+            <span v-if="n.progress != null && n.progress >= 0">{{ Math.round(n.progress) }}% · </span>{{ ago(n.updated) }}
             <a v-if="n.link" href="#" class="ml-2 notification-link" @click.prevent="follow(n.link)">Open</a>
           </div>
-          <template v-slot:append>
+          <template v-slot:append v-if="!n.persistent">
             <v-btn icon size="small" variant="text" title="Dismiss" class="notification-dismiss"
                    @click="api.Notifications.dismiss({ids: [n.id]})">
               <v-icon>mdi-close</v-icon>

@@ -24,6 +24,19 @@ EXIT_ABSENT = 127
 TIMEOUT = 180  # a check may have to download and verify the manifest
 
 
+SLOT_KEYS = ('slot', 'other_slot', 'default_slot')
+
+
+def upper_slots(value):
+    """Slot names are always shown in capitals (A, B), wherever they appear: the updater reports them as 'a'/'b'."""
+    if isinstance(value, dict):
+        return {k: (v.upper() if k in SLOT_KEYS and isinstance(v, str) and len(v) == 1 else upper_slots(v))
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [upper_slots(v) for v in value]
+    return value
+
+
 def parse_output(returncode: int, stdout: str) -> dict[str, Any]:
     """Turn the updater's (exit code, stdout) pair into a dict the web UI can use."""
     if returncode == EXIT_ABSENT:
@@ -34,6 +47,7 @@ def parse_output(returncode: int, stdout: str) -> dict[str, Any]:
         return {'supported': True, 'error': 'Unreadable answer from the updater', 'error_code': 'bad-output'}
     if not isinstance(data, dict):
         return {'supported': True, 'error': 'Unreadable answer from the updater', 'error_code': 'bad-output'}
+    data = upper_slots(data)
     data['supported'] = True
     data['returncode'] = returncode
     if returncode == EXIT_FAILED and 'error' not in data:
