@@ -26,6 +26,7 @@ const BUTTON_PX = 56
 const HEADER_PX = 40
 const POSITIONS = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
 const NUMERIC = {default: ['1 2 3', '4 5 6', '7 8 9', '{bksp} 0 {enter}']}
+const NUMERIC_MANUAL = {default: ['1 2 3', '4 5 6', '7 8 9', '{abc} 0 {bksp} {enter}']}
 // the part of the panel's header that always stays on the screen, whatever the visitor does with it
 const KEEP_PX = 160
 const LONG_PRESS_MS = 380
@@ -40,12 +41,14 @@ const FALLBACK_LAYOUT = 'en-US'
 // A row of Gboard's tablet layouts is 786 weight units wide (the layout resource: `weightSum="786"`)
 const ROW_WEIGHT = 786
 const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
-const BOTTOM_SYM = '{abc} {space} {left} {right} {hide}'
+const BOTTOM_SYM = '{abc} {numpad} {space} {left} {right} {abc}'
 // the bottom row (res/layout/..04f6): 58 for each arrow, 65 for the key at the right; the switch to the symbols is 58 plus the one of
 // the emoji key, which is not here (user: "useless and hard"), the space bar takes the rest
 const BOTTOM_WEIGHTS = [90.5, 0, 58, 58, 65]
+// the symbols pages (res/layout/..0512): back to the letters 90.5, the digit keyboard 90.5, space, the arrows, back to the letters 65
+const BOTTOM_SYM_WEIGHTS = [90.5, 90.5, 0, 58, 58, 65]
 const FUNCTION_TOKENS = {tab: '{tab}', bksp: '{bksp}', lock: '{lock}', enter: '{enter}', shift: '{shift}', sym1: '{sym1}', sym2: '{sym2}',
-  none: '{gap}'}
+  none: '{gap}', 'icon-sym1': '{pagecaps}', 'icon-sym2': '{pagecaps}'}
 
 const css = `${keyboardCss}
 #ut-kbd-layer { position: absolute; inset: 0; z-index: 2147483647; pointer-events: none; overflow: hidden;
@@ -102,6 +105,7 @@ let openedByUser = false
 let shift = false
 let caps = false
 let numeric = false
+let manualNumeric = false // the visitor opened the digit keyboard from the symbols page
 let page = 'letters' // letters | sym1 | sym2
 let lastShiftTap = 0
 const box = {x: 0, y: 0, w: 0, h: 0} // the panel, in the coordinates of the layer
@@ -211,6 +215,21 @@ function onTap(button, action) {
   })
 }
 
+/** The 1 Euro filter (Casiez et al.) of one coordinate: the cutoff grows with the speed, so it is steady when slow and quick when fast. */
+function oneEuro(start, time, minCutoff = 1.5, beta = 0.05, derivativeCutoff = 1) {
+  let value = start
+  let speed = 0
+  let last = time
+  const alpha = (cutoff, dt) => 1 / (1 + 1 / (2 * Math.PI * cutoff * dt))
+  return (next, now) => {
+    const dt = Math.max((now - last) / 1000, 0.001)
+    last = now
+    speed += alpha(derivativeCutoff, dt) * ((next - value) / dt - speed)
+    value += alpha(minCutoff + beta * Math.abs(speed), dt) * (next - value)
+    return value
+  }
+}
+
 function drag(handle, onMove, moveOnly = false) {
   handle.addEventListener('pointerdown', event => {
     if (event.target.closest('button')) return
@@ -218,13 +237,19 @@ function drag(handle, onMove, moveOnly = false) {
     handle.setPointerCapture(event.pointerId)
     let lastX = event.clientX
     let lastY = event.clientY
+    // a finger that is nearly still sends noise (and the input prediction extrapolates it): the position is smoothed by a 1 Euro filter, which
+    // smooths a lot at low speed (no more jumping) and hardly at all when the finger is fast (no lag)
+    const filterX = oneEuro(event.clientX, event.timeStamp)
+    const filterY = oneEuro(event.clientY, event.timeStamp)
     // pointermove is already aligned to the frames by the browser: applying at once (not from a requestAnimationFrame of
     // our own) saves one frame of lag behind the finger; no shadow while it moves (a big blur to repaint)
     panel.classList.add('ut-moving')
     const move = e => {
-      const [dx, dy] = toLayer(e.clientX - lastX, e.clientY - lastY)
-      lastX = e.clientX
-      lastY = e.clientY
+      const x = filterX(e.clientX, e.timeStamp)
+      const y = filterY(e.clientY, e.timeStamp)
+      const [dx, dy] = toLayer(x - lastX, y - lastY)
+      lastX = x
+      lastY = y
       onMove(dx, dy)
       clamp(moveOnly)
     }
@@ -246,7 +271,7 @@ function drag(handle, onMove, moveOnly = false) {
 const SPECIAL = {'{bksp}': 'Backspace', '{enter}': 'Enter', '{tab}': 'Tab', '{left}': 'ArrowLeft', '{right}': 'ArrowRight'}
 const REPEATING = new Set(['{bksp}', '{left}', '{right}'])
 const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': '⇪', '{tab}': '⇥', '{space}': ' ',
-  '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC', '{left}': '◀', '{right}': '▶', '{hide}': '⌨'}
+  '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC', '{left}': '◀', '{right}': '▶', '{hide}': '⌨', '{numpad}': '▦', '{pagecaps}': ' ', '{gap}': ' '}
 
 
 const languages = new Map() // language -> promise of its file
@@ -262,7 +287,7 @@ function loadLanguage(lang) {
 const capital = text => { const up = text.toUpperCase(); return [...up].length === [...text].length ? up : text }
 
 /** One page of the keyboard, for simple-keyboard (`layout`: its rows of keys) and for us (`meta`: what each key is: its weight and popup). */
-function pageOf(rows, {shifted = false, bottom = BOTTOM}) {
+function pageOf(rows, {mode = 'default', bottom = BOTTOM, weights = BOTTOM_WEIGHTS}) {
   const layout = []
   const meta = []
   const display = {}
@@ -277,10 +302,13 @@ function pageOf(rows, {shifted = false, bottom = BOTTOM}) {
         tokens.push('{gap}')
         keys.push({w: key.w})
       } else {
-        const text = shifted ? (key.u ?? capital(key.k)) : key.k
+        // caps lock: the capitals; shift: the capitals and, on a tablet, the symbols of the digits and the punctuation (as on a PC)
+        const caps = key.u ?? capital(key.k)
+        const text = mode === 'shift' ? (key.s ?? caps) : (mode === 'caps' ? caps : key.k)
         tokens.push(text)
         if (key.t) display[text] = key.t
-        const popup = shifted ? (key.L ?? key.l?.map(capital)) : key.l
+        const capsPopup = key.L ?? key.l?.map(capital)
+        const popup = mode === 'shift' ? (key.S ?? capsPopup) : (mode === 'caps' ? capsPopup : key.l)
         keys.push({w: key.w, popup: popup ?? []})
       }
     }
@@ -288,7 +316,7 @@ function pageOf(rows, {shifted = false, bottom = BOTTOM}) {
     meta.push(keys)
   }
   layout.push(bottom)
-  meta.push(bottom.split(' ').map((token, i) => ({w: BOTTOM_WEIGHTS[i]})))
+  meta.push(bottom.split(' ').map((token, i) => ({w: weights[i]})))
   return {layout, meta, display}
 }
 
@@ -301,9 +329,10 @@ async function buildLayout(id) {
   const symbols = record.symbols ?? SYMBOL_PAGES
   const pages = {
     default: pageOf(rows, {}),
-    shift: pageOf(rows, {shifted: true}),
-    sym1: pageOf(symbols[0], {bottom: BOTTOM_SYM}),
-    sym2: pageOf(symbols[1], {bottom: BOTTOM_SYM}),
+    caps: pageOf(rows, {mode: 'caps'}),
+    shift: pageOf(rows, {mode: 'shift'}),
+    sym1: pageOf(symbols[0], {bottom: BOTTOM_SYM, weights: BOTTOM_SYM_WEIGHTS}),
+    sym2: pageOf(symbols[1], {bottom: BOTTOM_SYM, weights: BOTTOM_SYM_WEIGHTS}),
   }
   const display = {}
   for (const name of Object.keys(pages)) Object.assign(display, pages[name].display)
@@ -337,7 +366,7 @@ function layoutOf() {
   return current?.simple ?? {default: ['{space}']}
 }
 
-const layoutName = () => page !== 'letters' ? page : (shift || caps ? 'shift' : 'default')
+const layoutName = () => page !== 'letters' ? page : (caps ? 'caps' : (shift ? 'shift' : 'default'))
 
 /** What simple-keyboard is told after every change of state: the page, which keys are lit (shift, caps) and the key size. */
 function appearance() {
@@ -361,7 +390,10 @@ function typeKey(button) {
     return
   }
   if (button === '{hide}') { setOpen(false); return }
+  if (button === '{pagecaps}') { page = page === 'sym1' ? 'sym2' : 'sym1'; refreshLayout(); return }
+  if (button === '{numpad}') { manualNumeric = true; numeric = true; applyLayout(); return }
   if (button === '{lock}') { caps = !caps; shift = false; refreshLayout(); return }
+  if (button === '{abc}' && manualNumeric) { manualNumeric = false; numeric = false; page = 'letters'; applyLayout(); return }
   if (button === '{sym1}' || button === '{sym2}' || button === '{abc}') {
     page = button === '{abc}' ? 'letters' : button.slice(1, -1)
     refreshLayout()
@@ -384,6 +416,10 @@ function variantsOf(btn) {
 function addHints() {
   for (const button of body.querySelectorAll('.hg-button')) {
     button.querySelector('.ut-hint')?.remove()
+    // the key at caps lock's place on the symbols pages has an icon (Gboard's drawable: a chevron over a bar)
+    if (button.getAttribute('data-skbtn') === '{pagecaps}' && !button.querySelector('svg')) {
+      button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" width="1.4em" height="1.4em" fill="currentColor"><path d="M12,8.41L16.59,13 18,11.59l-6,-6 -6,6L7.41,13 12,8.41zM6,18h12v-2H6v2z"/></svg>')
+    }
     const key = button.getAttribute('data-skbtn')
     const first = variantsOf(button)[0]
     // on the letter page only a letter carries a hint, and only when it is a symbol (Gboard: `q` has `%`, `e` has `|`; its accents
@@ -497,7 +533,7 @@ function wireKeys(host) {
 let layoutRequest = 0
 async function applyLayout() {
   if (numeric) {
-    keyboard.setOptions({layout: NUMERIC, ...appearance()})
+    keyboard.setOptions({layout: manualNumeric ? NUMERIC_MANUAL : NUMERIC, ...appearance()})
     return
   }
   const request = ++layoutRequest
@@ -667,7 +703,8 @@ export function focusChanged(on, kind) {
   if (!enabled || !layer) return
   if (on) {
     const wantsNumeric = kind === 'number' || kind === 'tel'
-    if (wantsNumeric !== numeric) { numeric = wantsNumeric; applyLayout() }
+    if (!manualNumeric && wantsNumeric !== numeric) { numeric = wantsNumeric; applyLayout() }
+    if (manualNumeric && !wantsNumeric) { /* a text field after the digits: back to the letters */ manualNumeric = false; numeric = false; applyLayout() }
     if (!open) setOpen(true, false) // already open (by the button too): leave it as it is
     if (anchor && Date.now() - anchor.at < 1500) placeBelowAnchor() // the position arrived before the keyboard was open
   } else if (!openedByUser) {
