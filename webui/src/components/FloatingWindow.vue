@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
 }
 
 /* Plain buttons, not v-btn: the global rule on `.v-btn--icon .v-icon` makes the icon of every icon button huge.
-   24 px with a 16 px glyph, about what a KDE title bar button is. */
+   24 px with a 16 px glyph, a usual title bar button size. */
 .fw-btn {
   width: 24px;
   height: 24px;

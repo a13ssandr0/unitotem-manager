@@ -7,14 +7,11 @@ mechanism, not fail to import, on any node that lacks the hardware or the
 tools. See manager/api/display.py's own note for the same constraint on the
 existing Display API.
 
-Only the pure, dependency-free parsing/decoding/resolution logic lives here so
-far (ddc.py, identity.py, mechanism.py): text parsers for ddcutil's output, an
-EDID decoder, an xrandr EDID-property extractor, an output-name normaliser and
-mechanism-priority resolution. None of it shells out or touches a device.
+The pure, dependency-free parsing/decoding/resolution logic lives in ddc.py, identity.py
+and mechanism.py: text parsers for ddcutil's output, an EDID decoder, an output-name
+normaliser and mechanism-priority resolution. None of it shells out or touches a device.
 
-The hardware layer - the subprocess calls, per-bus/per-device asyncio locks,
-sysfs/xrandr output enumeration, and the async facade that wires all of this
-together (probe(), apply_power/input/volume/mute()) - is SCREEN-CONTROL-PLAN.md
-step 4, not yet implemented. This module intentionally does not import them
-yet; nothing here shells out to ddcutil/cec-ctl/xrandr.
+The hardware layer (subprocess calls, per-bus/per-device asyncio locks, output enumeration
+and the async facade probe(), apply_power/input/volume/mute()) is in the other modules of
+the package. This module intentionally imports none of them.
 """

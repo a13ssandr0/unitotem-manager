@@ -42,7 +42,7 @@ async def start_hotspot(ssid: str = None, password: str = None):
                 raise RuntimeError('Wireless hardware not enabled')
 
             if not await nm.wireless_enabled:
-                logger.info('Wireless not yet enabled')
+                logger.info('Wireless is not enabled')
                 await nm.wireless_enabled.set_async(True)
                 await sleep(2)
 

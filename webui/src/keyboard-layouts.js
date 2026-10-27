@@ -1,8 +1,8 @@
 /**
  * Names of the on-screen keyboard layouts, shared by the keyboard itself and the Viewers page.
  *
- * A layout is a language of Gboard ('it', 'pt-BR'...) and, when the language has several, one of its variants ('de/de_neo2'). The twelve
- * names the setting had before the layouts were Gboard's ('english', 'italian'...) still mean the same, and the page keeps saving them
+ * A layout is a language ('it', 'pt-BR'...) and, when the language has several, one of its variants ('de/de_neo2'). The twelve
+ * names the setting had before the layouts came from the extracted data ('english', 'italian'...) still mean the same, and the page keeps saving them
  * for those languages: a version that knows only those names can still read the setting.
  */
 export const LEGACY_LAYOUTS = {english: 'en-US', italian: 'it', german: 'de', french: 'fr', spanish: 'es-ES', brazilian: 'pt-BR',

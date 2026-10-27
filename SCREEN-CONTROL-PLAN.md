@@ -1,7 +1,6 @@
 # Monitor control via CEC, DDC/CI and X blanking — execution plan
 
-Self-contained, written to be picked up cold in a later session. **Nothing here is
-implemented yet.** This covers the `TODO` backlog entry "Add display power control"
+Self-contained design and execution plan. This covers the `TODO` backlog entry "Add display power control"
 (CEC and DDC/CI only; GPIO and Serial stay in the backlog).
 
 ---
@@ -22,7 +21,7 @@ system Python, which `debian/rules` uses to derive `CEF_PYTAG`, so the cefpython
 must match the new interpreter.
 
 The version table is kept because it is why the migration was chosen, and because the
-runtime version gate still matters for any node not yet on trixie:
+runtime version gate still matters for any node still on bookworm:
 
 | Suite | ddcutil |
 |---|---|
@@ -123,7 +122,7 @@ worse than a subprocess we can time out and kill.
   some SoCs, USB adapters, DisplayPort-to-HDMI via `drm_dp_cec`. Desktop Intel/AMD/NVIDIA
   generally do **not**. Confirmed on both the dev host and the rebuilt `unitotem-test`
   (GTX 1060 passthrough, `nvidia` driver): no `/dev/cec*` on either. No CEC path has been
-  tested end to end anywhere yet — no CEC-capable hardware has been available.
+  tested end to end: no CEC-capable hardware has been available.
 
 ### 1.3 Mapping a RandR output name to an I2C bus / CEC device
 
@@ -348,7 +347,7 @@ around `subprocess.run(timeout=...)` (10 s getvcp/setvcp, 60 s capabilities, 15 
 cec-ctl). **One `asyncio.Lock` per I2C bus and per CEC device** — concurrent
 transactions on one bus is exactly how "Maximum retries exceeded" was reproduced. The
 31 s probe is a background task that broadcasts `getScreens` on completion. A non-local
-`viewer_id` returns an explicit "not supported yet": a remote viewer is a client node
+`viewer_id` returns an explicit "not supported": a remote viewer is a client node
 running its own manager, so the correct route is the Remote channel, not
 `send_webview_command`, and a 31 s ddcutil call on the Qt main thread would be a bug.
 

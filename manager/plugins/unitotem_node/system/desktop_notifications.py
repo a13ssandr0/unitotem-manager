@@ -78,7 +78,7 @@ def timeout_of(hints: dict, expire_timeout: int) -> Optional[int]:
 
 
 def progress_of(hints: dict) -> Optional[float]:
-    value = _hint(hints, 'value')       # the de-facto progress hint of notify-osd, dunst, KDE and GNOME
+    value = _hint(hints, 'value')       # the de-facto progress hint used by the common notification daemons
     return float(value) if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 100 else None
 
 

@@ -54,7 +54,7 @@ def address_text() -> str:
     others = [a for a in all_ipv4() if a != default]
     if default:
         return default
-    return ', '.join(others) if others else 'no network yet'
+    return ', '.join(others) if others else 'no network'
 
 
 async def address_changes():

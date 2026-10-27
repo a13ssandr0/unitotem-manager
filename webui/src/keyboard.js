@@ -12,7 +12,7 @@
  * size, and its header cannot shrink or leave. The limits are applied after every gesture, on every change of the size
  * of the screen and on every rotation, not just while dragging.
  *
- * It behaves like Gboard: a key types when it is released, a long press on a letter or a symbol opens its variants
+ * A key types when it is released, a long press on a letter or a symbol opens its variants
  * (accents, currencies...) to slide onto, the key `?123` switches to a page of symbols and `=\\<` to a second one, shift
  * pressed twice is caps lock and the backspace repeats while held. Moving and resizing is done here with pointer events instead of a library because the content can be
  * rotated and flipped with CSS (the page's orientation settings), and the libraries do not follow a transformed parent.
@@ -33,12 +33,12 @@ const LONG_PRESS_MS = 380
 const REPEAT_DELAY_MS = 400
 const REPEAT_MS = 60
 const DOUBLE_TAP_MS = 400
-// The layouts are Gboard's own, read from its application by tools/gboard/gboard_layouts.py (see its README): for every language the
+// The layouts are generated data, extracted from the keyboard's source application by tools/gboard/gboard_layouts.py (see its README): for every language the
 // rows of its tablet keyboard (number row, tab, caps lock, enter, shift...) with the weight of every key, what a long press on a key
 // offers and the two pages of symbols. One file per language, loaded when it is needed.
 const LANGUAGE_FILES = import.meta.glob('./gboard/layouts/*.json')
 const FALLBACK_LAYOUT = 'en-US'
-// A row of Gboard's tablet layouts is 786 weight units wide (the layout resource: `weightSum="786"`)
+// A row of the tablet layouts is 786 weight units wide (the layout resource: `weightSum="786"`)
 const ROW_WEIGHT = 786
 const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
 const BOTTOM_SYM = '{abc} {numpad} {space} {left} {right} {abc}'
@@ -70,11 +70,11 @@ const css = `${keyboardCss}
 #ut-kbd-body .hg-row .hg-button:not(:last-child) { margin-right: 8px; }
 #ut-kbd-body .hg-row:last-child { margin-bottom: 0; }
 #ut-kbd-body .hg-button { height: auto; font-size: clamp(12px, 2.4vmin, 40px); }
-/* The size of every key is set by sizeKeys() below (Android tablet geometry); here only the colours. */
+/* The size of every key is set by sizeKeys() below (tablet geometry); here only the colours. */
 #ut-kbd-body .hg-button { position: relative; transition: background-color .08s; border: 0; border-radius: 10px; box-shadow: none; color: #1f1f1f; }
 #ut-kbd-body .hg-button[data-skbtn="{enter}"] { border-radius: 999px; background: #0b57cf !important; color: #fff; }
 #ut-kbd-body .hg-button[data-skbtn="{enter}"]:hover { background: #0a4cb4 !important; }
-/* feedback like Android's: a key lights up under the pointer and while it is pressed */
+/* feedback: a key lights up under the pointer and while it is pressed */
 #ut-kbd-body .hg-button:hover { background: #e3e7ec !important; }
 #ut-kbd-body .hg-button.ut-down, #ut-kbd-body .hg-button.hg-activeButton { background: #b8c4d6 !important; }
 #ut-kbd-preview { position: absolute; display: none; min-width: ${BUTTON_PX}px; height: ${BUTTON_PX * 1.3}px; padding: 0 10px;
@@ -278,7 +278,7 @@ const languages = new Map() // language -> promise of its file
 function loadLanguage(lang) {
   if (!languages.has(lang)) {
     const load = LANGUAGE_FILES[`./gboard/layouts/${lang}.json`]
-    languages.set(lang, load ? load().then(module => module.default) : Promise.reject(new Error(`no Gboard layout for ${lang}`)))
+    languages.set(lang, load ? load().then(module => module.default) : Promise.reject(new Error(`no keyboard layout for ${lang}`)))
   }
   return languages.get(lang)
 }
@@ -339,7 +339,7 @@ async function buildLayout(id) {
   return {pages, display, simple: Object.fromEntries(Object.entries(pages).map(([name, p]) => [name, p.layout]))}
 }
 
-// Gboard's tablet geometry: a key is as wide as its weight says out of the 786 of the row (the layout resource of the keyboard), so tab,
+// Tablet geometry: a key is as wide as its weight says out of the 786 of the row (the layout resource of the keyboard), so tab,
 // backspace, caps lock, enter and shift keep the size they have there whatever the language, and every row ends where the others do
 let current = null // what buildLayout() returned for the layout on show
 const GAP_PX = 8
@@ -405,7 +405,7 @@ function typeKey(button) {
   if (shift && !caps) { shift = false; refreshLayout() }
 }
 
-/** The variants a long press on a key offers (what Gboard has behind it: a symbol, accents...), in the case of the key. */
+/** The variants a long press on a key offers (a symbol, accents...), in the case of the key. */
 function variantsOf(btn) {
   const key = btn.getAttribute('data-skbtn')
   if (/^\{.+\}$/.test(key)) return []
@@ -416,13 +416,13 @@ function variantsOf(btn) {
 function addHints() {
   for (const button of body.querySelectorAll('.hg-button')) {
     button.querySelector('.ut-hint')?.remove()
-    // the key at caps lock's place on the symbols pages has an icon (Gboard's drawable: a chevron over a bar)
+    // the key at caps lock's place on the symbols pages has an icon (a chevron over a bar)
     if (button.getAttribute('data-skbtn') === '{pagecaps}' && !button.querySelector('svg')) {
       button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" width="1.4em" height="1.4em" fill="currentColor"><path d="M12,8.41L16.59,13 18,11.59l-6,-6 -6,6L7.41,13 12,8.41zM6,18h12v-2H6v2z"/></svg>')
     }
     const key = button.getAttribute('data-skbtn')
     const first = variantsOf(button)[0]
-    // on the letter page only a letter carries a hint, and only when it is a symbol (Gboard: `q` has `%`, `e` has `|`; its accents
+    // on the letter page only a letter carries a hint, and only when it is a symbol (`q` has `%`, `e` has `|`; its accents
     // are only in the popup); the symbol pages show the first variant of every key
     const shown = first && (page !== 'letters' || (/^\p{L}$/u.test(key) && !/\p{L}/u.test(first)))
     if (shown) button.appendChild(Object.assign(document.createElement('span'), {className: 'ut-hint', textContent: first}))
@@ -456,7 +456,7 @@ function openVariants(press) {
   alts.style.display = 'flex'
   const [bx, by] = offsetIn(press.btn, panel)
   const W = layer.clientWidth
-  // like Gboard: the first variant is right above the key, the others follow to the side (pulled back when they would leave the screen)
+  // the first variant is right above the key, the others follow to the side (pulled back when they would leave the screen)
   const x = box.x + bx
   const y = box.y + by - alts.offsetHeight - 6
   alts.style.left = `${Math.min(Math.max(x, 0), Math.max(0, W - alts.offsetWidth))}px`
@@ -466,7 +466,7 @@ function openVariants(press) {
   pickVariant(press, null)
 }
 
-/** The variant under the finger, Gboard style: only the movement ALONG the popup counts. The finger does not have to reach the popup, it
+/** The variant under the finger: only the movement ALONG the popup counts. The finger does not have to reach the popup, it
  *  can slide sideways on the key row it is on; the popup's row is the nearest one to the finger (a single row ignores the height). */
 function pickVariant(press, e) {
   const [dx, dy] = e ? toLayer(e.clientX - press.from[0], e.clientY - press.from[1]) : [0, 0]
@@ -484,7 +484,7 @@ function pickVariant(press, e) {
   return chosen
 }
 
-/** Gboard's behaviour on the keys of the panel: typed on release, long press for the variants, repeat on backspace. */
+/** The behaviour of the keys of the panel: typed on release, long press for the variants, repeat on backspace. */
 function wireKeys(host) {
   let press = null
   const stop = () => {
@@ -615,7 +615,7 @@ function build() {
 
   keyboard = new Keyboard(host, {
     onRender: () => { sizeKeys(); addHints() },
-    onKeyPress: () => {}, // the keys are handled by wireKeys(): they type on release, like Gboard
+    onKeyPress: () => {}, // the keys are handled by wireKeys(): they type on release
     theme: 'hg-theme-default hg-layout-default',
     layout: layoutOf(),
     display: DISPLAY,
@@ -651,7 +651,7 @@ export function configure(settings) {
 }
 
 /** `kind` is the type of the field that has the focus (text, password, number, email, tel...) or null. */
-/** A field that has no room for the keyboard below it is brought up instead (like iOS does): the whole content of the window
+/** A field that has no room for the keyboard below it is brought up instead: the whole content of the window
  *  slides up, off the screen if it has to, and slides back when the keyboard goes. The transform is applied to #stage and
  *  #home-frame by the page's stylesheet (boot-screen.html), with the animation. */
 let contentShift = 0

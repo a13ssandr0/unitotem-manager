@@ -1,8 +1,7 @@
 """
 A terminal in the web UI: `/terminal` is a websocket carrying a pty that runs the shell of the web user's own account.
 
-There is no second login, the way TrueNAS does it (read in its sources: `apps/webshell_app.py` and `plugins/auth.py` of
-truenas/middleware, `services/shell.service.ts` of truenas/webui): the web user is already authenticated, the web
+There is no second login: the web user is already authenticated, the web
 accounts are operating-system accounts (PAM), so the console starts `login -f <that account>` and the visitor is in their own shell, as
 themselves, with no user name or password to type. What keeps this safe:
  - opening it needs the admin capability, checked when the token is asked for AND when the websocket is opened;
