@@ -1,7 +1,7 @@
 """
 One-time tokens for the websockets that give a window onto the machine (the terminal and the screen).
 
-Same idea as TrueNAS's shell tokens (middlewared `auth.generate_token` / `get_token_for_shell_application`): the page asks for a
+The page asks for a
 token over an ordinary authenticated request, and the websocket must present it as its first text frame, `{"token": "..."}`.
 A token is valid for TOKEN_TTL seconds, only once (it is spent by being looked at, right or wrong), and only for the
 account and the session that asked for it: the session cookie alone is not enough to open these sockets, and a token left in a

@@ -11,7 +11,7 @@
  * sets) and, when the bar reserves its space, leaves `var(--ticker-h)` free for it. This module sets `--ticker-h` (px) on
  * `#area`, sizes and paints the host, and draws inside it. Nothing outside `#area` is touched.
  *
- * Many headlines are never one long string. Each lane is a RECYCLER, like Android's RecyclerView: a belt (one element
+ * Many headlines are never one long string. Each lane is a RECYCLER: a belt (one element
  * moved with one `transform`, the only animated layer of the lane) carries the few headline elements that are on screen
  * plus a buffer on the right; an element that has left on the left goes to a pool and is filled again with the next
  * headline of the list, which wraps around. 500 headlines cost the same as 5. Headlines are placed at the moment they are

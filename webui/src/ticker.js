@@ -18,8 +18,7 @@
  * ONCE into a texture and the GPU process slides it, with no main thread involved, so a busy main thread cannot make the
  * crawl miss a frame.
  *
- * Many headlines are never one long string, and never one element each: each lane is a RECYCLER (like Android's
- * RecyclerView) of PAGES. A page is one element holding consecutive headlines, about 2-3 bar widths long (never more than
+ * Many headlines are never one long string, and never one element each: each lane is a RECYCLER of PAGES. A page is one element holding consecutive headlines, about 2-3 bar widths long (never more than
  * 8192 px: GPU texture limit) and has ONE animation from the right edge of the lane to its own width to the left. The next
  * page is built ahead with seconds of slack and its animation gets an exact `startTime` (start of the previous one +
  * the time the previous one needs to move by its own width, on document.timeline), so the gap is zero and the speed is the

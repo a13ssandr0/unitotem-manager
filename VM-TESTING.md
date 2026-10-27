@@ -101,7 +101,7 @@ SSH_ASKPASS_REQUIRE=never sshpass -p unitotem ssh-copy-id -i vm_test_key.pub \
 tools/vm-ssh hostname          # must print 'unitotem'
 ```
 
-> **ssh must never be allowed to open a password window.** On a KDE desktop a
+> **ssh must never be allowed to open a password window.** On a desktop session a
 > missing key, an unknown host key or a `sshpass` invocation makes ssh spawn
 > `ksshaskpass`, which steals focus and blocks any automation until somebody
 > clicks it. `tools/vm-env.sh` exports `SSH_ASKPASS_REQUIRE=never` and passes

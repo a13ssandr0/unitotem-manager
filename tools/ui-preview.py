@@ -105,7 +105,7 @@ async def main(args):
               return {buttons: b.map(x => x.title), bw: Math.round(b[0].getBoundingClientRect().width),
                       icon: Math.round(parseFloat(getComputedStyle(i).fontSize)), bar: Math.round(bar.height)} })()""")
             check('title bar has minimise, maximise and close', sizes['buttons'] == ['Minimise', 'Maximise', 'Close'])
-            check('buttons are 24 px with 16 px icons, KDE-sized', sizes['bw'] == 24 and sizes['icon'] == 16)
+            check('buttons are 24 px with 16 px icons, title-bar sized', sizes['bw'] == 24 and sizes['icon'] == 16)
             before = await cdp.eval("(() => { const b = document.querySelector('.floating-window').getBoundingClientRect(); return [Math.round(b.width), Math.round(b.height)] })()")
             await cdp.eval("document.querySelector('.floating-window button[title=Maximise]').click()")
             await asyncio.sleep(0.4)

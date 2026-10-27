@@ -24,7 +24,7 @@ class KeyboardSettings(BaseModel, validate_assignment=True):
     # where the button that opens it is, on the screen
     button_position: Literal['top-left', 'top', 'top-right', 'left', 'right',
                              'bottom-left', 'bottom', 'bottom-right'] = 'bottom-right'
-    # a layout of Gboard: a language ('it', 'pt-BR'...) and, for a language that has several, one of its variants ('de/de_neo2'); the old
+    # a keyboard layout: a language ('it', 'pt-BR'...) and, for a language that has several, one of its variants ('de/de_neo2'); the old
     # names ('english', 'italian'...) still mean the same (webui/src/keyboard-layouts.js)
     layout: str = Field(default='english', pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{1,39}(/[A-Za-z0-9][A-Za-z0-9_.-]{0,39})?$')
 

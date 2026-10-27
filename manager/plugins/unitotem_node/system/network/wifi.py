@@ -48,7 +48,7 @@ async def get_access_points():
             raise RuntimeError('Wireless hardware not enabled')
 
         if not await nm.wireless_enabled:
-            logger.info('Wireless not yet enabled')
+            logger.info('Wireless is not enabled')
             await nm.wireless_enabled.set_async(True)
 
         aps = set()
@@ -77,7 +77,7 @@ async def scan_access_points():
             raise RuntimeError('Wireless hardware not enabled')
 
         if not await nm.wireless_enabled:
-            logger.info('Wireless not yet enabled')
+            logger.info('Wireless is not enabled')
             await nm.wireless_enabled.set_async(True)
             await sleep(2)
 

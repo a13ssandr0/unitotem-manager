@@ -325,8 +325,8 @@ const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/s
 // ... and so are the area and the panes of a window (the playlist of each pane is the scheduler's)
 const canConfigureLayout = computed(() => canCall('Viewers/set_area', currentUser.value))
 const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
-// The layouts of the on-screen keyboard are Gboard's: one per language, some with variants (see keyboard-layouts.js)
-// Gboard's own names of its languages ('english united states', 'arabic gulf'), capitalised; the id goes under it
+// The layouts of the on-screen keyboard come from the generated data in src/gboard: one per language, some with variants (see keyboard-layouts.js)
+// The names of the languages as the data gives them ('english united states', 'arabic gulf'), capitalised; the id goes under it
 const capitalise = text => text.replace(/\b\p{L}/gu, c => c.toUpperCase())
 const keyboardLanguages = gboardLanguages.map(lang => ({title: capitalise(lang.name), value: lang.id}))
   .sort((a, b) => a.title.localeCompare(b.title))

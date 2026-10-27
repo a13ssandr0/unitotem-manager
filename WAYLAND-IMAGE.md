@@ -3,7 +3,7 @@
 Decision of 2026-10-20: the kiosk runs **labwc (Wayland)** and no X server at all. The program side is done (branch `viewer-wayland`, see CLAUDE.md
 "THE KIOSK RUNS WAYLAND"). This is the list for the image (`~/Sviluppo/unitotem-system`), which that project owns. Measured on a Pi 4 and on venus
 (Intel Iris Xe): 60 fps canvas2d and WebGL at 1080p on both, no tearing, a window per output, outputs unplugged and plugged at run time, touch mapping, VNC,
-screen power. Everything below was run on real boards with the transient unit of `tools/wayland/session.sh`, not yet from an image.
+screen power. Everything below was run on real boards with the transient unit of `tools/wayland/session.sh`.
 
 ## Remove
 - `start-xorg.service` (and its enablement, the `getty@tty1` mask stays: labwc takes VT1), `unitotem-xbackground.service` + `/usr/sbin/unitotem-xbackground`,
