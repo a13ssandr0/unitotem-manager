@@ -2,7 +2,7 @@
   <div class="d-flex justify-center flex-column align-center">
     <v-card
       class="ma-4"
-      max-width="720"
+      max-width="600"
       width="100%"
       :title="String($route.name)"
     >
