@@ -66,3 +66,8 @@ class Update(WSAPIBase):
         result = await updater.rollback(reboot)
         self._start_polling()
         return WSBroadcast(result=result)
+
+    async def copy_to_other(self):
+        result = await updater.copy_to_other()
+        self._start_polling()
+        return WSBroadcast(result=result)
