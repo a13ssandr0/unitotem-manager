@@ -79,33 +79,35 @@
           @click="runCheck"
         >Check updates</v-btn>
         <v-btn
-          variant="text"
-          color="primary"
-          prepend-icon="mdi-download"
-          :disabled="busy || !canDownload"
-          @click="send('fetch')"
-        >Download</v-btn>
-        <v-btn
+          v-if="busy"
           variant="text"
           color="warning"
           prepend-icon="mdi-cancel"
-          :disabled="!busy"
           @click="send('cancel')"
         >Cancel</v-btn>
         <v-btn
+          v-else
+          variant="text"
+          color="primary"
+          prepend-icon="mdi-download"
+          :disabled="!canDownload"
+          @click="send('fetch')"
+        >Download</v-btn>
+        <v-btn
+          v-if="status?.pending_confirm"
+          variant="text"
+          color="green"
+          prepend-icon="mdi-check"
+          @click="send('confirm')"
+        >Confirm this version</v-btn>
+        <v-btn
+          v-else
           variant="text"
           color="red"
           prepend-icon="mdi-restart"
           :disabled="!canInstall"
           @click="confirmAction = 'apply'"
         >Install and restart</v-btn>
-        <v-btn
-          variant="text"
-          color="green"
-          prepend-icon="mdi-check"
-          :disabled="!status?.pending_confirm"
-          @click="send('confirm')"
-        >Confirm this version</v-btn>
         <v-btn
           variant="text"
           color="red"
