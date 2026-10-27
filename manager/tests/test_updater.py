@@ -55,7 +55,7 @@ def test_slot_names_are_always_capitals():
 def test_progress_watcher_helpers():
     import struct
     from unitotem_node.system.update_progress import describe, names_in
-    assert describe('repair', 'write', 'B') == ('Repairing slot B', 'Writing')
+    assert describe('repair', 'write', 'B') == ('Rebuilding slot B', 'Writing')
     assert describe('fetch', 'download', None)[0] == 'Downloading the update'
     name = b'unitotem-update.progress\0\0\0\0\0\0\0\0'
     event = struct.pack('iIII', 1, 0x80, 0, len(name)) + name
