@@ -21,7 +21,7 @@ mkdir -p "$STAGE/pylib"
 PIP=${PIP:-"$ROOT/.venv/bin/pip"}
 [ -x "$PIP" ] || PIP=/home/alessandro/Sviluppo/Python/unitotem-manager/.venv/bin/pip
 "$PIP" install -q --target "$STAGE/pylib" feedparser
-for d in api utils webview static; do cp -r "$ROOT/manager/$d" "$STAGE/$d"; done
+for d in api utils webview static templates routers; do cp -r "$ROOT/manager/$d" "$STAGE/$d"; done
 cp "$ROOT/manager/main.py" "$STAGE/main.py"
 cp -r "$ROOT/manager/plugins/unitotem_viewer" "$STAGE/unitotem_viewer"
 cp -r "$ROOT/manager/plugins/unitotem_node" "$STAGE/unitotem_node"
@@ -56,13 +56,15 @@ tar -C "$STAGE" -cf - . | rsh 'tar -C /var/lib/unitotem/ticker-test.new -xf -'
 # the bind mounts are replaced in one go: umount what an earlier run mounted, swap the directory, mount again
 rsh 'set -e
 B=/usr/share/unitotem-manager
-for t in $B/api $B/utils $B/webview $B/static $B/main.py $B/plugins/unitotem_viewer $B/plugins/unitotem_node; do umount "$t" 2>/dev/null || true; done
+for t in $B/api $B/utils $B/webview $B/static $B/templates $B/routers $B/main.py $B/plugins/unitotem_viewer $B/plugins/unitotem_node; do umount "$t" 2>/dev/null || true; done
 rm -rf /var/lib/unitotem/ticker-test && mv /var/lib/unitotem/ticker-test.new /var/lib/unitotem/ticker-test
 T=/var/lib/unitotem/ticker-test
 mount --bind $T/api $B/api
 mount --bind $T/utils $B/utils
 mount --bind $T/webview $B/webview
 mount --bind $T/static $B/static
+mount --bind $T/templates $B/templates
+mount --bind $T/routers $B/routers
 mount --bind $T/main.py $B/main.py
 mount --bind $T/unitotem_viewer $B/plugins/unitotem_viewer
 mount --bind $T/unitotem_node $B/plugins/unitotem_node

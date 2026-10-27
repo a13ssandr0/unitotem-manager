@@ -1,6 +1,11 @@
 __author__ = 'Alessandro Campolo (a13ssandr0)'
 __version__ = '3.0.0'
 
+# Names this particular start of the manager (not secret, only different every time). The page is served with it and the websocket
+# repeats it on every connection: a page that holds another one was loaded from an earlier run and reloads itself.
+import uuid
+BOOT_ID = uuid.uuid4().hex[:12]
+
 from pathlib import Path
 
 default_bind = '0.0.0.0'
