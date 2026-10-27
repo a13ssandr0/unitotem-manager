@@ -18,12 +18,8 @@
           The updater did not report the two system slots, so updates are unavailable here.
         </v-alert>
 
-        <v-table v-if="status && status.supported && !status.error" density="compact">
+        <v-table v-if="status && status.supported && !status.error && status.ab" density="compact">
           <tbody>
-            <tr>
-              <td>Installed version</td>
-              <td>{{ status.current_version }}</td>
-            </tr>
             <tr v-for="slot in slots" :key="slot.name">
               <td>Slot {{ slot.name }}</td>
               <td>
