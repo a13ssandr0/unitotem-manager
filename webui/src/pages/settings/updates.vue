@@ -111,6 +111,13 @@
         <v-btn
           variant="text"
           color="red"
+          prepend-icon="mdi-content-copy"
+          :disabled="!canCopy"
+          @click="confirmAction = 'copy_to_other'"
+        >Copy slot {{ slotName(status?.slot) }} to {{ slotName(status?.other_slot) }}</v-btn>
+        <v-btn
+          variant="text"
+          color="red"
           prepend-icon="mdi-swap-horizontal"
           :disabled="!canSwitch"
           @click="confirmAction = 'rollback'"
@@ -118,8 +125,13 @@
       </v-card-actions>
     </v-card>
     <v-dialog v-model="confirmDialog" max-width="420">
-      <v-card :title="confirmAction === 'apply' ? 'Install and restart?' : `Restart on slot ${slotName(status?.other_slot)}?`">
-        <v-card-text>
+      <v-card :title="dialogTitle">
+        <v-card-text v-if="confirmAction === 'copy_to_other'">
+          Slot {{ slotName(status?.other_slot) }} ({{ status?.other_version || 'empty' }}) will be replaced by a copy of
+          slot {{ slotName(status?.slot) }} ({{ status?.current_version }}). Nothing can be rolled back to until the copy is done,
+          and the previous version of slot {{ slotName(status?.other_slot) }} is lost. The device keeps running meanwhile.
+        </v-card-text>
+        <v-card-text v-else>
           The device will restart now{{ confirmAction === 'apply' ? ' into the new version'
             : ` into slot ${slotName(status?.other_slot)} (version ${status?.other_version})` }}
           and will be unavailable for a few minutes. Uploads are kept; settings are those of that slot.
@@ -176,9 +188,16 @@ function isNewer(a, b) {
   return false
 }
 const newerInOther = computed(() => !!status.value?.other_version && isNewer(status.value.other_version, status.value.current_version))
+const dialogTitle = computed(() => {
+  const other = slotName(status.value?.other_slot)
+  if (confirmAction.value === 'apply') return 'Install and restart?'
+  if (confirmAction.value === 'copy_to_other') return `Replace slot ${other} with a copy of slot ${slotName(status.value?.slot)}?`
+  return `Restart on slot ${other}?`
+})
 const busy = computed(() => !!status.value?.op)
 const canDownload = computed(() => !!status.value?.ab && !!check.value?.available)
 const canInstall = computed(() => !!status.value?.ab && !busy.value && !status.value.armed && newerInOther.value)
+const canCopy = computed(() => !!status.value?.ab && !busy.value && !status.value.pending_confirm)
 const canSwitch = computed(() => !!status.value?.ab && !busy.value && !!status.value.other_version)
 const phaseNames = {check: 'checking', download: 'downloading', write: 'writing', verify: 'verifying', arm: 'preparing the restart',
   reboot: 'restarting'}
@@ -186,7 +205,8 @@ const damaged = ['label', 'fsck', 'mount']
 const progressTitle = computed(() => {
   const op = progress.value?.op
   const titles = {fetch: 'Downloading the update', apply: 'Installing the update', rollback: 'Going back to the previous version',
-    repair: `Rebuilding slot ${slotName(status.value?.other_slot)}` + (damaged.includes(progress.value?.cause) ||
+    repair: status.value?.copy_from ? `Copying slot ${slotName(status.value.copy_from)} to slot ${slotName(status.value.other_slot)}`
+      : `Rebuilding slot ${slotName(status.value?.other_slot)}` + (damaged.includes(progress.value?.cause) ||
       progress.value?.cause?.startsWith('bootfile:') ? ' after damage' : progress.value?.cause === 'empty' ? ' (incomplete system)' : '')}
   return titles[op] ?? 'Working'
 })
@@ -235,7 +255,7 @@ onApi('Settings/Update/check', data => {
   checking.value = false
 })
 
-for (const command of ['fetch', 'cancel', 'apply', 'confirm', 'rollback']) {
+for (const command of ['fetch', 'cancel', 'apply', 'confirm', 'rollback', 'copy_to_other']) {
   onApi('Settings/Update/' + command, data => {
     message.value = data.result.error
       ? {type: friendlyErrors[data.result.error_code] ? 'warning' : 'error', text: describeError(data.result)}
