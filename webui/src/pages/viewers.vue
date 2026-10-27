@@ -87,9 +87,14 @@
                   <v-select :items="keyboardPositions" :model-value="win.keyboard.button_position" label="Button position"
                             density="compact" variant="outlined" hide-details min-width="160" :disabled="!win.keyboard.enabled"
                             @update:model-value="v => setKeyboard(win, {button_position: v})"></v-select>
-                  <v-select :items="keyboardLayouts" :model-value="win.keyboard.layout" label="Layout"
-                            density="compact" variant="outlined" hide-details min-width="160" :disabled="!win.keyboard.enabled"
-                            @update:model-value="v => setKeyboard(win, {layout: v})"></v-select>
+                  <v-autocomplete :items="keyboardLanguages" :model-value="keyboardLanguage(win)" label="Language"
+                                  density="compact" variant="outlined" hide-details min-width="220"
+                                  :disabled="!win.keyboard.enabled"
+                                  @update:model-value="v => v && setKeyboard(win, {layout: layoutId(v, undefined, languageVariants(v))})"></v-autocomplete>
+                  <v-select v-if="languageVariants(keyboardLanguage(win)).length > 1" :items="languageVariants(keyboardLanguage(win))"
+                            :model-value="keyboardVariant(win)" label="Variant" density="compact" variant="outlined" hide-details
+                            min-width="220" :disabled="!win.keyboard.enabled"
+                            @update:model-value="v => setKeyboard(win, {layout: layoutId(keyboardLanguage(win), v, languageVariants(keyboardLanguage(win)))})"></v-select>
                 </div>
               </td>
             </tr>
@@ -237,6 +242,8 @@
 import { ref, computed } from 'vue'
 import { api, canCall } from '@/api'
 import WindowLayout from '@/components/WindowLayout.vue'
+import gboardLanguages from '@/gboard/index.json'
+import { layoutId, parseLayoutId } from '@/keyboard-layouts.js'
 
 const viewersMap = ref({})    // instance_id → viewer info
 const playlists = api.Scheduler.playlists.use({pick: 'playlists', initial: []})
@@ -313,8 +320,15 @@ const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/s
 // ... and so are the area and the panes of a window (the playlist of each pane is the scheduler's)
 const canConfigureLayout = computed(() => canCall('Viewers/set_area', currentUser.value))
 const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
-const keyboardLayouts = ['english', 'italian', 'german', 'french', 'spanish', 'brazilian', 'russian', 'polish', 'czech',
-  'greek', 'turkish', 'ukrainian']
+// The layouts of the on-screen keyboard are Gboard's: one per language, some with variants (see keyboard-layouts.js)
+const languageNames = new Intl.DisplayNames(['en'], {type: 'language', fallback: 'code'})
+const languageName = lang => { try { return languageNames.of(lang.id) } catch { return lang.id } }
+const keyboardLanguages = gboardLanguages.map(lang => ({title: `${languageName(lang)} (${lang.id})`, value: lang.id}))
+  .sort((a, b) => a.title.localeCompare(b.title))
+const variantsByLanguage = Object.fromEntries(gboardLanguages.map(lang => [lang.id, lang.variants]))
+const languageVariants = lang => variantsByLanguage[lang] ?? []
+const keyboardLanguage = win => parseLayoutId(win.keyboard.layout).lang
+const keyboardVariant = win => parseLayoutId(win.keyboard.layout).variant ?? languageVariants(keyboardLanguage(win))[0]
 function setKeyboard(win, patch) {
   api.Viewers.set_keyboard({viewer_id: win.viewer_id, window_id: win.window_id, ...win.keyboard, ...patch})
 }
