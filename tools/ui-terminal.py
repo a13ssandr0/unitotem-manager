@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Test of the web terminal: in headless Chrome open it from the navbar, check that `login` asks for an account, log in
-with an operating-system account, run a command, close the window; and over a plain websocket check that nobody
-without a session, and no web user without the admin capability, gets a terminal.
+Test of the web terminal: in headless Chrome open it from the navbar (no login: the shell of the web user's own
+account), run a command, close the window; and over a plain websocket check that nobody without a session, no web
+user without the admin capability, nobody without a valid one-time token (none, wrong, used twice, another
+session's) and no page of another origin gets a terminal.
 
-    tools/ui-terminal.py --host 192.168.122.50 --os-user root --os-password unitotem
+    tools/ui-terminal.py --host 192.168.0.254 --user root --password unitotem
 """
 import argparse
 import asyncio
@@ -96,13 +97,10 @@ async def main(args):
             check('the Terminal button is there for an admin',
                   await cdp.eval("!!document.querySelector('button[title=Terminal]')"))
             await cdp.eval("document.querySelector('button[title=Terminal]').click()")
-            check('login asks for an account', await wait_for('login:'))
-            await type_line(args.os_user)
-            check('then for a password', await wait_for('assword'))
-            await type_line(args.os_password)
+            check('no login prompt: the shell starts at once', await wait_for('#') or await wait_for('$'))
             await type_line('echo TERMINAL-$((6*7))-OK; id -un')
             check('a command runs in the session', await wait_for('TERMINAL-42-OK'))
-            check('as the operating-system user that logged in', await wait_for(args.os_user))
+            check('as the web user themselves', await wait_for(args.user))
             # the title follows what the shell asks for (OSC 0/2), like any terminal emulator
             await type_line("printf '\\033]0;shell-title-test\\007'")
             for _ in range(20):
@@ -139,27 +137,65 @@ async def main(args):
             check('logging out of the session (exit / Ctrl+D) closes the window',
                   await cdp.eval("document.querySelectorAll('.floating-window').length") == 0)
             await cdp.eval("document.querySelector('button[title=Terminal]').click()")
-            check('it can be opened again', await wait_for('login:'))
+            check('it can be opened again', await wait_for('#') or await wait_for('$'))
             await cdp.eval("document.querySelector('.floating-window button[title=Close]').click()")
             await asyncio.sleep(1)
             check('the Close button removes it', await cdp.eval("document.querySelectorAll('.floating-window').length") == 0)
 
         await refused(args.host, None, 'a connection without a session is refused', check)
+        # tokens, with the admin's cookie
+        import http.client
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        def login(user, password):
+            conn = http.client.HTTPSConnection(args.host, context=ctx)
+            conn.request('POST', '/auth/token', f'username={user}&password={password}',
+                         {'Content-Type': 'application/x-www-form-urlencoded'})
+            return (conn.getresponse().getheader('set-cookie') or '').split(';')[0]
+
+        def token_of(cookie):
+            conn = http.client.HTTPSConnection(args.host, context=ctx)
+            conn.request('POST', '/terminal/token', headers={'Cookie': cookie})
+            r = conn.getresponse()
+            body = r.read()
+            return r.status, (json.loads(body).get('token') if r.status == 200 else None)
+
+        async def opens(cookie, first, origin=None):
+            """True if the server starts a shell for `first` (the first frame): it answers with terminal data."""
+            headers = {'Cookie': cookie}
+            if origin:
+                headers['Origin'] = origin
+            try:
+                async with websockets.connect(f'wss://{args.host}/terminal', ssl=ctx, additional_headers=headers) as w:
+                    if first is not None:
+                        await w.send(first)
+                    await asyncio.wait_for(w.recv(), 4)
+                    return True
+            except Exception:
+                return False
+
+        admin = login(args.user, args.password)
+        status, token = token_of(admin)
+        check('an admin gets a token', status == 200 and bool(token))
+        check('the token opens a terminal', await opens(admin, json.dumps({'token': token})))
+        check('and only once', not await opens(admin, json.dumps({'token': token})))
+        check('no token: refused', not await opens(admin, None))
+        check('a wrong token: refused', not await opens(admin, json.dumps({'token': 'x' * 43})))
+        _, token = token_of(admin)
+        check('a foreign Origin: refused', not await opens(admin, json.dumps({'token': token}), origin='https://evil.example'))
         # a web user without the admin capability
         probe = [sys.executable, str(PROBE), '--host', args.host, '--timeout', '4']
         subprocess.run(probe + ['--send', 'Settings/Security/add_user', '--args',
                                 json.dumps({'username': 'term-test', 'password': 'term-test-1'})], capture_output=True)
         subprocess.run(probe + ['--send', 'Settings/Security/set_user_permissions', '--args',
                                 json.dumps({'username': 'term-test', 'perms': ['scheduler']})], capture_output=True)
-        import http.client
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        conn = http.client.HTTPSConnection(args.host, context=ctx)
-        conn.request('POST', '/auth/token', 'username=term-test&password=term-test-1',
-                     {'Content-Type': 'application/x-www-form-urlencoded'})
-        cookie = (conn.getresponse().getheader('set-cookie') or '').split(';')[0]
-        await refused(args.host, cookie, 'a web user without the admin capability is refused', check)
+        cookie = login('term-test', 'term-test-1')
+        check('a web user without the admin capability gets no token', token_of(cookie)[0] == 403)
+        await refused(args.host, cookie, 'and no terminal', check)
+        _, token = token_of(admin)
+        check("another session's token is useless", not await opens(cookie, json.dumps({'token': token})))
         subprocess.run(probe + ['--send', 'Settings/Security/delete_user', '--args', json.dumps({'username': 'term-test'})],
                        capture_output=True)
     finally:
@@ -172,6 +208,4 @@ if __name__ == '__main__':
     ap.add_argument('--host', required=True)
     ap.add_argument('--user', default='admin')
     ap.add_argument('--password', default='admin')
-    ap.add_argument('--os-user', required=True)
-    ap.add_argument('--os-password', required=True)
     asyncio.run(main(ap.parse_args()))

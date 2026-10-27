@@ -6,8 +6,9 @@
 
 <script setup>
 /**
- * A terminal in a floating window, over the /terminal websocket (a pty running `login`: the operating-system
- * account and password are asked here, they are not the web UI's). The connection exists only while the window is open.
+ * A terminal in a floating window, over the /terminal websocket: the shell of the web user's own account, no second
+ * login. A one-time token (POST /terminal/token, needs the session) is the first frame of the websocket. The connection
+ * exists only while the window is open.
  */
 import {nextTick, onBeforeUnmount, ref, watch} from 'vue'
 import {Terminal} from '@xterm/xterm'
@@ -33,7 +34,7 @@ function sendSize() {
   }
 }
 
-function connect() {
+async function connect() {
   term = new Terminal({cursorBlink: true, fontSize: 14, convertEol: false, scrollback: 2000,
     theme: {background: '#000000'}})
   fit = new FitAddon()
@@ -43,9 +44,20 @@ function connect() {
   title.value = 'Terminal'
   fit.fit()
 
+  let token
+  try {
+    const reply = await fetch('/terminal/token', {method: 'POST', credentials: 'same-origin'})
+    if (!reply.ok) throw new Error((await reply.json().catch(() => ({}))).detail || reply.statusText)
+    token = (await reply.json()).token
+  } catch (e) {
+    term.write(`\x1b[2m[cannot open the terminal: ${e.message}]\x1b[0m\r\n`)
+    return
+  }
+  if (!term) return          // the window was closed meanwhile
+
   socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/terminal`)
   socket.binaryType = 'arraybuffer'
-  socket.onopen = () => { sendSize(); term.focus() }
+  socket.onopen = () => { socket.send(JSON.stringify({token})); sendSize(); term.focus() }
   socket.onmessage = (e) => term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data))
   socket.onclose = (e) => {
     // The shell ended (logout, Ctrl+D, exit): there is nothing left to show, the window goes with it

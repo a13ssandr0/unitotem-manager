@@ -19,16 +19,16 @@ loop, token plugins and (on Debian) numpy, jwcrypto and redis in order to copy b
 """
 import asyncio
 import json
-from urllib.parse import urlsplit
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from loguru import logger
 from starlette.requests import Request
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from routers.login import LOGMAN, NotAuthenticatedException
+from routers.login import LOGMAN, NotAuthenticatedException, require_perm
 from utils import sessions
 from .system import vnc as vnc_system
+from .ws_token import new_token, read_token, same_origin
 from .system.screens import wayland
 from .system.vnc import IdleWatch, VncError, VncServer
 
@@ -40,13 +40,6 @@ IDLE_CHECK_INTERVAL = 5
 async def _refuse(websocket: WebSocket, code: int, reason: str):
     await websocket.accept()
     await websocket.close(code, reason)
-
-
-def same_origin(websocket: WebSocket) -> bool:
-    """A browser always sends Origin on a websocket: a page of another site must not be able to open this one even
-    if it somehow rode the user's cookie (it is SameSite=Strict, this is the second lock)."""
-    origin = websocket.headers.get('origin')
-    return origin is None or urlsplit(origin).netloc == websocket.headers.get('host')
 
 
 async def authorize(websocket: WebSocket):
@@ -109,6 +102,12 @@ async def _watch_idle(idle: IdleWatch):
     return 'Idle'
 
 
+@router.post('/vnc/token')
+async def vnc_token(user=Depends(require_perm('admin'))):
+    """A one-time token to open the /vnc websocket with (valid 30 s, for this session only)."""
+    return {'token': new_token(user.name, user.sid)}
+
+
 @router.websocket('/vnc')
 async def vnc(websocket: WebSocket):
     user = await authorize(websocket)
@@ -116,13 +115,19 @@ async def vnc(websocket: WebSocket):
         return
     peer = websocket.client.host if websocket.client else 'unknown'
     control = websocket.query_params.get('control') == '1'
+    # accepted first: the one-time token is the first frame, and nothing is started before it is right
+    await websocket.accept()
+    if not await read_token(websocket, user.name, user.sid):
+        logger.warning('Screen viewing refused to {} from {}: missing, wrong, used or expired token', user.name, peer)
+        await websocket.close(1008, 'Forbidden')
+        return
 
     binary = vnc_system.find_binary()
     if binary is None:
-        await _refuse(websocket, 1011, 'The VNC server is not installed (package wayvnc)')
+        await websocket.close(1011, 'The VNC server is not installed (package wayvnc)')
         return
     if len(_sessions) >= vnc_system.MAX_SESSIONS:
-        await _refuse(websocket, 1013, 'Too many screens are being watched')
+        await websocket.close(1013, 'Too many screens are being watched')
         return
 
     server = None
@@ -136,10 +141,9 @@ async def vnc(websocket: WebSocket):
         if server:
             _sessions.discard(server)
             await server.stop()
-        await _refuse(websocket, 1011, str(exc)[:120])
+        await websocket.close(1011, str(exc)[:120])
         return
 
-    await websocket.accept()
     sessions.track(websocket, user.name, user.sid)
     logger.info('{} watches the screen ({}) from {}, {}', user.name, output.name if output else 'first output', peer,
                 'WITH control' if control else 'view-only')

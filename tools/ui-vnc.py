@@ -133,16 +133,43 @@ def login(host, user, password):
     return (conn.getresponse().getheader('set-cookie') or '').split(';')[0]
 
 
-def connect(host, cookie, query='', origin=None):
-    headers = {'Cookie': cookie} if cookie else {}
-    if origin:
-        headers['Origin'] = origin
-    return websockets.connect(f'wss://{host}/vnc{query}', ssl=CTX, additional_headers=headers, max_size=None)
+class connect:
+    """A websocket to /vnc that, like the page, asks for a one-time token and sends it as its first frame
+    (`token=False` sends none, a string sends that one). Usable with `async with` and with `await`."""
+
+    def __init__(self, host, cookie, query='', origin=None, token=True):
+        self.host, self.cookie, self.query, self.origin, self.token = host, cookie, query, origin, token
+
+    async def _open(self):
+        headers = {'Cookie': self.cookie} if self.cookie else {}
+        if self.origin:
+            headers['Origin'] = self.origin
+        token = self.token
+        if token is True and self.cookie:
+            conn = http.client.HTTPSConnection(self.host, context=CTX)
+            conn.request('POST', '/vnc/token', headers={'Cookie': self.cookie})
+            reply = conn.getresponse()
+            body = reply.read()
+            token = json.loads(body)['token'] if reply.status == 200 else None
+        self.ws = await websockets.connect(f'wss://{self.host}/vnc{self.query}', ssl=CTX, additional_headers=headers,
+                                           max_size=None)
+        if token:
+            await self.ws.send(json.dumps({'token': token}))
+        return self.ws
+
+    async def __aenter__(self):
+        return await self._open()
+
+    async def __aexit__(self, *exc):
+        await self.ws.close()
+
+    def __await__(self):
+        return self._open().__await__()
 
 
-async def refused(host, cookie, query='', origin=None):
+async def refused(host, cookie, query='', origin=None, token=True):
     try:
-        async with connect(host, cookie, query, origin) as ws:
+        async with connect(host, cookie, query, origin, token) as ws:
             await asyncio.wait_for(ws.recv(), 4)
             return False
     except websockets.ConnectionClosed as exc:
@@ -243,6 +270,8 @@ async def main(args):
         check('a connection without a session is refused', await refused(host, None))
         check('a page of another origin is refused even with an admin cookie',
               await refused(host, cookie, origin='https://evil.example'))
+        check('a connection with no token is refused', await refused(host, cookie, token=False))
+        check('a wrong token is refused', await refused(host, cookie, token='x' * 43))
         subprocess.run(probe + ['--send', 'Settings/Security/add_user', '--args',
                                 json.dumps({'username': 'vnc-test', 'password': 'vnc-test-1'})], capture_output=True)
         subprocess.run(probe + ['--send', 'Settings/Security/set_user_permissions', '--args',
