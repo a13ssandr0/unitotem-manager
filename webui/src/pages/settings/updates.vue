@@ -86,6 +86,7 @@
         <v-alert v-else-if="check" type="success" variant="tonal" class="mt-4">
           The system is up to date.
         </v-alert>
+
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
@@ -128,6 +129,35 @@
         >Download</v-btn>
       </v-card-actions>
     </v-card>
+    <v-card v-if="status && status.ab && status.auto" class="ma-4 mt-0" max-width="600" width="100%" title="Automatic updates">
+      <v-card-text>
+        <div class="d-flex flex-wrap align-center ga-4">
+          <v-select
+            class="policy-mode"
+            density="compact"
+            hide-details
+            label="When a new version is available"
+            :items="policyModes"
+            :model-value="policy.mode"
+            @update:model-value="setPolicy({mode: $event})"
+          ></v-select>
+          <v-text-field
+            v-if="policy.mode === 'scheduled'"
+            class="policy-time"
+            density="compact"
+            hide-details
+            type="time"
+            label="Restart at"
+            :model-value="policy.time"
+            @update:model-value="v => v && setPolicy({time: v})"
+          ></v-text-field>
+        </div>
+        <div v-if="autoText" class="text-caption mt-2">{{ autoText }}</div>
+        <div v-if="status.staged" class="text-caption mt-1">
+          An update is prepared: it starts at the next restart of the device.
+        </div>
+      </v-card-text>
+    </v-card>
     <v-dialog v-model="confirmDialog" max-width="420">
       <v-card :title="dialogTitle">
         <v-card-text v-if="confirmAction === 'copy_to_other'">
@@ -153,6 +183,8 @@
 <style scoped>
 /* name and action take only what they need, the version and its chips take the rest */
 .slot-name, .slot-action { width: 1%; white-space: nowrap; }
+.policy-mode { max-width: 340px; min-width: 240px; }
+.policy-time { max-width: 140px; }
 </style>
 
 <script setup>
@@ -203,6 +235,30 @@ const dialogTitle = computed(() => {
   if (confirmAction.value === 'copy_to_other') return `Replace slot ${other} with a copy of slot ${slotName(status.value?.slot)}?`
   return `Restart on slot ${other}?`
 })
+const policyModes = [
+  {title: 'Do nothing', value: 'off'},
+  {title: 'Download only', value: 'download'},
+  {title: 'Download and prepare (starts at the next restart)', value: 'stage'},
+  {title: 'Download and restart at once', value: 'reboot'},
+  {title: 'Download and restart at a set time', value: 'scheduled'},
+]
+const policy = computed(() => ({mode: 'off', time: '04:00', ...(status.value?.auto?.policy ?? {})}))
+function setPolicy(change) {
+  const next = {...policy.value, ...change}
+  api.Settings.Update.set_policy({mode: next.mode, time: next.time})
+}
+// What the automatic run did last, in words (only the states worth telling)
+const autoTexts = {
+  'up-to-date': 'The system is up to date.',
+  downloaded: 'A new version was downloaded.',
+  staged: 'A new version is prepared and starts at the next restart.',
+  'waiting-for-schedule': 'A new version is prepared and will start at the scheduled time.',
+  rebooting: 'Restarting into the new version.',
+  'check-failed': 'The last automatic check failed, it will be retried.',
+  'fetch-failed': 'The last automatic download failed, it will be retried.',
+  'needs-manual': 'The new version needs a manual installation.',
+}
+const autoText = computed(() => autoTexts[status.value?.auto?.state?.action] ?? '')
 const busy = computed(() => !!status.value?.op)
 const canDownload = computed(() => !!status.value?.ab && !!check.value?.available)
 const canInstall = computed(() => !!status.value?.ab && !busy.value && !status.value.armed && newerInOther.value)
@@ -264,7 +320,7 @@ onApi('Settings/Update/check', data => {
   checking.value = false
 })
 
-for (const command of ['fetch', 'cancel', 'apply', 'confirm', 'rollback', 'copy_to_other']) {
+for (const command of ['fetch', 'cancel', 'apply', 'confirm', 'rollback', 'copy_to_other', 'set_policy']) {
   onApi('Settings/Update/' + command, data => {
     message.value = data.result.error
       ? {type: friendlyErrors[data.result.error_code] ? 'warning' : 'error', text: describeError(data.result)}

@@ -71,3 +71,10 @@ class Update(WSAPIBase):
         result = await updater.copy_to_other()
         self._start_polling()
         return WSBroadcast(result=result)
+
+    async def set_policy(self, mode: str, time: str = '04:00'):
+        if mode not in updater.POLICY_MODES:
+            return WSBroadcast(result={'error': f'Unknown mode {mode!r}'})
+        result = await updater.set_policy(mode, time)
+        await self.ws.broadcast('Settings/Update/status', status=await updater.status())
+        return WSBroadcast(result=result)
