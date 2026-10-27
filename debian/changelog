@@ -1,7 +1,7 @@
 unitotem-manager (3.0.0~dev11) stable; urgency=medium
 
-  * CEF: pages that forbid being framed (X-Frame-Options, CSP frame-ancestors; Home Assistant
-    does) are shown in a window (libcef patch 0003, switch unitotem-allow-framing, rebuilt
+  * CEF: pages that forbid being framed (X-Frame-Options, CSP frame-ancestors)
+    are shown in a window (libcef patch 0003, switch unitotem-allow-framing, rebuilt
     for both architectures)
   * The viewer raises what the browser refuses or cannot load, and exceptions of its own
     page, as notifications
