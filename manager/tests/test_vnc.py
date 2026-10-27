@@ -17,6 +17,7 @@ import pytest
 _login = types.ModuleType('routers.login')
 _login.LOGMAN = None
 _login.NotAuthenticatedException = type('NotAuthenticatedException', (Exception,), {})
+_login.require_perm = lambda perm: None
 sys.modules.setdefault('routers.login', _login)
 
 from unitotem_node import vnc as vnc_route  # noqa: E402
