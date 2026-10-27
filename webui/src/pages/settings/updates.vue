@@ -23,7 +23,7 @@
             <tr>
               <td>Image layout</td>
               <td>
-                {{ status.ab ? 'A/B (rollback available)' : 'Single root, no A/B yet' }}
+                {{ layoutText }}
               </td>
             </tr>
             <tr v-if="status.ab">
@@ -150,6 +150,14 @@ const confirmDialog = computed({
   set: (v) => { if (!v) confirmAction.value = null },
 })
 const progress = computed(() => status.value?.op?.progress ?? null)
+// The updater reports `layout`: 1 = a single root, 2 = two slots (A/B); `ab` says whether this system runs from a slot
+const layoutText = computed(() => {
+  const s = status.value
+  if (!s) return ''
+  if (s.ab) return 'A/B (rollback available)'
+  if (!s.layout || s.layout === 1) return 'Single root, no A/B yet'
+  return `Layout ${s.layout} (unknown to this version of the manager)`
+})
 const busy = computed(() => !!status.value?.op)
 const phaseNames = {check: 'checking', download: 'downloading', write: 'writing', verify: 'verifying', arm: 'preparing the restart',
   reboot: 'restarting'}

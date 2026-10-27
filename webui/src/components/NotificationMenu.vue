@@ -20,8 +20,8 @@
 
       <div v-if="!items.length" class="pa-4 text-medium-emphasis notification-empty">No notifications</div>
       <v-list v-else lines="three" density="compact" class="py-0" style="max-height: 60vh; overflow-y: auto">
-        <v-list-item v-for="n in items" :key="n.id" class="notification-item" :class="{unread: !n.read}"
-                     :data-level="n.level" :data-title="n.title">
+        <v-list-item v-for="n in items" :key="n.id" class="notification-item" :class="{unread: !n.read, clickable: true}"
+                     :data-level="n.level" :data-title="n.title" @click="activate(n, router, () => { open = false })">
           <template v-slot:prepend>
             <v-icon :color="levelOf(n).color" class="mr-3">{{ levelOf(n).icon }}</v-icon>
           </template>
@@ -31,11 +31,14 @@
                              :indeterminate="n.progress < 0" :model-value="Math.max(n.progress, 0)"></v-progress-linear>
           <div class="text-caption text-medium-emphasis">
             <span v-if="n.progress != null && n.progress >= 0">{{ Math.round(n.progress) }}% · </span>{{ ago(n.updated) }}
-            <a v-if="n.link" href="#" class="ml-2 notification-link" @click.prevent="follow(n.link)">Open</a>
+          </div>
+          <div v-if="n.actions.length" class="mt-1">
+            <v-btn v-for="a in n.actions" :key="a.id" size="small" variant="text" color="primary"
+                   @click.stop="runAction(n, a)">{{ a.label || a.id }}</v-btn>
           </div>
           <template v-slot:append v-if="!n.persistent">
             <v-btn icon size="small" variant="text" title="Dismiss" class="notification-dismiss"
-                   @click="api.Notifications.dismiss({ids: [n.id]})">
+                   @click.stop="api.Notifications.dismiss({ids: [n.id]})">
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </template>
@@ -53,6 +56,7 @@
 import {computed, onUnmounted, ref, watch} from 'vue'
 import {useRouter} from 'vue-router'
 import {api} from '@/api'
+import {activate, runAction} from '@/notifications'
 
 const router = useRouter()
 const items = api.Notifications.list.use({pick: 'notifications', initial: []})
@@ -95,12 +99,9 @@ function ago(epoch) {
   if (hours < 24) return `${hours} h ago`
   return `${Math.floor(hours / 24)} d ago`
 }
-
-function follow(link) {
-  // The server only accepts a path of this web UI, and so does this: an address is never followed
-  if (typeof link === 'string' && link.startsWith('/') && !link.startsWith('//')) {
-    open.value = false
-    router.push(link)
-  }
-}
 </script>
+
+<style scoped>
+.notification-item.clickable { cursor: pointer; }
+.notification-item.clickable:hover { background: rgba(var(--v-theme-on-surface), 0.06); }
+</style>
