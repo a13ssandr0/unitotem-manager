@@ -54,10 +54,11 @@ def test_replaces_id_updates(server, center):
     assert n['text'] == '90%'
 
 
-def test_unknown_replaces_id_is_a_new_one(server, center):
+def test_a_non_zero_replaces_id_is_returned_as_it_is(server, center):
+    # the spec: "If replaces_id is non-zero, the server returns that same value", also for an id it does not know
     a = server.raise_notification('app', 0, 'a', '', {})
-    b = server.raise_notification('app', 4242, 'b', '', {})
-    assert a != b and len(shown(center)) == 2
+    assert server.raise_notification('app', 4242, 'b', '', {}) == 4242
+    assert a != 4242 and len(shown(center)) == 2
 
 
 def test_rate_limit_per_application(server, center):
@@ -83,3 +84,70 @@ def test_dismissal_is_reported_to_the_application(server, center, monkeypatch):
     nid = server.raise_notification('app', 0, 'hi', '', {})
     center.dismiss_all(['admin'])
     assert emitted == [(nid, dn.CLOSED_DISMISSED)]
+
+
+def test_timeouts_follow_the_spec(server, center):
+    server.raise_notification('app', 0, 'default', '', {})                       # -1: the level's default
+    server.raise_notification('app', 0, 'never', '', {}, [], 0)                   # 0: until clicked
+    server.raise_notification('app', 0, 'two s', '', {}, [], 2000)                # > 0: that long
+    server.raise_notification('app', 0, 'critical', '', {'urgency': ('y', 2)}, [], 1000)   # critical never expires
+    t = {n['title']: n['timeout'] for n in shown(center)}
+    assert t == {'default': 6000, 'never': 0, 'two s': 2000, 'critical': 0}
+
+
+def test_progress_hint_and_flags(server, center):
+    server.raise_notification('app', 0, 'Copy', '', {'value': ('i', 40), 'resident': ('b', True)})
+    [n] = shown(center)
+    assert n['progress'] == 40
+
+
+def test_actions_default_is_a_click_and_the_rest_buttons(server, center):
+    nid = server.raise_notification('app', 0, 'Mail', '', {}, ['default', 'Open', 'reply', 'Reply'])
+    [n] = shown(center)
+    assert n['default_action'] is True and n['actions'] == [{'id': 'reply', 'label': 'Reply'}]
+    told = []
+    center.listen_action(lambda item, action: told.append((item.key, action)))
+    assert center.invoke(n['id'], 'default', ['admin']) is True
+    assert told == [(f'fdo.user.{nid}', 'default')]
+    assert shown(center) == []                      # not resident: the click closes it
+    assert center.invoke(n['id'], 'default', ['admin']) is False
+
+
+def test_resident_stays_after_an_action(server, center):
+    server.raise_notification('app', 0, 'Mail', '', {'resident': ('b', True)}, ['default', 'Open'])
+    [n] = shown(center)
+    center.invoke(n['id'], 'default', ['admin'])
+    assert len(shown(center)) == 1
+
+
+def test_expiry_tells_the_sender_and_keeps_it_in_the_bell(server, center):
+    import asyncio
+    sent = []
+    server.notification_closed = type('S', (), {'emit': lambda self, v: sent.append(v)})()
+
+    async def run():
+        nid = server.raise_notification('app', 0, 'Quick', '', {}, ['default', 'Open'], 50)
+        await asyncio.sleep(0.2)
+        return nid
+
+    nid = asyncio.run(run())
+    assert sent == [(nid, dn.CLOSED_EXPIRED)]
+    [n] = shown(center)
+    assert n['default_action'] is False             # the sender cannot be told any more: the id is invalid
+
+
+def test_transient_leaves_the_bell_when_it_expires(server, center):
+    import asyncio
+    server.notification_closed = type('S', (), {'emit': lambda self, v: None})()
+
+    async def run():
+        server.raise_notification('app', 0, 'Blink', '', {'transient': ('b', True)}, [], 50)
+        await asyncio.sleep(0.2)
+
+    asyncio.run(run())
+    assert shown(center) == []
+
+
+def test_capabilities_are_only_what_is_implemented():
+    from pathlib import Path
+    assert "return ['actions', 'body', 'persistence']" in Path(dn.__file__).read_text()
