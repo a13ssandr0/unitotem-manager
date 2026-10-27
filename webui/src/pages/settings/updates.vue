@@ -161,10 +161,12 @@ const layoutText = computed(() => {
 const busy = computed(() => !!status.value?.op)
 const phaseNames = {check: 'checking', download: 'downloading', write: 'writing', verify: 'verifying', arm: 'preparing the restart',
   reboot: 'restarting'}
+const damaged = ['label', 'fsck', 'mount']
 const progressTitle = computed(() => {
   const op = progress.value?.op
   const titles = {fetch: 'Downloading the update', apply: 'Installing the update', rollback: 'Going back to the previous version',
-    repair: `Repairing slot ${slotName(status.value?.other_slot)}`}
+    repair: `Rebuilding slot ${slotName(status.value?.other_slot)}` + (damaged.includes(progress.value?.cause) ||
+      progress.value?.cause?.startsWith('bootfile:') ? ' after damage' : progress.value?.cause === 'empty' ? ' (incomplete system)' : '')}
   return titles[op] ?? 'Working'
 })
 

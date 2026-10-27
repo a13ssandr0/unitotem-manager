@@ -7,17 +7,17 @@ from utils.notifications import NotificationCenter
 
 def test_a_persistent_notification_with_a_bar_cannot_be_dismissed(tmp_path):
     center = NotificationCenter(path=tmp_path / 'n.json')
-    center.notify('update.progress', 'info', 'Repairing slot B', 'Writing', progress=10, persistent=True)
+    center.notify('update.progress', 'info', 'Rebuilding slot B', 'Writing', progress=10, persistent=True)
     center.notify('other', 'info', 'Something')
     assert center.set_progress('update.progress', 55, 'Writing, about 30 s left')
     perms = ['admin']
     shown = {n['title']: n for n in center.snapshot(perms)}
-    assert shown['Repairing slot B']['progress'] == 55 and shown['Repairing slot B']['persistent']
+    assert shown['Rebuilding slot B']['progress'] == 55 and shown['Rebuilding slot B']['persistent']
     center.dismiss_all(perms)
     left = [n['title'] for n in center.snapshot(perms)]
-    assert left == ['Repairing slot B']
-    center.dismiss([shown['Repairing slot B']['id']], perms)
-    assert [n['title'] for n in center.snapshot(perms)] == ['Repairing slot B']
+    assert left == ['Rebuilding slot B']
+    center.dismiss([shown['Rebuilding slot B']['id']], perms)
+    assert [n['title'] for n in center.snapshot(perms)] == ['Rebuilding slot B']
     assert center.resolve('update.progress')
     assert center.snapshot(perms) == []
 
@@ -55,7 +55,7 @@ def test_watcher_follows_an_operation_from_start_to_end(tmp_path, monkeypatch):
         answers.append(running)
         await watcher.refresh()
         first = center.snapshot(['admin'])[0]
-        assert first['title'] == 'Repairing slot B' and first['progress'] == 40 and first['persistent']
+        assert first['title'] == 'Rebuilding slot B' and first['progress'] == 40 and first['persistent']
         running2 = {**running, 'op': {'pid': 1, 'progress': {'op': 'repair', 'phase': 'verify', 'percent': 80}}}
         answers.append(running2)
         await watcher.refresh()
@@ -64,7 +64,7 @@ def test_watcher_follows_an_operation_from_start_to_end(tmp_path, monkeypatch):
                         'last_result': {'op': 'repair', 'result': 'ok', 'slot': 'B'}})
         await watcher.refresh()
         titles = [n['title'] for n in center.snapshot(['admin'])]
-        assert titles == ['Slot B repaired']          # the bar is gone, what came of it is told
+        assert titles == ['Slot B rebuilt']          # the bar is gone, what came of it is told
         assert len(pushed) == 3
 
     asyncio.run(scenario())
@@ -87,3 +87,13 @@ def test_a_bar_left_by_a_dead_manager_is_removed_at_start(tmp_path, monkeypatch)
 
     asyncio.run(scenario())
     assert center.snapshot(['admin']) == []
+
+
+def test_rebuild_titles_tell_damage_from_an_incomplete_system():
+    up = __import__('unitotem_node.system.update_progress', fromlist=['x'])
+    assert up.describe('repair', 'write', 'B', 'fsck')[0] == 'Rebuilding slot B after damage'
+    assert up.describe('repair', 'write', 'B', 'bootfile:kernel8.img')[0] == 'Rebuilding slot B after damage'
+    assert up.describe('repair', 'write', 'B', 'empty')[0] == 'Rebuilding slot B (incomplete system)'
+    assert up.describe('repair', 'write', 'B')[0] == 'Rebuilding slot B'
+    assert up.describe('fetch', 'download', 'B')[0] == 'Downloading the update'
+    assert up.cause_text('fsck') == 'its filesystem is damaged' and up.cause_text('bootfile:x') == 'its boot file x is missing'
