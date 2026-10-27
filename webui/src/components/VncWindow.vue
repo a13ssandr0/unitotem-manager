@@ -1,17 +1,28 @@
 <template>
   <FloatingWindow v-model="open" :title="title" icon="mdi-monitor-eye" :width="900" :height="560">
+    <template #titlebar>
+      <v-menu location="bottom end">
+        <template #activator="{props}">
+          <button v-bind="props" type="button" class="vnc-pick" title="Which screen to show" :disabled="!available">
+            <v-icon>mdi-monitor</v-icon><span class="text-truncate">{{ outputLabel }}</span><v-icon>mdi-menu-down</v-icon>
+          </button>
+        </template>
+        <v-list density="compact" :selected="[output]">
+          <v-list-item v-for="item in outputItems" :key="item.value" :value="item.value" :title="item.title"
+                       @click="chooseOutput(item.value)"></v-list-item>
+        </v-list>
+      </v-menu>
+      <button type="button" class="vnc-btn vnc-control" :class="{on: control}" :disabled="!available"
+              :title="control ? 'Control is ON: click to go back to view only' : 'View only: click to take control'"
+              @click="toggleControl">
+        <v-icon>{{ control ? 'mdi-cursor-default-click' : 'mdi-eye' }}</v-icon>
+      </button>
+      <button type="button" class="vnc-btn" title="Reconnect" :disabled="!available" @click="reconnect">
+        <v-icon>mdi-reload</v-icon>
+      </button>
+    </template>
     <div class="vnc-root">
-      <div class="vnc-bar d-flex align-center ga-2 px-2">
-        <v-select v-model="output" :items="outputItems" density="compact" variant="outlined" hide-details
-                  class="vnc-output" label="Screen" :disabled="!available" @update:model-value="reconnect"/>
-        <v-switch v-model="control" color="warning" density="compact" hide-details inset label="Control"
-                  :disabled="!available" @update:model-value="reconnect"/>
-        <v-spacer/>
-        <span class="text-caption vnc-status" :class="'vnc-' + state">{{ statusText }}</span>
-        <v-btn size="small" variant="text" icon="mdi-reload" title="Reconnect" :disabled="!available"
-               @click="reconnect"/>
-      </div>
-      <div class="vnc-screen" @pointermove="activity" @pointerdown="activity" @keydown="activity" @wheel="activity">
+      <div class="vnc-screen" :class="{viewonly: !control}" @pointermove="activity" @pointerdown="activity" @keydown="activity" @wheel="activity">
         <div ref="host" class="vnc-host"></div>
         <div v-if="state !== 'connected'" class="vnc-overlay text-medium-emphasis">
           <v-progress-circular v-if="state === 'connecting'" indeterminate size="28"/>
@@ -56,10 +67,17 @@ const outputItems = computed(() => [
   {title: 'Whole desktop', value: ''},
   ...outputs.value.map(o => ({title: `${o.name} (${o.width}x${o.height})`, value: o.name})),
 ])
-const title = computed(() => {
-  const what = output.value || 'whole desktop'
-  return `Screen: ${what}${control.value ? ' (control)' : ''}`
-})
+const outputLabel = computed(() => outputItems.value.find(i => i.value === output.value)?.title ?? output.value)
+const title = computed(() => `Screen · ${statusText.value}`)
+function chooseOutput(name) {
+  if (name === output.value) return
+  output.value = name
+  reconnect()
+}
+function toggleControl() {
+  control.value = !control.value
+  reconnect()
+}
 const statusText = computed(() => {
   if (state.value === 'connecting') return 'Connecting'
   if (state.value === 'connected') return control.value ? 'Controlling' : 'View only'
@@ -161,13 +179,39 @@ onBeforeUnmount(disconnect)
   width: 100%;
   height: 100%;
 }
-.vnc-bar {
-  flex: none;
-  height: 52px;
+.vnc-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
 }
-.vnc-output {
-  max-width: 260px;
+.vnc-btn:hover { background: rgba(var(--v-theme-on-surface), 0.12); }
+.vnc-btn .v-icon { font-size: 16px !important; width: 16px; height: 16px; }
+.vnc-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }
+.vnc-pick:hover { background: rgba(var(--v-theme-on-surface), 0.12); }
+.vnc-pick .v-icon { font-size: 16px !important; width: 16px; height: 16px; }
+.vnc-control.on { background: rgb(var(--v-theme-warning)); color: rgb(var(--v-theme-on-warning)); }
+.vnc-btn:disabled, .vnc-pick:disabled { opacity: 0.4; cursor: default; }
 .vnc-screen {
   position: relative;
   flex: 1;
@@ -177,6 +221,11 @@ onBeforeUnmount(disconnect)
 .vnc-host {
   width: 100%;
   height: 100%;
+}
+/* View only: noVNC draws the remote pointer itself and hides the local one, which is nothing at all when the server sends no
+   cursor image: the pointer must stay visible over the screen */
+.vnc-screen.viewonly :deep(canvas) {
+  cursor: default !important;
 }
 .vnc-overlay {
   position: absolute;
