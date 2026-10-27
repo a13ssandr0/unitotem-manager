@@ -174,7 +174,7 @@ def test_round_trip_across_a_restart(path):
     [shown] = two.snapshot(['admin'])
     assert shown == {'id': nid, 'level': 'error', 'title': 'Broken', 'text': 'text', 'source': 's',
                      'audience': 'admin', 'link': '/x', 'created': shown['created'], 'updated': shown['updated'],
-                     'read': True}
+                     'read': True, 'progress': None, 'persistent': False}
     two.notify('k', 'error', 'Broken', 'text', source='s', audience='admin', link='/x')     # still the same one
     assert len(two.snapshot(['admin'])) == 1
 

@@ -20,6 +20,9 @@ How a producer uses it (core code and plugins alike: a plugin may import this mo
   user. An admin sees everything. Use `admin` whenever the text can reveal anything about the machine or the network.
 * Text is plain text, never markup (the web UI renders it escaped), and is truncated: producers may put things other
   people chose (the name of a device that asked to be paired) in it.
+* `progress` (0-100, or -1 for "working, unknown how far") turns a notification into a progress bar and `persistent` makes it
+  impossible to dismiss while the work lasts: `notifications.set_progress(key, percent, text)` moves the bar without making
+  the notification unread again, `resolve(key)` removes it when the work ends (the updater's download and repair).
 * The list is bounded, kept in /var/lib/unitotem (it is state, not configuration: it is not part of a backup) and
   survives a restart. The file has a version and every field is optional on reading, so the previous release can read
   what this one wrote and the other way round (rollback rule).
@@ -66,11 +69,13 @@ class Notification(BaseModel):
     updated: float = 0
     read: bool = False
     dismissed: bool = False
+    progress: Optional[float] = None        # 0-100, -1 = unknown, None = no bar
+    persistent: bool = False                # cannot be dismissed (it is about work in progress)
 
     def public(self) -> dict:
         return {'id': self.id, 'level': self.level, 'title': self.title, 'text': self.text, 'source': self.source,
                 'audience': self.audience, 'link': self.link, 'created': self.created, 'updated': self.updated,
-                'read': self.read}
+                'read': self.read, 'progress': self.progress, 'persistent': self.persistent}
 
 
 def _clip(value, limit: int) -> str:
@@ -165,7 +170,8 @@ class NotificationCenter:
     # ── producers ────────────────────────────────────────────────────────────
 
     def notify(self, key: Optional[str], level: str, title: str, text: str = '', *, source: str = '',
-               audience: Optional[str] = None, link: Optional[str] = None) -> Optional[str]:
+               audience: Optional[str] = None, link: Optional[str] = None, progress: Optional[float] = None,
+               persistent: bool = False) -> Optional[str]:
         """Raise a notification (see the module docstring). Returns its id, or None if it could not be raised. Never raises."""
         try:
             if level not in LEVELS:
@@ -176,6 +182,7 @@ class NotificationCenter:
             key = _clip(key, MAX_KEY) if key else None
             source = _clip(source, 40)
             link = _clean_link(link)
+            progress = None if progress is None else max(-1.0, min(100.0, float(progress)))
         except Exception as exc:        # a producer's bug is logged, it must not take the producer down
             logger.error('Invalid notification {!r}: {}', title, exc)
             return None
@@ -184,20 +191,41 @@ class NotificationCenter:
             now = self._now()
             same = next((i for i in self._items if key and i.key == key), None)
             if same is not None:
-                content = (level, title, text, audience, link, source)
-                if content == (same.level, same.title, same.text, same.audience, same.link, same.source):
+                content = (level, title, text, audience, link, source, progress, persistent)
+                if content == (same.level, same.title, same.text, same.audience, same.link, same.source, same.progress,
+                               same.persistent):
                     return same.id      # the same thing again: nothing to tell
                 same.level, same.title, same.text = level, title, text
                 same.audience, same.link, same.source = audience, link, source
+                same.progress, same.persistent = progress, persistent
                 same.updated, same.read, same.dismissed = now, False, False
                 item = same
             else:
                 item = Notification(key=key, level=level, title=title, text=text, source=source,
-                                    audience=audience, link=link, created=now, updated=now)
+                                    audience=audience, link=link, created=now, updated=now,
+                                    progress=progress, persistent=persistent)
                 self._items.append(item)
                 self._trim()
             self._changed()
             return item.id
+
+    def set_progress(self, key: str, progress: float, text: Optional[str] = None) -> bool:
+        """Move the bar of the notification `key` (and optionally its text) without making it unread again. False if there is none."""
+        try:
+            progress = max(-1.0, min(100.0, float(progress)))
+        except (TypeError, ValueError):
+            return False
+        with self._lock:
+            self._load()
+            item = next((i for i in self._items if i.key == key), None)
+            if item is None:
+                return False
+            text = item.text if text is None else _clip(text, MAX_TEXT)
+            if (item.progress, item.text) == (progress, text):
+                return True
+            item.progress, item.text, item.updated = progress, text, self._now()
+            self._changed()
+        return True
 
     def resolve(self, key: str) -> bool:
         """The problem behind `key` is gone: remove its notification. True if there was one."""
@@ -236,13 +264,14 @@ class NotificationCenter:
         wanted = set(ids)
         with self._lock:
             self._load()
-            hit = self._dismiss([i for i in self._items if i.id in wanted and not i.dismissed and visible_to(i, perms)])
+            hit = self._dismiss([i for i in self._items if i.id in wanted and not i.dismissed and not i.persistent
+                                 and visible_to(i, perms)])
         self._tell_closed(hit, dismissed=True)
 
     def dismiss_all(self, perms: Iterable) -> None:
         with self._lock:
             self._load()
-            hit = self._dismiss([i for i in self._items if not i.dismissed and visible_to(i, perms)])
+            hit = self._dismiss([i for i in self._items if not i.dismissed and not i.persistent and visible_to(i, perms)])
         self._tell_closed(hit, dismissed=True)
 
     def _dismiss(self, hit: list[Notification]) -> list[Notification]:

@@ -40,3 +40,23 @@ def test_record_only_changes_on_a_real_difference_and_ignores_failures():
     assert updater.availability['available'] is True
     assert updater.record({'supported': False}) is False
     assert updater.record({'supported': True, 'available': False}) is True
+
+
+def test_slot_names_are_always_capitals():
+    from unitotem_node.system.updater import upper_slots
+    data = parse_output(0, '{"slot":"a","other_slot":"b","last_result":{"op":"repair","slot":"b"},"armed":{"slot":"b"},'
+                           '"default_slot":null,"version":"a"}')
+    assert (data['slot'], data['other_slot'], data['default_slot']) == ('A', 'B', None)
+    assert data['last_result']['slot'] == 'B' and data['armed']['slot'] == 'B'
+    assert data['version'] == 'a'          # only slot names, nothing else that happens to be one letter
+    assert upper_slots([{'slot': 'a'}]) == [{'slot': 'A'}]
+
+
+def test_progress_watcher_helpers():
+    import struct
+    from unitotem_node.system.update_progress import describe, names_in
+    assert describe('repair', 'write', 'B') == ('Repairing slot B', 'Writing')
+    assert describe('fetch', 'download', None)[0] == 'Downloading the update'
+    name = b'unitotem-update.progress\0\0\0\0\0\0\0\0'
+    event = struct.pack('iIII', 1, 0x80, 0, len(name)) + name
+    assert names_in(event + event) == ['unitotem-update.progress'] * 2
