@@ -75,45 +75,44 @@
           variant="text"
           color="primary"
           :prepend-icon="checking ? 'mdi-loading mdi-spin' : 'mdi-refresh'"
-          :disabled="checking || !status || !status.supported"
+          :disabled="checking || busy || !status || !status.supported"
           @click="runCheck"
         >Check updates</v-btn>
         <v-btn
-          v-if="busy"
-          variant="text"
-          color="warning"
-          prepend-icon="mdi-cancel"
-          @click="send('cancel')"
-        >Cancel</v-btn>
-        <v-btn
-          v-else-if="check && check.available"
           variant="text"
           color="primary"
           prepend-icon="mdi-download"
-          :disabled="!status.ab"
+          :disabled="busy || !canDownload"
           @click="send('fetch')"
         >Download</v-btn>
         <v-btn
-          v-if="status && status.ab && !busy && !status.armed && newerInOther"
+          variant="text"
+          color="warning"
+          prepend-icon="mdi-cancel"
+          :disabled="!busy"
+          @click="send('cancel')"
+        >Cancel</v-btn>
+        <v-btn
           variant="text"
           color="red"
           prepend-icon="mdi-restart"
+          :disabled="!canInstall"
           @click="confirmAction = 'apply'"
         >Install and restart</v-btn>
         <v-btn
-          v-if="status && status.pending_confirm"
           variant="text"
           color="green"
           prepend-icon="mdi-check"
+          :disabled="!status?.pending_confirm"
           @click="send('confirm')"
         >Confirm this version</v-btn>
         <v-btn
-          v-if="status && status.ab && !busy && status.other_version"
           variant="text"
           color="red"
           prepend-icon="mdi-swap-horizontal"
+          :disabled="!canSwitch"
           @click="confirmAction = 'rollback'"
-        >Restart on slot {{ slotName(status.other_slot) }}</v-btn>
+        >Restart on slot {{ slotName(status?.other_slot) }}</v-btn>
       </v-card-actions>
     </v-card>
     <v-dialog v-model="confirmDialog" max-width="420">
@@ -176,6 +175,9 @@ function isNewer(a, b) {
 }
 const newerInOther = computed(() => !!status.value?.other_version && isNewer(status.value.other_version, status.value.current_version))
 const busy = computed(() => !!status.value?.op)
+const canDownload = computed(() => !!status.value?.ab && !!check.value?.available)
+const canInstall = computed(() => !!status.value?.ab && !busy.value && !status.value.armed && newerInOther.value)
+const canSwitch = computed(() => !!status.value?.ab && !busy.value && !!status.value.other_version)
 const phaseNames = {check: 'checking', download: 'downloading', write: 'writing', verify: 'verifying', arm: 'preparing the restart',
   reboot: 'restarting'}
 const damaged = ['label', 'fsck', 'mount']
