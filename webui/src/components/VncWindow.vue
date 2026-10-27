@@ -91,7 +91,19 @@ async function connect() {
   const params = new URLSearchParams()
   if (output.value) params.set('output', output.value)
   if (control.value) params.set('control', '1')
+  // A one-time token (needs the session) is the first frame of the websocket, as for the terminal
+  let token
+  try {
+    const reply = await fetch('/vnc/token', {method: 'POST', credentials: 'same-origin'})
+    if (!reply.ok) throw new Error(reply.statusText)
+    token = (await reply.json()).token
+  } catch (e) {
+    if (mine === generation) end(`Cannot open the screen: ${e.message}`)
+    return
+  }
+  if (mine !== generation) return
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/vnc?${params}`)
+  ws.addEventListener('open', () => ws.send(JSON.stringify({token})))   // before noVNC's own handler: it is added later
   socket = ws
   // The websocket is created here, not by noVNC, to be told why the server closed it (the reason is the only place
   // where "idle" and "refused" are told apart); noVNC accepts an existing channel.

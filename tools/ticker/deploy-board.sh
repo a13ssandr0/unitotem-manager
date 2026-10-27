@@ -24,6 +24,7 @@ PIP=${PIP:-"$ROOT/.venv/bin/pip"}
 for d in api utils webview static; do cp -r "$ROOT/manager/$d" "$STAGE/$d"; done
 cp "$ROOT/manager/main.py" "$STAGE/main.py"
 cp -r "$ROOT/manager/plugins/unitotem_viewer" "$STAGE/unitotem_viewer"
+cp -r "$ROOT/manager/plugins/unitotem_node" "$STAGE/unitotem_node"
 find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} +
 
 # the OLD crawl (main thread moves the text every frame), bundled as a control for before/after measurements:
@@ -55,7 +56,7 @@ tar -C "$STAGE" -cf - . | rsh 'tar -C /var/lib/unitotem/ticker-test.new -xf -'
 # the bind mounts are replaced in one go: umount what an earlier run mounted, swap the directory, mount again
 rsh 'set -e
 B=/usr/share/unitotem-manager
-for t in $B/api $B/utils $B/webview $B/static $B/main.py $B/plugins/unitotem_viewer; do umount "$t" 2>/dev/null || true; done
+for t in $B/api $B/utils $B/webview $B/static $B/main.py $B/plugins/unitotem_viewer $B/plugins/unitotem_node; do umount "$t" 2>/dev/null || true; done
 rm -rf /var/lib/unitotem/ticker-test && mv /var/lib/unitotem/ticker-test.new /var/lib/unitotem/ticker-test
 T=/var/lib/unitotem/ticker-test
 mount --bind $T/api $B/api
@@ -64,6 +65,7 @@ mount --bind $T/webview $B/webview
 mount --bind $T/static $B/static
 mount --bind $T/main.py $B/main.py
 mount --bind $T/unitotem_viewer $B/plugins/unitotem_viewer
+mount --bind $T/unitotem_node $B/plugins/unitotem_node
 mkdir -p /run/systemd/system/unitotem-manager.service.d
 printf "[Service]\nEnvironment=PYTHONPATH=$T/pylib\n" > /run/systemd/system/unitotem-manager.service.d/ticker-test.conf
 systemctl daemon-reload
