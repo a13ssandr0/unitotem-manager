@@ -100,7 +100,7 @@
           @click="send('fetch')"
         >Download</v-btn>
         <v-btn
-          v-if="status && status.ab && !busy && status.other_version && !status.armed"
+          v-if="status && status.ab && !busy && !status.armed && newerInOther"
           variant="text"
           color="red"
           prepend-icon="mdi-restart"
@@ -172,6 +172,23 @@ const slots = computed(() => {
     {name: other, version: s.other_version, running: false, next: slotName(s.default_slot) === other},
   ].sort((x, y) => x.name.localeCompare(y.name))
 })
+// "Install and restart" only makes sense while there is something left to install: the other slot holds a version NEWER than
+// the running one (a downloaded update). Otherwise the button that switches slot is enough. Same ordering as the updater's vkey.
+function versionParts(v) {
+  return String(v ?? '').replace(/-/g, '.').split('.').map(x => (/^\d+$/.test(x) ? Number(x) : x))
+}
+function isNewer(a, b) {
+  const x = versionParts(a), y = versionParts(b)
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if (x[i] === y[i]) continue
+    if (x[i] === undefined) return false
+    if (y[i] === undefined) return true
+    if (typeof x[i] === typeof y[i]) return x[i] > y[i]
+    return typeof x[i] === 'string'
+  }
+  return false
+}
+const newerInOther = computed(() => !!status.value?.other_version && isNewer(status.value.other_version, status.value.current_version))
 const busy = computed(() => !!status.value?.op)
 const phaseNames = {check: 'checking', download: 'downloading', write: 'writing', verify: 'verifying', arm: 'preparing the restart',
   reboot: 'restarting'}
