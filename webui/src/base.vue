@@ -257,6 +257,19 @@ api.Settings.Display.bounds.on(data => {
   disp_size.value = (data.width && data.height) ? data : null
 })
 
+// Every start of the manager has its own id (served with the page, repeated by the websocket on each connection): a page that holds
+// a different one was loaded before the manager restarted (an update, a deploy) and may be an old copy kept by the browser,
+// so it is fetched again past the cache and reloaded. Once per id: if the page is still the old one the reload is not repeated.
+async function reloadFresh(boot) {
+  const KEY = 'unitotem-boot-reload'
+  try {
+    if (sessionStorage.getItem(KEY) === boot) return
+    sessionStorage.setItem(KEY, boot)
+  } catch { /* storage unavailable: reload anyway */ }
+  try { await fetch(window.location.href, {cache: 'reload', credentials: 'same-origin'}) } catch { /* offline: reload anyway */ }
+  window.location.reload()
+}
+
 function connectWs() {
   ws = new WebSocket(`/ws`)
   ws.onopen = () => {
@@ -269,6 +282,10 @@ function connectWs() {
   }
   ws.onmessage = e => {
     const data = JSON.parse(e.data)
+    if (data.target === 'connected' && data.boot && window.__BOOT_ID__ && data.boot !== window.__BOOT_ID__) {
+      reloadFresh(data.boot)      // this page comes from an earlier start of the manager
+      return
+    }
     if (Object.hasOwn(data, 'error')) {
       // Whoever sent the failing command gets this, nobody else
       console.error(data.target + ' returned ' + data.error, data.extra ?? '')

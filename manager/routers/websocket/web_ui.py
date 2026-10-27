@@ -9,6 +9,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from api.ws.permissions import APIPermissionError
 from utils import sessions
+from utils.constants import BOOT_ID
 from utils.models.user import User
 from api.ws.endpoints import WS, handle_call
 from api.ws.responses import WSBroadcast, WSMulticast, WSResponse
@@ -31,7 +32,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     await WS.connect(websocket, user.name)
     sessions.track(websocket, user.name, user.sid)     # authenticated once, here: only the server ends it (utils/sessions.py)
-    await WS.send(websocket, 'connected')
+    await WS.send(websocket, 'connected', boot=BOOT_ID)
     logger.success('User {} connected', user.name)
 
     while True:

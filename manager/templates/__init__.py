@@ -20,6 +20,7 @@ def ctx_proc(request):
             os_vers=os_release()['PRETTY_NAME'],
             ip_addr=address_text(),
             hostname=gethostname(),
+            boot_id=const.BOOT_ID,
     )
 
 
