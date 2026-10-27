@@ -241,6 +241,8 @@ export interface Api {
       /** [requires: admin] */
       rollback: ApiCall<{ reboot?: boolean }>
       /** [requires: admin] */
+      set_policy: ApiCall<{ mode: string; time?: string }>
+      /** [requires: admin] */
       status: ApiCall<Record<string, never>>
     }
   }
