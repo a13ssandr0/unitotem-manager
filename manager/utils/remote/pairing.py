@@ -4,7 +4,7 @@ waiting for the administrator's approval, the validation of what a peer sends, a
 
 How pairing works (the orchestration is in utils.remote.service):
 
-* A node that is an unpaired client ACCEPTS adoption from whoever asks, like a Ubiquiti device: nothing in a
+* A node that is an unpaired client ACCEPTS adoption from whoever asks, by design: nothing in a
   factory-fresh client can tell a legitimate server from another. This is not blind trust, though: the administrator of
   the server is shown the certificate fingerprint the device presents, must confirm it, and the same fingerprint is on the
   client's own page for comparison, which is what defeats somebody standing between the two. The client, for its part,

@@ -14,17 +14,15 @@
           {{ status.error }}
         </v-alert>
 
+        <v-alert v-else-if="status && !status.ab" type="warning" variant="tonal" class="mb-4">
+          The updater did not report the two system slots, so updates are unavailable here.
+        </v-alert>
+
         <v-table v-if="status && status.supported && !status.error" density="compact">
           <tbody>
             <tr>
               <td>Installed version</td>
               <td>{{ status.current_version }}</td>
-            </tr>
-            <tr>
-              <td>Image layout</td>
-              <td>
-                {{ layoutText }}
-              </td>
             </tr>
             <tr v-for="slot in slots" :key="slot.name">
               <td>Slot {{ slot.name }}</td>
@@ -153,14 +151,6 @@ const confirmDialog = computed({
   set: (v) => { if (!v) confirmAction.value = null },
 })
 const progress = computed(() => status.value?.op?.progress ?? null)
-// The updater reports `layout`: 1 = a single root, 2 = two slots (A/B); `ab` says whether this system runs from a slot
-const layoutText = computed(() => {
-  const s = status.value
-  if (!s) return ''
-  if (s.ab) return 'A/B (rollback available)'
-  if (!s.layout || s.layout === 1) return 'Single root, no A/B yet'
-  return `Layout ${s.layout} (unknown to this version of the manager)`
-})
 // The two slots, each with the version it holds: `current_version` is the running one, `other_version` the other
 // (empty while it holds no system); `default_slot` is the one the next boot starts
 const slots = computed(() => {

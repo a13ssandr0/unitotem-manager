@@ -228,7 +228,7 @@ def supports_ddc(version: Optional[tuple[int, int]]) -> bool:
     versions were never verified and Debian bookworm's packaged 1.4.1 is
     exactly the version this project chose NOT to support (the kiosk image
     moved to trixie instead, which packages 2.2.0). A node still running an
-    older ddcutil - a bookworm node that has not been reimaged yet, most
+    older ddcutil - a node still on bookworm, most
     likely - must have DDC/CI reported unavailable with this as the reason,
     not silently attempt it.
     """
