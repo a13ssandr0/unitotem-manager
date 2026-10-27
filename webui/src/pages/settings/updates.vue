@@ -104,6 +104,21 @@
           @click="send('cancel')"
         >Cancel</v-btn>
         <v-btn
+          v-else-if="status?.pending_confirm"
+          variant="text"
+          color="green"
+          prepend-icon="mdi-check"
+          @click="send('confirm')"
+        >Confirm this version</v-btn>
+        <v-btn
+          v-else-if="newerInOther"
+          variant="text"
+          color="red"
+          prepend-icon="mdi-restart"
+          :disabled="!canInstall"
+          @click="confirmAction = 'apply'"
+        >Install and restart</v-btn>
+        <v-btn
           v-else
           variant="text"
           color="primary"
@@ -111,21 +126,6 @@
           :disabled="!canDownload"
           @click="send('fetch')"
         >Download</v-btn>
-        <v-btn
-          v-if="status?.pending_confirm"
-          variant="text"
-          color="green"
-          prepend-icon="mdi-check"
-          @click="send('confirm')"
-        >Confirm this version</v-btn>
-        <v-btn
-          v-else
-          variant="text"
-          color="red"
-          prepend-icon="mdi-restart"
-          :disabled="!canInstall"
-          @click="confirmAction = 'apply'"
-        >Install and restart</v-btn>
       </v-card-actions>
     </v-card>
     <v-dialog v-model="confirmDialog" max-width="420">
