@@ -19,6 +19,8 @@
  */
 import Keyboard from 'simple-keyboard'
 import keyboardCss from 'simple-keyboard/build/css/index.css?inline'
+import SYMBOL_PAGES from './gboard/symbols.json'
+import {parseLayoutId} from './keyboard-layouts.js'
 
 const BUTTON_PX = 56
 const HEADER_PX = 40
@@ -30,26 +32,20 @@ const LONG_PRESS_MS = 380
 const REPEAT_DELAY_MS = 400
 const REPEAT_MS = 60
 const DOUBLE_TAP_MS = 400
-// The symbol pages follow HeliBoard (HeliBorg/HeliBoard, app/src/main/assets/layouts/symbols/symbols.txt and more_symbols/symbols_shifted.txt):
-// the number row stays, then the three rows of each page (the currency keys are its locale's, $ £ € ¥ here)
+// The layouts are Gboard's own, read from its application by tools/gboard/gboard_layouts.py (see its README): for every language the
+// rows of its tablet keyboard (number row, tab, caps lock, enter, shift...) with the weight of every key, what a long press on a key
+// offers and the two pages of symbols. One file per language, loaded when it is needed.
+const LANGUAGE_FILES = import.meta.glob('./gboard/layouts/*.json')
+const FALLBACK_LAYOUT = 'en-US'
+// A row of Gboard's tablet layouts is 786 weight units wide (the layout resource: `weightSum="786"`)
+const ROW_WEIGHT = 786
+const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
 const BOTTOM_SYM = '{abc} {space} {left} {right} {hide}'
-const SYMBOLS = {
-  sym1: ['1 2 3 4 5 6 7 8 9 0 {bksp}', '% \\ | = [ ] < > { }', '@ # $ _ & - + ( ) / {enter}', '{sym2} * " \' : ; ! ? {sym2}', BOTTOM_SYM],
-  sym2: ['1 2 3 4 5 6 7 8 9 0 {bksp}', '~ ` | • √ π ÷ × ¶ ∆', '£ ¢ € ¥ ^ ° = { } \\ {enter}', '{sym1} © ® ™ % [ ] < > {sym1}', BOTTOM_SYM],
-}
-// What a long press on a key offers, in the order of Gboard / AOSP's LatinIME (OpenBoard's `donottranslate-more-keys.xml`, the
-// accents of every Latin language it ships merged and sorted by how many languages use them). Lower case: the upper case of
-// the key gives the upper case of these. The first one is also drawn on the key as a grey hint, like Gboard does.
-const VARIANTS = {
-  a: 'à á â ä æ ã å ā ą ă ª', e: 'è é ê ë ē ė ę ě ə', i: 'ì í î ï ī į ı ĳ', o: 'ò ó ô ö œ õ ø ō ő º', u: 'ù ú û ü ū ů ű ų',
-  s: 'ś š ß ş ș', n: 'ñ ń ň ņ', c: 'ç ć č', y: 'ý ÿ', z: 'ž ź ż', d: 'ď đ ð', t: 'ť ţ ț þ', l: 'ł ļ ĺ ľ', g: 'ğ ģ', r: 'ř ŕ ŗ', k: 'ķ',
-  // numbers and symbols: HeliBoard's popups (number_row.json, symbols.txt, symbols_shifted.txt, more keys of the locale)
-  '1': '¹ ½ ⅓ ¼ ⅛', '2': '² ⅔', '3': '³ ¾ ⅜', '4': '⁴', '5': '⁵ ⅝', '6': '⁶', '7': '⁷ ⅞', '8': '⁸', '9': '⁹', '0': '⁰ ⁿ ∅',
-  '.': '! ? , # ) ( / ; \' @ : - " + % &', '-': '– ⁻ — ·', '+': '± ⁺', '*': '† ‡ ★', '%': '‰', '_': '% ‰', '=': '≠ ⁼ ≈ ∞', '^': '↑ ↓ ← →',
-  '"': '„ “ ” « »', '\'': '‚ ‘ ’ ‹ ›', '!': '¡', '?': '¿', '$': '¢ £ € ¥ ₱', '€': '$ ¢ £ ¥ ₱', '£': '$ ¢ € ¥ ₱', '¥': '$ ¢ € £ ₱', '¢': '$ £ € ¥ ₱',
-  '(': '⁽ < { [', ')': '⁾ > } ]', '<': '‹ ≤ «', '>': '› ≥ »',
-  '•': '♪ ♥ ♠ ♦ ♣', '°': '′ ″', 'π': 'Π', '¶': '§',
-}
+// the bottom row (res/layout/..04f6): 58 for each arrow, 65 for the key at the right; the switch to the symbols is 58 plus the one of
+// the emoji key, which is not here (user: "useless and hard"), the space bar takes the rest
+const BOTTOM_WEIGHTS = [90.5, 0, 58, 58, 65]
+const FUNCTION_TOKENS = {tab: '{tab}', bksp: '{bksp}', lock: '{lock}', enter: '{enter}', shift: '{shift}', sym1: '{sym1}', sym2: '{sym2}',
+  none: '{gap}'}
 
 const css = `${keyboardCss}
 #ut-kbd-layer { position: absolute; inset: 0; z-index: 2147483647; pointer-events: none; overflow: hidden;
@@ -84,6 +80,7 @@ const css = `${keyboardCss}
 #ut-kbd-body .hg-button, #ut-kbd-body .hg-button.hg-standardBtn[data-skbtn] { min-width: 0; max-width: none; } /* simple-keyboard caps the @ key at 60 px */
 #ut-kbd-body .hg-button[data-skbtn^="{"][data-skbtn$="}"] { background: #e1e3e0; }
 #ut-kbd-body .hg-button[data-skbtn="{space}"][data-skbtn="{space}"] { background: #fff; }
+#ut-kbd-body .hg-button[data-skbtn="{gap}"][data-skbtn="{gap}"] { visibility: hidden; }
 .ut-hint { position: absolute; top: 3px; right: 6px; font-size: .55em; line-height: 1; color: #8a8f98; pointer-events: none; }
 #ut-kbd-body.ut-numeric .hg-button { flex: 1 1 0; }
 #ut-kbd-body .hg-button.ut-on { background: #4a90e2 !important; color: #fff; }
@@ -99,7 +96,7 @@ const css = `${keyboardCss}
 
 let hostEl, layer, toggle, panel, closeButton, body, grip, keyboard, alts, preview
 let enabled = false
-let config = {enabled: true, button_position: 'bottom-right', layout: 'english'}
+let config = {enabled: true, button_position: 'bottom-right', layout: FALLBACK_LAYOUT}
 let open = false
 let openedByUser = false
 let shift = false
@@ -251,90 +248,93 @@ const REPEATING = new Set(['{bksp}', '{left}', '{right}'])
 const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': '⇪', '{tab}': '⇥', '{space}': ' ',
   '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC', '{left}': '◀', '{right}': '▶', '{hide}': '⌨'}
 
-// What Gboard draws at the top right of a letter and offers first on a long press: a symbol (screenshot of Gboard on a tablet, Italian layout)
-const SYMBOL_HINT = {q: '%', w: '\\', e: '|', r: '=', t: '[', y: ']', u: '<', i: '>', o: '{', p: '}', a: '@', s: '#', d: '€', f: '_', g: '&',
-  h: '-', j: '+', k: '(', l: ')', z: '*', x: '"', c: "'", v: ':', b: ';', n: '!', m: '?'}
-const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
-// One layout per language, all built the same way (the way Gboard's own tablet keyboard with the number row on is, copied from the user's
-// screenshot of its Italian layout): number row + backspace, `tab` + row 1, `caps lock` + row 2 + enter, `shift` + row 3 + `, . -` + `shift`,
-// `?123 space ◀ ▶ ?123`. What differs is the language: its letters (and, for Italian, the symbols its keyboard puts on the same rows).
-// Base letter rows: HeliBoard (HeliBorg/HeliBoard, assets/layouts/main: qwerty.txt, qwertz.txt, azerty.json, greek.json, russian.txt,
-// turkish.txt, ukrainian.txt); the keys a language adds to them are Gboard's (German ü ö ä, Spanish ñ, Turkish ğ ü ş i ö ç, Italian è ù ò à ì),
-// the other accents are long-press popups there as here.
-const QWERTY = ['q w e r t y u i o p', 'a s d f g h j k l', 'z x c v b n m']
-const QWERTZ = ['q w e r t z u i o p', 'a s d f g h j k l', 'y x c v b n m']
-const DIGITS = '1 2 3 4 5 6 7 8 9 0'
-const LAYOUT_SPECS = {
-  english: {rows: QWERTY},
-  italian: {numbers: `\\ ${DIGITS} ' ì`, rows: ['q w e r t y u i o p è ù +', 'a s d f g h j k l ò à', QWERTY[2]]},
-  german: {numbers: `${DIGITS} ß`, rows: [QWERTZ[0] + ' ü', QWERTZ[1] + ' ö ä', QWERTZ[2]]},
-  french: {rows: ['a z e r t y u i o p', 'q s d f g h j k l m', 'w x c v b n']},
-  spanish: {rows: [QWERTY[0], QWERTY[1] + ' ñ', QWERTY[2]]},
-  brazilian: {rows: QWERTY},
-  polish: {rows: QWERTY},
-  czech: {rows: QWERTZ},
-  greek: {numbers: `${DIGITS} - =`, rows: ['; ς ε ρ τ υ θ ι ο π', 'α σ δ φ γ η ξ κ λ', 'ζ χ ψ ω β ν μ']},
-  turkish: {numbers: `${DIGITS} * -`, rows: ['q w e r t y u ı o p ğ ü', 'a s d f g h j k l ş i', 'z x c v b n m ö ç']},
-  russian: {numbers: `${DIGITS} - =`, rows: ['й ц у к е н г ш щ з х ъ', 'ф ы в а п р о л д ж э', 'я ч с м и т ь б ю']},
-  ukrainian: {numbers: `${DIGITS} - =`, rows: ['й ц у к е н г ш щ з х ї', 'ф і в а п р о л д ж є', 'я ч с м и т ь б ю ґ']},
+
+const languages = new Map() // language -> promise of its file
+function loadLanguage(lang) {
+  if (!languages.has(lang)) {
+    const load = LANGUAGE_FILES[`./gboard/layouts/${lang}.json`]
+    languages.set(lang, load ? load().then(module => module.default) : Promise.reject(new Error(`no Gboard layout for ${lang}`)))
+  }
+  return languages.get(lang)
 }
 
-function gboard(spec) {
-  const [r1, r2, r3] = spec.rows
-  return [
-    `${spec.numbers ?? DIGITS} {bksp}`,
-    `{tab} ${r1}`,
-    `{lock} ${r2} {enter}`,
-    `{shift} ${r3} , .${r3.split(' ').length > 9 ? '' : ' -'} {shift}`, // a long third row has no room for the dash
-    BOTTOM,
-  ]
+/** The capital of a key (a sharp s stays one character); the file says it when it is not just that (a Turkish i). */
+const capital = text => { const up = text.toUpperCase(); return [...up].length === [...text].length ? up : text }
+
+/** One page of the keyboard, for simple-keyboard (`layout`: its rows of keys) and for us (`meta`: what each key is: its weight and popup). */
+function pageOf(rows, {shifted = false, bottom = BOTTOM}) {
+  const layout = []
+  const meta = []
+  const display = {}
+  for (const row of rows) {
+    const tokens = []
+    const keys = []
+    for (const key of row) {
+      if (key.f) {
+        tokens.push(FUNCTION_TOKENS[key.f] ?? '{gap}')
+        keys.push({w: key.w})
+      } else if (!key.k || /\s/.test(key.k)) {
+        tokens.push('{gap}')
+        keys.push({w: key.w})
+      } else {
+        const text = shifted ? (key.u ?? capital(key.k)) : key.k
+        tokens.push(text)
+        if (key.t) display[text] = key.t
+        const popup = shifted ? (key.L ?? key.l?.map(capital)) : key.l
+        keys.push({w: key.w, popup: popup ?? []})
+      }
+    }
+    layout.push(tokens.join(' '))
+    meta.push(keys)
+  }
+  layout.push(bottom)
+  meta.push(bottom.split(' ').map((token, i) => ({w: BOTTOM_WEIGHTS[i]})))
+  return {layout, meta, display}
 }
 
-/** The capitals of a page (a Turkish i is İ and ı is I). */
-const upperRows = (rows, name) => rows.map(row => row.split(' ').map(k => {
-  if (/^\{.+\}$/.test(k) || k.length !== 1 || !/\p{L}/u.test(k)) return k
-  if (k === 'ß') return 'ẞ'
-  return name === 'turkish' ? k.toLocaleUpperCase('tr') : k.toUpperCase()
-}).join(' '))
+/** Everything the keyboard needs for a layout setting: its four pages. */
+async function buildLayout(id) {
+  let {lang, variant} = parseLayoutId(id)
+  let record
+  try { record = await loadLanguage(lang) } catch (e) { console.warn('keyboard:', e.message); lang = FALLBACK_LAYOUT; variant = undefined; record = await loadLanguage(lang) }
+  const rows = record.variants[variant] ?? Object.values(record.variants)[0]
+  const symbols = record.symbols ?? SYMBOL_PAGES
+  const pages = {
+    default: pageOf(rows, {}),
+    shift: pageOf(rows, {shifted: true}),
+    sym1: pageOf(symbols[0], {bottom: BOTTOM_SYM}),
+    sym2: pageOf(symbols[1], {bottom: BOTTOM_SYM}),
+  }
+  const display = {}
+  for (const name of Object.keys(pages)) Object.assign(display, pages[name].display)
+  return {pages, display, simple: Object.fromEntries(Object.entries(pages).map(([name, p]) => [name, p.layout]))}
+}
 
-// The real Gboard's tablet geometry, measured on its screenshots (1600 px wide: key 111 px + gap 16 = 127 px = one unit): a row is 12.39
-// units; tab/backspace 1.18, caps 1.43, enter 1.88, shifts 1.92 and 1.44, ?123 1.46, the arrows 0.97, hide 1; the LAST key of a
-// row that has no space bar stretches, so every character key is the same size
-const SIDE_UNITS = {'{tab}': 1.18, '{lock}': 1.43, '{bksp}': 1.18, '{enter}': 1.88, '{sym1}': 1.46, '{sym2}': 1.46, '{abc}': 1.46,
-  '{left}': 0.97, '{right}': 0.97, '{hide}': 1}
-const ROW_UNITS = 12.39
-const MAX_STRETCH = 3.6 // units
-const unitsOf = (key, index) => key === '{shift}' ? (index === 0 ? 1.92 : 1.44) : (SIDE_UNITS[key] ?? 1)
+// Gboard's tablet geometry: a key is as wide as its weight says out of the 786 of the row (the layout resource of the keyboard), so tab,
+// backspace, caps lock, enter and shift keep the size they have there whatever the language, and every row ends where the others do
+let current = null // what buildLayout() returned for the layout on show
+const GAP_PX = 8
 
-/** Sets the size of every key of the page on show (called after every render): all characters one unit wide, rows as tall as each other. */
+/** Sets the size of every key of the page on show (called after every render): rows as tall as each other, keys as wide as their weight. */
 function sizeKeys() {
   if (!keyboard) return // simple-keyboard renders once while it is being constructed
-  const layout = keyboard.options.layout
-  const rows = (layout[keyboard.options.layoutName] ?? []).map(row => row.split(' '))
-  const isFn = k => /^\{.+\}$/.test(k)
-  const used = row => row.reduce((sum, k, i) => sum + (k === '{space}' ? 6.5 : unitsOf(k, i)), 0)
-  const total = Math.max(ROW_UNITS, ...rows.map(used))
+  const meta = numeric ? null : current?.pages[keyboard.options.layoutName]?.meta
   body.querySelectorAll('.hg-row').forEach((el, i) => {
-    const keys = rows[i]
-    if (!keys) return
-    el.style.justifyContent = keys.some(isFn) ? 'flex-start' : 'center'
-    // a row shorter than the widest one gives the rest to ONE function key (the last, or the first when the row has none at the end), but
-    // never more than MAX_STRETCH of it: a backspace a third of the keyboard wide is what a row of 9 letters used to get
-    const spare = total - used(keys)
-    // keys that take the spare: both ends when both are function keys (shifts, caps/enter), else the one at the end that is
-    const ends = keys.includes('{space}') || !(spare > 0.01) ? [] : (isFn(keys[0]) && isFn(keys[keys.length - 1]) ? [0, keys.length - 1]
-      : (isFn(keys[keys.length - 1]) ? [keys.length - 1] : (isFn(keys[0]) ? [0] : [])))
+    const keys = meta?.[i]
+    el.style.justifyContent = 'flex-start'
+    if (!keys) { el.querySelectorAll('.hg-button').forEach(button => { button.style.flex = '' }); return }
+    const total = Math.max(ROW_WEIGHT, keys.reduce((sum, key) => sum + key.w, 0))
     el.querySelectorAll('.hg-button').forEach((button, j) => {
-      if (numeric) { button.style.flex = ''; return }
-      const units = unitsOf(keys[j], j) + (ends.includes(j) ? Math.min(spare / ends.length, MAX_STRETCH - unitsOf(keys[j], j)) : 0)
-      button.style.flex = keys[j] === '{space}' ? '1 1 0' : `0 0 calc(${(100 * units / total).toFixed(3)}% - 8px)`
+      const key = keys[j]
+      button.utKey = key
+      // the width is the key's share of the row less its share of the gaps between the keys, so a row is flush to both sides
+      button.style.flex = !key.w ? '1 1 0' : `0 0 calc(${(100 * key.w / total).toFixed(3)}% - ${(GAP_PX * (1 - key.w / total)).toFixed(2)}px)`
     })
   })
 }
 
-function layoutOf(name) {
-  const base = gboard(LAYOUT_SPECS[name] ?? LAYOUT_SPECS.english)
-  return {default: base, shift: upperRows(base, name), ...SYMBOLS}
+function layoutOf() {
+  return current?.simple ?? {default: ['{space}']}
 }
 
 const layoutName = () => page !== 'letters' ? page : (shift || caps ? 'shift' : 'default')
@@ -373,14 +373,11 @@ function typeKey(button) {
   if (shift && !caps) { shift = false; refreshLayout() }
 }
 
-/** The variants offered by a long press on a key, in the case of the key. */
-function variantsOf(button) {
-  if (/^\{.+\}$/.test(button)) return []
-  if (page === 'sym2' && button === '%') return ['℅'] // HeliBoard: the shifted symbols page has another popup on %
-  const base = button.toLowerCase()
-  const list = [SYMBOL_HINT[base], ...(VARIANTS[button] ?? VARIANTS[base] ?? '').split(' ')].filter(Boolean)
-  if (button === base || button.length !== 1) return list
-  return list.map(v => v === 'ß' ? 'ẞ' : v.toUpperCase()).filter(v => [...v].length === 1)
+/** The variants a long press on a key offers (what Gboard has behind it: a symbol, accents...), in the case of the key. */
+function variantsOf(btn) {
+  const key = btn.getAttribute('data-skbtn')
+  if (/^\{.+\}$/.test(key)) return []
+  return btn.utKey?.popup ?? []
 }
 
 /** Draws, on every key that has variants, the first of them in grey at the top right (called by simple-keyboard after each render). */
@@ -388,9 +385,11 @@ function addHints() {
   for (const button of body.querySelectorAll('.hg-button')) {
     button.querySelector('.ut-hint')?.remove()
     const key = button.getAttribute('data-skbtn')
-    // on the letter page only the letters carry a hint (the symbol), like Gboard; the symbol pages show the first variant
-    const first = key && key.length <= 2 && (page !== 'letters' || SYMBOL_HINT[key.toLowerCase()]) ? variantsOf(key)[0] : null
-    if (first) button.appendChild(Object.assign(document.createElement('span'), {className: 'ut-hint', textContent: first}))
+    const first = variantsOf(button)[0]
+    // on the letter page only a letter carries a hint, and only when it is a symbol (Gboard: `q` has `%`, `e` has `|`; its accents
+    // are only in the popup); the symbol pages show the first variant of every key
+    const shown = first && (page !== 'letters' || (/^\p{L}$/u.test(key) && !/\p{L}/u.test(first)))
+    if (shown) button.appendChild(Object.assign(document.createElement('span'), {className: 'ut-hint', textContent: first}))
   }
 }
 
@@ -414,7 +413,7 @@ function showPreview(btn) {
 }
 
 function openVariants(press) {
-  const list = variantsOf(press.key)
+  const list = variantsOf(press.btn)
   if (!list.length) return
   preview.style.display = 'none'
   alts.replaceChildren(...list.map(v => Object.assign(document.createElement('span'), {textContent: v})))
@@ -470,11 +469,11 @@ function wireKeys(host) {
     const key = btn.getAttribute('data-skbtn')
     press = {btn, key, long: false, timer: null, repeat: null, from: [e.clientX, e.clientY]}
     btn.classList.add('ut-down')
-    if (variantsOf(key).length) showPreview(btn) // only a key with other symbols behind it gets a bubble (user)
+    if (variantsOf(btn).length) showPreview(btn) // only a key with other symbols behind it gets a bubble (user)
     if (REPEATING.has(key)) {
       typeKey(key)
       press.timer = setTimeout(() => { press.repeat = setInterval(() => typeKey(key), REPEAT_MS) }, REPEAT_DELAY_MS)
-    } else if (variantsOf(key).length) {
+    } else if (variantsOf(btn).length) {
       press.timer = setTimeout(() => openVariants(press), LONG_PRESS_MS)
     }
   })
@@ -495,13 +494,18 @@ function wireKeys(host) {
   window.addEventListener('pointercancel', stop)
 }
 
-function applyLayout() {
+let layoutRequest = 0
+async function applyLayout() {
   if (numeric) {
     keyboard.setOptions({layout: NUMERIC, ...appearance()})
     return
   }
-  const layout = layoutOf(config.layout)
-  keyboard.setOptions({layout, ...appearance()})
+  const request = ++layoutRequest
+  let next
+  try { next = await buildLayout(config.layout) } catch (e) { console.error('keyboard layout', e); return }
+  if (request !== layoutRequest || numeric) return // another layout was asked for meanwhile, or a number field took over
+  current = next
+  keyboard.setOptions({layout: layoutOf(), display: {...DISPLAY, ...current.display}, ...appearance()})
 }
 
 // ── showing and hiding ──────────────────────────────────────────────────
@@ -577,7 +581,7 @@ function build() {
     onRender: () => { sizeKeys(); addHints() },
     onKeyPress: () => {}, // the keys are handled by wireKeys(): they type on release, like Gboard
     theme: 'hg-theme-default hg-layout-default',
-    layout: layoutOf('english'),
+    layout: layoutOf(),
     display: DISPLAY,
     preventMouseDownDefault: true,
     preventMouseUpDefault: true,
