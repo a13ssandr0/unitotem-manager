@@ -26,13 +26,15 @@
                 {{ layoutText }}
               </td>
             </tr>
-            <tr v-if="status.ab">
-              <td>Running slot</td>
-              <td>{{ slotName(status.slot) }}<span v-if="status.trial"> (on trial, not confirmed yet)</span></td>
-            </tr>
-            <tr v-if="status.ab && status.other_version">
-              <td>Other slot</td>
-              <td>{{ slotName(status.other_slot) }}: {{ status.other_version }}<span v-if="status.armed"> (armed for next boot)</span></td>
+            <tr v-for="slot in slots" :key="slot.name">
+              <td>Slot {{ slot.name }}</td>
+              <td>
+                {{ slot.version || 'no system installed' }}
+                <v-chip v-if="slot.running" size="x-small" color="green" class="ml-2">running</v-chip>
+                <v-chip v-if="slot.running && status.trial" size="x-small" color="warning" class="ml-1">on trial, not confirmed yet</v-chip>
+                <v-chip v-if="!slot.running && status.armed" size="x-small" color="primary" class="ml-2">armed for next boot</v-chip>
+                <v-chip v-else-if="slot.next && !slot.running" size="x-small" color="primary" class="ml-2">starts at next boot</v-chip>
+              </td>
             </tr>
           </tbody>
         </v-table>
@@ -112,19 +114,20 @@
           @click="send('confirm')"
         >Confirm this version</v-btn>
         <v-btn
-          v-if="status && status.rollback_available"
+          v-if="status && status.ab && !busy && status.other_version"
           variant="text"
           color="red"
-          prepend-icon="mdi-undo"
+          prepend-icon="mdi-swap-horizontal"
           @click="confirmAction = 'rollback'"
-        >Roll back</v-btn>
+        >Restart on slot {{ slotName(status.other_slot) }}</v-btn>
       </v-card-actions>
     </v-card>
     <v-dialog v-model="confirmDialog" max-width="420">
-      <v-card :title="confirmAction === 'apply' ? 'Install and restart?' : 'Roll back?'">
+      <v-card :title="confirmAction === 'apply' ? 'Install and restart?' : `Restart on slot ${slotName(status?.other_slot)}?`">
         <v-card-text>
-          The device will restart now{{ confirmAction === 'apply' ? ' into the new version' : ' into the previous version' }}
-          and will be unavailable for a few minutes. Your data is kept.
+          The device will restart now{{ confirmAction === 'apply' ? ' into the new version'
+            : ` into slot ${slotName(status?.other_slot)} (version ${status?.other_version})` }}
+          and will be unavailable for a few minutes. Uploads are kept; settings are those of that slot.
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -157,6 +160,17 @@ const layoutText = computed(() => {
   if (s.ab) return 'A/B (rollback available)'
   if (!s.layout || s.layout === 1) return 'Single root, no A/B yet'
   return `Layout ${s.layout} (unknown to this version of the manager)`
+})
+// The two slots, each with the version it holds: `current_version` is the running one, `other_version` the other
+// (empty while it holds no system); `default_slot` is the one the next boot starts
+const slots = computed(() => {
+  const s = status.value
+  if (!s?.ab) return []
+  const cur = slotName(s.slot), other = slotName(s.other_slot)
+  return [
+    {name: cur, version: s.current_version, running: true, next: slotName(s.default_slot) === cur},
+    {name: other, version: s.other_version, running: false, next: slotName(s.default_slot) === other},
+  ].sort((x, y) => x.name.localeCompare(y.name))
 })
 const busy = computed(() => !!status.value?.op)
 const phaseNames = {check: 'checking', download: 'downloading', write: 'writing', verify: 'verifying', arm: 'preparing the restart',
