@@ -40,7 +40,7 @@ FOCUS_SCRIPT = r"""
     (el.tagName === 'INPUT' && !NO_TEXT.includes((el.type || 'text').toLowerCase())));
   const report = (touch) => {
     try {
-      // pages built from web components (Home Assistant) keep the real field inside shadow roots
+      // pages built from web components keep the real field inside shadow roots
       let el = document.activeElement;
       while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
       const r = editable(el) ? el.getBoundingClientRect() : null;
@@ -275,8 +275,7 @@ class Cdp:
         if entry.get('level') != 'error' or window is None or not (entry.get('source') == 'security' or text.startswith('Refused to')):
             return
         if 'X-Frame-Options' in text or 'frame-ancestors' in text:
-            text += ('\nThe page forbids being shown inside another page. The site has to allow it '
-                     '(Home Assistant: `http: use_x_frame_options: false` in configuration.yaml).')
+            text += '\nThe page forbids being shown inside another page: the site has to allow it.'
         logger.warning('Window {}: {}', window, text)
         notifications.notify(f'viewer.security.{window}', 'warning', f'Window {window}: the browser refused something',
                              text, source='viewer', audience='scheduler')
