@@ -1,3 +1,17 @@
+unitotem-manager (3.0.0~dev12) stable; urgency=medium
+
+  * Updates page: one row per slot with its version, restart on the other slot, copy
+    the running slot to the other, one stateful button (download, install, confirm,
+    cancel), progress bar and notifications for downloads and rebuilds
+  * Automatic updates card (mode and time of the scheduled restart); Reboot uses the
+    updater's restart when an update is armed
+  * Notifications follow the freedesktop specification; terminal and screen open with
+    no second login; web UI reloads itself after a manager restart
+  * On-screen keyboard layouts extracted from the real Gboard; viewer no longer
+    reports browser security messages
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Wed, 28 Oct 2026 12:00:00 +0100
+
 unitotem-manager (3.0.0~dev11) stable; urgency=medium
 
   * CEF: pages that forbid being framed (X-Frame-Options, CSP frame-ancestors)
