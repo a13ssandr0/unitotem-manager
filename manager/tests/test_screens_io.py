@@ -113,3 +113,39 @@ def test_power_off_value_follows_what_the_monitor_advertises():
     assert power_off_value({'D6': {'01': 'On', '04': 'Standby'}}) == 0x04
     assert power_off_value({'D6': {'01': 'On', '05': 'Off'}}) == 0x05
     assert power_off_value({}) == 0x04
+
+
+def test_content_transform_table_covers_every_turn_and_flip():
+    table = wayland.CONTENT_TO_TRANSFORM
+    assert set(table) == {(r, f) for r in range(4) for f in range(3)}
+    assert wayland.TRANSFORMS == {'normal', '90', '180', '270', 'flipped', 'flipped-90', 'flipped-180', 'flipped-270'}
+    # a mirror turned half a turn is the mirror along the other axis
+    assert table[(0, 2)] == table[(2, 1)] and table[(0, 1)] == table[(2, 2)]
+    # content turned a quarter clockwise is the output turned three quarters, and bad input counts as no mirror
+    assert wayland.transform_for(1, 0) == '270' and wayland.transform_for(3, 0) == '90'
+    assert wayland.transform_for(5, 7) == wayland.transform_for(1, 0)
+
+
+def test_parse_outputs_keeps_the_mirror_in_the_transform():
+    text = json.dumps([{'name': 'DP-1', 'enabled': True, 'modes': [{'width': 1920, 'height': 1080, 'current': True}],
+                        'position': {'x': 0, 'y': 0}, 'transform': 'flipped-90'}])
+    out = wayland.parse_outputs(text)[0]
+    assert out.transform == 'flipped-90' and out.rotation == 'left' and (out.width, out.height) == (1080, 1920)
+
+
+def test_set_transform_refuses_unknown_names_and_reports_the_compositor(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    calls = []
+
+    async def fake_run(cmd, timeout=None):
+        calls.append(cmd)
+        return SimpleNamespace(returncode=1 if cmd[-1] == '180' else 0, stdout='', stderr='refused')
+    monkeypatch.setattr(wayland, 'run', fake_run)
+    with pytest.raises(ValueError):
+        asyncio.run(wayland.set_transform('DP-1', 'sideways'))
+    asyncio.run(wayland.set_transform('DP-1', '270'))
+    assert calls == [['wlr-randr', '--output', 'DP-1', '--transform', '270']]
+    with pytest.raises(RuntimeError, match='refused'):
+        asyncio.run(wayland.set_transform('DP-1', '180'))
