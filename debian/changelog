@@ -1,3 +1,13 @@
+unitotem-manager (3.0.0~dev13) stable; urgency=medium
+
+  * Screen orientation and flip are done by the compositor (wlr-randr transform) instead of the page: the screen
+    window (VNC) shows the panel upright and clicks land where they are drawn, touch follows, nothing is slower;
+    the page only turns its content when the compositor cannot
+  * The compositor unit turns the outputs as saved before the boot splash draws (output_transform.py), so the
+    splash and the page are turned from their first frame
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Thu, 29 Oct 2026 03:00:00 +0100
+
 unitotem-manager (3.0.0~dev12) stable; urgency=medium
 
   * Updates page: one row per slot with its version, restart on the other slot, copy
