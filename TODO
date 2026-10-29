@@ -4,7 +4,7 @@
   pixel-exact table (docs/rotation-benchmark.md), node `wayland.set_transform`/`transform_for`, boot script `unitotem_viewer/output_transform.py` run by the compositor unit before the boot splash,
   viewer `_turn_output`, web UI (preview size, wording). Verified on Pi B (OBS camera): 12/12 pictures identical to the page's, 12/12 touch taps, VNC upright with correct clicks, power off/on,
   manager and compositor restart, boot with and without the kernel token. Performance identical (docs/rotation-benchmark.md). OPEN: (1) the kernel token `video=<connector>:panel_orientation=` that turns
-  Plymouth from the initramfs belongs to unitotem-system (spec sent: helper + OTA carrying it + x86 bootloader); until then Plymouth is unturned and the splash/page are turned; (2) mixed versions
+  Plymouth from the initramfs: helper `unitotem-boot-orientation` is committed in unitotem-system (next image) and the viewer calls it, NOT run on a board yet (not installed there); until then Plymouth is unturned; (2) mixed versions
   (old viewer <-> new manager) and rollback to the previous slot were reasoned (same keys, same protocol), NOT run; (3) the Pi shows ~3 s of rotated console text between Plymouth and the splash
   (also without the token, unturned: it is the console, not this change); (4) the tests on Pi A used the dev code bind-mounted (volatile): a dev13 deb/image is what makes it permanent.
 
