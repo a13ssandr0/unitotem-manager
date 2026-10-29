@@ -75,8 +75,17 @@ function crawl() {
   document.body.appendChild(d); d.animate([{transform: 'translateX(100vw)'}, {transform: 'translateX(-6000px)'}], {duration: 60000, iterations: Infinity});
   (function f() { drawn++; requestAnimationFrame(f); })();
 }
+function corners() {
+  const q = (n, css) => { const d = document.createElement('div'); d.textContent = n;
+    d.style.cssText = 'position:absolute;width:18vmin;height:18vmin;font:bold 6vmin sans-serif;display:flex;align-items:center;justify-content:center;color:#000;' + css;
+    document.body.appendChild(d); };
+  q('TL', 'left:0;top:0;background:#e53935'); q('TR', 'right:0;top:0;background:#43a047'); q('BL', 'left:0;bottom:0;background:#1e88e5'); q('BR', 'right:0;bottom:0;background:#fdd835');
+  const m = document.createElement('div'); m.textContent = 'UP'; m.style.cssText = 'position:absolute;left:50%;top:20%;transform:translateX(-50%);font:bold 14vmin sans-serif;color:#fff';
+  document.body.appendChild(m);
+  addEventListener('pointerdown', e => fetch('/click?x=' + (e.clientX / innerWidth).toFixed(3) + '&y=' + (e.clientY / innerHeight).toFixed(3)));
+}
 ({idle() { (function f() { drawn++; requestAnimationFrame(f); })(); }, video: () => video(1), video4k: () => video(1), video4: () => video(4),
-  canvas: canvas2d, webgl: () => webgl(1), webgl_heavy: () => webgl(8), crawl})[W]();
+  corners, canvas: canvas2d, webgl: () => webgl(1), webgl_mid: () => webgl(2), webgl_heavy: () => webgl(8), crawl})[W]();
 </script>"""
 
 
@@ -101,6 +110,18 @@ async def stat(request):
     return web.Response(text='ok')
 
 
+clicks = []
+
+
+async def click(request):
+    clicks.append({'x': float(request.query['x']), 'y': float(request.query['y']), 'at': time.time()})
+    return web.Response(text='ok')
+
+
+async def get_clicks(request):
+    return web.json_response(clicks)
+
+
 async def get_stats(request):
     since = float(request.query.get('since', 0))
     return web.json_response([s for s in stats if s['at'] >= since])
@@ -108,5 +129,5 @@ async def get_stats(request):
 
 app = web.Application()
 app.add_routes([web.get('/run.html', run), web.get('/workload', workload), web.get('/set', set_workload),
-                web.post('/stat', stat), web.get('/stats', get_stats), web.static('/', DIR)])
+                web.post('/stat', stat), web.get('/click', click), web.get('/clicks', get_clicks), web.get('/stats', get_stats), web.static('/', DIR)])
 web.run_app(app, host='127.0.0.1', port=8099, print=None)
