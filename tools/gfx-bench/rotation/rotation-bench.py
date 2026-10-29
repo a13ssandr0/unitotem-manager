@@ -39,7 +39,7 @@ CONFIGS = {
     'BF': (0, 1, 'normal'),         # page mirrors
     'CF': (0, 0, 'flipped'),        # compositor mirrors
 }
-WORKLOADS = ['idle', 'video', 'video4', 'canvas', 'webgl', 'webgl_heavy', 'crawl']
+WORKLOADS = ['idle', 'video', 'video4', 'canvas', 'webgl', 'webgl_mid', 'webgl_heavy', 'crawl']
 
 
 def sh(host, cmd, timeout=300):
