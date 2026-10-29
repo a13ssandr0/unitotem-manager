@@ -78,30 +78,23 @@ class PageCommands:
         None means the default one, i.e. whatever the system decides."""
         self._cef.execute_js(f'setAudioOutput({json.dumps(device)})')
 
-    orientation = 0     # what the page has been told: reported to the manager (WebviewInfo)
-    flip = 0
+    orientation = 0     # the quarter turns (clockwise) and the flip asked for, reported to the manager (WebviewInfo)
+    flip = 0            # 0 none, 1 horizontal, 2 vertical
+    turned_by_output = False    # the compositor turns the screen: the page leaves its content alone
 
-    def set_orientation(self, orientation: int):
-        self.orientation = int(orientation) % 4
-        # orientation is a quarter-turn index (0/1/2/3 = 0/90/180/270deg),
-        # not a raw degree value. boot-screen.html's setOrientation() applies
-        # it via a body[r] CSS attribute selector with the correct swapped
-        # width/height + transform-origin per rotation (a plain
-        # transform:rotate() would clip the content at 90/270deg, since the
-        # unrotated box still occupies the original, now-perpendicular,
-        # viewport dimensions).
-        self._cef.execute_js(f'setOrientation({orientation})')
+    def set_turn(self, orientation: Optional[int] = None, flip: Optional[int] = None):
+        """Remember the turn and/or mirror asked for (flip: 0 none, 1 horizontal, 2 vertical, mutually exclusive)."""
+        if orientation is not None:
+            self.orientation = int(orientation) % 4
+        if flip is not None:
+            self.flip = flip if flip in (1, 2) else 0
 
-    def set_flip(self, flip: int):
-        self.flip = flip if flip in (1, 2) else 0
-        # flip: 0=none, 1=horizontal, 2=vertical (mutually exclusive, no
-        # "both" state). Applied to a separate wrapper element from
-        # orientation (see boot-screen.html's setFlip()) so the two compose
-        # independently regardless of order - entangling them into a single
-        # element's transform meant setting orientation again erased any
-        # flip, and flip mirrored along the rotated axes instead of the
-        # screen's true horizontal/vertical.
-        self._cef.execute_js(f'setFlip({flip})')
+    def show_turn(self):
+        """Tell the page. When the compositor already turned the output the page shows its content as it is; otherwise the page
+        turns it (boot-screen.html's setOrientation/setFlip: orientation is a quarter-turn index and the two are applied to
+        separate wrappers, so they compose in either order)."""
+        orientation, flip = (0, 0) if self.turned_by_output else (self.orientation, self.flip)
+        self._cef.execute_js(f'setOrientation({orientation}); setFlip({flip})')
 
 
 class _DisplayWatch:
