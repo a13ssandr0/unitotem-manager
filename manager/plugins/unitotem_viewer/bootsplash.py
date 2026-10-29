@@ -33,12 +33,17 @@ FRAME = 1 / 30                     # seconds between two frames of the ring
 
 
 def wait_for_compositor(timeout: float = 120.0) -> bool:
-    """The compositor's socket: a client cannot connect before it exists."""
+    """The compositor's socket: a client cannot connect before it exists. Then, while the compositor unit is still turning the
+    outputs as saved (it leaves `output-pending` next to the socket until it is done, at most a few seconds), the first frame waits."""
     name = os.environ.get('WAYLAND_DISPLAY', 'wayland-0')
     path = name if os.path.isabs(name) else os.path.join(os.environ.get('XDG_RUNTIME_DIR', '/run/user/0'), name)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if os.path.exists(path):
+            pending = os.path.join(os.path.dirname(path), 'output-pending')
+            patience = time.monotonic() + 3
+            while os.path.exists(pending) and time.monotonic() < patience:
+                time.sleep(0.02)
             return True
         time.sleep(0.02)
     return False
