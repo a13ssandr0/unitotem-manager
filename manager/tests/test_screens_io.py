@@ -149,3 +149,30 @@ def test_set_transform_refuses_unknown_names_and_reports_the_compositor(monkeypa
     assert calls == [['wlr-randr', '--output', 'DP-1', '--transform', '270']]
     with pytest.raises(RuntimeError, match='refused'):
         asyncio.run(wayland.set_transform('DP-1', '180'))
+
+
+def test_boot_orientation_writes_only_what_differs_and_survives_a_missing_helper(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from unitotem_node.system import boot_orientation as bo
+
+    calls = []
+
+    async def fake_run(cmd, timeout=None):
+        calls.append(cmd[1:])
+        if cmd[1] == 'get':
+            return SimpleNamespace(returncode=0, stdout=json.dumps({'connector': cmd[2], 'orientation': state['now']}), stderr='')
+        return SimpleNamespace(returncode=state['rc'], stdout='{"error": "x"}', stderr='')
+    state = {'now': 'normal', 'rc': 0}
+    monkeypatch.setattr(bo, 'run', fake_run)
+    monkeypatch.setattr(bo.shutil, 'which', lambda name: None)
+    assert asyncio.run(bo.set_turn('HDMI-A-1', 1)) is False and calls == []          # no helper on this image
+    monkeypatch.setattr(bo.shutil, 'which', lambda name: '/usr/sbin/' + name)
+    assert asyncio.run(bo.set_turn('HDMI-A-1', 1)) is True
+    assert calls == [['get', 'HDMI-A-1'], ['set', 'HDMI-A-1', 'right']]
+    state['now'] = 'right'
+    calls.clear()
+    assert asyncio.run(bo.set_turn('HDMI-A-1', 5)) is False and calls == [['get', 'HDMI-A-1']]      # already so: no write
+    state.update(now='normal', rc=1)
+    assert asyncio.run(bo.set_turn('HDMI-A-1', 3)) is False                                          # a failure is only logged
