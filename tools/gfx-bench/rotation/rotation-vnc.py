@@ -5,7 +5,7 @@ Run from the dev PC (repository .venv, google-chrome):
 
     .venv/bin/python tools/gfx-bench/rotation/rotation-vnc.py --host 192.168.0.254 --out DIR [--configs A,B3,C90,C270,C180,CF]
 
-For every configuration (names as in rotation-bench.py) it puts rotsrv.py's `corners` page in the window, opens the screen
+For every configuration (names as in rotation-bench.py, plus U1/U2/U3/UF/UF2/U1F: the saved setting only, turned by the viewer) it puts rotsrv.py's `corners` page in the window, opens the screen
 window in a headless Chrome, saves a screenshot, switches Control on, clicks the middle of the top-left square of the picture
 it shows and asks the board where the page received the click (fractions of the page, 0,0 = its top left).
 Everything is put back at the end, like rotation-bench.py.
@@ -36,7 +36,9 @@ def load(name, *path):
 vr = load('venus_run', '..', '..', 'ticker', 'venus-run.py')
 smoke = load('ui_smoke', '..', '..', 'ui-smoke.py')
 CONFIGS = {'A': (0, 0, 'normal'), 'B1': (1, 0, 'normal'), 'B3': (3, 0, 'normal'), 'C90': (0, 0, '90'), 'C270': (0, 0, '270'),
-           'C180': (0, 0, '180'), 'CF': (0, 0, 'flipped'), 'BF': (0, 1, 'normal')}
+           'C180': (0, 0, '180'), 'CF': (0, 0, 'flipped'), 'BF': (0, 1, 'normal'),
+           # the setting itself (a viewer that turns screens by the compositor does it): no transform is set here
+           'U1': (1, 0, None), 'U2': (2, 0, None), 'U3': (3, 0, None), 'UF': (0, 1, None), 'UF2': (0, 2, None), 'U1F': (1, 1, None)}
 REMOTE = '/var/lib/unitotem/rot'
 ENV = 'export XDG_RUNTIME_DIR=/run/unitotem/xdg WAYLAND_DISPLAY=wayland-0;'
 BUTTON = "document.querySelector('button[title=\"Watch the screen\"]')"
@@ -96,7 +98,8 @@ async def main():
                     r, f, transform = CONFIGS[name]
                     await api.send('Settings/Display/set_orientation', viewer_id=viewer, window_id=win, orientation=r)
                     await api.send('Settings/Display/set_flip', viewer_id=viewer, window_id=win, flip=f)
-                    vr.ssh(host, f'{ENV} wlr-randr --output {output} --transform {transform}; curl -s localhost:8099/clicks >/dev/null')
+                    if transform:
+                        vr.ssh(host, f'{ENV} wlr-randr --output {output} --transform {transform}')
                     await asyncio.sleep(5)
                     if args.capture:
                         subprocess.run(['ffmpeg', '-loglevel', 'error', '-y', '-f', 'v4l2', '-i', args.capture, '-frames:v', '5', '-update', '1',
