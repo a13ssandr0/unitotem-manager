@@ -26,7 +26,22 @@ from .identity import edid_identity
 # wlr-randr's transform names and the names the web UI has always used for the same rotations (xrandr's)
 _TRANSFORM_TO_ROTATION = {'normal': 'normal', '90': 'left', '180': 'inverted', '270': 'right',
                           'flipped': 'normal', 'flipped-90': 'left', 'flipped-180': 'inverted', 'flipped-270': 'right'}
-_ROTATION_TO_TRANSFORM = {'normal': 'normal', 'left': '90', 'inverted': '180', 'right': '270'}
+
+# What turning and mirroring the CONTENT of a window in the page (quarter turns clockwise, flip 1 horizontal / 2 vertical) looks like
+# when the compositor does it to the output instead: (turn, flip) -> wlr-randr transform. Compared picture by picture on a board
+# (docs/rotation-benchmark.md): all twelve are identical.
+CONTENT_TO_TRANSFORM = {
+    (0, 0): 'normal', (0, 1): 'flipped', (0, 2): 'flipped-180',
+    (1, 0): '270', (1, 1): 'flipped-270', (1, 2): 'flipped-90',
+    (2, 0): '180', (2, 1): 'flipped-180', (2, 2): 'flipped',
+    (3, 0): '90', (3, 1): 'flipped-90', (3, 2): 'flipped-270',
+}
+TRANSFORMS = frozenset(CONTENT_TO_TRANSFORM.values())     # the eight there are: a horizontal mirror turned twice is a vertical one
+
+
+def transform_for(turn: int, flip: int) -> str:
+    """The transform that shows what the page would show with `turn` quarter turns and `flip` (anything else counts as none)."""
+    return CONTENT_TO_TRANSFORM[(int(turn) % 4, flip if flip in (1, 2) else 0)]
 
 
 @dataclass(frozen=True)
@@ -39,6 +54,7 @@ class Output:
     x: int = 0
     y: int = 0
     rotation: str = 'normal'
+    transform: str = 'normal'     # wlr-randr's own name, mirror included (`rotation` has no mirror)
     make: str = ''
     model: str = ''
     serial: str = ''
@@ -62,7 +78,7 @@ def parse_outputs(text: str) -> list[Output]:
         found.append(Output(
             name=entry['name'], connected=True, active=enabled, width=width, height=height,
             x=int(position.get('x', 0)), y=int(position.get('y', 0)),
-            rotation=_TRANSFORM_TO_ROTATION.get(transform, 'normal'),
+            rotation=_TRANSFORM_TO_ROTATION.get(transform, 'normal'), transform=transform,
             make=entry.get('make') or '', model=entry.get('model') or '', serial=entry.get('serial') or ''))
     return found
 
@@ -102,6 +118,15 @@ async def identities() -> dict[str, str]:
     return found
 
 
+async def set_transform(name: str, transform: str):
+    """Turn and/or mirror one output. Raises RuntimeError with wlr-randr's own message when it refuses."""
+    if transform not in TRANSFORMS:
+        raise ValueError(f'Unknown transform {transform}')
+    result = await run(['wlr-randr', '--output', name, '--transform', transform], timeout=15)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip() or f'wlr-randr exited with {result.returncode}')
+
+
 # Where an output was before it was switched off, so switching it on puts it back
 _last_geometry: dict[str, Output] = {}
 
@@ -112,7 +137,7 @@ async def set_power(name: str, on: bool, known: Optional[Output] = None):
         cmd = ['wlr-randr', '--output', name, '--on']
         before = _last_geometry.get(name)
         if before is not None:
-            cmd += ['--pos', f'{before.x},{before.y}', '--transform', _ROTATION_TO_TRANSFORM.get(before.rotation, 'normal')]
+            cmd += ['--pos', f'{before.x},{before.y}', '--transform', before.transform]
     else:
         if known is not None and known.active:
             _last_geometry[name] = known
