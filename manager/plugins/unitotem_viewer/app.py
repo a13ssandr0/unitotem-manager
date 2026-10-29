@@ -627,6 +627,9 @@ class WebviewApp:
             if current.transform != transform:       # the compositor was already started turned: nothing to do
                 await outputs.set_transform(screen, transform)
             ok = True
+            # and the kernel command line, for the next boot (Plymouth)
+            from unitotem_node.system import boot_orientation
+            await boot_orientation.set_turn(screen, orientation)
         except (ImportError, RuntimeError, ValueError, OSError) as e:
             logger.warning('Cannot turn the output {} ({}): the page turns its content instead', screen, e)
         self._bridge.command_received.emit({'target': '_OutputTurned', 'window_id': window, 'ok': ok, 'seq': seq})
