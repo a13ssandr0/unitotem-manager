@@ -192,3 +192,18 @@ busiest GPU engine %
 | video | 36.0 | 35.3 | 35.7 | 35.3 |
 | webgl_mid | 99.0 | 99.0 | 99.0 | 99.0 |
 | idle | 0.0 | 0.0 | 0.0 | 0.0 |
+
+## Equivalence of the page's turn/mirror and the output transform (pixel exact)
+`tools/gfx-bench/rotation/rotation-equivalence.py` on Pi B, frames from OBS's virtual camera, `corners` page: for each content
+orientation r (quarter turns clockwise) and flip f (1 horizontal, 2 vertical) the transform that gives the same picture
+(difference 0.00-0.01 of 255 against 4.2 for the runner-up in every case):
+
+| r \ flip | 0 | 1 | 2 |
+|---|---|---|---|
+| 0 | normal | flipped | flipped-180 |
+| 1 | 270 | flipped-270 | flipped-90 |
+| 2 | 180 | flipped-180 | flipped |
+| 3 | 90 | flipped-90 | flipped-270 |
+
+Kernel `panel_orientation` (turns Plymouth only, no mirror): `right_side_up` = transform 270 (r=1), `left_side_up` = 90 (r=3),
+`upside_down` = 180 (r=2).
