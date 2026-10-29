@@ -27,12 +27,14 @@ Environment=LIBSEAT_BACKEND=builtin
 Environment=XDG_CONFIG_DIRS=/usr/share/unitotem/xdg:/run/unitotem/labwc/node
 ExecStartPre=-/usr/bin/timeout 5 /usr/bin/plymouth deactivate
 ExecStartPre=/bin/chmod 700 /run/unitotem/xdg
+# the boot splash draws its first frame only after the outputs are turned as saved (output_transform.py removes this file): it must exist before the socket does
+ExecStartPre=/bin/touch /run/unitotem/xdg/output-pending
 ExecStartPre=/bin/sh -c 'for n in node; do f=/run/unitotem/labwc/$n/labwc/rc.xml; [ -e "$f" ] || printf \'<?xml version="1.0"?>\\n<labwc_config>\\n</labwc_config>\\n\' > "$f"; done'
 ExecStart=/usr/bin/labwc --merge-config
-# once the compositor really answers (the socket exists), remove Plymouth WITHOUT `plymouth quit`: quit puts the VT back into
+# once the compositor really answers (the socket exists), turn and mirror the outputs as saved; then remove Plymouth WITHOUT `plymouth quit`: quit puts the VT back into
 # text mode, which makes the kernel console repaint over the new frame. The daemon is already deactivated (no drawing, no DRM
 # master), so killing it only drops the process; the VT buffer and /dev/fb0 are cleared first.
-ExecStartPost=-/bin/sh -c 'i=0; until [ -S /run/unitotem/xdg/wayland-0 ] || [ $i -ge 400 ]; do sleep 0.05; i=$((i+1)); done; printf "\\033[H\\033[2J\\033[3J" > /dev/tty1; cat /dev/zero > /dev/fb0 2>/dev/null; pkill -KILL -x plymouthd'
+ExecStartPost=-/bin/sh -c 'i=0; until [ -S /run/unitotem/xdg/wayland-0 ] || [ $i -ge 400 ]; do sleep 0.05; i=$((i+1)); done; /usr/bin/python3 /usr/share/unitotem-manager/plugins/unitotem_viewer/output_transform.py; printf "\\033[H\\033[2J\\033[3J" > /dev/tty1; cat /dev/zero > /dev/fb0 2>/dev/null; pkill -KILL -x plymouthd'
 Restart=always
 RestartSec=3
 
