@@ -44,7 +44,7 @@
         </svg>
       </div>
       <div class="d-flex justify-center align-center mb-4">
-        <v-label class="text-center mr-2">Orientation:</v-label>
+        <v-label class="text-center mr-2">Screen orientation:</v-label>
         <v-btn-toggle v-model="orientation" mandatory>
           <v-btn @click="api.Settings.Display.set_orientation({viewer_id: currentViewerId, window_id: 0, orientation: 0})">
             <v-icon :style="{ transform: 'rotate(0deg)' }">mdi-monitor</v-icon>
@@ -61,7 +61,7 @@
         </v-btn-toggle>
       </div>
       <div class="d-flex justify-center align-center mb-4">
-        <v-label class="text-center mr-2">Flip:</v-label>
+        <v-label class="text-center mr-2">Screen flip:</v-label>
         <v-btn-toggle v-model="flip" mandatory>
           <v-btn @click="api.Settings.Display.set_flip({viewer_id: currentViewerId, window_id: 0, flip: 0})">
             No
