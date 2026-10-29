@@ -311,6 +311,7 @@ class WebviewApp:
 
         self.windows: dict[int, WebviewWindow] = {}
         self._screen_windows: dict[QScreen, int] = {}
+        self._turn_seq: dict[int, int] = {}      # per window: the newest request to turn its screen
         self._next_id = 0
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
         self._ws = None
@@ -388,6 +389,7 @@ class WebviewApp:
         self._notify_screens_changed()
 
     def _forget_window(self, window_id: int):
+        self._turn_seq.pop(window_id, None)
         if self._ws_loop is not None:
             self._ws_loop.call_soon_threadsafe(self._drop_window, window_id)
 
@@ -597,6 +599,38 @@ class WebviewApp:
         settings = json.dumps({**config, 'module': module})
         await self._cdp.evaluate(window, f'window.__utKeyboardConfig = {settings}; window.applyKeyboard && window.applyKeyboard();')
 
+    # ── turning and mirroring a window's screen ──
+
+    def _turn_window(self, window: int):
+        """The orientation and flip of a window are the screen's: the compositor does it (the whole chain, the boot splash and the
+        screen window included, is then turned the same way); when it cannot, the page turns its content as before."""
+        win, screen = self.windows.get(window), self._screen_name_of(window)
+        seq = self._turn_seq[window] = self._turn_seq.get(window, 0) + 1
+        if win is None:
+            return
+        if screen is None or self._ws_loop is None:
+            win.show_turn()
+            return
+        asyncio.run_coroutine_threadsafe(self._turn_output(window, screen, win.orientation, win.flip, seq), self._ws_loop)
+
+    def _screen_name_of(self, window: int) -> Optional[str]:
+        return next((s.name() for s, wid in self._screen_windows.items() if wid == window), None)
+
+    async def _turn_output(self, window: int, screen: str, orientation: int, flip: int, seq: int):
+        ok = False
+        try:
+            from unitotem_node.system.screens import wayland as outputs
+            transform = outputs.transform_for(orientation, flip)
+            current = next((o for o in await outputs.outputs() if o.name == screen), None)
+            if current is None:
+                raise RuntimeError(f'{screen} is not an output of the compositor')
+            if current.transform != transform:       # the compositor was already started turned: nothing to do
+                await outputs.set_transform(screen, transform)
+            ok = True
+        except (ImportError, RuntimeError, ValueError, OSError) as e:
+            logger.warning('Cannot turn the output {} ({}): the page turns its content instead', screen, e)
+        self._bridge.command_received.emit({'target': '_OutputTurned', 'window_id': window, 'ok': ok, 'seq': seq})
+
     # ── the RSS bar (webui/src/ticker.js), on the websocket thread ──
 
     async def _apply_ticker(self, window: int):
@@ -755,6 +789,8 @@ class WebviewApp:
                 'width': g.width(), 'height': g.height(),
                 # how the content is turned and mirrored: the editor of the layout draws the window the way it is seen
                 'orientation': win.orientation, 'flip': win.flip,
+                # the compositor turned the screen: width and height above are already the turned ones
+                'turned_by_output': win.turned_by_output,
             })
         await ws.send(json.dumps({
             'target' : 'WebviewInfo',
@@ -812,12 +848,18 @@ class WebviewApp:
             win.set_asset_audio(data.get('volume', 1.0), data.get('muted', False), data.get('pane'))
         elif target == 'SetAudioOutput' and win:
             win.set_audio_output(data.get('device'))
-        elif target == 'SetOrientation' and win:
-            win.set_orientation(data.get('orientation', 0))
-            self._notify_screens_changed()
-        elif target == 'SetFlip' and win:
-            win.set_flip(data.get('flip', 0))
-            self._notify_screens_changed()
+        elif target in ('SetOrientation', 'SetFlip') and win:
+            if target == 'SetOrientation':
+                win.set_turn(orientation=data.get('orientation', 0))
+            else:
+                win.set_turn(flip=data.get('flip', 0))
+            self._turn_window(window_id)
+        elif target == '_OutputTurned' and win:
+            # the answer of _turn_output, back on the Qt thread; an older request that finishes late does not count
+            if data['seq'] == self._turn_seq.get(window_id):
+                win.turned_by_output = data['ok']
+                win.show_turn()
+                self._notify_screens_changed()
         elif target == 'AddWindow':
             self._open_window(
                 screen_index=data.get('display', 0),

@@ -17,7 +17,7 @@
     <v-card-text>
       <!-- the window, in the space of its content: what the area and the panes are percentages of -->
       <div class="text-caption text-medium-emphasis text-center mb-1" data-test="orientation-note">
-        {{ portrait ? 'Portrait' : 'Landscape' }} content<template v-if="turned">, turned {{ turned }}&deg;</template><template v-if="mirror">, mirrored {{ mirror === 'x' ? 'left-right' : 'top-bottom' }}</template>
+        {{ portrait ? 'Portrait' : 'Landscape' }} content<template v-if="turned">, {{ win.turned_by_output ? 'screen ' : '' }}turned {{ turned }}&deg;</template><template v-if="mirror">, mirrored {{ mirror === 'x' ? 'left-right' : 'top-bottom' }}</template>
       </div>
       <div class="preview-wrap"><div ref="preview" class="preview" :class="mirror && 'mirror-' + mirror" :style="previewStyle" data-test="preview">
         <div class="area" :class="{editable: canEdit}" :style="areaStyle" data-test="area"
@@ -105,8 +105,9 @@ function holdDraft() {
 }
 
 // The preview is the window in the space of its CONTENT, the one the area and the panes are percentages of: turned by the
-// content orientation (the width and height of a vertical screen swap), mirrored by the flip, the way it is seen
-const rotated = computed(() => [1, 3].includes(props.win.orientation))
+// content orientation (the width and height of a vertical screen swap, unless the compositor turned the screen: the window already
+// has the turned size), mirrored by the flip, the way it is seen
+const rotated = computed(() => !props.win.turned_by_output && [1, 3].includes(props.win.orientation))
 const turned = computed(() => (props.win.orientation || 0) * 90)
 const mirror = computed(() => props.win.flip === 1 ? 'x' : props.win.flip === 2 ? 'y' : '')
 const contentSize = computed(() => rotated.value ? [props.win.height, props.win.width] : [props.win.width, props.win.height])

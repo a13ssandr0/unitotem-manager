@@ -284,6 +284,7 @@ const windows = computed(() =>
       refresh: {refresh_after_idle: null, refresh_schedules: [], ...win.refresh},
       orientation: win.orientation ?? 0,
       flip: win.flip ?? 0,
+      turned_by_output: win.turned_by_output ?? false,     // the compositor turned the screen: width and height are the turned ones
       hostname_label: viewer.hostname,
       layout: {...DEFAULT_LAYOUT, ...win.layout},
       pane_count: countLeaves((win.layout ?? DEFAULT_LAYOUT).tree),
