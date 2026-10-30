@@ -218,6 +218,10 @@ class WebviewApp:
             # here while breaking a feature. Chromium requires a dedicated
             # user-data-dir for this (cache_path alone is not enough: Chromium logs an error and ignores the switch).
             'user-data-dir': cache_path,
+            # The profile is kept now: the browser must not fill it with what it downloads on its own (speech engine, suggestion model,
+            # component updates: ~75 MB on the first run) or go to the network for anything but the pages that are shown
+            'disable-component-update': '',
+            'disable-background-networking': '',
             'disk-cache-dir': BROWSER_CACHE,
             'disable-web-security': '',
             'allow-file-access-from-files': '',
