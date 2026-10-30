@@ -62,6 +62,22 @@ SPLASH_MAX_MS = 20000
 PRESENT_MS = 300     # from the page's first drawn frame to the splash leaving
 
 
+BROWSER_PROFILE = '/var/lib/unitotem/browser'
+BROWSER_CACHE = '/var/cache/unitotem-cef'
+
+
+def clear_stale_locks(profile: str):
+    """A power cut leaves the browser's process lock (Singleton*) in the profile; the next start would take it for a running browser
+    when the process id is reused, and refuse to start. Nothing else uses the profile at this point: remove the locks."""
+    for name in ('SingletonLock', 'SingletonSocket', 'SingletonCookie'):
+        try:
+            os.unlink(os.path.join(profile, name))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logger.warning('Cannot remove the stale browser lock {}: {}', name, e)
+
+
 class _Bridge(QObject):
     """Carries commands from the asyncio/WS thread to the Qt main thread."""
     command_received = Signal(dict)
@@ -168,14 +184,13 @@ class WebviewApp:
         stop_boot_splash()      # ours is up: hand over from the one the boot started on its own
         ready.ready('first frame on screen')
 
-        # CEF's default profile dir is under $HOME/.config, which on the
-        # kiosk image is only writable during maintenance windows (the root
-        # filesystem is otherwise read-only) - CEF's ProcessSingleton lock
-        # file then can't be created/replaced and it aborts. /var/cache is a
-        # tmpfs on that image (always writable); an ephemeral cache is fine
-        # for a kiosk browser anyway (nothing here needs to survive reboots).
-        cache_path = '/var/cache/unitotem-cef'
+        # CEF's default profile dir is under $HOME/.config, which on the kiosk image is not writable. The profile (cookies, logins,
+        # local storage) is the operator's and must survive reboots and updates: it lives under /var/lib/unitotem/browser, which the
+        # image puts on the shared data partition (unitotem-persist-paths); the HTTP cache is only a cache and stays in RAM (/var/cache).
+        cache_path = BROWSER_PROFILE
         os.makedirs(cache_path, exist_ok=True)
+        os.makedirs(BROWSER_CACHE, exist_ok=True)
+        clear_stale_locks(cache_path)
 
         # multi_threaded_message_loop must stay False - it's a Windows-only
         # feature in this fork (see module docstring); CEF's queue is instead
@@ -203,6 +218,7 @@ class WebviewApp:
             # here while breaking a feature. Chromium requires a dedicated
             # user-data-dir for this (cache_path alone is not enough: Chromium logs an error and ignores the switch).
             'user-data-dir': cache_path,
+            'disk-cache-dir': BROWSER_CACHE,
             'disable-web-security': '',
             'allow-file-access-from-files': '',
             # A page that forbids being framed (X-Frame-Options, CSP frame-ancestors) is shown anyway.
@@ -274,6 +290,9 @@ class WebviewApp:
                 'log_severity'                 : cef.LOGSEVERITY_WARNING,
                 'remote_debugging_port'        : CDP_PORT,
                 'cache_path'                   : cache_path,
+                # A site that asks for a login keeps it in a session cookie (no expiry date): without this the browser forgets
+                # them when it exits, so every restart logs the operator out of every page
+                'persist_session_cookies'      : True,
                 # Paint black, not white, before a document has loaded. CEF's
                 # documented default for a windowed browser is opaque white
                 # (see vendor/cefpython/api/ApplicationSettings.md), which on a

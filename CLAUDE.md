@@ -678,7 +678,7 @@ the VM-specific ones.
   read-only (no overlay), so `uploads_folder` defaulting to `<code>/uploaded` made the manager
   crash-loop at import time with an `OSError` in `UploadManager.__init__`. Uploads now default to
   `/var/lib/unitotem/uploaded` (`utils/constants.py`); everything else the manager writes lives in
-  `/etc/unitotem`, `/etc/ssl`, `/var/cache/unitotem-cef`, all on the DATA overlay.
+  `/etc/unitotem`, `/etc/ssl`, `/var/lib/unitotem/browser` (the browser profile), all on the DATA overlay.
 - **The websocket API is deliberately id-less (rule from the user).** A command is fire-and-forget and every
   change is pushed to all connected clients, including the one that asked, so two people on the same page
   always see the same state, and the server only loops over the connected clients, no per-request ids to
@@ -1013,4 +1013,9 @@ Tests: `manager/tests/test_ticker_*.py` (models, feeds against local http server
 - **Rotation tools** (`tools/gfx-bench/rotation/`): `rotation-bench.py` (A/B performance, three boards in parallel), `rotation-equivalence.py` (pixel table through a camera), `rotation-vnc.py` (screen window + click mapping, headless Chrome),
   `rotation-ui.py` (the Display page's real buttons, 12 pairs, transform + reported values + picture), `rotation-touch.py`, `rotlib.py` (shared set-up; every script restores the board). Traps: `pkill -f` of a pattern that is in the command
   line kills the caller's own shell (use a pid file); the equivalence of directions is not what one expects (r1 is transform 270).
+- **The browser profile (cookies, logins) lives on DATA, not in a tmpfs (user report, 2026-10-30: "cookies are lost at reboot or after an update")**: it was `/var/cache/unitotem-cef`, a tmpfs, so EVERYTHING was lost at every reboot; and `/var` is a per-slot overlay, so a plain
+  directory under /var/lib would be lost at every slot switch. Now `viewer/app.py` `BROWSER_PROFILE = /var/lib/unitotem/browser` (the image bind-mounts it from `DATA/unitotem/persist/browser`, `unitotem-persist-paths`, like uploads, so it is shared by the slots)
+  and the HTTP cache goes to RAM (`disk-cache-dir=/var/cache/unitotem-cef`). Also `persist_session_cookies: True`: without it a cookie with no expiry date (what most logins use) is dropped at every browser exit even with the profile kept
+  (measured on a Pi: after a manager restart the persistent cookie was there, the session one gone; with the setting both are). `clear_stale_locks` removes `Singleton*` before CEF starts (a power cut leaves them in a profile that is no longer on a tmpfs).
+  Cookies are credentials: the profile is NOT in the backup. Test with `tools/` cookies script: Storage.setCookies over the browser target, restart, Storage.getCookies.
 
