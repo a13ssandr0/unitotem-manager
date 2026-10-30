@@ -57,7 +57,7 @@ const css = `${keyboardCss}
 #ut-kbd-toggle { position: absolute; width: ${BUTTON_PX}px; height: ${BUTTON_PX}px; border-radius: 12px; border: 0;
   background: rgba(30, 30, 30, .85); color: #fff; font-size: 28px; pointer-events: auto; cursor: pointer; padding: 0; }
 #ut-kbd-panel { position: absolute; background: #222; border-radius: 10px; box-shadow: 0 4px 24px #000a;
-  pointer-events: auto; display: none; flex-direction: column; overflow: hidden; will-change: transform; }
+  pointer-events: auto; display: none; flex-direction: column; overflow: hidden; will-change: transform; container-type: inline-size; }
 #ut-kbd-panel.ut-moving { box-shadow: none; }
 #ut-kbd-header { flex: 0 0 ${HEADER_PX}px; height: ${HEADER_PX}px; background: #111; color: #ccc; display: flex;
   align-items: center; justify-content: space-between; padding: 0 0 0 14px; cursor: move; font-size: 14px; }
@@ -69,7 +69,7 @@ const css = `${keyboardCss}
 #ut-kbd-body .hg-row { flex: 1 1 0; display: flex; margin-bottom: 8px; }
 #ut-kbd-body .hg-row .hg-button:not(:last-child) { margin-right: 8px; }
 #ut-kbd-body .hg-row:last-child { margin-bottom: 0; }
-#ut-kbd-body .hg-button { height: auto; font-size: clamp(12px, 2.4vmin, 40px); }
+#ut-kbd-body .hg-button { height: auto; font-size: clamp(12px, 1.9cqw, 40px); white-space: nowrap; overflow: hidden; }
 /* The size of every key is set by sizeKeys() below (tablet geometry); here only the colours. */
 #ut-kbd-body .hg-button { position: relative; transition: background-color .08s; border: 0; border-radius: 10px; box-shadow: none; color: #1f1f1f; }
 #ut-kbd-body .hg-button[data-skbtn="{enter}"] { border-radius: 999px; background: #0b57cf !important; color: #fff; }
@@ -164,13 +164,20 @@ function placeToggle() {
 // The layer changes size when the window is turned (a vertical panel: 1920x1080 becomes 1080x1920) or its screen changes mode: the
 // panel keeps its place and size relative to the screen, instead of staying where it was in pixels and being squeezed back inside
 let lastSize = null
+let touched = false // the visitor moved or resized the panel: it is theirs, not the default one
 function resized() {
   const W = layer.clientWidth
   const H = layer.clientHeight
   if (lastSize && lastSize.W && lastSize.H && (lastSize.W !== W || lastSize.H !== H)) {
-    const sx = W / lastSize.W
-    const sy = H / lastSize.H
-    box.x *= sx; box.w *= sx; box.y *= sy; box.h *= sy
+    if (touched) {
+      // the position follows the screen, the size keeps the proportions of the keys (a different factor for the width and the
+      // height would stretch them)
+      const sx = W / lastSize.W
+      const sy = H / lastSize.H
+      box.x *= sx; box.y *= sy; box.w *= sx; box.h *= sx
+    } else {
+      defaultBox()
+    }
   }
   lastSize = {W, H}
   placeToggle()
@@ -179,8 +186,11 @@ function resized() {
 
 function defaultBox() {
   const {W, H} = limits()
-  box.w = W * 0.7
-  box.h = H * 0.35
+  touched = false
+  // a vertical screen is narrow: the keyboard takes (nearly) all the width, and its height follows from it, so that the keys are about as
+  // tall as they are wide (a third of a vertical screen's height would stretch them to twice their width)
+  box.w = W > H ? W * 0.7 : W * 0.96
+  box.h = Math.min(H * 0.35, box.w * 0.42 + HEADER_PX)
   box.x = (W - box.w) / 2
   box.y = H - box.h - BUTTON_PX - 24
 }
@@ -628,8 +638,8 @@ function build() {
   sizeKeys()
   addHints()
   wireKeys(host)
-  drag(header, (dx, dy) => { box.x += dx; box.y += dy }, true)
-  drag(grip, (dx, dy) => { box.w += dx; box.h += dy })
+  drag(header, (dx, dy) => { touched = true; box.x += dx; box.y += dy }, true)
+  drag(grip, (dx, dy) => { touched = true; box.w += dx; box.h += dy })
 
   new ResizeObserver(resized).observe(layer)
   defaultBox()
