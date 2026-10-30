@@ -84,8 +84,14 @@ function corners() {
   document.body.appendChild(m);
   addEventListener('pointerdown', e => fetch('/click?x=' + (e.clientX / innerWidth).toFixed(3) + '&y=' + (e.clientY / innerHeight).toFixed(3)));
 }
+function field() {
+  const i = document.createElement('input'); i.id = 'f'; i.type = 'text'; i.autocomplete = 'off';
+  i.style.cssText = 'position:absolute;left:10%;top:10%;width:80%;height:8%;font:6vmin sans-serif;box-sizing:border-box';
+  document.body.appendChild(i);
+  i.addEventListener('input', () => fetch('/val?v=' + encodeURIComponent(i.value)));
+}
 ({idle() { (function f() { drawn++; requestAnimationFrame(f); })(); }, video: () => video(1), video4k: () => video(1), video4: () => video(4),
-  corners, canvas: canvas2d, webgl: () => webgl(1), webgl_mid: () => webgl(2), webgl_heavy: () => webgl(8), crawl})[W]();
+  corners, field, canvas: canvas2d, webgl: () => webgl(1), webgl_mid: () => webgl(2), webgl_heavy: () => webgl(8), crawl})[W]();
 </script>"""
 
 
@@ -111,6 +117,16 @@ async def stat(request):
 
 
 clicks = []
+values = []
+
+
+async def val(request):
+    values.append(request.query['v'])
+    return web.Response(text='ok')
+
+
+async def get_vals(request):
+    return web.json_response(values)
 
 
 async def click(request):
@@ -129,5 +145,5 @@ async def get_stats(request):
 
 app = web.Application()
 app.add_routes([web.get('/run.html', run), web.get('/workload', workload), web.get('/set', set_workload),
-                web.post('/stat', stat), web.get('/click', click), web.get('/clicks', get_clicks), web.get('/stats', get_stats), web.static('/', DIR)])
+                web.post('/stat', stat), web.get('/click', click), web.get('/val', val), web.get('/vals', get_vals), web.get('/clicks', get_clicks), web.get('/stats', get_stats), web.static('/', DIR)])
 web.run_app(app, host='127.0.0.1', port=8099, print=None)

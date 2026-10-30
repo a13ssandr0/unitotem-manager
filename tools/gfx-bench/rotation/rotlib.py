@@ -47,6 +47,15 @@ class Board:
         self.ssh(f'kill $(cat {REMOTE}/pid) 2>/dev/null; nohup python3 {REMOTE}/rotsrv.py {REMOTE} >/dev/null 2>&1 & echo $! > {REMOTE}/pid;'
                  f' sleep 2; curl -s "localhost:8099/set?w={self.workload}"')
         self.net = self.ssh(f'{ENV} (sleep 3000; wlr-randr --output {self.output} --transform normal) >/dev/null 2>&1 & echo $!')
+        try:
+            return await self._enter()
+        except BaseException:
+            # __aexit__ does not run when __aenter__ fails: the safety net would stay and turn the screen back 50 minutes later
+            self.ssh(f'pkill -P {self.net}; kill {self.net}; true')
+            raise
+
+    async def _enter(self):
+        host = self.host
         self.api = await vr.Api(host).__aenter__()
         views = (await self.api.call('Viewers/list'))['viewers']
         self.viewer = next(iter(views))
