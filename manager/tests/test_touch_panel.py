@@ -222,3 +222,15 @@ def test_idle_watch_refreshes_repeatedly_and_survives_a_failing_action():
         assert len(calls) >= 3
 
     asyncio.run(scenario())
+
+
+# ── automatic mapping ─────────────────────────────────────────────────────
+
+def test_a_device_on_automatic_belongs_to_the_only_screen():
+    from unitotem_node.system import touch
+    a, b = touch.TouchDevice(name='A', key='A|0001:0002'), touch.TouchDevice(name='B', key='B|0003:0004')
+    assert touch.effective_mapping({}, [a, b], ['HDMI-A-1']) == {'A|0001:0002': 'HDMI-A-1', 'B|0003:0004': 'HDMI-A-1'}
+    # what the operator chose is never overridden, and with several screens nothing is guessed
+    assert touch.effective_mapping({'A|0001:0002': 'DP-1'}, [a, b], ['HDMI-A-1'])['A|0001:0002'] == 'DP-1'
+    assert touch.effective_mapping({}, [a, b], ['DP-1', 'DP-2']) == {}
+    assert touch.effective_mapping({}, [a], []) == {}
