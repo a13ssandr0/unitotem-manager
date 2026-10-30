@@ -50,6 +50,10 @@ async def main():
             key = next(d['key'] for d in devices['devices'] if d.get('name') == 'UniTotem Test Touch')
             await board.api.call('Settings/Display/Touch/set_output', reply='Settings/Display/Touch/devices', key=key, output=board.output)
             await asyncio.sleep(2)
+            # a page of the playlist that took the focus in a text field has opened the on-screen keyboard: it would cover taps
+            subprocess.run(vr.SSH + ['scp', '-O'] + vr.OPTS + [os.path.join(HERE, '..', '..', 'ticker', 'board-cdp.py'), f'root@{host}:{rotlib.REMOTE}/board-cdp.py'],
+                           capture_output=True, check=True)
+            board.ssh(f'python3 {rotlib.REMOTE}/board-cdp.py eval "window.utKeyboard && window.utKeyboard.focusChanged(false)" 0')
             for r in range(4):
                 for f in range(3):
                     await board.set_content(r, f)

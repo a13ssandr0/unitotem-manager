@@ -50,6 +50,8 @@ async def main():
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         async with rotlib.Board(args.host, 'corners') as board:
+            subprocess.run(rotlib.vr.SSH + ['scp', '-O'] + rotlib.vr.OPTS + [os.path.join(HERE, '..', '..', 'ticker', 'board-cdp.py'),
+                                                                           f'root@{args.host}:{rotlib.REMOTE}/board-cdp.py'], capture_output=True, check=True)
             for _ in range(50):
                 try:
                     page = next(t for t in json.load(urllib.request.urlopen('http://127.0.0.1:9343/json/list')) if t['type'] == 'page')
@@ -72,7 +74,7 @@ async def main():
                         await asyncio.sleep(4)
                         transform = [l for l in board.ssh(f'{rotlib.ENV} wlr-randr').splitlines() if 'Transform' in l][0].split(':')[1].strip()
                         info = (await board.api.call('Viewers/list'))['viewers'][board.viewer]['windows'][0]
-                        body = board.ssh('python3 /var/lib/unitotem/ticker-test/board-cdp.py eval "document.body.getAttribute(\'r\') + \'/\' + document.querySelector(\'main\').getAttribute(\'f\')" 2>&1 | tail -1')
+                        body = board.ssh(f'python3 {rotlib.REMOTE}/board-cdp.py eval "document.body.getAttribute(\'r\') + \'/\' + document.querySelector(\'main\').getAttribute(\'f\')" 2>&1 | tail -1')
                         row = {'r': r, 'f': f, 'transform': transform, 'expected': CONFIG[(r, f)], 'reported': [info.get('orientation'), info.get('flip')],
                                'turned_by_output': info.get('turned_by_output'), 'size': [info.get('width'), info.get('height')], 'page_body': body}
                         if args.camera:
