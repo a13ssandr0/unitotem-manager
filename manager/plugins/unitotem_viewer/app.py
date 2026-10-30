@@ -433,6 +433,11 @@ class WebviewApp:
         """
         if self._ws_loop is not None and self._ws is not None:
             asyncio.run_coroutine_threadsafe(self._send_webview_info(self._ws), self._ws_loop)
+        try:
+            from unitotem_node.system.touch_service import touch_service
+            touch_service.outputs_changed()      # a touch screen on automatic belongs to the only screen there is
+        except ImportError:
+            pass
 
     def _on_frame_binding(self, window, _data):
         self._bridge.first_frame.emit(window)

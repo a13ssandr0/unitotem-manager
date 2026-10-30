@@ -1,3 +1,10 @@
+unitotem-manager (3.0.0~dev16) stable; urgency=medium
+
+  * A touch screen left on automatic follows the turn and mirror of the screen: with one screen it is mapped to it
+    (before, a touch landed at the unturned place unless the screen was chosen by hand on the Display page)
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Fri, 30 Oct 2026 14:00:00 +0100
+
 unitotem-manager (3.0.0~dev15) stable; urgency=medium
 
   * The browser no longer downloads components of its own (component updater, speech engine, suggestion model)

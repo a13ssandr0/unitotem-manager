@@ -86,6 +86,11 @@ class TouchService:
         if relevant:
             self._schedule()
 
+    def outputs_changed(self):
+        """A screen appeared or went away (told by the viewer, from its own thread): the automatic mapping depends on how many there are."""
+        if self._loop is not None:
+            self._loop.call_soon_threadsafe(self._schedule)
+
     def _schedule(self):
         if self._timer:
             self._timer.cancel()
@@ -104,7 +109,8 @@ class TouchService:
         try:
             self.devices = await asyncio.to_thread(touch.touch_devices)
             self.outputs = [o for o in await wayland.outputs() if o.active]
-            self.available = await asyncio.to_thread(touch.apply_mapping, touch_map.mapping) or bool(self.outputs)
+            mapping = touch.effective_mapping(touch_map.mapping, self.devices, [o.name for o in self.outputs])
+            self.available = await asyncio.to_thread(touch.apply_mapping, mapping) or bool(self.outputs)
         except Exception as exc:
             logger.warning('Cannot apply the touch mapping: {}', exc)
 

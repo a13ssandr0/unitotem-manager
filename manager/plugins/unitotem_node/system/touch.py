@@ -158,6 +158,17 @@ def touch_devices(text: Optional[str] = None) -> list[TouchDevice]:
     return assign_keys(devices)
 
 
+def effective_mapping(mapping: dict[str, str], devices: list[TouchDevice], outputs: list[str]) -> dict[str, str]:
+    """What is written for the compositor: the mapping the operator chose, plus, with ONE active output, every touch device that has
+    none (it can only belong to that screen). Without this a device on automatic spans the layout as if the output were not turned
+    or mirrored, and a touch lands on the wrong place. With several outputs nothing can be guessed: automatic stays automatic."""
+    result = dict(mapping)
+    if len(outputs) == 1:
+        for device in devices:
+            result.setdefault(device.key, outputs[0])
+    return result
+
+
 def fragment(mapping: dict[str, str]) -> str:
     """The `<touch>` entries of the node's fragment: one per mapped device, by name. Entries whose output is not there
     are harmless (the compositor then lets the device span every output); an identity that is not a device name is
