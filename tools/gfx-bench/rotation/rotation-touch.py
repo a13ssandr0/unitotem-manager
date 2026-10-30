@@ -39,6 +39,7 @@ def content_point(r, f, nx, ny):
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--host', required=True)
+    ap.add_argument('--unmapped', action='store_true', help='leave the device on automatic (no output chosen)')
     args = ap.parse_args()
     host = args.host
     failures = 0
@@ -48,7 +49,7 @@ async def main():
         try:
             devices = (await board.api.call('Settings/Display/Touch/devices'))
             key = next(d['key'] for d in devices['devices'] if d.get('name') == 'UniTotem Test Touch')
-            await board.api.call('Settings/Display/Touch/set_output', reply='Settings/Display/Touch/devices', key=key, output=board.output)
+            (await board.api.call('Settings/Display/Touch/set_output', reply='Settings/Display/Touch/devices', key=key, output=board.output)) if not args.unmapped else None
             await asyncio.sleep(2)
             # a page of the playlist that took the focus in a text field has opened the on-screen keyboard: it would cover taps
             subprocess.run(vr.SSH + ['scp', '-O'] + vr.OPTS + [os.path.join(HERE, '..', '..', 'ticker', 'board-cdp.py'), f'root@{host}:{rotlib.REMOTE}/board-cdp.py'],
