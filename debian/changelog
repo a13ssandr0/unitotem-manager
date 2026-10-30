@@ -1,3 +1,13 @@
+unitotem-manager (3.0.0~dev14) stable; urgency=medium
+
+  * The browser profile (cookies, logins of the sites shown in a window) is kept across reboots and updates: it
+    lives in /var/lib/unitotem/browser (shared data partition on the image), cookies without an expiry date are
+    saved too, the HTTP cache stays in RAM
+  * On-screen keyboard: keys keep their proportions on a vertical screen and when the screen is turned, key text
+    follows the panel's width and never wraps
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Fri, 30 Oct 2026 02:00:00 +0100
+
 unitotem-manager (3.0.0~dev13) stable; urgency=medium
 
   * Screen orientation and flip are done by the compositor (wlr-randr transform) instead of the page: the screen

@@ -1,5 +1,8 @@
 === CURRENT WORK ===
 
+2026-10-30 BROWSER PROFILE + VERTICAL KEYBOARD (pushed): cookies were lost at every reboot (profile on a tmpfs) and session cookies at every restart (persist_session_cookies); now /var/lib/unitotem/browser (image: persist mount on DATA,
+  done by unitotem-system), verified with a full reboot of a Pi 4 (session + persistent cookie kept); NOT verified: a slot switch (needs the image). Keyboard on a vertical screen no longer stretched (CLAUDE.md 2026-10-30), checked by screenshots + camera. dev14 debs next.
+
 2026-10-29 SCREEN ROTATION/MIRROR BY THE COMPOSITOR (branch `viewer-wayland`, pushed): DONE: a window's orientation and flip now turn the SCREEN (wlr-randr transform), the page only as a fallback;
   pixel-exact table (docs/rotation-benchmark.md), node `wayland.set_transform`/`transform_for`, boot script `unitotem_viewer/output_transform.py` run by the compositor unit before the boot splash,
   viewer `_turn_output`, web UI (preview size, wording). Verified on Pi B (OBS camera): 12/12 pictures identical to the page's, 12/12 touch taps, VNC upright with correct clicks, power off/on,
