@@ -483,6 +483,17 @@ class WebviewManager:
             self._webviews[instance_id] = info
         self._restore_assignments(instance_id)
 
+    def window_reloaded(self, instance_id: str, window_id: int):
+        """The page of a window loaded again (reload, crash recovery): it is blank, so everything that was told to the window is
+        told again, the same way as for a window that just appeared."""
+        logger.info('Page of window {} of {} loaded again: restoring its content', window_id, instance_id)
+        self._audio_applied.discard((instance_id, window_id))
+        self._idle_panes -= {k for k in self._idle_panes if k[:2] == (instance_id, window_id)}
+        for loop in self._loops.values():
+            for key in [k for k in loop.assigned_webviews if k[:2] == (instance_id, window_id)]:
+                loop.unassign(*key)
+        self._restore_assignments(instance_id)
+
     def unregister_webview(self, instance_id: str):
         logger.info('Webview disconnected: {}', instance_id)
         self._webviews.pop(instance_id, None)

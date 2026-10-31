@@ -5,6 +5,16 @@
   <core>
     <gap>0</gap>
   </core>
+  <!-- A kiosk has no shortcuts and no menus: with no <default /> and at least one entry of their own, labwc loads none of its
+       default keybinds (close, terminal, menus, window switcher) or mousebinds (root menu). The entries are inert: no action. -->
+  <keyboard>
+    <keybind key="W-F24"/>
+  </keyboard>
+  <mouse>
+    <context name="Root">
+      <mousebind button="Left" action="Press"/>
+    </context>
+  </mouse>
   <theme>
     <cornerRadius>0</cornerRadius>
   </theme>

@@ -1,5 +1,6 @@
 <template>
   <v-container fluid class="pa-4">
+    <v-snackbar :model-value="!!devtoolsError" color="error" :timeout="8000" @update:model-value="devtoolsError = ''">{{ devtoolsError }}</v-snackbar>
     <v-row>
       <v-col>
         <h2 class="text-h5 mb-4">Viewer Assignment Matrix</h2>
@@ -68,6 +69,21 @@
                           :disabled="!(audioOutputs[win.viewer_id] || []).length"
                           @update:model-value="v => api.Viewers.set_audio_output({viewer_id: win.viewer_id, window_id: win.window_id, device: v || null})">
                 </v-select>
+              </td>
+            </tr>
+            <tr v-if="canDevtools">
+              <td class="playlist-col">
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="small" color="primary">mdi-bug-outline</v-icon>
+                  <div>
+                    <div class="font-weight-medium">Developer tools</div>
+                    <div class="text-caption text-medium-emphasis">Inspect the page of a window in a new tab</div>
+                  </div>
+                </div>
+              </td>
+              <td v-for="win in windows" :key="win.key" class="text-center">
+                <v-btn variant="tonal" size="small" prepend-icon="mdi-open-in-new" :loading="devtoolsBusy === win.key"
+                       @click="openDevtools(win)">Open</v-btn>
               </td>
             </tr>
             <tr v-if="canConfigureKeyboard">
@@ -322,6 +338,29 @@ async function toggle(playlistId, win) {
 // The keyboard of a panel is configuration of the panel, for administrators only: the row is not shown to anyone else
 const currentUser = api.Settings.Security.current_user.use()
 const canConfigureKeyboard = computed(() => canCall('Viewers/set_keyboard', currentUser.value))
+// The developer tools of a page: administrators only, and only where the node plugin that serves them is loaded
+const canDevtools = computed(() => canConfigureKeyboard.value && Boolean(window.__INITIAL_STATE__.plugins?.includes('node')))
+const devtoolsBusy = ref(null)
+const devtoolsError = ref('')
+async function openDevtools(win) {
+  devtoolsBusy.value = win.key
+  // The tab is opened by the click itself (a popup opened after a request is blocked), then pointed at the tools
+  const tab = window.open('about:blank', '_blank')
+  try {
+    const reply = await fetch('/devtools/open', {
+      method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({window_id: win.window_id}),
+    })
+    if (!reply.ok) throw new Error((await reply.json().catch(() => ({}))).detail || reply.statusText)
+    const {path} = await reply.json()
+    if (tab) tab.location.href = path.replace('{host}', location.host)
+  } catch (e) {
+    tab?.close()
+    devtoolsError.value = `Cannot open the developer tools: ${e.message}`
+  } finally {
+    devtoolsBusy.value = null
+  }
+}
 const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/sources', currentUser.value)) // admin only (the RSS ticker)
 // ... and so are the area and the panes of a window (the playlist of each pane is the scheduler's)
 const canConfigureLayout = computed(() => canCall('Viewers/set_area', currentUser.value))

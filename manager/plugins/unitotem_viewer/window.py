@@ -14,6 +14,8 @@ from pathlib import Path
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QScreen
 
+from . import keys
+
 try:
     from cefpython3 import cefpython as cef
 except ImportError:
@@ -27,6 +29,8 @@ _FIT_NAMES  = ['contain', 'cover', 'fill']
 logger = logging.getLogger(__name__)
 
 DISPLAY_WAIT_MS, DISPLAY_WAIT_TRIES = 150, 40     # up to 6 s for the browser to know a new output
+FOCUS_DELAY_MS = 300                 # the new page's widget exists a moment after its load ends
+RECOVERY_BASE_MS, RECOVERY_MAX_MS = 200, 10000      # pause before reloading a page whose process died
 APP_ID = 'org.unitotem.viewer'       # xdg_toplevel.app_id of every window: what the compositor's rules can match
 
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
@@ -139,13 +143,44 @@ class _BrowserViewDelegate:
         # The browser exists before its page does: a command run now would reach the blank initial document, which the
         # navigation then replaces (a window restored to its playlist at start showed nothing). They wait for the load.
         browser.SetClientCallback('OnLoadEnd', self._on_load_end)
+        browser.SetClientCallback('OnPreKeyEvent', self._on_pre_key_event)
+        browser.SetClientCallback('OnBeforePopup', self._on_before_popup)
+        browser.SetClientCallback('OnRendererProcessTerminated', self._on_renderer_terminated)
 
     def _on_load_end(self, browser, frame, http_code):
-        if frame.IsMain():
-            self._owner._page_loaded = True
-            for js in self._owner._pending_js:      # commands that arrived before the page was there
-                browser.ExecuteJavascript(js)
-            self._owner._pending_js.clear()
+        if not frame.IsMain():
+            return
+        owner = self._owner
+        if not (frame.GetUrl() or '').startswith(_BOOT_URL):
+            # something navigated the window away from our page (a script, a redirect): put it back
+            logger.warning('Window %s left its page for %s: loading it again', owner.window_id, frame.GetUrl()[:200])
+            browser.LoadUrl(f'{_BOOT_URL}?window={owner.window_id}')
+            return
+        reloaded = owner._page_loaded or owner._loads > 0
+        owner._loads += 1
+        QTimer.singleShot(RECOVERY_MAX_MS * 3, lambda: setattr(owner, '_recoveries', 0))
+        owner._page_loaded = True
+        for js in owner._pending_js:      # commands that arrived before the page was there
+            browser.ExecuteJavascript(js)
+        owner._pending_js.clear()
+        if reloaded:
+            QTimer.singleShot(FOCUS_DELAY_MS, owner.refocus)     # a replaced renderer starts without the keyboard focus
+        if reloaded and owner.on_page_reloaded is not None:
+            owner.on_page_reloaded(owner.window_id)     # whatever the page held is gone: the manager shows it again
+
+    def _on_pre_key_event(self, browser, event, event_handle, is_keyboard_shortcut_out):
+        """The browser's own shortcuts do nothing; a reload key asks the page shown to refresh itself."""
+        decision = keys.decide(event.get('modifiers', 0), event.get('windows_key_code', 0))
+        if decision is keys.Decision.RELOAD and event.get('type') in (cef.KEYEVENT_RAWKEYDOWN, cef.KEYEVENT_KEYDOWN):
+            self._owner.execute_js('refreshPage()')
+        return decision is not keys.Decision.PASS
+
+    def _on_before_popup(self, *args, **kwargs):
+        return True         # a page never opens windows of its own
+
+    def _on_renderer_terminated(self, browser, status):
+        logger.error('The page of window %s died (%s): reloading it', self._owner.window_id, status)
+        self._owner.recover()
 
     def OnBrowserDestroyed(self, browser_view, browser):
         self._owner._browser = None
@@ -197,9 +232,12 @@ class WebviewWindow(PageCommands):
         self._page_loaded = False           # boot-screen.html is there: its functions can be called
         self._display_id = None
         self._pending_js: list[str] = []
+        self._loads = 0                     # how many times the page has finished loading: more than one is a reload
+        self._recoveries = 0                # consecutive crashes without a page that stayed up
         self.closed = False
         self._attempts = 0
         self.on_geometry_changed = None     # set by the application
+        self.on_page_reloaded = None        # set by the application: called with the window id when the page loads again
 
     @property
     def window_id(self) -> int:
@@ -243,6 +281,28 @@ class WebviewWindow(PageCommands):
             self._browser.ExecuteJavascript(js)
         elif not self.closed:
             self._pending_js.append(js)
+
+    def refocus(self):
+        """Gives the keyboard focus back to the page after its renderer was replaced. Neither the view's nor the browser's own
+        focus calls do it (Views believes the focus is already there): the window has to be hidden and shown again."""
+        if self.closed or self._window is None or self._view is None:
+            return
+        self._window.Hide()
+        self._window.Show()
+        self._window.Activate()
+        self._view.RequestFocus()
+
+    def recover(self):
+        """The page's process died: load it again, after a pause that grows while it keeps dying (a crash loop must not burn the
+        CPU), and the load tells the manager to show the content again."""
+        self._page_loaded = False
+        delay = min(RECOVERY_BASE_MS * 2 ** self._recoveries, RECOVERY_MAX_MS)
+        self._recoveries += 1
+        QTimer.singleShot(delay, self._reload_after_crash)
+
+    def _reload_after_crash(self):
+        if self._browser is not None and not self.closed:
+            self._browser.Reload()
 
     def close(self):
         """Destroys the window for real (the toplevel goes away, the browser is closed)."""
