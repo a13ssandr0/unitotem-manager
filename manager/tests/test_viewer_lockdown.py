@@ -76,6 +76,8 @@ def test_a_terminal_token_does_not_open_the_developer_tools():
 
 
 def test_only_files_of_the_front_end_are_served():
+    import asyncio
+    asyncio.set_event_loop(asyncio.new_event_loop())        # importing the login router arms a lock; earlier tests closed the loop
     from plugins.unitotem_node.devtools import _FILE
     for good in ('inspector.html', 'front_end/core/common/common.js', 'a-b_c/d.e'):
         assert _FILE.fullmatch(good), good
@@ -84,5 +86,37 @@ def test_only_files_of_the_front_end_are_served():
 
 
 def test_the_targets_list_and_the_protocol_are_not_files():
+    import asyncio
+    asyncio.set_event_loop(asyncio.new_event_loop())
     from plugins.unitotem_node.devtools import _NOT_FILES
     assert {'json', 'page', 'browser', 'ws'} <= set(_NOT_FILES)
+
+
+# ── the profile's preferences ────────────────────────────────────────────
+
+def test_kiosk_preferences_are_merged_into_the_profile_and_the_rest_is_kept(tmp_path):
+    import json
+    from plugins.unitotem_viewer import profile_prefs
+    prefs = tmp_path / 'Default' / 'Preferences'
+    prefs.parent.mkdir()
+    prefs.write_text(json.dumps({'profile': {'name': 'x', 'default_content_setting_values': {'images': 1}}, 'kept': 1,
+                                 'autofill': {'profile_enabled': True, 'other': 5}}))
+    assert profile_prefs.apply(tmp_path) is True
+    got = json.loads(prefs.read_text())
+    assert got['kept'] == 1 and got['profile']['name'] == 'x' and got['autofill']['other'] == 5
+    assert got['autofill']['profile_enabled'] is False and got['credentials_enable_service'] is False
+    assert got['profile']['default_content_setting_values'] == {'images': 1, 'notifications': 2, 'geolocation': 2, 'popups': 2}
+    assert got['translate']['enabled'] is False
+    assert profile_prefs.apply(tmp_path) is False                     # nothing left to change
+
+
+def test_a_fresh_profile_gets_the_preferences_and_a_broken_file_is_left_alone(tmp_path):
+    import json
+    from plugins.unitotem_viewer import profile_prefs
+    assert profile_prefs.apply(tmp_path) is True
+    assert json.loads((tmp_path / 'Default' / 'Preferences').read_text())['credentials_enable_service'] is False
+    broken = tmp_path / 'other'
+    (broken / 'Default').mkdir(parents=True)
+    (broken / 'Default' / 'Preferences').write_text('{not json')
+    assert profile_prefs.apply(broken) is False
+    assert (broken / 'Default' / 'Preferences').read_text() == '{not json'

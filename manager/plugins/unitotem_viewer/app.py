@@ -43,6 +43,7 @@ from .cdp import Cdp
 from .idle import IdleWatch, schedule_due, seconds_to_next_minute
 from .splash import show_splashes
 from . import wayland
+from . import profile_prefs
 from .window import WebviewWindow
 import utils.ready as ready
 
@@ -191,6 +192,7 @@ class WebviewApp:
         os.makedirs(cache_path, exist_ok=True)
         os.makedirs(BROWSER_CACHE, exist_ok=True)
         clear_stale_locks(cache_path)
+        profile_prefs.apply(cache_path)
 
         # multi_threaded_message_loop must stay False - it's a Windows-only
         # feature in this fork (see module docstring); CEF's queue is instead
@@ -233,6 +235,13 @@ class WebviewApp:
             'enable-features': 'ResamplingInputEvents',
             # no scrollbars on a kiosk (content_switches.cc kHideScrollbars): the pages in the window scroll by touch
             'hide-scrollbars': '',
+            # Nobody is at the screen to answer a question: the camera and the microphone are granted to every page without asking
+            # (CEF's media_access_query.cc `enable-media-stream`; content_switches.cc `auto-accept-camera-and-microphone-capture`
+            # for the Chrome-style path), and every other permission prompt (location, notifications...) is refused without being shown
+            # (components/permissions `deny-permission-prompts`)
+            'enable-media-stream': '',
+            'auto-accept-camera-and-microphone-capture': '',
+            'deny-permission-prompts': '',
         }
         # See _own_cert_spki_hash(): trust this node's own certificate, and
         # only that one, so its locally served pages render instead of an error.
