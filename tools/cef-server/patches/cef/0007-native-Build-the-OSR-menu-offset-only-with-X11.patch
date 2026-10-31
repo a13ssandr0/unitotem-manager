@@ -1,0 +1,39 @@
+From 7000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Alessandro Campolo <campolo.alex@gmail.com>
+Date: Sat, 31 Oct 2026 20:30:00 +0000
+Subject: [PATCH 7/7] native: Build the OSR menu offset only with X11
+
+CefMenuRunnerViewsAura includes ui/gfx/x/connection.h and uses x11::Connection
+under BUILDFLAG(IS_LINUX), but the code is for "Linux/X11 with OSR" as its own
+comment says, and every other X11 use in libcef/browser/native is guarded by
+BUILDFLAG(SUPPORTS_OZONE_X11). With ozone_platform_x11=false (a Wayland-only
+build) the header does not exist and libcef does not compile. Use the same
+guard.
+
+---
+diff --git a/libcef/browser/native/menu_runner_views_aura.cc b/libcef/browser/native/menu_runner_views_aura.cc
+index ef826462d..1d9e7f48f 100644
+--- a/libcef/browser/native/menu_runner_views_aura.cc
++++ b/libcef/browser/native/menu_runner_views_aura.cc
+@@ -14,8 +14,10 @@
+ 
+ #if BUILDFLAG(IS_LINUX)
+ #include "ui/display/screen.h"
++#if BUILDFLAG(SUPPORTS_OZONE_X11)
+ #include "ui/gfx/x/connection.h"
+ #endif
++#endif
+ 
+ CefMenuRunnerViewsAura::CefMenuRunnerViewsAura() = default;
+ 
+@@ -41,7 +43,7 @@ bool CefMenuRunnerViewsAura::RunContextMenu(
+   gfx::Point screen_point = browser->GetScreenPoint(
+       gfx::Point(params.x, params.y), /*want_dip_coords=*/true);
+ 
+-#if BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
+   if (browser->IsWindowless() && parent_widget) {
+     // On Linux/X11 with OSR, menus are displayed as top-level override-redirect
+     // windows parented to the root window (to avoid clipping). The menu system
+-- 
+2.51.0
