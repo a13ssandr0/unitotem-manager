@@ -56,7 +56,7 @@ def normalize_schedule(expression: str) -> str:
     if not isinstance(expression, str):
         raise ValueError(f'{expression!r} is not a schedule')
     fields = expression.split()
-    if len(fields) != 5 or any(not _CRON_FIELD_RE.match(f) for f in fields):
+    if len(fields) != 5 or any(not _CRON_FIELD_RE.fullmatch(f) for f in fields):
         raise ValueError(f'{expression!r} is not a schedule of five fields (minute hour day month weekday)')
     normalized = ' '.join(fields)
     try:

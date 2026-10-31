@@ -9,6 +9,7 @@ and re-reads all of them on SIGHUP. Whoever writes a fragment calls `reload()`. 
 (a development machine, a desktop compositor): `reload()` finds nobody to signal and the caller carries on.
 """
 import os
+import re
 import signal
 from pathlib import Path
 from typing import Optional
@@ -18,6 +19,19 @@ from loguru import logger
 
 RUN_DIR = Path(os.environ.get('UNITOTEM_LABWC_RUN', '/run/unitotem/labwc'))
 EMPTY = '<?xml version="1.0"?>\n<labwc_config>\n</labwc_config>\n'
+
+
+# Characters XML 1.0 can hold at all; the rest (NUL, escape, other controls) would make the whole file unparsable and the compositor
+# would then silently load its default configuration
+_XML_ILLEGAL = re.compile('[^\\t\\n\\r\\x20-\\ud7ff\\ue000-\\ufffd\\U00010000-\\U0010ffff]')
+_XML_ESCAPES = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;', '\t': '&#9;', '\n': '&#10;', '\r': '&#13;'}
+
+
+def xml_attr(value: str) -> str:
+    """A string (a device or output name, anything a person or a device chose) as the value of an XML attribute: markup characters and
+    line breaks as references (an attribute's line breaks would otherwise be turned into spaces), characters XML cannot hold dropped.
+    Names are data: they never reach the file any other way."""
+    return ''.join(_XML_ESCAPES.get(c, c) for c in _XML_ILLEGAL.sub('', str(value)))
 
 
 def fragment_path(name: str) -> Path:

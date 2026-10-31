@@ -11,7 +11,7 @@ def canonical_output_name(name: str) -> str:
     """One name for the same output whatever the source: the `cardN-` prefix of a DRM connector is dropped and
     `HDMI-A-n` is folded into `HDMI-n`. Everything else is left alone."""
     stripped = _CARD_PREFIX_RE.sub('', name)
-    m = _HDMI_A_RE.match(stripped)
+    m = _HDMI_A_RE.fullmatch(stripped)
     return f'HDMI-{m.group(1)}' if m else stripped
 
 

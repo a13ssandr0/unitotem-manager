@@ -16,7 +16,7 @@ _MAC_RE = re.compile(r'^([0-9a-fA-F]{2}[:-]?){5}[0-9a-fA-F]{2}$')
 
 def normalise_mac(mac: str) -> str:
     """'aa-bb-cc-dd-ee-ff', 'AABBCCDDEEFF' and 'aa:bb:cc:dd:ee:ff' are all the same address."""
-    if not _MAC_RE.match(mac.strip()):
+    if not _MAC_RE.fullmatch(mac.strip()):
         raise ValueError(f'{mac!r} is not a MAC address')
     digits = re.sub(r'[^0-9a-fA-F]', '', mac).lower()
     return ':'.join(digits[i:i + 2] for i in range(0, 12, 2))

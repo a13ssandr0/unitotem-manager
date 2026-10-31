@@ -45,7 +45,7 @@ class TouchMap(BaseModel, validate_assignment=True):
         if output is None:
             mapping.pop(key, None)
         else:
-            if not OUTPUT_NAME_RE.match(output):
+            if not OUTPUT_NAME_RE.fullmatch(output):
                 raise ValueError(f'{output!r} is not an output name')
             mapping[key] = output
         self.mapping = mapping

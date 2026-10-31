@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -120,8 +121,19 @@ async def identities() -> dict[str, str]:
     return found
 
 
+# A connector's name goes to argument lists of wlr-randr and wlopm: letters, digits and a few separators, never a leading dash (an option)
+OUTPUT_NAME_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:+-]{0,63}')
+
+
+def check_output_name(name: str) -> str:
+    if not isinstance(name, str) or not OUTPUT_NAME_RE.fullmatch(name):
+        raise ValueError(f'{name!r} is not an output name')
+    return name
+
+
 async def set_transform(name: str, transform: str):
     """Turn and/or mirror one output. Raises RuntimeError with wlr-randr's own message when it refuses."""
+    check_output_name(name)
     if transform not in TRANSFORMS:
         raise ValueError(f'Unknown transform {transform}')
     result = await run(['wlr-randr', '--output', name, '--transform', transform], timeout=15)
@@ -148,6 +160,7 @@ async def set_power(name: str, on: bool, known: Optional[Output] = None):
     """Switch one output off or on. Power management (DPMS) first: the output stays enabled, so its window stays and the page is not
     reloaded when it comes back; only when that is refused the output itself is disabled. Raises RuntimeError with the
     compositor's message when nothing works."""
+    check_output_name(name)
     if on:
         _kept_off.discard(name)
         if not _kept_off:
@@ -255,6 +268,8 @@ async def _power_protocol(name: str, on: bool):
 
 async def dpms(on: bool, name: str = '*'):
     """Blank or wake every output (or one) with the output power management protocol."""
+    if name != '*':
+        check_output_name(name)
     result = await run(['wlopm', '--on' if on else '--off', name], timeout=10)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip() or f'wlopm exited with {result.returncode}')

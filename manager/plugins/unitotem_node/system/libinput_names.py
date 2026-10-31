@@ -59,7 +59,7 @@ def name_of(node: str) -> Optional[str]:
             return None
         try:
             device = lib.libinput_path_add_device(context, node.encode())
-            return lib.libinput_device_get_name(device).decode() if device else None
+            return lib.libinput_device_get_name(device).decode(errors='replace') if device else None
         finally:
             lib.libinput_unref(context)
     except Exception as exc:                   # a library that is there but different: the kernel name is the fallback

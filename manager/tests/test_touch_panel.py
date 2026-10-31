@@ -274,3 +274,39 @@ def test_the_configuration_uses_the_name_libinput_gives_not_the_kernel_name():
     assert 'deviceName="TSTP CTouch (USB 1-1.4)" mapToOutput="HDMI-A-1"' in text
     assert '<device category="TSTP CTouch (USB 1-1.4)"><calibrationMatrix>0 1 0 -1 0 1<' in text
     assert 'deviceName="TSTP CTouch"' not in text
+
+
+# ── names are data: they never break or inject into what is written for the compositor ────────────────────────────
+
+def test_a_device_name_can_not_break_out_of_its_attribute_or_the_file():
+    from unitotem_node.system import touch
+    hostile = 'Pwn" mapToOutput="X"/><touch deviceName="Y\nline\x00\x1bnul & <b>'
+    key = hostile + '|1:2'
+    text = touch.fragment({key: 'DP-1'}, {key: {'turn': 1, 'flip': 0}}, {key: hostile})
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring('<labwc_config>' + text + '</labwc_config>')      # still one well-formed document
+    touches = root.findall('touch')
+    assert len(touches) == 1 and touches[0].get('mapToOutput') == 'DP-1'
+    assert touches[0].get('deviceName') == hostile.replace('\x00', '').replace('\x1b', '')      # the name survives as data
+    assert len(root.findall('libinput/device')) == 1
+
+
+def test_a_device_named_like_a_category_does_not_calibrate_every_device_of_that_kind():
+    from unitotem_node.system import touch
+    text = touch.fragment({}, {'touch|1:2': {'turn': 1, 'flip': 0}}, {'touch|1:2': 'touch'})
+    assert 'category="touch"' not in text and '<libinput>' not in text
+
+
+def test_names_with_a_trailing_line_break_are_refused_everywhere():
+    from unitotem_node.models.touch_map import TouchMap
+    from unitotem_node.system.screens import wayland
+    from utils import passwords
+    import pytest
+    with pytest.raises(ValueError):
+        TouchMap().set('k', 'HDMI-A-1\n')
+    assert passwords.validate_username('bob\n') and not passwords.validate_username('bob')
+    for bad in ('--help', '-x', 'a b', 'a\n', '', 'x' * 65, 'a;b', 'a$(b)'):
+        with pytest.raises(ValueError):
+            wayland.check_output_name(bad)
+    for good in ('HDMI-A-1', 'DP-2', 'Virtual-1', 'eDP-1'):
+        assert wayland.check_output_name(good) == good

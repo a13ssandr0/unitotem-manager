@@ -232,3 +232,12 @@ def test_an_output_we_blanked_is_blanked_again_when_something_switches_it_on(mon
         await wayland.keep_off()
         assert not any('--off' in c for c in calls)
     asyncio.run(scenario())
+
+
+def test_a_cec_device_is_an_adapter_node_never_an_option_or_another_path():
+    import pytest
+    from unitotem_node.models.screen_control import OutputConfig
+    assert OutputConfig(cec_device='/dev/cec0').cec_device == '/dev/cec0'
+    for bad in ('--help', '-d', '/etc/passwd', '/dev/cec0\n', '/dev/cec', '../dev/cec0'):
+        with pytest.raises(ValueError):
+            OutputConfig(cec_device=bad)

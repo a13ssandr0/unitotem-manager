@@ -34,7 +34,7 @@ RULES = [
 
 def validate_username(username: str) -> list[str]:
     """What is wrong with the username (an empty list means it is fine)."""
-    if not isinstance(username, str) or not USERNAME_PATTERN.match(username):
+    if not isinstance(username, str) or not USERNAME_PATTERN.fullmatch(username):
         return ['The username must be 1 to 32 characters: lowercase letters, digits, dash and underscore, '
                 'not starting with a digit or a dash']
     return []
