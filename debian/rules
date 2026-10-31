@@ -56,6 +56,9 @@ override_dh_auto_install-arch:
 	install -d $(CEF); unzip -q "$$WHEEL" -d $(CEF)
 	# The wheel was built with an RUNPATH pointing into the CI machine; the helper finds its libraries beside itself
 	patchelf --set-rpath '$$ORIGIN' $(CEF)/cefpython3/subprocess
+	# The browser shows no interface of its own, so no translated strings are ever displayed: keep the fallback locale only (the
+	# language the PAGES get is set per window, see Viewers/set_language)
+	find $(CEF)/cefpython3/locales -name '*.pak' ! -name 'en-US.pak' -delete
 
 # python3-cefpython3 is left alone on purpose (see below), so dh_python3 must not run on any arch package either
 override_dh_python3-arch:

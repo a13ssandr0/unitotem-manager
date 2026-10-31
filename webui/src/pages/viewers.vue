@@ -86,6 +86,22 @@
                        @click="openDevtools(win)">Open</v-btn>
               </td>
             </tr>
+            <tr v-if="canSetLanguage">
+              <td class="playlist-col">
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="small" color="primary">mdi-translate</v-icon>
+                  <div>
+                    <div class="font-weight-medium">Language of the pages</div>
+                    <div class="text-caption text-medium-emphasis">What web pages are told to show (their own language setting)</div>
+                  </div>
+                </div>
+              </td>
+              <td v-for="win in windows" :key="win.key" class="text-center">
+                <v-autocomplete :items="contentLanguages" :model-value="win.language || ''" label="Language"
+                                density="compact" variant="outlined" hide-details class="keyboard-field"
+                                @update:model-value="v => setLanguage(win, v ?? '')"></v-autocomplete>
+              </td>
+            </tr>
             <tr v-if="canConfigureKeyboard">
               <td class="playlist-col">
                 <div class="d-flex align-center ga-2">
@@ -363,6 +379,12 @@ async function openDevtools(win) {
 }
 const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/sources', currentUser.value)) // admin only (the RSS ticker)
 // ... and so are the area and the panes of a window (the playlist of each pane is the scheduler's)
+// the language the pages of a window are told to show (administrators); the same languages as the keyboard's
+const canSetLanguage = computed(() => canCall('Viewers/set_language', currentUser.value))
+const contentLanguages = computed(() => [{title: 'Language of the node', value: ''}, ...keyboardLanguages])
+function setLanguage(win, language) {
+  api.Viewers.set_language({viewer_id: win.viewer_id, window_id: win.window_id, language})
+}
 const canConfigureLayout = computed(() => canCall('Viewers/set_area', currentUser.value))
 const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
 // The layouts of the on-screen keyboard come from the generated data in src/gboard: one per language, some with variants (see keyboard-layouts.js)
@@ -406,6 +428,7 @@ api.Viewers.screensaver.on(({viewer_id, window_id, ...settings}) => updateWindow
 api.Viewers.refresh.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'refresh', settings))
 // the keyboard of one window, pushed by the server after every change (and the reply to asking for it)
 api.Viewers.keyboard.on(({viewer_id, window_id, ...settings}) => updateWindow({viewer_id, window_id}, 'keyboard', settings))
+api.Viewers.language.on(({viewer_id, window_id, language}) => updateWindow({viewer_id, window_id}, 'language', language))
 // the layout of one window, pushed by the server after every change (a refusal comes with `error` and no layout)
 api.Viewers.layout.on(({viewer_id, window_id, layout}) => { if (layout) updateWindow({viewer_id, window_id}, 'layout', layout) })
 

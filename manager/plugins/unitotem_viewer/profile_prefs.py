@@ -36,8 +36,9 @@ def _merge(target: dict, wanted: dict):
             target[key] = value
 
 
-def apply(profile: Path, wanted: dict = KIOSK_PREFS) -> bool:
-    """Puts the kiosk preferences into the profile. True when the file was changed. A preferences file that cannot be read is
+def apply(profile: Path, wanted: dict = KIOSK_PREFS, accept_languages: str = '') -> bool:
+    """Puts the kiosk preferences into the profile, and `accept_languages` (the node's language, 'it-IT,it') as the language every page
+    is told to show unless its window has one of its own. True when the file was changed. A preferences file that cannot be read is
     left alone (the browser rebuilds it) rather than replaced by one with only these keys."""
     path = Path(profile) / 'Default' / 'Preferences'
     try:
@@ -49,6 +50,8 @@ def apply(profile: Path, wanted: dict = KIOSK_PREFS) -> bool:
         return False
     before = json.dumps(current, sort_keys=True)
     _merge(current, wanted)
+    if accept_languages:
+        _merge(current, {'intl': {'accept_languages': accept_languages}})
     if json.dumps(current, sort_keys=True) == before:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)

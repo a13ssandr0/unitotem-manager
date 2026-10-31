@@ -158,6 +158,25 @@ class Viewers(WSAPIBase):
         return WSBroadcast(self.keyboard, viewer_id=viewer_id, window_id=window_id, enabled=enabled,
                            button_position=button_position, layout=layout)
 
+    @UserPerms.requires.admin
+    def language(self, viewer_id: str, window_id: int):
+        """The language the pages of a window are told to show ('' = the node's)."""
+        try:
+            language = _vm().get_language(viewer_id, window_id)
+        except KeyError as e:
+            return WSResponse(error=str(e))
+        return WSBroadcast(viewer_id=viewer_id, window_id=window_id, language=language)
+
+    @UserPerms.requires.admin
+    async def set_language(self, viewer_id: str, window_id: int, language: str = ''):
+        """Says which language the pages of a window must show (a tag such as 'it' or 'pt-BR'; empty = the node's own). The page shown
+        loads again to take it."""
+        try:
+            await _vm().set_language(viewer_id, window_id, language)
+        except (KeyError, ValueError) as e:
+            return WSResponse(self.language, error=str(e))
+        return WSBroadcast(self.language, viewer_id=viewer_id, window_id=window_id, language=language)
+
     @UserPerms.requires.scheduler
     def screensaver(self, viewer_id: str, window_id: int):
         """The interactive mode of a window: its home page and the idle time after which the playlist is played over it."""

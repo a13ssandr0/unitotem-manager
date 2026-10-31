@@ -18,6 +18,16 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from utils.models.command_line import cmdargs
 
 
+# A language tag (BCP 47, as a page sees it in navigator.language): 'it', 'pt-BR', 'zh-Hant-TW'. Whole-string match, length-limited:
+# the tag ends up in HTTP headers and in DevTools commands.
+LANGUAGE_RE = re.compile(r'[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,3}')
+MAX_LANGUAGE_LENGTH = 35
+
+
+def valid_language(tag) -> bool:
+    return isinstance(tag, str) and len(tag) <= MAX_LANGUAGE_LENGTH and LANGUAGE_RE.fullmatch(tag) is not None
+
+
 class KeyboardSettings(BaseModel, validate_assignment=True):
     """The on-screen keyboard of one window (a touch panel): on unless switched off."""
     enabled: bool = True
@@ -141,6 +151,15 @@ class ViewerSettings(BaseModel, validate_assignment=True):
 
     # The on-screen keyboard of each window, keyed like the audio outputs
     keyboards: dict[str, KeyboardSettings] = {}
+
+    # The language the pages of each window are told to show (Accept-Language, navigator.language), keyed like the audio outputs;
+    # absent = the language of the node. Older versions ignore the key.
+    languages: dict[str, str] = {}
+
+    @field_validator('languages', mode='before')
+    @classmethod
+    def _languages(cls, v):
+        return {str(k): t for k, t in (v or {}).items() if valid_language(t)}
 
     # The orientation (quarter turns, 0..3) and flip (0 none, 1 horizontal, 2 vertical) of the CONTENT of each window, keyed like the
     # audio outputs: a vertical panel must come back vertical after a reboot. Older versions ignore these keys.

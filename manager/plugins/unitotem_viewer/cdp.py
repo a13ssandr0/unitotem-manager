@@ -103,8 +103,11 @@ FocusCallback = Callable[[int, str, bool, Optional[str], bool], None]
 
 
 class Cdp:
-    def __init__(self, port: int, on_focus: FocusCallback, on_page_ready: Optional[Callable[[int], None]] = None):
+    def __init__(self, port: int, on_focus: FocusCallback, on_page_ready: Optional[Callable[[int], None]] = None,
+                 user_agent: str = ''):
         self._port = port
+        self._user_agent = user_agent               # the override that carries a language has to repeat it
+        self._languages: dict[int, str] = {}        # window id -> language its pages are told to show
         self._on_focus = on_focus
         self._on_page_ready = on_page_ready
         self._ids = itertools.count(1)
@@ -230,6 +233,7 @@ class Cdp:
             await self._send('Runtime.addBinding', {'name': 'utSaver'}, session)
         await self._send('Page.enable', session=session)
         await self._send('Network.enable', session=session)
+        await self._apply_language(session)
         await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT}, session)
         await self._send('Runtime.evaluate', {'expression': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT}, session)
         # frames of other origins appear as targets of their own
@@ -316,6 +320,45 @@ class Cdp:
     async def gpu_info(self) -> dict:
         """Chromium's own report of its graphics (SystemInfo.getInfo on the browser): feature status and GL implementation."""
         return (await self._send('SystemInfo.getInfo')).get('gpu', {})
+
+    # ── the language the pages of a window are told to show ──
+
+    @staticmethod
+    def accept_language(tag: str) -> str:
+        """The Accept-Language list of a tag: 'pt-BR' -> 'pt-BR,pt'."""
+        base = tag.split('-')[0]
+        return tag if base == tag else f'{tag},{base}'
+
+    def _window_of(self, session: str) -> Optional[int]:
+        info = self._sessions.get(session)
+        if not info:
+            return None
+        if info['window'] is not None:
+            return info['window']
+        return next((w for w, s in self._pages.items() if s == info.get('page')), None)
+
+    async def _apply_language(self, session: str, clear: bool = False):
+        """Puts the language of the session's window on the session: the header of every request, `navigator.language(s)` and Intl.
+        Applied to a page and to each of its frames when they attach, and again whenever the choice changes."""
+        window = self._window_of(session)
+        tag = self._languages.get(window) if window is not None else None
+        if not tag and not clear:
+            return
+        try:
+            await self._send('Emulation.setUserAgentOverride', {
+                'userAgent': self._user_agent, 'acceptLanguage': self.accept_language(tag) if tag else ''}, session)
+            await self._send('Emulation.setLocaleOverride', {'locale': tag} if tag else {}, session)
+        except RuntimeError as exc:             # a frame that is going away, or an override that is already in effect
+            logger.debug('Language of window {} not applied: {}', window, exc)
+
+    async def set_language(self, window: int, tag: str):
+        """Chooses the language of a window ('' = the browser's own). The page loads again to take it (see the caller)."""
+        if tag:
+            self._languages[window] = tag
+        else:
+            self._languages.pop(window, None)
+        for session in [s for s in self._sessions if self._window_of(s) == window]:
+            await self._apply_language(session, clear=not tag)
 
     async def evaluate(self, window: int, expression: str):
         session = self._pages.get(window)
