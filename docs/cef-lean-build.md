@@ -92,21 +92,42 @@ only the package's own `Depends` get shorter.
 
 * The viewer already uses the Alloy style; there is no Alloy-only build to choose any more.
 * The one saving that costs nothing and is in the package: the 220 locale files (49 MB), done.
-* Build arguments can remove about 1.2 % of the build and a few packages from `Depends`; the real effect on `libcef.so` is measured by the build
-  of section 6.
+* Build arguments can remove about 1.2 % of the build steps and, measured, **0.7 % of libcef.so (1.7 MiB)** plus the X11/CUPS/Cairo/Pango entries of its
+  `Depends`; several arguments that `gn gen` accepts do not compile or link (section 6).
 * Dropping the Chrome interface as such is not an argument: it is a fork of Chromium's dependency graph, for at most ~25 MB of 252.
 
 ## 6. Measured build (`out/Release_Lean_x64`)
 
-`tools/cef-server/cef-lean-x64.sh` builds x64 `libcef` with the accepted set above (its own out directory; the release trees are not touched).
-Result: see the end of this file once the build has finished.
+`tools/cef-server/cef-lean-x64.sh` builds x64 `libcef` in its own out directory (the release trees are not touched). Getting it to build showed
+that **`gn gen` accepting an argument proves nothing**: the dry run of section 2 passed every one of these and the build then failed.
+
+| argument | `gn gen` | what the build said |
+| --- | --- | --- |
+| `enable_compose=false` | ok | compile: `settings_ui` includes a header that is no longer generated (`compose_optimization_guide.pb.h`) |
+| `enable_captive_portal_detection=false` | ok | compile: `chrome_security_blocking_page_factory.cc` calls functions that are not built |
+| `enable_media_remoting*`, `enable_remoting` | ok | link: `CastRemotingConnector` undefined |
+| `enable_webui_certificate_viewer=false` | ok | link: `X509CertificateModel` undefined |
+| `use_bluez=false` | ok | link: `bluez::BluezDBusManager`, `floss::features::IsFlossEnabled` undefined |
+| `ozone_platform_x11=false` (Wayland only) | ok | compile: **CEF** `menu_runner_views_aura.cc` includes `ui/gfx/x/connection.h` without the `SUPPORTS_OZONE_X11` guard every other X11 use has: patch `patches/cef/0007` (one file, the OSR-on-X11 menu offset) |
+
+What stays (and builds and links): `ozone_platform_x11=false` + `ozone_platform="wayland"` + `ozone_platform_headless=false` (with patch 0007),
+`use_gtk=false`, `use_cups=false`, `use_kerberos=false`, `enable_service_discovery=false`, `enable_mdns=false`, `enable_vr=false`,
+`enable_paint_preview=false`, `enable_webui_tab_strip=false`.
+
+Result, stripped x64 `libcef.so`: **252.0 MiB -> 250.3 MiB (-1.7 MiB, -0.7 %)**; `.text` 193.2 -> 191.8 MiB. What changes is the list of libraries it needs:
+libX11, libxcb, libXcomposite, libXdamage, libXext, libXfixes, libXrandr, libcups, libcairo and libpango are gone; glib, atk, atk-bridge, at-spi,
+dbus, nss, alsa, gbm, xkbcommon, udev stay (accessibility and glib have no switch the build accepts).
+
+NOT done: the result is a `libcef.so`, not a wheel or a distribution; nothing was run (a Wayland window, video, the patches 0001-0006 on top of a
+build without X11). Adopting it needs the arm64 build, the wheel (`tools/build-cef-wheels.sh`) and the whole viewer test battery on a board; the gain
+is 1.7 MiB and a shorter `Depends` of python3-cefpython3 (the kiosk image keeps those libraries for other packages).
 
 ## Tools
 
 * `tools/cef-server/probe-gn-args.sh <results> < sets` : one `gn gen` and a step count per set (`name|arg arg ...` per line); it needs
   `chrome_pgo_phase=0` because the PGO profile is owned by another user on the server.
 * `tools/cef-server/nm-areas.py`: `python3 nm-areas.py <llvm-nm> libcef.so` prints the table of section 3 (leading namespace of every defined symbol, summed).
-* `tools/cef-server/cef-lean-x64.sh`: the measured build.
+* `tools/cef-server/cef-lean-x64.sh`: the measured build (run it with `systemd-run` as root; the PGO profile of the tree belongs to another user, so a probe uses `chrome_pgo_phase=0`).
 * The deletion of old trees on the server was done by the user's permission for everything under `/nas` that this project created
   (`out/Dbg_arm64`, 20 GB, rebuildable with `cef-arm64-dbg.sh`; `/nas/cef-master-check`, 38 GB, the check against CEF master of
   `docs/cef-wayland/pr-cef.md`, rebuildable with its `sync.sh`); `/nas/build` belongs to the unitotem-system project and was not touched.
