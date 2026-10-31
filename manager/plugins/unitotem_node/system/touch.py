@@ -16,13 +16,14 @@ The module is importable and harmless without a compositor or any touch device: 
 """
 from __future__ import annotations
 
-import html
 import os
 import re
 from dataclasses import dataclass
 from typing import Optional
 
 from loguru import logger
+
+from utils import labwc
 
 PROC_DEVICES = '/proc/bus/input/devices'
 INPUT_PROP_DIRECT = 1       # bit number: the device is a screen (a touch screen), not a pointer on a surface
@@ -184,6 +185,10 @@ CALIBRATION = {
 }
 
 
+# `<device category>` is a device name OR one of these kinds of devices
+RESERVED_CATEGORIES = frozenset({'default', 'touch', 'touchpad', 'non-touch', 'tablet', 'tablet-pad'})
+
+
 def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, names: Optional[dict[str, str]] = None) -> str:
     """The `<touch>` entries of the node's fragment: one per mapped device, and a calibration matrix for each connected device.
     `names` gives, per device identity, the name the compositor knows it by (libinput's, see libinput_names.py): the identity's own
@@ -200,8 +205,7 @@ def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = N
         if not name or name in seen:
             continue
         seen.add(name)
-        lines.append(f'  <touch deviceName="{html.escape(name, quote=True)}" mapToOutput="{html.escape(output, quote=True)}" '
-                     'mouseEmulation="no"/>\n')
+        lines.append(f'  <touch deviceName="{labwc.xml_attr(name)}" mapToOutput="{labwc.xml_attr(output)}" mouseEmulation="no"/>\n')
     # Every connected device gets its matrix written, the identity included: the compositor keeps the last matrix it applied when a
     # device's entry disappears from the configuration, so a cleared orientation has to be written as "no correction"
     matrices = {label(key): _I for key in (names or {})}
@@ -210,9 +214,10 @@ def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = N
         matrix = CALIBRATION.get((value.get('turn', 0), value.get('flip', 0)))
         if name and matrix is not None and (name in matrices or names is None):
             matrices[name] = matrix
-    entries = [f'    <device category="{html.escape(name, quote=True)}">'
+    # a device whose name is one of the compositor's own categories would calibrate every device of that kind: no entry for it
+    entries = [f'    <device category="{labwc.xml_attr(name)}">'
                f'<calibrationMatrix>{" ".join(str(v) for v in matrix)}</calibrationMatrix></device>\n'
-               for name, matrix in matrices.items() if matrix != _I or names is not None]
+               for name, matrix in matrices.items() if (matrix != _I or names is not None) and name.lower() not in RESERVED_CATEGORIES]
     if entries:
         lines.append('  <libinput>\n' + ''.join(entries) + '  </libinput>\n')
     return ''.join(lines)
@@ -220,7 +225,6 @@ def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = N
 
 def apply_mapping(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, names: Optional[dict[str, str]] = None) -> bool:
     """Write the node's fragment of the compositor configuration and have it read again. True when a compositor took it."""
-    from utils import labwc
     if not labwc.write_fragment(FRAGMENT, fragment(mapping, orientation, names)):
         return False
     reloaded = labwc.reload()

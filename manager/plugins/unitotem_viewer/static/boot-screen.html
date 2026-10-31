@@ -219,6 +219,10 @@
     #stage, #home-frame { transition: transform .35s ease-in-out; }
     #orient-intro[data-kbd-shift] > #stage, #orient-intro[data-kbd-shift] > #home-frame { transform: translateY(var(--ut-kbd-shift, 0px)); }
     #home-frame { display: none; border: none; position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+    /* What is only there to be looked at (the boot logo, the "no assets" page, the welcome page, the set-up pages) does not react to touch at all:
+       no events reach it, no gestures start on it, and nothing of the viewer's own (the keyboard button) is offered over it */
+    .pane.inert, .pane.inert * { pointer-events: none !important; touch-action: none !important; -webkit-user-select: none; user-select: none; }
+    body[data-inert] #ut-kbd-toggle, body[data-inert] #ut-kbd-panel { display: none !important; }
     #shield { display: none; position: absolute; inset: 0; z-index: 20; touch-action: none; background: transparent; }
     body[data-saver] #home-frame { display: block; }
     body[data-saver] #stage {
@@ -423,6 +427,8 @@
         if (seq !== this.seq) return;        // a newer asset arrived while the type was being probed
 
         this.current = {src, container, idle: !!idle};
+        this.el.classList.toggle('inert', !!idle || container === 'boot');
+        updateInert();
         this.setBackdrop(bg_color || 'rgb(0,0,0)');
         this.hideAll();
 
@@ -543,6 +549,12 @@
 
     // What the main pane shows; kept for whoever asks (the screensaver code used to read it, and it is handy at a console)
     Object.defineProperty(window, 'current', {get: () => mainStage()?.current ?? null, configurable: true});
+
+    // Every pane only shows something to look at (boot logo, no assets, welcome): the page offers no touch controls of its own
+    function updateInert() {
+      const panes = allStages();
+      document.body.toggleAttribute('data-inert', panes.length > 0 && panes.every(s => s.current && (s.current.idle || s.current.container === 'boot')));
+    }
 
     // The page as a whole allows a pinch as soon as one pane does (each pane forbids it for itself, see applyWebView)
     function updateTouchAction() {

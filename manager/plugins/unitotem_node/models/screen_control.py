@@ -73,6 +73,14 @@ class OutputConfig(BaseModel, validate_assignment=True):
     serial: Optional[SerialConfig] = None
     cec_device: Optional[str] = None
 
+    @field_validator('cec_device')
+    @classmethod
+    def _cec_device(cls, v):
+        # the path is an argument of cec-ctl: a CEC adapter node and nothing else (never an option, never a path elsewhere)
+        if v is not None and not re.fullmatch(r'/dev/cec\d{1,3}', v):
+            raise ValueError(f'{v!r} is not a CEC adapter')
+        return v
+
     # Cached probe results
     identity: Optional[str] = None
     ddc_bus: Optional[int] = None
@@ -86,7 +94,7 @@ class ScreenControl(BaseModel, validate_assignment=True):
     outputs: dict[str, OutputConfig] = Field(default_factory=dict)
 
     def output(self, name: str) -> OutputConfig:
-        if not OUTPUT_NAME_RE.match(name):
+        if not OUTPUT_NAME_RE.fullmatch(name):
             raise ValueError(f'{name!r} is not an output name')
         return self.outputs.setdefault(name, OutputConfig())
 

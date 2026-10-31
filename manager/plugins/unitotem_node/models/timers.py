@@ -70,7 +70,7 @@ class Timer(BaseModel, validate_assignment=True):
             if not self.wake:
                 raise ValueError('A suspend timer needs the schedule of its wake-up')
         if self.action in SCREEN_ACTIONS:
-            if not self.output or not OUTPUT_NAME_RE.match(self.output):
+            if not self.output or not OUTPUT_NAME_RE.fullmatch(self.output):
                 raise ValueError(f'{self.output!r} is not an output name')
         return self
 
