@@ -22,6 +22,21 @@ OUTPUT_NAME_RE = re.compile(r'^[A-Za-z0-9_.-]{1,64}$')
 
 class TouchMap(BaseModel, validate_assignment=True):
     mapping: dict[str, str] = Field(default_factory=dict)       # device identity -> output name
+    # device identity -> {'turn': 0..3, 'flip': 0..2}: how the touch input is turned/mirrored (same convention as a window's orientation and flip)
+    # before it reaches the screen. Only for a panel that is not glued to its screen and has another natural orientation; absent = as the screen
+    orientation: dict[str, dict] = Field(default_factory=dict)
+
+    def set_orientation(self, key: str, turn: int, flip: int):
+        if not key or len(key) > 512:
+            raise ValueError('not a touch device identity')
+        if turn not in (0, 1, 2, 3) or flip not in (0, 1, 2) or isinstance(turn, bool) or isinstance(flip, bool):
+            raise ValueError('turn is 0-3 quarter turns and flip 0 (none), 1 (left-right) or 2 (top-bottom)')
+        orientation = dict(self.orientation)
+        if turn == 0 and flip == 0:
+            orientation.pop(key, None)
+        else:
+            orientation[key] = {'turn': turn, 'flip': flip}
+        self.orientation = orientation
 
     def set(self, key: str, output: str | None):
         if not key or len(key) > 512:
