@@ -297,6 +297,10 @@ class WebviewApp:
                 # A site that asks for a login keeps it in a session cookie (no expiry date): without this the browser forgets
                 # them when it exits, so every restart logs the operator out of every page
                 'persist_session_cookies'      : True,
+                # A public kiosk has no context menu (it offers reload, print, view source and the developer tools) and
+                # saves no files: a long press goes to the page shown and to nobody else
+                'context_menu'                 : {'enabled': False},
+                'downloads_enabled'            : False,
                 # Paint black, not white, before a document has loaded. CEF's
                 # documented default for a windowed browser is opaque white
                 # (see vendor/cefpython/api/ApplicationSettings.md), which on a
@@ -419,7 +423,14 @@ class WebviewApp:
     def _new_window(self, **geometry) -> WebviewWindow:
         win = WebviewWindow(**geometry)
         win.on_geometry_changed = self._geometry_timer.start
+        win.on_page_reloaded = self._page_reloaded
         return win
+
+    def _page_reloaded(self, window_id: int):
+        """A window's page loaded again (a reload by any means, or a recovery after a crash): the manager sends its content again."""
+        if self._ws_loop is not None and self._ws is not None:
+            message = json.dumps({'target': 'WindowReloaded', 'window_id': window_id})
+            asyncio.run_coroutine_threadsafe(self._ws.send(message), self._ws_loop)
 
     def _notify_screens_changed(self):
         """

@@ -46,6 +46,9 @@ async def viewer_message(instance_id: str, raw: str) -> bool:
         vm.update_webview_info(instance_id, msg)
         await publish(vm)
         return True
+    if target == 'WindowReloaded' and vm:
+        vm.window_reloaded(instance_id, int(msg.get('window_id', -1)))
+        return True
     return False
 
 

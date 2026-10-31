@@ -221,7 +221,8 @@ BACKUP = (
 def _routers():
     from .terminal import router
     from .vnc import router as vnc_router
-    return (router, vnc_router)
+    from .devtools import router as devtools_router
+    return (router, vnc_router, devtools_router)
 
 
 PLUGIN = Plugin(

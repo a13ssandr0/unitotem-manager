@@ -71,5 +71,12 @@ mount --bind $T/unitotem_node $B/plugins/unitotem_node
 mkdir -p /run/systemd/system/unitotem-manager.service.d
 printf "[Service]\nEnvironment=PYTHONPATH=$T/pylib\n" > /run/systemd/system/unitotem-manager.service.d/ticker-test.conf
 systemctl daemon-reload
-systemctl restart unitotem-manager
+# A manager that survives its unit (left over by an earlier failed restart) keeps the ports: the new one dies with "Address
+# already in use" and systemd restarts it over and over, and every death used to drop the Wi-Fi. Stop, then end it by PID.
+systemctl stop unitotem-manager
+for pid in $(ss -ltnp 2>/dev/null | grep -E ":(80|443|4443) " | grep -o "pid=[0-9]*" | cut -d= -f2 | sort -u); do
+  kill "$pid" 2>/dev/null; for _ in 1 2 3 4 5 6 7 8; do kill -0 "$pid" 2>/dev/null || break; sleep 1; done; kill -9 "$pid" 2>/dev/null || true
+done
+systemctl reset-failed unitotem-manager 2>/dev/null || true
+systemctl start unitotem-manager
 echo restarted'

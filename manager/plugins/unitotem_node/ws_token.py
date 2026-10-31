@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 TOKEN_TTL = 30
-_tokens: dict[str, tuple[str, str | None, float]] = {}      # token -> (account, session id, expiry on the monotonic clock)
+_tokens: dict[str, tuple[str, str | None, float, str | None]] = {}      # token -> (account, session id, expiry on the monotonic clock, scope)
 
 
 def same_origin(websocket: WebSocket) -> bool:
@@ -25,22 +25,23 @@ def same_origin(websocket: WebSocket) -> bool:
     return origin is None or urlsplit(origin).netloc == websocket.headers.get('host')
 
 
-def new_token(user: str, sid: str | None) -> str:
+def new_token(user: str, sid: str | None, scope: str | None = None) -> str:
+    """`scope` ties the token to one purpose (a page to inspect): it opens nothing else."""
     now = time.monotonic()
-    for old in [t for t, (_, _, expiry) in _tokens.items() if expiry < now]:
+    for old in [t for t, (_, _, expiry, _) in _tokens.items() if expiry < now]:
         del _tokens[old]
     token = secrets.token_urlsafe(32)
-    _tokens[token] = (user, sid, now + TOKEN_TTL)
+    _tokens[token] = (user, sid, now + TOKEN_TTL, scope)
     return token
 
 
-def take_token(token: str, user: str, sid: str | None) -> bool:
+def take_token(token: str, user: str, sid: str | None, scope: str | None = None) -> bool:
     """Spends a token: true only if it exists, has not expired and was asked for by this account in this session."""
     entry = _tokens.pop(token, None)
     if entry is None:
         return False
-    account, session, expiry = entry
-    return expiry >= time.monotonic() and account == user and session == sid
+    account, session, expiry, wanted = entry
+    return expiry >= time.monotonic() and account == user and session == sid and wanted == scope
 
 
 async def read_token(websocket: WebSocket, user: str, sid: str | None) -> bool:
