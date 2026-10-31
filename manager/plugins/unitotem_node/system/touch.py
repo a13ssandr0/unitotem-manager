@@ -189,23 +189,23 @@ CALIBRATION = {
 RESERVED_CATEGORIES = frozenset({'default', 'touch', 'touchpad', 'non-touch', 'tablet', 'tablet-pad'})
 
 
-def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, names: Optional[dict[str, str]] = None) -> str:
-    """The `<touch>` entries of the node's fragment: one per mapped device, and a calibration matrix for each connected device.
-    `names` gives, per device identity, the name the compositor knows it by (libinput's, see libinput_names.py): the identity's own
-    first field (the kernel name) is the fallback and matches nothing for a device whose libinput name has a suffix. Entries whose output
-    is not there are harmless (the compositor then lets the device span every output). The first mapping of a name wins, the rest cannot
-    be told apart by the compositor."""
+def fragment_elements(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, names: Optional[dict[str, str]] = None) -> list:
+    """The node's fragment of the compositor configuration, as elements: a `<touch>` per mapped device and a calibration matrix for each
+    connected device. `names` gives, per device identity, the name the compositor knows it by (libinput's, see libinput_names.py): the
+    identity's own first field (the kernel name) is the fallback and matches nothing for a device whose libinput name has a suffix.
+    Entries whose output is not there are harmless (the compositor then lets the device span every output). The first mapping of a name
+    wins, the rest cannot be told apart by the compositor. Names are attribute VALUES of a serialised document, never part of its text."""
     def label(key: str) -> str:
-        return ((names or {}).get(key) or key.split('|')[0]).strip()
+        return labwc.xml_clean((names or {}).get(key) or key.split('|')[0]).strip()
 
     seen = set()
-    lines = []
+    elements = []
     for key, output in mapping.items():
         name = label(key)
         if not name or name in seen:
             continue
         seen.add(name)
-        lines.append(f'  <touch deviceName="{labwc.xml_attr(name)}" mapToOutput="{labwc.xml_attr(output)}" mouseEmulation="no"/>\n')
+        elements.append(labwc.element('touch', {'deviceName': name, 'mapToOutput': output, 'mouseEmulation': 'no'}))
     # Every connected device gets its matrix written, the identity included: the compositor keeps the last matrix it applied when a
     # device's entry disappears from the configuration, so a cleared orientation has to be written as "no correction"
     matrices = {label(key): _I for key in (names or {})}
@@ -215,17 +215,22 @@ def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = N
         if name and matrix is not None and (name in matrices or names is None):
             matrices[name] = matrix
     # a device whose name is one of the compositor's own categories would calibrate every device of that kind: no entry for it
-    entries = [f'    <device category="{labwc.xml_attr(name)}">'
-               f'<calibrationMatrix>{" ".join(str(v) for v in matrix)}</calibrationMatrix></device>\n'
-               for name, matrix in matrices.items() if (matrix != _I or names is not None) and name.lower() not in RESERVED_CATEGORIES]
-    if entries:
-        lines.append('  <libinput>\n' + ''.join(entries) + '  </libinput>\n')
-    return ''.join(lines)
+    devices = [labwc.element('device', {'category': name}, [labwc.element('calibrationMatrix', text=' '.join(str(v) for v in matrix))])
+               for name, matrix in matrices.items()
+               if (matrix != _I or names is not None) and name.lower() not in RESERVED_CATEGORIES]
+    if devices:
+        elements.append(labwc.element('libinput', children=devices))
+    return elements
+
+
+def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, names: Optional[dict[str, str]] = None) -> str:
+    """`fragment_elements` as text (what the compositor reads, and what the tests parse)."""
+    return labwc.render(fragment_elements(mapping, orientation, names))
 
 
 def apply_mapping(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, names: Optional[dict[str, str]] = None) -> bool:
     """Write the node's fragment of the compositor configuration and have it read again. True when a compositor took it."""
-    if not labwc.write_fragment(FRAGMENT, fragment(mapping, orientation, names)):
+    if not labwc.write_fragment(FRAGMENT, fragment_elements(mapping, orientation, names)):
         return False
     reloaded = labwc.reload()
     if reloaded:

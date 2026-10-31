@@ -175,7 +175,7 @@ async def set_power(name: str, on: bool, known: Optional[Output] = None):
         cmd = ['wlr-randr', '--output', name, '--on']
         before = _last_geometry.get(name)
         if before is not None:
-            cmd += ['--pos', f'{before.x},{before.y}', '--transform', before.transform]
+            cmd += ['--pos', f'{int(before.x)},{int(before.y)}', '--transform', before.transform if before.transform in TRANSFORMS else 'normal']
         result = await run(cmd, timeout=15)
         if result.returncode != 0:
             raise RuntimeError((result.stderr or result.stdout).strip() or f'wlr-randr exited with {result.returncode}')

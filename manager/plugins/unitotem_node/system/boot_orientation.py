@@ -9,6 +9,7 @@ from typing import Optional
 
 from loguru import logger
 
+from .screens.wayland import check_output_name
 from .screens._exec import ToolMissing, ToolTimeout, run
 
 HELPER = 'unitotem-boot-orientation'
@@ -22,6 +23,7 @@ async def current(connector: str) -> Optional[str]:
     if binary is None:
         return None
     try:
+        check_output_name(connector)
         result = await run([binary, 'get', connector], timeout=15)
         return json.loads(result.stdout)['orientation'] if result.returncode == 0 else None
     except (ToolMissing, ToolTimeout, ValueError, KeyError, TypeError):
@@ -35,6 +37,7 @@ async def set_turn(connector: str, turn: int) -> bool:
     if binary is None:
         logger.debug('{} is not on this image: Plymouth keeps its orientation', HELPER)
         return False
+    check_output_name(connector)
     wanted = NAMES[int(turn) % 4]
     if await current(connector) == wanted:
         return False

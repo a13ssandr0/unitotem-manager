@@ -28,7 +28,8 @@ files = {}
 
 templates = Jinja2Templates(
         context_processors=[ctx_proc],
-        env=jinja2.Environment(loader=jinja2.DictLoader(files), extensions=['jinja2.ext.do', 'jinja2.ext.debug']),
+        # every value is escaped for the page it lands in (a host name, an SSID, the detail of an error are data); `|safe` only where the code made the markup
+        env=jinja2.Environment(loader=jinja2.DictLoader(files), extensions=['jinja2.ext.do', 'jinja2.ext.debug'], autoescape=True),
 )
 templates.env.filters['flatten'] = flatten
 

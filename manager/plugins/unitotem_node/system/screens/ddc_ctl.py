@@ -8,6 +8,7 @@ tool in a thread.
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Optional
 
 from loguru import logger
@@ -67,6 +68,7 @@ RETRY_DELAY = 0.6
 
 async def getvcp(bus: int, code: str) -> Optional[VcpValue]:
     """The current value of one VCP feature, None if the monitor does not support it."""
+    _check_vcp(bus, code)
     for attempt in range(RETRIES):
         async with _lock(bus):
             result = await run(['ddcutil', '--bus', str(bus), '--terse', 'getvcp', code], timeout=15)
@@ -78,12 +80,21 @@ async def getvcp(bus: int, code: str) -> Optional[VcpValue]:
             await asyncio.sleep(RETRY_DELAY)
 
 
+_VCP_CODE = re.compile(r'[0-9A-Fa-f]{2}')
+
+
+def _check_vcp(bus, code):
+    if not isinstance(bus, int) or isinstance(bus, bool) or not 0 <= bus < 1024 or not _VCP_CODE.fullmatch(str(code)):
+        raise ValueError('A DDC bus is a number and a VCP code two hexadecimal digits')
+
+
 async def setvcp(bus: int, code: str, value: int):
     """Set one VCP feature. --noverify: many monitors cannot answer the read-back that follows a write, and
     the failure of that read-back would be reported as a failure of the write."""
+    _check_vcp(bus, code)
     for attempt in range(RETRIES):
         async with _lock(bus):
-            result = await run(['ddcutil', '--bus', str(bus), '--noverify', 'setvcp', code, str(value)], timeout=15)
+            result = await run(['ddcutil', '--bus', str(bus), '--noverify', 'setvcp', code, str(int(value))], timeout=15)
         text = result.stdout + result.stderr
         if result.returncode == 0:
             return
