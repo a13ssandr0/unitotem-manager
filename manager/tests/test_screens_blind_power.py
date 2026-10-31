@@ -113,3 +113,30 @@ def test_ddc_wake_reset_sequence(monkeypatch):
     sent.clear()
     asyncio.run(ddc_ctl.set_power(10, False, {}, wake_reset=True))
     assert sent == [(10, 'D6', 4)]                      # the reset is a wake-up only
+
+
+def test_start_up_wake_up_leaves_a_screen_the_operator_switched_off(fake_screen, monkeypatch):
+    """The wake-up retries for minutes (a configured screen that is not there never succeeds): it must not undo a switch-off made meanwhile."""
+    control._operator_touched.clear()
+    control.screen_control.outputs['HDMI-A-1'] = _cfg()
+    control.screen_control.outputs['GONE-1'] = _cfg()           # never present: keeps the loop retrying
+    fake_screen['outputs'] = [wayland.Output(name='HDMI-A-1', connected=True, active=False, width=1920, height=1080)]
+
+    async def do_power(name, mechanism, on, cfg, x):
+        fake_screen['calls'].append((name, mechanism, on))
+        fake_screen['outputs'] = [wayland.Output(name=name, connected=True, active=on, width=1920, height=1080)]
+    monkeypatch.setattr(control, '_do_power', do_power)
+
+    async def operator_switches_off():
+        await asyncio.sleep(0.12)
+        await control.set_power('HDMI-A-1', 'off', 'output')
+
+    async def scenario():
+        task = asyncio.create_task(operator_switches_off())
+        await control.wake_all(budget=0.5, interval=0.05)
+        await task
+    asyncio.run(scenario())
+    ons = [c for c in fake_screen['calls'] if c == ('HDMI-A-1', 'output', True)]
+    assert len(ons) == 1 and fake_screen['calls'][-1] == ('HDMI-A-1', 'output', False)   # woken once at the start, never again after the operator's switch-off
+    control.screen_control.outputs.pop('GONE-1', None)
+    control._operator_touched.clear()
