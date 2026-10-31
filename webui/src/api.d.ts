@@ -108,6 +108,8 @@ export interface Api {
         devices: ApiCall<Record<string, never>>
         /** Drop the mapping of a device that is not plugged in any more. [requires: admin] */
         forget: ApiCall<{ key: string }>
+        /** Turn and/or mirror the touch input of a panel that is not glued to its screen and has another natural orientation (a landscape [requires: admin] */
+        set_orientation: ApiCall<{ key: string; turn?: number; flip?: number }>
         /** Map a touch screen, by its stable identity, to an output; None goes back to automatic (the whole screen). [requires: admin] */
         set_output: ApiCall<{ key: string; output?: null | string }>
       }

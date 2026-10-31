@@ -40,6 +40,11 @@ def _inotify(path: str) -> Optional[int]:
         return None
 
 
+def _orientation(touch_map, key: str) -> dict:
+    value = touch_map.orientation.get(key) or {}
+    return {'turn': value.get('turn', 0), 'flip': value.get('flip', 0)}
+
+
 class TouchService:
     def __init__(self):
         self.devices: list[touch.TouchDevice] = []
@@ -112,7 +117,8 @@ class TouchService:
             self.devices = await asyncio.to_thread(touch.touch_devices)
             self.outputs = [o for o in await wayland.outputs() if o.active]
             mapping = touch.effective_mapping(touch_map.mapping, self.devices, [o.name for o in self.outputs])
-            self.available = await asyncio.to_thread(touch.apply_mapping, mapping) or bool(self.outputs)
+            self.available = await asyncio.to_thread(touch.apply_mapping, mapping, touch_map.orientation,
+                                                        sorted({d.name for d in self.devices})) or bool(self.outputs)
         except Exception as exc:
             logger.warning('Cannot apply the touch mapping: {}', exc)
 
@@ -123,12 +129,13 @@ class TouchService:
         live = {d.key for d in self.devices}
         devices = [{
             'key': d.key, 'name': d.name, 'vendor': d.vendor, 'product': d.product, 'serial': d.serial,
-            'output': touch_map.mapping.get(d.key), 'connected': True,
+            'output': touch_map.mapping.get(d.key), 'connected': True, **_orientation(touch_map, d.key),
         } for d in self.devices]
-        for key, output in touch_map.mapping.items():
+        for key in [*touch_map.mapping, *[k for k in touch_map.orientation if k not in touch_map.mapping]]:
+            output = touch_map.mapping.get(key)
             if key not in live:
                 devices.append({'key': key, 'name': key.split('|')[0], 'vendor': None, 'product': None,
-                                'serial': None, 'output': output, 'connected': False})
+                                'serial': None, 'output': output, 'connected': False, **_orientation(touch_map, key)})
         return {
             'devices': devices,
             'outputs': [{'name': o.name, 'x': o.x, 'y': o.y, 'width': o.width, 'height': o.height,
