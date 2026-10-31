@@ -4,8 +4,8 @@ subprocess calls, no I/O; see the module docstring in __init__.py. The
 capability model itself (SCREEN-CONTROL-PLAN.md §2):
 
     Operation      DDC/CI (>= 2.0)          CEC                       output
-    Power off      0xD6 <- 04/05            --standby (0x36)          wlr-randr --output X --off
-    Power on       0xD6 <- 01 (best-effort) --image-view-on + --active-source  wlr-randr --output X --on
+    Power off      0xD6 <- 04/05            --standby (0x36)          wlopm --off X (DPMS; the output stays enabled)
+    Power on       0xD6 <- 01 (best-effort) --image-view-on + --active-source  wlopm --on X
     Input source   0x60                     not supported             -
     Volume/mute    0x62 / 0x8D              relative up/down, toggle  -
 

@@ -90,6 +90,8 @@ class TouchService:
         """A screen appeared or went away (told by the viewer, from its own thread): the automatic mapping depends on how many there are."""
         if self._loop is not None:
             self._loop.call_soon_threadsafe(self._schedule)
+            # an output that came back after a hot-plug is switched on: one we were told to keep off is blanked again
+            self._loop.call_soon_threadsafe(lambda: self._loop.create_task(wayland.keep_off()))
 
     def _schedule(self):
         if self._timer:
