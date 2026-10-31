@@ -50,7 +50,7 @@ def report(t, x, y, path):
     """One line per tap, as soon as the page's side of it is known (or after a second without it)."""
     near = min(got, key=lambda g: abs(g[0] - t), default=None)
     page_xy = near[1] if near and abs(near[0] - t) < 1 else None
-    print(json.dumps({'raw': [round(x, 3), round(y, 3)], 'page': [round(v, 3) for v in page_xy[:2]] if page_xy else None,
+    print(json.dumps({'t': round(t, 2), 'raw': [round(x, 3), round(y, 3)], 'page': [round(v, 3) for v in page_xy[:2]] if page_xy else None,
                       'type': page_xy[2] if page_xy else None, 'window': page_xy[3:] if page_xy else None, 'node': path}), flush=True)
 
 

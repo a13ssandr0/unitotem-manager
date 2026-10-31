@@ -39,6 +39,7 @@ def content_point(r, f, nx, ny):
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--host', required=True)
+    ap.add_argument('--single', action='store_true', help='the virtual panel has no multitouch slots (a simple USB touch panel)')
     ap.add_argument('--manual', action='store_true', help='screen NOT turned; the device orientation of the Display page (API) is what turns the touch')
     ap.add_argument('--unmapped', action='store_true', help='leave the device on automatic (no output chosen)')
     args = ap.parse_args()
@@ -46,10 +47,10 @@ async def main():
     failures = 0
     async with rotlib.Board(host, 'corners') as board:
         subprocess.run(vr.SSH + ['scp', '-O'] + vr.OPTS + [os.path.join(HERE, 'touchdev.py'), f'root@{host}:{rotlib.REMOTE}/touchdev.py'], capture_output=True, check=True)
-        board.ssh(f'nohup python3 {rotlib.REMOTE}/touchdev.py >/dev/null 2>&1 & echo $! > {rotlib.REMOTE}/touchpid; sleep 3; ls /run/rot-touch.fifo')
+        board.ssh(f'SINGLE_TOUCH={int(args.single)} nohup python3 {rotlib.REMOTE}/touchdev.py >/dev/null 2>&1 & echo $! > {rotlib.REMOTE}/touchpid; sleep 3; ls /run/rot-touch.fifo')
         try:
             devices = (await board.api.call('Settings/Display/Touch/devices'))
-            key = next(d['key'] for d in devices['devices'] if d.get('name') == 'UniTotem Test Touch')
+            key = next(d['key'] for d in devices['devices'] if d.get('name', '').startswith('UniTotem Test'))
             (await board.api.call('Settings/Display/Touch/set_output', reply='Settings/Display/Touch/devices', key=key, output=board.output)) if not args.unmapped else None
             await asyncio.sleep(2)
             # a page of the playlist that took the focus in a text field has opened the on-screen keyboard: it would cover taps

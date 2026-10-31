@@ -13,16 +13,18 @@ UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT, UI_DEV_SETUP, UI_ABS
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 FIFO = '/run/rot-touch.fifo'
 MAX = 4095
+SINGLE = os.environ.get('SINGLE_TOUCH') == '1'      # no multitouch slots: ABS_X/ABS_Y + BTN_TOUCH only, like a simple USB touch panel
+NAME = b'UniTotem Test Touch' if not SINGLE else b'UniTotem Test Single'
 
 fd = os.open('/dev/uinput', os.O_WRONLY)
 fcntl.ioctl(fd, UI_SET_EVBIT, EV_KEY)
 fcntl.ioctl(fd, UI_SET_KEYBIT, 0x14a)
 fcntl.ioctl(fd, UI_SET_EVBIT, EV_ABS)
-for axis in (0, 1, 0x2f, 0x35, 0x36, 0x39):
+for axis in ((0, 1) if SINGLE else (0, 1, 0x2f, 0x35, 0x36, 0x39)):
     fcntl.ioctl(fd, UI_SET_ABSBIT, axis)
 fcntl.ioctl(fd, UI_SET_PROPBIT, 1)          # INPUT_PROP_DIRECT: a touch screen
-fcntl.ioctl(fd, UI_DEV_SETUP, struct.pack('<HHHH80sI', 3, 0x1209, 0x7002, 1, b'UniTotem Test Touch', 0))
-for axis, top in ((0, MAX), (1, MAX), (0x35, MAX), (0x36, MAX), (0x2f, 9), (0x39, 65535)):
+fcntl.ioctl(fd, UI_DEV_SETUP, struct.pack('<HHHH80sI', 3, 0x1209, 0x7002, 1, NAME, 0))
+for axis, top in (((0, MAX), (1, MAX)) if SINGLE else ((0, MAX), (1, MAX), (0x35, MAX), (0x36, MAX), (0x2f, 9), (0x39, 65535))):
     fcntl.ioctl(fd, UI_ABS_SETUP, struct.pack('<HHiiiiii', axis, 0, 0, 0, top, 0, 0, 0)[:28])
 fcntl.ioctl(fd, UI_DEV_CREATE)
 
@@ -33,12 +35,13 @@ def event(kind, code, value):
 
 def tap(nx, ny):
     x, y = int(nx * MAX), int(ny * MAX)
-    for code, value in ((0x2f, 0), (0x39, 1), (0x35, x), (0x36, y), (0, x), (1, y)):
+    for code, value in (((0, x), (1, y)) if SINGLE else ((0x2f, 0), (0x39, 1), (0x35, x), (0x36, y), (0, x), (1, y))):
         event(EV_ABS, code, value)
     event(EV_KEY, 0x14a, 1)
     event(EV_SYN, 0, 0)
     time.sleep(0.2)
-    event(EV_ABS, 0x39, -1)
+    if not SINGLE:
+        event(EV_ABS, 0x39, -1)
     event(EV_KEY, 0x14a, 0)
     event(EV_SYN, 0, 0)
 
