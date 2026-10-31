@@ -5,11 +5,12 @@ from socket import gethostname
 from uuid import uuid4
 
 import sdbus_async.networkmanager.exceptions
+from sdbus import SdBusBaseError
 from dotenv import load_dotenv, set_key
 from loguru import logger
 from qrcode import ERROR_CORRECT_Q, make as make_qr
 from qrcode.image.svg import SvgPathFillImage
-from sdbus_async.networkmanager import (NetworkConnectionSettings, NetworkDeviceWireless,
+from sdbus_async.networkmanager import (ActiveConnection, NetworkConnectionSettings, NetworkDeviceWireless,
                                         NetworkManager, NetworkManagerSettings, NmDeviceNotActiveError,
                                         NmSettingsInvalidConnectionError)
 
@@ -119,6 +120,17 @@ async def start_hotspot(ssid: str = None, password: str = None):
 
 
 
+async def _hotspot_is_active(bus, nm, settings_path: str) -> bool:
+    """Whether the connection with this settings object is one of the active connections (their own paths are other objects)."""
+    for active_path in await nm.active_connections:
+        try:
+            if await ActiveConnection(active_path, bus).connection == settings_path:
+                return True
+        except (sdbus_async.networkmanager.exceptions.NetworkManagerBaseError, SdBusBaseError):
+            continue                   # it went away while looking
+    return False
+
+
 async def is_hotspot_enabled():
     try:
         with open_system_bus() as bus:
@@ -128,7 +140,7 @@ async def is_hotspot_enabled():
 
             try:
                 connection_path = await NetworkManagerSettings(bus).get_connection_by_uuid(environ['hotspot_uuid'])
-                return connection_path in await nm.active_connections
+                return await _hotspot_is_active(bus, nm, connection_path)
             except NmSettingsInvalidConnectionError:
                 return False
     except sdbus_async.networkmanager.exceptions.NetworkManagerPermissionDeniedError:
@@ -159,6 +171,8 @@ async def get_hotspot_with_qr():
 
 
 async def stop_hotspot():
+    """Takes the fallback hotspot down and removes its profile. This also runs whenever the manager stops, so it must touch
+    nothing but the hotspot: the Wi-Fi device is disconnected only while it is the hotspot that is active on it."""
     try:
         with open_system_bus() as bus:
             nm = NetworkManager(bus)
@@ -166,29 +180,25 @@ async def stop_hotspot():
             if not await nm.wireless_enabled:
                 return
 
-            iface = get_default_wireless()
-            if iface is None:
-                # no wireless interface (any more: at shutdown the device may already be gone): nothing to stop
-                logger.info('No wireless interface, no hotspot to stop')
+            try:
+                conn_dbus_path = await NetworkManagerSettings(bus).get_connection_by_uuid(environ['hotspot_uuid'])
+            except NmSettingsInvalidConnectionError:
+                logger.info('No hotspot connection: nothing to stop')
                 return
 
-            logger.info('Stopping hotspot')
+            if await _hotspot_is_active(bus, nm, conn_dbus_path):
+                iface = get_default_wireless()
+                if iface is not None:
+                    logger.info('Stopping hotspot')
+                    netdev = NetworkDeviceWireless(await nm.get_device_by_ip_iface(iface), bus)
+                    try:
+                        await netdev.disconnect()
+                        logger.info('Stopped hotspot on interface {}', await netdev.interface)
+                    except NmDeviceNotActiveError:
+                        logger.info('Hotspot was already stopped')
 
-            netdev = NetworkDeviceWireless(await nm.get_device_by_ip_iface(iface), bus)
-            try:
-                await netdev.disconnect()
-                logger.info('Stopped hotspot on interface {}', await netdev.interface)
-            except NmDeviceNotActiveError:
-                logger.info('Hotspot was already stopped')
-
-            try:
-                nm_settings = NetworkManagerSettings(bus)
-                conn_dbus_path = await nm_settings.get_connection_by_uuid(environ['hotspot_uuid'])
-                await NetworkConnectionSettings(conn_dbus_path, bus).delete()
-
-                logger.info('Deleted hotspot connection')
-            except NmSettingsInvalidConnectionError:
-                logger.info('No connection to delete')
+            await NetworkConnectionSettings(conn_dbus_path, bus).delete()
+            logger.info('Deleted hotspot connection')
     except sdbus_async.networkmanager.exceptions.NetworkManagerPermissionDeniedError:
         logger.error("NetworkManager dbus permission denied")
 
