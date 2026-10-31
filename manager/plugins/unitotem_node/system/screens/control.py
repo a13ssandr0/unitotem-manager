@@ -46,6 +46,8 @@ def _load_commanded() -> dict[str, dict]:
 
 
 _commanded_off: dict[str, dict] = _load_commanded()
+# Outputs the operator (web UI, timers, API) switched since the manager started: the start-up wake-up must leave them alone
+_operator_touched: set[str] = set()
 
 
 def _save_commanded():
@@ -221,12 +223,14 @@ async def _do_power(name: str, mechanism: str, on: bool, cfg: OutputConfig, x: O
         await serial.send(cfg.serial.port, cfg.serial.baud, command)
 
 
-async def set_power(name: str, state: str, mechanism: str = 'auto') -> str:
+async def set_power(name: str, state: str, mechanism: str = 'auto', operator: bool = True) -> str:
     """Switch an output on or off. Returns the mechanism that did it. On 'auto' the mechanisms are tried in order
     until one works; an explicit one is the only attempt."""
     if state not in ('on', 'off'):
         raise ScreenControlError("state must be 'on' or 'off'")
     on = state == 'on'
+    if operator:
+        _operator_touched.add(name)
     async with _lock(name):
         cfg = screen_control.output(name)
         x = await _x_output(name)
@@ -340,6 +344,7 @@ async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
     loop = asyncio.get_running_loop()
     deadline = loop.time() + budget
     attempt = 0
+    wanted: set[str] = set()
     while True:
         attempt += 1
         x_outputs = {o.name: o for o in await wayland.outputs()}
@@ -347,6 +352,9 @@ async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
                 if cfg.power_on_at_start and not (name in x_outputs and x_outputs[name].active)]
         todo += [name for name, o in x_outputs.items() if not o.active and name not in todo
                  and screen_control.outputs.get(name, OutputConfig()).power_on_at_start]
+        # only what was off when the manager started: a screen the operator switched off since is meant to stay off
+        todo = [name for name in todo if name not in _operator_touched and (attempt == 1 or name in wanted)]
+        wanted.update(todo)
         if attempt == 1:
             # A monitor WE put to standby over DDC/CEC/serial keeps its link, so the compositor lists it as driven and the loop above
             # never wakes it (it is remembered in the state file, see _commanded_off): wake it with the mechanism that switched it off
@@ -354,7 +362,7 @@ async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
                 cfg = screen_control.outputs.get(name, OutputConfig())
                 if cfg.power_on_at_start and name in x_outputs and x_outputs[name].active and name not in todo:
                     try:
-                        await set_power(name, 'on')
+                        await set_power(name, 'on', operator=False)
                         logger.info('Woke screen {} that was switched off over {}', name, _commanded_off.get(name, {}).get('mechanism'))
                     except ScreenControlError as exc:
                         logger.warning('Cannot wake screen {}: {}', name, exc)
@@ -362,7 +370,7 @@ async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
             break
         for name in todo:
             try:
-                mech = await set_power(name, 'on')
+                mech = await set_power(name, 'on', operator=False)
                 logger.info('Woke screen {} with {} (attempt {})', name, mech, attempt)
             except ScreenControlError as exc:
                 logger.warning('Cannot wake screen {} (attempt {}): {}', name, attempt, exc)

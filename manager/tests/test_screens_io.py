@@ -176,3 +176,59 @@ def test_boot_orientation_writes_only_what_differs_and_survives_a_missing_helper
     assert asyncio.run(bo.set_turn('HDMI-A-1', 5)) is False and calls == [['get', 'HDMI-A-1']]      # already so: no write
     state.update(now='normal', rc=1)
     assert asyncio.run(bo.set_turn('HDMI-A-1', 3)) is False                                          # a failure is only logged
+
+
+def test_blanked_outputs_do_not_count_as_active_but_stay_enabled():
+    out = wayland.parse_outputs(OUTPUTS, frozenset({'DP-1'}))
+    by = {o.name: o for o in out}
+    assert not by['DP-1'].active and by['DP-1'].enabled and by['HDMI-A-1'].active
+
+
+def test_power_off_blanks_without_disabling_the_output_and_falls_back(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    calls = []
+
+    async def fake_run(cmd, timeout=None):
+        calls.append(cmd[0] + ' ' + ' '.join(cmd[1:]))
+        return SimpleNamespace(returncode=1 if (cmd[0] == 'wlopm' and fail['wlopm']) else 0, stdout='', stderr='no protocol')
+    fail = {'wlopm': False}
+    monkeypatch.setattr(wayland, 'run', fake_run)
+    asyncio.run(wayland.set_power('DP-1', False))
+    assert calls == ['wlopm --off DP-1']                  # the window stays: nothing was disabled
+    calls.clear()
+    fail['wlopm'] = True
+    asyncio.run(wayland.set_power('DP-1', False))
+    assert calls == ['wlopm --off DP-1', 'wlr-randr --output DP-1 --off']
+
+
+def test_an_output_we_blanked_is_blanked_again_when_something_switches_it_on(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    calls, state = [], {'blanked': set()}
+
+    async def fake_run(cmd, timeout=None):
+        calls.append(' '.join(cmd))
+        if cmd[0] == 'wlopm' and len(cmd) == 3:
+            (state['blanked'].add if cmd[1] == '--off' else state['blanked'].discard)(cmd[2])
+            return SimpleNamespace(returncode=0, stdout='', stderr='')
+        if cmd[0] == 'wlopm':
+            return SimpleNamespace(returncode=0, stdout=''.join(f'{n} {"off" if n in state["blanked"] else "on"}\n' for n in ('DP-1', 'DP-2')), stderr='')
+        return SimpleNamespace(returncode=0, stdout=OUTPUTS, stderr='')
+    monkeypatch.setattr(wayland, 'run', fake_run)
+    monkeypatch.setattr(wayland, '_watch_uevents', lambda: None)
+    wayland._kept_off.clear()
+
+    async def scenario():
+        await wayland.set_power('DP-1', False)
+        assert wayland._kept_off == {'DP-1'}
+        state['blanked'].clear()                       # the compositor switched it on by itself
+        calls.clear()
+        await wayland.keep_off()
+        assert 'wlopm --off DP-1' in calls
+        await wayland.set_power('DP-1', True)           # the operator wants it on: no longer kept off
+        assert wayland._kept_off == set()
+        calls.clear()
+        await wayland.keep_off()
+        assert not any('--off' in c for c in calls)
+    asyncio.run(scenario())

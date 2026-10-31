@@ -48,7 +48,7 @@ def transform_for(turn: int, flip: int) -> str:
 class Output:
     name: str
     connected: bool
-    active: bool          # enabled, i.e. being driven (an output that is connected but off is not)
+    active: bool          # shows something: enabled and not blanked (an output that is connected but off is not)
     width: int = 0
     height: int = 0
     x: int = 0
@@ -58,10 +58,12 @@ class Output:
     make: str = ''
     model: str = ''
     serial: str = ''
+    enabled: bool = True          # driven by the compositor (blanking by power management leaves it enabled)
 
 
-def parse_outputs(text: str) -> list[Output]:
-    """The outputs in `wlr-randr --json`. The compositor only lists outputs that are connected."""
+def parse_outputs(text: str, blanked: frozenset = frozenset()) -> list[Output]:
+    """The outputs in `wlr-randr --json`, `blanked` being the ones power management has switched off. The compositor only lists
+    outputs that are connected."""
     try:
         data = json.loads(text)
     except ValueError:
@@ -76,7 +78,7 @@ def parse_outputs(text: str) -> list[Output]:
         if enabled and transform in ('90', '270', 'flipped-90', 'flipped-270'):
             width, height = height, width      # the rectangle the output covers in the layout is the rotated one
         found.append(Output(
-            name=entry['name'], connected=True, active=enabled, width=width, height=height,
+            name=entry['name'], connected=True, active=enabled and entry['name'] not in blanked, enabled=enabled, width=width, height=height,
             x=int(position.get('x', 0)), y=int(position.get('y', 0)),
             rotation=_TRANSFORM_TO_ROTATION.get(transform, 'normal'), transform=transform,
             make=entry.get('make') or '', model=entry.get('model') or '', serial=entry.get('serial') or ''))
@@ -92,7 +94,7 @@ async def outputs() -> list[Output]:
         return []
     if result.returncode != 0:
         return []
-    return parse_outputs(result.stdout)
+    return parse_outputs(result.stdout, await blanked_outputs())
 
 
 def read_edid(name: str, root: str = '/sys/class/drm') -> Optional[bytes]:
@@ -131,28 +133,117 @@ async def set_transform(name: str, transform: str):
 _last_geometry: dict[str, Output] = {}
 
 
+async def blanked_outputs() -> frozenset:
+    """The outputs switched off by power management (`wlopm` prints `NAME on|off`), empty when the tool or protocol is missing."""
+    try:
+        result = await run(['wlopm'], timeout=10)
+    except Exception:
+        return frozenset()
+    if result.returncode != 0:
+        return frozenset()
+    return frozenset(parts[0] for parts in (line.split() for line in result.stdout.splitlines()) if len(parts) == 2 and parts[1] == 'off')
+
+
 async def set_power(name: str, on: bool, known: Optional[Output] = None):
-    """Switch one output off or on. Raises RuntimeError with wlr-randr's own message when it refuses."""
+    """Switch one output off or on. Power management (DPMS) first: the output stays enabled, so its window stays and the page is not
+    reloaded when it comes back; only when that is refused the output itself is disabled. Raises RuntimeError with the
+    compositor's message when nothing works."""
     if on:
+        _kept_off.discard(name)
+        if not _kept_off:
+            _stop_uevents()
+        try:
+            await dpms(True, name)
+        except RuntimeError as exc:
+            logger.debug('The power protocol did not wake {}: {}', name, exc)
+        current = next((o for o in await outputs() if o.name == name), None)
+        if current is not None and current.enabled:
+            return
         cmd = ['wlr-randr', '--output', name, '--on']
         before = _last_geometry.get(name)
         if before is not None:
             cmd += ['--pos', f'{before.x},{before.y}', '--transform', before.transform]
-    else:
-        if known is not None and known.active:
-            _last_geometry[name] = known
-        cmd = ['wlr-randr', '--output', name, '--off']
-    result = await run(cmd, timeout=15)
+        result = await run(cmd, timeout=15)
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout).strip() or f'wlr-randr exited with {result.returncode}')
+        await _power_protocol(name, True)       # an output blanked by the power protocol is not woken by being enabled
+        return
+    try:
+        await dpms(False, name)
+        _kept_off.add(name)
+        _watch_uevents()
+        return
+    except RuntimeError as exc:
+        logger.info('The power protocol did not blank {} ({}): disabling the output', name, exc)
+    if known is not None and known.active:
+        _last_geometry[name] = known
+    result = await run(['wlr-randr', '--output', name, '--off'], timeout=15)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip() or f'wlr-randr exited with {result.returncode}')
-    if on:
-        await _power_protocol(name, True)       # an output blanked by the power protocol is not woken by being enabled
-    else:
-        await asyncio.sleep(0.5)
-        now = next((o for o in await outputs() if o.name == name), None)
-        if now is not None and now.active:
-            # the compositor keeps its last output enabled (the Raspberry Pi's, for one): blank it instead
-            await _power_protocol(name, False)
+
+
+# Outputs WE blanked and that must stay so. A monitor without signal goes into deep standby and, when it comes back, the compositor
+# reapplies its configuration and switches the output on again (Raspberry Pi + a monitor that drops its link: after ~30 s). The
+# kernel tells (a `change` uevent of the DRM device) and the blanking is repeated: no polling, the listener exists only while
+# something is kept off.
+_kept_off: set[str] = set()
+_uevents: dict = {}
+
+
+def _watch_uevents():
+    if _uevents.get('fd') is not None:
+        return
+    import socket
+    try:
+        sock = socket.socket(socket.AF_NETLINK, socket.SOCK_DGRAM, 15)       # NETLINK_KOBJECT_UEVENT
+        sock.bind((0, 1))                                                    # the kernel's own group
+        sock.setblocking(False)
+        loop = asyncio.get_running_loop()
+    except (OSError, RuntimeError) as exc:
+        logger.debug('No uevent listener, a blanked output is not kept off: {}', exc)
+        return
+    _uevents.update(fd=sock, loop=loop, timer=None)
+    loop.add_reader(sock.fileno(), _uevent_readable)
+
+
+def _uevent_readable():
+    sock, loop = _uevents['fd'], _uevents['loop']
+    relevant = False
+    try:
+        while True:
+            data = sock.recv(8192)
+            relevant = relevant or (b'SUBSYSTEM=drm' in data and b'ACTION=change' in data)
+    except BlockingIOError:
+        pass
+    if relevant:
+        if _uevents['timer']:
+            _uevents['timer'].cancel()
+        _uevents['timer'] = loop.call_later(0.3, lambda: loop.create_task(keep_off()))
+
+
+async def keep_off():
+    """Blank again every output we switched off that has been switched on by something else; stop listening when none is left."""
+    if not _kept_off:
+        _stop_uevents()
+        return
+    try:
+        now = {o.name: o for o in await outputs()}
+        for name in list(_kept_off):
+            if name not in now:
+                continue                              # not there (yet): done when it comes back
+            if now[name].active:
+                logger.info('Output {} was switched on by itself: blanking it again', name)
+                await dpms(False, name)
+    except Exception as exc:
+        logger.warning('Cannot keep {} off: {}', sorted(_kept_off), exc)
+
+
+def _stop_uevents():
+    sock = _uevents.pop('fd', None)
+    if sock is not None:
+        _uevents['loop'].remove_reader(sock.fileno())
+        sock.close()
+    _uevents.clear()
 
 
 async def _power_protocol(name: str, on: bool):
@@ -172,4 +263,6 @@ async def dpms(on: bool, name: str = '*'):
 async def wake_all():
     """Policy at start (and after a resume): nothing blanks by itself, outputs are switched by timers and commands only
     (labwc has no idle blanking of its own), and whatever a previous session left blanked is woken."""
+    _kept_off.clear()
+    _stop_uevents()
     await dpms(True)

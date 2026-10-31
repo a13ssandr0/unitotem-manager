@@ -1,3 +1,11 @@
+unitotem-manager (3.0.0~dev17) stable; urgency=medium
+
+  * Switching a screen off blanks it with power management instead of disabling the output: the window stays and the page
+    is not reloaded; a screen the operator switched off stays off (it was switched on again within minutes of a manager
+    start by the start-up wake-up, and by monitors that come back from standby by themselves)
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sat, 31 Oct 2026 12:00:00 +0100
+
 unitotem-manager (3.0.0~dev16) stable; urgency=medium
 
   * A touch screen left on automatic follows the turn and mirror of the screen: with one screen it is mapped to it
