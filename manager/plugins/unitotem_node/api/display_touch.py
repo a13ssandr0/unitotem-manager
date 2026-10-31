@@ -28,8 +28,22 @@ class Touch(WSAPIBase):
         await touch_service.refresh()
         return WSBroadcast(self.devices, **touch_service.snapshot())
 
-    def forget(self, key: str):
+    async def forget(self, key: str):
         """Drop the mapping of a device that is not plugged in any more."""
         touch_map.set(key, None)
+        touch_map.set_orientation(key, 0, 0)
         touch_map.save()
+        await touch_service.refresh()
+        return WSBroadcast(self.devices, **touch_service.snapshot())
+
+    async def set_orientation(self, key: str, turn: int = 0, flip: int = 0):
+        """Turn and/or mirror the touch input of a panel that is not glued to its screen and has another natural orientation (a landscape
+        screen with a portrait panel). Same convention as a window's orientation: `turn` quarter turns clockwise, `flip` 0 none, 1 left-right,
+        2 top-bottom. A touch screen built into its monitor needs nothing: it follows the screen's own turn by itself."""
+        try:
+            touch_map.set_orientation(key, turn, flip)
+        except ValueError as exc:
+            return WSResponse(error=str(exc))
+        touch_map.save()
+        await touch_service.refresh()
         return WSBroadcast(self.devices, **touch_service.snapshot())

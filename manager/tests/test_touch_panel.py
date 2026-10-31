@@ -234,3 +234,34 @@ def test_a_device_on_automatic_belongs_to_the_only_screen():
     assert touch.effective_mapping({'A|0001:0002': 'DP-1'}, [a, b], ['HDMI-A-1'])['A|0001:0002'] == 'DP-1'
     assert touch.effective_mapping({}, [a, b], ['DP-1', 'DP-2']) == {}
     assert touch.effective_mapping({}, [a], []) == {}
+
+
+def test_orientation_of_a_separate_panel_becomes_a_calibration_matrix():
+    from unitotem_node.models.touch_map import TouchMap
+    from unitotem_node.system import touch
+    m = TouchMap()
+    m.set_orientation('Panel|0001:0002', 1, 0)
+    m.set_orientation('Same|0003:0004', 0, 0)                  # nothing to correct: no entry at all
+    assert 'Same|0003:0004' not in m.orientation
+    text = touch.fragment({'Panel|0001:0002': 'DP-1'}, m.orientation)
+    assert '<device category="Panel"><calibrationMatrix>0 1 0 -1 0 1</calibrationMatrix></device>' in text and 'mapToOutput="DP-1"' in text
+    assert '<libinput>' not in touch.fragment({'Panel|0001:0002': 'DP-1'}, {})
+    import pytest
+    with pytest.raises(ValueError):
+        m.set_orientation('x', 4, 0)
+    with pytest.raises(ValueError):
+        m.set_orientation('x', 1, 3)
+
+
+def test_every_orientation_has_a_matrix_and_they_are_the_eight_signed_permutations():
+    from unitotem_node.system import touch
+    assert set(touch.CALIBRATION) == {(r, f) for r in range(4) for f in range(3)}
+    assert len(set(touch.CALIBRATION.values())) == 8
+
+
+def test_a_cleared_orientation_is_written_as_the_identity_for_every_connected_device():
+    from unitotem_node.system import touch
+    text = touch.fragment({}, {}, ['Panel'])
+    assert '<device category="Panel"><calibrationMatrix>1 0 0 0 1 0</calibrationMatrix></device>' in text
+    both = touch.fragment({}, {'Panel|1:2': {'turn': 2, 'flip': 0}}, ['Panel', 'Other'])
+    assert '>-1 0 1 0 -1 1<' in both and '<device category="Other"><calibrationMatrix>1 0 0 0 1 0' in both

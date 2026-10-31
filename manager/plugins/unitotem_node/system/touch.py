@@ -169,10 +169,22 @@ def effective_mapping(mapping: dict[str, str], devices: list[TouchDevice], outpu
     return result
 
 
-def fragment(mapping: dict[str, str]) -> str:
-    """The `<touch>` entries of the node's fragment: one per mapped device, by name. Entries whose output is not there
-    are harmless (the compositor then lets the device span every output); an identity that is not a device name is
-    skipped. The first mapping of a name wins, the rest cannot be told apart by the compositor."""
+# libinput calibration matrix (a b c d e f: x' = a x + b y + c, y' = d x + e y + f, coordinates 0..1) that makes a panel report as if its glass
+# were turned like a window with that orientation (quarter turns clockwise) and flip. Checked on a board with a virtual touch screen
+# against the points a page turned the same way gives (tools/gfx-bench/rotation/rotation-touch.py).
+_I, _H, _V = (1, 0, 0, 0, 1, 0), (-1, 0, 1, 0, 1, 0), (1, 0, 0, 0, -1, 1)
+CALIBRATION = {
+    (0, 0): _I, (0, 1): _H, (0, 2): _V,
+    (1, 0): (0, 1, 0, -1, 0, 1), (1, 1): (0, -1, 1, -1, 0, 1), (1, 2): (0, 1, 0, 1, 0, 0),
+    (2, 0): (-1, 0, 1, 0, -1, 1), (2, 1): _V, (2, 2): _H,
+    (3, 0): (0, -1, 1, 1, 0, 0), (3, 1): (0, 1, 0, 1, 0, 0), (3, 2): (0, -1, 1, -1, 0, 1),
+}
+
+
+def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, devices: Optional[list[str]] = None) -> str:
+    """The `<touch>` entries of the node's fragment: one per mapped device, by name, and a calibration matrix for each device that has an
+    orientation of its own. Entries whose output is not there are harmless (the compositor then lets the device span every output); an
+    identity that is not a device name is skipped. The first mapping of a name wins, the rest cannot be told apart by the compositor."""
     seen = set()
     lines = []
     for key, output in mapping.items():
@@ -182,15 +194,29 @@ def fragment(mapping: dict[str, str]) -> str:
         seen.add(name)
         lines.append(f'  <touch deviceName="{html.escape(name, quote=True)}" mapToOutput="{html.escape(output, quote=True)}" '
                      'mouseEmulation="no"/>\n')
+    # Every connected device gets its matrix written, the identity included: the compositor keeps the last matrix it applied when a
+    # device's entry disappears from the configuration, so a cleared orientation has to be written as "no correction"
+    matrices = {name: _I for name in (devices or [])}
+    for key, value in (orientation or {}).items():
+        name = key.split('|')[0].strip()
+        matrix = CALIBRATION.get((value.get('turn', 0), value.get('flip', 0)))
+        if name and matrix is not None and (name in matrices or devices is None):
+            matrices[name] = matrix
+    entries = [f'    <device category="{html.escape(name, quote=True)}">'
+               f'<calibrationMatrix>{" ".join(str(v) for v in matrix)}</calibrationMatrix></device>\n'
+               for name, matrix in matrices.items() if matrix != _I or devices is not None]
+    if entries:
+        lines.append('  <libinput>\n' + ''.join(entries) + '  </libinput>\n')
     return ''.join(lines)
 
 
-def apply_mapping(mapping: dict[str, str]) -> bool:
+def apply_mapping(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, devices: Optional[list[str]] = None) -> bool:
     """Write the node's fragment of the compositor configuration and have it read again. True when a compositor took it."""
     from utils import labwc
-    if not labwc.write_fragment(FRAGMENT, fragment(mapping)):
+    if not labwc.write_fragment(FRAGMENT, fragment(mapping, orientation, devices)):
         return False
     reloaded = labwc.reload()
     if reloaded:
-        logger.info('Touch mapping applied: {}', {k.split('|')[0]: v for k, v in mapping.items()} or 'none')
+        logger.info('Touch mapping applied: {} {}', {k.split('|')[0]: v for k, v in mapping.items()} or 'none',
+                    {k.split('|')[0]: v for k, v in (orientation or {}).items()} or '')
     return reloaded

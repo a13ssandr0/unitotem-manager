@@ -43,6 +43,15 @@ def absinfo(fd, code):
 
 
 taps = []      # (time, raw normalised x, y, node)
+got = []       # (time, [x, y, type, width, height]) as the page saw it
+
+
+def report(t, x, y, path):
+    """One line per tap, as soon as the page's side of it is known (or after a second without it)."""
+    near = min(got, key=lambda g: abs(g[0] - t), default=None)
+    page_xy = near[1] if near and abs(near[0] - t) < 1 else None
+    print(json.dumps({'raw': [round(x, 3), round(y, 3)], 'page': [round(v, 3) for v in page_xy[:2]] if page_xy else None,
+                      'type': page_xy[2] if page_xy else None, 'window': page_xy[3:] if page_xy else None, 'node': path}), flush=True)
 
 
 def reader(path):
@@ -69,45 +78,39 @@ def reader(path):
                 state['down'] = True
             elif t == EV_SYN and state['down'] and state['x'] is not None:
                 taps.append((time.time(), state['x'], state['y'], path, ranges))
+                loop.call_later(0.4, report, taps[-1][0], state['x'], state['y'], path)
                 state['down'] = False
     loop.add_reader(fd, readable)
     print('listening on', path, {hex(k): v for k, v in ranges.items()}, flush=True)
 
 
 async def page():
-    targets = json.load(urllib.request.urlopen('http://127.0.0.1:9223/json/list'))
-    url = next(t['webSocketDebuggerUrl'] for t in targets if t.get('type') == 'page' and 'boot-screen.html' in t.get('url', ''))
-    got = []
-    async with websockets.connect(url, max_size=None) as ws:
-        n = 0
-
-        async def call(method, **p):
-            nonlocal n
-            n += 1
-            await ws.send(json.dumps({'id': n, 'method': method, 'params': p}))
-        await call('Runtime.enable')
-        await call('Runtime.addBinding', name='utTapRec')
-        await call('Runtime.evaluate', expression='addEventListener("pointerdown", e => utTapRec(JSON.stringify([e.clientX / innerWidth, e.clientY / innerHeight, e.pointerType, innerWidth, innerHeight])), true)')
-        end = time.time() + seconds
-        while time.time() < end:
-            try:
-                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
-            except asyncio.TimeoutError:
-                continue
-            if msg.get('method') == 'Runtime.bindingCalled':
-                got.append((time.time(), json.loads(msg['params']['payload'])))
-    return got
+    """Page side of every tap; survives a restart of the viewer (the page goes away and a new one appears)."""
+    end = time.time() + seconds
+    while time.time() < end:
+        try:
+            targets = json.load(urllib.request.urlopen('http://127.0.0.1:9223/json/list'))
+            url = next(t['webSocketDebuggerUrl'] for t in targets if t.get('type') == 'page' and 'boot-screen.html' in t.get('url', ''))
+            async with websockets.connect(url, max_size=None) as ws:
+                await ws.send(json.dumps({'id': 1, 'method': 'Runtime.enable'}))
+                await ws.send(json.dumps({'id': 2, 'method': 'Runtime.addBinding', 'params': {'name': 'utTapRec'}}))
+                await ws.send(json.dumps({'id': 3, 'method': 'Runtime.evaluate', 'params': {'expression':
+                    'addEventListener("pointerdown", e => utTapRec(JSON.stringify([e.clientX / innerWidth, e.clientY / innerHeight, e.pointerType, innerWidth, innerHeight])), true)'}}))
+                while time.time() < end:
+                    try:
+                        msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
+                    except asyncio.TimeoutError:
+                        continue
+                    if msg.get('method') == 'Runtime.bindingCalled':
+                        got.append((time.time(), json.loads(msg['params']['payload'])))
+        except Exception:
+            await asyncio.sleep(2)
 
 
 async def main():
     for path in nodes():
         reader(path)
-    got = await page()
-    for t, x, y, path, _ in taps:
-        near = min(got, key=lambda g: abs(g[0] - t), default=None)
-        page_xy = near[1] if near and abs(near[0] - t) < 1 else None
-        print(json.dumps({'raw': [round(x, 3), round(y, 3)], 'page': page_xy[:2] if page_xy else None, 'type': page_xy[2] if page_xy else None,
-                          'window': page_xy[3:] if page_xy else None, 'node': path}))
-    print('taps', len(taps), 'page events', len(got))
+    await page()
+    print('taps', len(taps), 'page events', len(got), flush=True)
 
 asyncio.run(main())

@@ -39,6 +39,7 @@ def content_point(r, f, nx, ny):
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--host', required=True)
+    ap.add_argument('--manual', action='store_true', help='screen NOT turned; the device orientation of the Display page (API) is what turns the touch')
     ap.add_argument('--unmapped', action='store_true', help='leave the device on automatic (no output chosen)')
     args = ap.parse_args()
     host = args.host
@@ -57,8 +58,12 @@ async def main():
             board.ssh(f'python3 {rotlib.REMOTE}/board-cdp.py eval "window.utKeyboard && window.utKeyboard.focusChanged(false)" 0')
             for r in range(4):
                 for f in range(3):
-                    await board.set_content(r, f)
-                    await asyncio.sleep(5)
+                    if args.manual:
+                        await board.api.call('Settings/Display/Touch/set_orientation', reply='Settings/Display/Touch/devices', key=key, turn=r, flip=f)
+                        await asyncio.sleep(2.5)
+                    else:
+                        await board.set_content(r, f)
+                        await asyncio.sleep(5)
                     before = len(json.loads(board.ssh('curl -s localhost:8099/clicks') or '[]'))
                     board.ssh(f'echo "{NX} {NY}" > /run/rot-touch.fifo; sleep 1')
                     clicks = json.loads(board.ssh('curl -s localhost:8099/clicks') or '[]')[before:]
