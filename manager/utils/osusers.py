@@ -110,17 +110,26 @@ def create_user(name: str, password: str, hashed: bool = False):
     if exists(name):
         raise OSUserError('An account with this name already exists on the system')
     ensure_group()
-    _run(['useradd', '--no-create-home', '--shell', '/usr/sbin/nologin', '--comment', GECOS, '--groups', GROUP, name])
+    _run(['useradd', '--no-create-home', '--shell', '/usr/sbin/nologin', '--comment', GECOS, '--groups', GROUP, '--', name])
     try:
         set_password(name, password, hashed)
     except OSUserError:
-        _run(['userdel', name])         # no half-made account
+        _run(['userdel', '--', name])   # no half-made account
         raise
     logger.info('Created the account {}', name)
 
 
+# A crypt(3) hash as /etc/shadow keeps it ($id$[params$]salt$hash): the characters of the format and nothing else, never a colon or a line break
+_HASH = re.compile(r'\$[A-Za-z0-9./$,=+-]{3,300}')
+
+
 def set_password(name: str, password: str, hashed: bool = False):
-    if '\n' in password or '\0' in password or ':' in name:
+    # chpasswd reads LINES of `name:secret`: the line is built only from a valid name and a secret that cannot end it
+    if not valid_name(name):
+        raise OSUserError('Invalid user name')
+    if hashed and not _HASH.fullmatch(password):
+        raise OSUserError('Not a password hash')
+    if not isinstance(password, str) or '\n' in password or '\r' in password or '\0' in password:
         raise OSUserError('Invalid characters in the password')
     _run(['chpasswd', *(['--encrypted'] if hashed else [])], f'{name}:{password}\n')
 
@@ -136,7 +145,7 @@ def remove_user(name: str):
         return
     entry = pwd.getpwnam(name)
     if entry.pw_gecos == GECOS and entry.pw_uid != 0:
-        _run(['userdel', name])
+        _run(['userdel', '--', name])
         logger.info('Deleted the account {}', name)
     elif _gid() is not None and name in grp.getgrgid(_gid()).gr_mem:
         _run(['gpasswd', '--delete', name, GROUP])

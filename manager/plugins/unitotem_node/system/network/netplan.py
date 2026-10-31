@@ -1,5 +1,5 @@
 from os import remove as removefile, listdir
-from os.path import join, exists
+from os.path import join, exists, basename
 from subprocess import run, PIPE
 from typing import Union
 
@@ -10,6 +10,8 @@ def set_netplan(filename: Union[str, None], file_content: Union[str, dict], appl
     if isinstance(file_content, str):
         file_content = {filename: file_content}
     for name, content in file_content.items():
+        if name != basename(name) or name in ('', '.', '..'):
+            raise ValueError('A netplan file is a name in the netplan directory')
         with open(join(NETPLAN_DIR, name), 'w') as netp:
             netp.write(content)
     return generate_netplan(apply)

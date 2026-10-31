@@ -11,6 +11,7 @@ and re-reads all of them on SIGHUP. Whoever writes a fragment calls `reload()`. 
 import os
 import re
 import signal
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
@@ -24,14 +25,26 @@ EMPTY = '<?xml version="1.0"?>\n<labwc_config>\n</labwc_config>\n'
 # Characters XML 1.0 can hold at all; the rest (NUL, escape, other controls) would make the whole file unparsable and the compositor
 # would then silently load its default configuration
 _XML_ILLEGAL = re.compile('[^\\t\\n\\r\\x20-\\ud7ff\\ue000-\\ufffd\\U00010000-\\U0010ffff]')
-_XML_ESCAPES = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;', '\t': '&#9;', '\n': '&#10;', '\r': '&#13;'}
 
 
-def xml_attr(value: str) -> str:
-    """A string (a device or output name, anything a person or a device chose) as the value of an XML attribute: markup characters and
-    line breaks as references (an attribute's line breaks would otherwise be turned into spaces), characters XML cannot hold dropped.
-    Names are data: they never reach the file any other way."""
-    return ''.join(_XML_ESCAPES.get(c, c) for c in _XML_ILLEGAL.sub('', str(value)))
+def xml_clean(value) -> str:
+    """The characters XML cannot hold dropped from a value that comes from outside (a device or output name): the one thing a serialiser
+    does not do. Everything else (markup, quotes, line breaks) is the serialiser's job: values are NEVER pasted into XML text."""
+    return _XML_ILLEGAL.sub('', str(value))
+
+
+def element(tag: str, attributes: Optional[dict] = None, children=(), text: Optional[str] = None) -> ET.Element:
+    """An XML element whose attributes and text are data: the document is serialised by ElementTree, as a parameterised query is sent."""
+    node = ET.Element(tag, {key: xml_clean(value) for key, value in (attributes or {}).items()})
+    if text is not None:
+        node.text = xml_clean(text)
+    node.extend(children)
+    return node
+
+
+def render(children) -> str:
+    """The children of a fragment as XML text (what is written, and what the tests read back)."""
+    return ''.join(ET.tostring(child, encoding='unicode', short_empty_elements=True) + '\n' for child in children)
 
 
 def fragment_path(name: str) -> Path:
@@ -53,13 +66,13 @@ def pid() -> Optional[int]:
     return None
 
 
-def write_fragment(name: str, body: str) -> bool:
-    """Writes `<labwc_config>body</labwc_config>` as the fragment of `name`, atomically. False if it cannot be written."""
+def write_fragment(name: str, children) -> bool:
+    """Writes the elements as the children of `<labwc_config>` in the fragment of `name`, atomically. False if it cannot be written."""
     path = fragment_path(name)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix('.tmp')
-        tmp.write_text(f'<?xml version="1.0"?>\n<labwc_config>\n{body}</labwc_config>\n')
+        tmp.write_text('<?xml version="1.0"?>\n<labwc_config>\n' + render(children) + '</labwc_config>\n')
         os.replace(tmp, path)
         return True
     except OSError as exc:

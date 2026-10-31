@@ -310,3 +310,17 @@ def test_names_with_a_trailing_line_break_are_refused_everywhere():
             wayland.check_output_name(bad)
     for good in ('HDMI-A-1', 'DP-2', 'Virtual-1', 'eDP-1'):
         assert wayland.check_output_name(good) == good
+
+
+# ── structure, not escaping (what a prepared statement is to SQL) ─────────────────────────────────────────────────
+
+def test_the_compositor_fragment_is_a_serialised_document_whatever_the_names():
+    from utils import labwc
+    from unitotem_node.system import touch
+    import xml.etree.ElementTree as ET
+    for hostile in ('a" b="c', '<x/>', "it's", 'line\nbreak\tab', '&amp;', ']]>', '‮', 'a' * 5000):
+        key = hostile + '|1:2'
+        root = ET.fromstring('<labwc_config>' + touch.fragment({key: hostile[:60] or 'x'}, {key: {'turn': 1, 'flip': 0}}, {key: hostile}) + '</labwc_config>')
+        assert [c.tag for c in root] == ['touch', 'libinput']
+        assert root.find('touch').get('deviceName') == labwc.xml_clean(hostile).strip()
+    assert touch.fragment({}, {}, {}) == ''

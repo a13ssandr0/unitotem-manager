@@ -75,6 +75,9 @@ class Update(WSAPIBase):
     async def set_policy(self, mode: str, time: str = '04:00'):
         if mode not in updater.POLICY_MODES:
             return WSBroadcast(result={'error': f'Unknown mode {mode!r}'})
-        result = await updater.set_policy(mode, time)
+        try:
+            result = await updater.set_policy(mode, time)
+        except ValueError as exc:
+            return WSBroadcast(result={'error': str(exc)})
         await self.ws.broadcast('Settings/Update/status', status=await updater.status())
         return WSBroadcast(result=result)

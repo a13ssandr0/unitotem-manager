@@ -93,7 +93,7 @@ def test_password_with_newline_cannot_smuggle_another_chpasswd_line(system):
 
 def test_only_accounts_made_by_unitotem_are_deleted(system):
     osusers.remove_user('alice')               # made by UniTotem
-    assert system.calls[-1][0] == ['userdel', 'alice']
+    assert system.calls[-1][0] == ['userdel', '--', 'alice']
     system.calls.clear()
     osusers.remove_user('carol')               # a real account: out of the group at most, never deleted
     assert all(args[0] != 'userdel' for args, _ in system.calls)

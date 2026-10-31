@@ -241,3 +241,33 @@ def test_a_cec_device_is_an_adapter_node_never_an_option_or_another_path():
     for bad in ('--help', '-d', '/etc/passwd', '/dev/cec0\n', '/dev/cec', '../dev/cec0'):
         with pytest.raises(ValueError):
             OutputConfig(cec_device=bad)
+
+
+def test_values_that_reach_a_command_are_checked_first():
+    import asyncio
+    import pytest
+    from unitotem_node.system import updater
+    from unitotem_node.system.screens import ddc_ctl
+    from unitotem_node.system.dbus_system import render_hosts, valid_hostname
+    from utils import osusers
+    for bad in ('4:00', '24:00', '04:60', '04:00\n', '-1:00', ''):
+        with pytest.raises(ValueError):
+            asyncio.run(updater.set_policy('scheduled', bad))
+    with pytest.raises(ValueError):
+        asyncio.run(updater.set_policy('--help', '04:00'))
+    for bad_code in ('--help', 'D6\n', 'D', 'GG', '', 'D6 '):
+        with pytest.raises(ValueError):
+            asyncio.run(ddc_ctl.setvcp(1, bad_code, 1))
+    with pytest.raises(ValueError):
+        asyncio.run(ddc_ctl.getvcp(1, '--help'))
+    # a hash for chpasswd is the format and nothing else: no colon, no line break (a second line would be a second account)
+    for bad in ('$6$x$y:root', '$6$x\n$y', 'plain', '', '$6$x$y\nroot:$6$z'):
+        with pytest.raises(osusers.OSUserError):
+            osusers.set_password('bob', bad, hashed=True)
+    with pytest.raises(osusers.OSUserError):
+        osusers.set_password('bob\n', 'x')
+    for bad in ('a b', 'a\nb', '-a', 'a..b', '', 'x' * 65, 'a/b', 'a;b'):
+        assert not valid_hostname(bad)
+        with pytest.raises(ValueError):
+            render_hosts('127.0.0.1 localhost\n', bad)
+    assert valid_hostname('unitotem') and valid_hostname('totem-1.example.org')

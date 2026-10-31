@@ -5,6 +5,7 @@ Replaces subprocess calls to systemctl / hostname with proper DBus calls,
 which work without elevated privileges (governed by polkit policies).
 """
 import os
+import re
 from contextlib import contextmanager
 from socket import gethostname
 
@@ -140,7 +141,9 @@ async def set_static_hostname(name: str):
     /etc/hosts (that is the administrator's responsibility per the man page).
     We do it here so that 127.0.1.1 always resolves to the current hostname.
     """
-    name = name.strip()[:64]
+    name = name.strip()
+    if not valid_hostname(name):
+        raise ValueError('A host name is letters, digits, dashes and dots, up to 64 characters')
     old = await get_hostname() or gethostname()
 
     with _system_bus() as bus:
@@ -149,12 +152,22 @@ async def set_static_hostname(name: str):
     _sync_etc_hosts(old, name)
 
 
+_HOSTNAME = re.compile(r'[A-Za-z0-9]([A-Za-z0-9.-]{0,62}[A-Za-z0-9])?')
+
+
+def valid_hostname(name: str) -> bool:
+    """What goes into /etc/hosts as a line of fields: no space, no line break, nothing but name characters."""
+    return isinstance(name, str) and _HOSTNAME.fullmatch(name) is not None and '..' not in name
+
+
 def render_hosts(content: str, new_hostname: str, old_hostname: str = '') -> str:
     """
     /etc/hosts with exactly one `127.0.1.1` entry, for the new hostname. Debian's convention: the machine's own name
     resolves to 127.0.1.1 (not to 127.0.0.1, which is `localhost`). Every other line is kept as it is, except that the
     old name is removed from the aliases of the loopback lines (a stale alias would still resolve to this machine).
     """
+    if not valid_hostname(new_hostname):
+        raise ValueError('Not a host name')
     lines, placed = [], False
     for line in content.splitlines():
         fields = line.split('#', 1)[0].split()

@@ -59,6 +59,14 @@ def has_shell(account: str) -> bool:
     return bool(shell) and os.path.basename(shell) not in NO_SHELL
 
 
+def _checked_account(name: str) -> str:
+    """The account is an argument of login: a valid account name, never an option."""
+    from utils import osusers
+    if not osusers.valid_name(name):
+        raise ValueError('Not an account name')
+    return name
+
+
 async def _terminate(proc: asyncio.subprocess.Process):
     """Hang up the session and make sure the child is gone and reaped."""
     for sig in (signal.SIGHUP, signal.SIGTERM, signal.SIGKILL):
@@ -94,7 +102,7 @@ class Terminal:
         # started by the subprocess machinery with the pty as its stdio, and `setsid -c` makes that pty its
         # controlling terminal, which login needs. `-f`: the account is already authenticated (the web session).
         self.proc = await asyncio.create_subprocess_exec(
-            'setsid', '-c', LOGIN_PROGRAM, '-f', self.username, stdin=self.slave, stdout=self.slave, stderr=self.slave,
+            'setsid', '-c', LOGIN_PROGRAM, '-f', _checked_account(self.username), stdin=self.slave, stdout=self.slave, stderr=self.slave,
             close_fds=True, env={'TERM': 'xterm-256color', 'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'})
         _sessions.add(self.proc.pid)
 

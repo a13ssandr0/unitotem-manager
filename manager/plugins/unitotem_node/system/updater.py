@@ -5,6 +5,7 @@ images itself.
 """
 import asyncio
 import json
+import re
 from typing import Any, Optional
 
 from loguru import logger
@@ -118,11 +119,14 @@ async def rollback(reboot: bool = True) -> dict[str, Any]:
     return await run('rollback', *(['--reboot'] if reboot else []))
 
 
+_TIME = re.compile(r'([01]\d|2[0-3]):[0-5]\d')
 POLICY_MODES = ('off', 'download', 'stage', 'reboot', 'scheduled')
 
 
 async def set_policy(mode: str, time: str) -> dict[str, Any]:
     """Sets the automatic update policy: what to do with a newer release, and the time of day for the scheduled restart."""
+    if mode not in POLICY_MODES or not _TIME.fullmatch(str(time)):
+        raise ValueError('The automatic update policy is a known mode and a time of day as HH:MM')
     return await run('policy', '--set-mode', mode, '--time', time)
 
 
