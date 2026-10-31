@@ -44,6 +44,7 @@ from .idle import IdleWatch, schedule_due, seconds_to_next_minute
 from .splash import show_splashes
 from . import wayland
 from . import profile_prefs
+from .language import default_language
 from .window import WebviewWindow
 import utils.ready as ready
 
@@ -192,7 +193,7 @@ class WebviewApp:
         os.makedirs(cache_path, exist_ok=True)
         os.makedirs(BROWSER_CACHE, exist_ok=True)
         clear_stale_locks(cache_path)
-        profile_prefs.apply(cache_path)
+        profile_prefs.apply(cache_path, accept_languages=Cdp.accept_language(default_language()))
 
         # multi_threaded_message_loop must stay False - it's a Windows-only
         # feature in this fork (see module docstring); CEF's queue is instead
@@ -306,6 +307,10 @@ class WebviewApp:
                 # A site that asks for a login keeps it in a session cookie (no expiry date): without this the browser forgets
                 # them when it exits, so every restart logs the operator out of every page
                 'persist_session_cookies'      : True,
+                # The browser draws no interface of its own, so no translated strings exist in the package (only the fallback locale is
+                # installed). The language the PAGES get is a per-window choice (Viewers/set_language); windows without one get the node's,
+                # which is the profile's `intl.accept_languages` (profile_prefs.apply).
+                'locale'                       : 'en-US',
                 # A public kiosk has no context menu (it offers reload, print, view source and the developer tools) and
                 # saves no files: a long press goes to the page shown and to nobody else
                 'context_menu'                 : {'enabled': False},
@@ -596,7 +601,7 @@ class WebviewApp:
 
     def _ws_thread_main(self):
         asyncio.set_event_loop(self._ws_loop)
-        self._cdp = Cdp(CDP_PORT, self._on_focus_changed, self._on_page_ready)
+        self._cdp = Cdp(CDP_PORT, self._on_focus_changed, self._on_page_ready, user_agent())
         self._cdp.on_binding('utKey', self._on_keyboard_key)
         self._cdp.on_binding('utFrame', self._on_frame_binding)
         self._cdp.on_binding('utActivity', self._on_activity)
@@ -634,6 +639,15 @@ class WebviewApp:
         watch = self._watches.get(window)
         if watch:
             watch.reset()       # a page that has just loaded is not showing a screensaver
+
+    async def _set_language(self, window: int, tag: str, reload: bool):
+        """The language the pages of a window are told to show. A choice made now (not one restored at start) loads the page again,
+        which is how it takes it."""
+        if self._cdp is None:
+            return
+        await self._cdp.set_language(window, tag)
+        if reload:
+            await self._cdp.call(window, 'refreshPage()')
 
     async def _apply_keyboard(self, window: int):
         """Hands the keyboard settings of a window to its page. Safe to call before the page has loaded (it applies
@@ -882,6 +896,9 @@ class WebviewApp:
             asyncio.run_coroutine_threadsafe(self._set_touch_settings(window_id, refresh={
                 'refresh_after_idle': data.get('refresh_after_idle'),
                 'refresh_schedules': data.get('refresh_schedules') or []}), self._ws_loop)
+        elif target == 'SetLanguage' and win and self._ws_loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                self._set_language(window_id, data.get('language') or '', bool(data.get('reload'))), self._ws_loop)
         elif target == 'SetKeyboard' and win:
             self._keyboard_config[data['window_id']] = {
                 'enabled': bool(data.get('enabled')), 'button_position': data.get('button_position', 'bottom-right'),

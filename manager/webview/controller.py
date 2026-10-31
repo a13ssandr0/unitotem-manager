@@ -14,7 +14,7 @@ from utils.models.command_line import cmdargs
 from utils.ticker import push as ticker_push
 from utils.models import layout as layouts
 from utils.models.layout import Area, LayoutError, WindowLayout, window_layouts
-from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings, viewer_settings
+from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings, valid_language, viewer_settings
 
 if TYPE_CHECKING:
     from api.ws.wsmanager import WSManager
@@ -404,6 +404,10 @@ class WebviewManager:
                 if keyboard:
                     asyncio.create_task(self.send_webview_command(
                         instance_id, 'SetKeyboard', window_id=window_id, **keyboard.model_dump()))
+                # and the language its pages are told to show
+                language = viewer_settings.languages.get(self._audio_key(instance_id, screen_name))
+                if language:
+                    asyncio.create_task(self.send_webview_command(instance_id, 'SetLanguage', window_id=window_id, language=language))
                 # and its RSS bar (utils/ticker/push.py; nothing at all when the bar is off)
                 if self._supports_layout(instance_id):
                     asyncio.create_task(ticker_push.window_appeared(
@@ -798,6 +802,31 @@ class WebviewManager:
                 window['keyboard'] = settings.model_dump()
         await self.send_webview_command(webview_id, 'SetKeyboard', window_id=window_id, **settings.model_dump())
 
+    def get_language(self, webview_id: str, window_id: int) -> str:
+        """The language the pages of a window are told to show; '' is the language of the node."""
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        return viewer_settings.languages.get(self._audio_key(webview_id, screen_name), '')
+
+    async def set_language(self, webview_id: str, window_id: int, language: str):
+        """Sets the language of the pages of one window ('' goes back to the node's), kept per screen like the audio output."""
+        if language and not valid_language(language):
+            raise ValueError(f'{language!r} is not a language tag')
+        screen_name = self._screen_of(webview_id, window_id)
+        if screen_name is None:
+            raise KeyError(f'No window {window_id} on {webview_id}')
+        key = self._audio_key(webview_id, screen_name)
+        if language:
+            viewer_settings.languages[key] = language
+        else:
+            viewer_settings.languages.pop(key, None)
+        viewer_settings.save()
+        for window in self._webviews.get(webview_id, {}).get('windows', []):
+            if window.get('window_id') == window_id:
+                window['language'] = language
+        await self.send_webview_command(webview_id, 'SetLanguage', window_id=window_id, language=language, reload=True)
+
     def get_screensaver(self, webview_id: str, window_id: int) -> ScreensaverSettings:
         screen_name = self._screen_of(webview_id, window_id)
         if screen_name is None:
@@ -945,6 +974,7 @@ class WebviewManager:
                      'audio_output': viewer_settings.audio_outputs.get(self._audio_key(vid, w.get('screen_name'))),
                      'keyboard': viewer_settings.keyboards.get(
                          self._audio_key(vid, w.get('screen_name')), KeyboardSettings()).model_dump(),
+                     'language': viewer_settings.languages.get(self._audio_key(vid, w.get('screen_name')), ''),
                      'screensaver': viewer_settings.screensavers.get(
                          self._audio_key(vid, w.get('screen_name')), ScreensaverSettings()).model_dump(),
                      'refresh': viewer_settings.refreshes.get(

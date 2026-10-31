@@ -279,6 +279,8 @@ export interface Api {
     close_pane: ApiCall<{ viewer_id: string; window_id: number; pane_id: number }>
     /** The on-screen keyboard of a window. [requires: admin] */
     keyboard: ApiCall<{ viewer_id: string; window_id: number }>
+    /** The language the pages of a window are told to show ('' = the node's). [requires: admin] */
+    language: ApiCall<{ viewer_id: string; window_id: number }>
     /** The layout of a window: the rectangle its content is drawn in, and its panes (a tree of splits) with their playlists. [requires: scheduler] */
     layout: ApiCall<{ viewer_id: string; window_id: number }>
     /** [requires: scheduler] */
@@ -295,6 +297,8 @@ export interface Api {
     set_audio_output: ApiCall<{ viewer_id: string; window_id: number; device?: null | string }>
     /** Turns the on-screen keyboard of a window on or off, and says where its button is and which layout it has. [requires: admin] */
     set_keyboard: ApiCall<{ viewer_id: string; window_id: number; enabled: boolean; button_position?: string; layout?: string }>
+    /** Says which language the pages of a window must show (a tag such as 'it' or 'pt-BR'; empty = the node's own). The page shown [requires: admin] */
+    set_language: ApiCall<{ viewer_id: string; window_id: number; language?: string }>
     /** When a window reloads its web page: after refresh_after_idle seconds without activity (10 s to 7 days, empty [requires: scheduler] */
     set_refresh: ApiCall<{ viewer_id: string; window_id: number; refresh_after_idle?: null | number; refresh_schedules?: (string)[] | null }>
     /** Makes a window interactive: home page (http or https) shown indefinitely, playlist as a screensaver after [requires: scheduler] */

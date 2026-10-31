@@ -120,3 +120,57 @@ def test_a_fresh_profile_gets_the_preferences_and_a_broken_file_is_left_alone(tm
     (broken / 'Default' / 'Preferences').write_text('{not json')
     assert profile_prefs.apply(broken) is False
     assert (broken / 'Default' / 'Preferences').read_text() == '{not json'
+
+
+# ── the language of the pages ────────────────────────────────────────────
+
+def test_the_node_language_comes_from_the_environment_then_the_locale_file(tmp_path):
+    from plugins.unitotem_viewer.language import default_language
+    nofile = tmp_path / 'none'
+    assert default_language({'LANG': 'it_IT.UTF-8'}, nofile) == 'it-IT'
+    assert default_language({'LC_ALL': 'de_DE.UTF-8', 'LANG': 'it_IT.UTF-8'}, nofile) == 'de-DE'
+    assert default_language({'LANG': 'pt'}, nofile) == 'pt'
+    assert default_language({'LANG': 'C.UTF-8'}, nofile) == 'en-US'
+    assert default_language({'LANG': 'POSIX'}, nofile) == 'en-US'
+    assert default_language({}, nofile) == 'en-US'
+    locale = tmp_path / 'locale'
+    locale.write_text('LANG="fr_FR.UTF-8"\n')
+    assert default_language({'LANG': 'C'}, locale) == 'fr-FR'
+
+
+def test_only_language_tags_are_accepted():
+    from utils.models.viewer import valid_language
+    for good in ('it', 'pt-BR', 'zh-Hant-TW', 'en-US'):
+        assert valid_language(good), good
+    for bad in ('', 'i', 'it\\n', 'it,fr', 'it;q=1', 'it_IT', 'x' * 40, 'it-', None, 5, 'it-IT-\\r\\nX: y'):
+        assert not valid_language(bad), bad
+
+
+def test_the_accept_language_list_of_a_tag():
+    from plugins.unitotem_viewer.cdp import Cdp
+    assert Cdp.accept_language('it') == 'it'
+    assert Cdp.accept_language('pt-BR') == 'pt-BR,pt'
+
+
+def test_a_window_language_reaches_the_viewer_and_survives_a_restart(tmp_path, monkeypatch):
+    from utils.models.viewer import viewer_settings
+    async def go():
+        mgr, ws = make_manager(tmp_path, monkeypatch)
+        viewer_settings.languages = {}
+        monkeypatch.setattr(type(viewer_settings), 'save', lambda self: None)
+        await mgr.set_language(VIEWER, 0, 'it')
+        assert ws.commands('SetLanguage')[-1]['language'] == 'it' and ws.commands('SetLanguage')[-1]['reload'] is True
+        assert mgr.get_language(VIEWER, 0) == 'it'
+        assert mgr.get_webviews()[VIEWER]['windows'][0]['language'] == 'it'
+        ws.sent.clear()
+        mgr.window_reloaded(VIEWER, 0)              # what a window that appears (or loads again) is told
+        await settle()
+        assert ws.commands('SetLanguage')[-1]['language'] == 'it' and 'reload' not in ws.commands('SetLanguage')[-1]
+        await mgr.set_language(VIEWER, 0, '')
+        assert mgr.get_language(VIEWER, 0) == ''
+        try:
+            await mgr.set_language(VIEWER, 0, 'it\\r\\nX: y')
+            assert False, 'a header-splitting tag was accepted'
+        except ValueError:
+            pass
+    run(go())
