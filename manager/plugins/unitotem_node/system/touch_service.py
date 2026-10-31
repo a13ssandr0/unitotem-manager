@@ -118,7 +118,7 @@ class TouchService:
             self.outputs = [o for o in await wayland.outputs() if o.active]
             mapping = touch.effective_mapping(touch_map.mapping, self.devices, [o.name for o in self.outputs])
             self.available = await asyncio.to_thread(touch.apply_mapping, mapping, touch_map.orientation,
-                                                        sorted({d.name for d in self.devices})) or bool(self.outputs)
+                                                        {d.key: d.libinput_name or d.name for d in self.devices}) or bool(self.outputs)
         except Exception as exc:
             logger.warning('Cannot apply the touch mapping: {}', exc)
 

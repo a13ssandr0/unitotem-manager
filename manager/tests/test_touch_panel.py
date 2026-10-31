@@ -261,7 +261,16 @@ def test_every_orientation_has_a_matrix_and_they_are_the_eight_signed_permutatio
 
 def test_a_cleared_orientation_is_written_as_the_identity_for_every_connected_device():
     from unitotem_node.system import touch
-    text = touch.fragment({}, {}, ['Panel'])
+    text = touch.fragment({}, {}, {'Panel|1:2': 'Panel'})
     assert '<device category="Panel"><calibrationMatrix>1 0 0 0 1 0</calibrationMatrix></device>' in text
-    both = touch.fragment({}, {'Panel|1:2': {'turn': 2, 'flip': 0}}, ['Panel', 'Other'])
+    both = touch.fragment({}, {'Panel|1:2': {'turn': 2, 'flip': 0}}, {'Panel|1:2': 'Panel', 'Other|3:4': 'Other'})
     assert '>-1 0 1 0 -1 1<' in both and '<device category="Other"><calibrationMatrix>1 0 0 0 1 0' in both
+
+
+def test_the_configuration_uses_the_name_libinput_gives_not_the_kernel_name():
+    from unitotem_node.system import touch
+    names = {'TSTP CTouch|eeef:2828|CMTP_1.0': 'TSTP CTouch (USB 1-1.4)'}
+    text = touch.fragment({'TSTP CTouch|eeef:2828|CMTP_1.0': 'HDMI-A-1'}, {'TSTP CTouch|eeef:2828|CMTP_1.0': {'turn': 1, 'flip': 0}}, names)
+    assert 'deviceName="TSTP CTouch (USB 1-1.4)" mapToOutput="HDMI-A-1"' in text
+    assert '<device category="TSTP CTouch (USB 1-1.4)"><calibrationMatrix>0 1 0 -1 0 1<' in text
+    assert 'deviceName="TSTP CTouch"' not in text

@@ -38,6 +38,7 @@ class TouchDevice:
     serial: Optional[str] = None
     phys: Optional[str] = None       # USB port path: tells apart two identical panels
     node: Optional[str] = None       # /dev/input/eventN, only used to look the serial up
+    libinput_name: Optional[str] = None   # what the compositor's configuration matches (see libinput_names.py); the kernel name when unknown
     key: str = ''                    # stable identity, set by assign_keys()
 
 
@@ -152,9 +153,11 @@ def touch_devices(text: Optional[str] = None) -> list[TouchDevice]:
         except OSError:
             return []
     devices = parse_devices(text)
+    from . import libinput_names
     for d in devices:
         if d.serial is None:
             d.serial = sysfs_identity(d.node).get('serial')
+        d.libinput_name = (libinput_names.name_of(d.node) if d.node else None) or d.name
     return assign_keys(devices)
 
 
@@ -181,14 +184,19 @@ CALIBRATION = {
 }
 
 
-def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, devices: Optional[list[str]] = None) -> str:
-    """The `<touch>` entries of the node's fragment: one per mapped device, by name, and a calibration matrix for each device that has an
-    orientation of its own. Entries whose output is not there are harmless (the compositor then lets the device span every output); an
-    identity that is not a device name is skipped. The first mapping of a name wins, the rest cannot be told apart by the compositor."""
+def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, names: Optional[dict[str, str]] = None) -> str:
+    """The `<touch>` entries of the node's fragment: one per mapped device, and a calibration matrix for each connected device.
+    `names` gives, per device identity, the name the compositor knows it by (libinput's, see libinput_names.py): the identity's own
+    first field (the kernel name) is the fallback and matches nothing for a device whose libinput name has a suffix. Entries whose output
+    is not there are harmless (the compositor then lets the device span every output). The first mapping of a name wins, the rest cannot
+    be told apart by the compositor."""
+    def label(key: str) -> str:
+        return ((names or {}).get(key) or key.split('|')[0]).strip()
+
     seen = set()
     lines = []
     for key, output in mapping.items():
-        name = key.split('|')[0].strip()
+        name = label(key)
         if not name or name in seen:
             continue
         seen.add(name)
@@ -196,24 +204,24 @@ def fragment(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = N
                      'mouseEmulation="no"/>\n')
     # Every connected device gets its matrix written, the identity included: the compositor keeps the last matrix it applied when a
     # device's entry disappears from the configuration, so a cleared orientation has to be written as "no correction"
-    matrices = {name: _I for name in (devices or [])}
+    matrices = {label(key): _I for key in (names or {})}
     for key, value in (orientation or {}).items():
-        name = key.split('|')[0].strip()
+        name = label(key)
         matrix = CALIBRATION.get((value.get('turn', 0), value.get('flip', 0)))
-        if name and matrix is not None and (name in matrices or devices is None):
+        if name and matrix is not None and (name in matrices or names is None):
             matrices[name] = matrix
     entries = [f'    <device category="{html.escape(name, quote=True)}">'
                f'<calibrationMatrix>{" ".join(str(v) for v in matrix)}</calibrationMatrix></device>\n'
-               for name, matrix in matrices.items() if matrix != _I or devices is not None]
+               for name, matrix in matrices.items() if matrix != _I or names is not None]
     if entries:
         lines.append('  <libinput>\n' + ''.join(entries) + '  </libinput>\n')
     return ''.join(lines)
 
 
-def apply_mapping(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, devices: Optional[list[str]] = None) -> bool:
+def apply_mapping(mapping: dict[str, str], orientation: Optional[dict[str, dict]] = None, names: Optional[dict[str, str]] = None) -> bool:
     """Write the node's fragment of the compositor configuration and have it read again. True when a compositor took it."""
     from utils import labwc
-    if not labwc.write_fragment(FRAGMENT, fragment(mapping, orientation, devices)):
+    if not labwc.write_fragment(FRAGMENT, fragment(mapping, orientation, names)):
         return False
     reloaded = labwc.reload()
     if reloaded:
