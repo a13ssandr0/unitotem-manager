@@ -4,6 +4,7 @@ Monitor control of this node's own outputs: power (X, DDC/CI, CEC, Wake-on-LAN, 
 Paths: Settings/Display/Screens/<function> (bound into unitotem_node.api.display.Display). Every change answers on `screens`, so
 any page showing the outputs is updated; errors the operator can act on come back as an `error` message.
 """
+import asyncio
 from typing import Optional
 
 from api.ws.responses import WSBroadcast, WSResponse
@@ -68,19 +69,27 @@ class Screens(WSAPIBase):
             return WSResponse(error=str(exc))
         return None
 
+    async def gpio_lines(self):
+        """The GPIO chips of this machine and their lines (name, and who uses each), for choosing the line of a screen."""
+        from ..system.screens import gpio
+        return WSBroadcast(self.gpio_lines, chips=await asyncio.to_thread(gpio.chips))
+
     async def configure(self, name: str, on_mechanism: Optional[str] = None, off_mechanism: Optional[str] = None,
                         power_on_at_start: Optional[bool] = None, wol: Optional[dict] = None,
-                        serial: Optional[dict] = None, cec_device: Optional[str] = None,
-                        clear_wol: bool = False, clear_serial: bool = False):
+                        serial: Optional[dict] = None, gpio: Optional[dict] = None, cec_device: Optional[str] = None,
+                        clear_wol: bool = False, clear_serial: bool = False, clear_gpio: bool = False):
         """Change how an output is controlled. `wol` is {mac, broadcast?, port?}, `serial` is
-        {port, baud?, on_command, off_command}; clear_wol / clear_serial remove them."""
+        {port, baud?, on_command, off_command}, `gpio` is {chip, line, mode?, active_low?, pulse_ms?};
+        clear_wol / clear_serial / clear_gpio remove them."""
         changes = {k: v for k, v in dict(on_mechanism=on_mechanism, off_mechanism=off_mechanism,
-                                         power_on_at_start=power_on_at_start, wol=wol, serial=serial,
+                                         power_on_at_start=power_on_at_start, wol=wol, serial=serial, gpio=gpio,
                                          cec_device=cec_device).items() if v is not None}
         if clear_wol:
             changes['wol'] = None
         if clear_serial:
             changes['serial'] = None
+        if clear_gpio:
+            changes['gpio'] = None
         try:
             control.configure(name, **changes)
         except (ScreenControlError, ValueError) as exc:

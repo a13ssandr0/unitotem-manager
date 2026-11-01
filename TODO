@@ -7,7 +7,7 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
 === OPEN (history: docs/TODO-archive.md; what each thing is: CLAUDE.md) ===
 
 --- To build (mine), decided with the user on 2026-11-01; order: the simplest first, each closed for good ---
-1. Display power by GPIO (idea).
+1. (nothing left to build: GPIO display power is built, see the line under 'Needs hardware'.)
 
 --- Later, asked for by the user through unitotem-system (NOT started; do not start it before the user says) ---
 * Boot gap of about 7 s between Plymouth and the first frame of the boot splash, with the kernel console text on screen (measured on a Pi by unitotem-system: `plymouth deactivate` in
@@ -30,6 +30,7 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
 * Mixed versions (old viewer with a new manager and the reverse) and rollback to the previous slot with a turned screen were reasoned, never run.
 
 --- Needs hardware or a setup I do not have ---
+* GPIO display power (relay or button line, `system/screens/gpio.py`, Display page): unit-tested against a fake libgpiod only; never run on a real line (wiring is the installer's) nor against Debian's python3-libgpiod 2.x on a board.
 * CEC (no adapter), serial power commands (no port), Wake-on-LAN of a monitor with a NIC, DDC writes on monitors other than the LG and the Realtek board.
 * A client (remote) viewer's pixels, the approval click path in the UI, behind a firewall that blocks 4443, multi-GB transfers, and an adoption/unpair between two real nodes with window settings and layouts, and the push of files to a client (both unit-tested only; the boards are the system session's and an adoption empties the client).
 * Camera and microphone: `getUserMedia` answers `NotFoundError` on the boards (they have neither); a real capture was never seen.

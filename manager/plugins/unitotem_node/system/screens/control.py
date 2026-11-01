@@ -16,7 +16,7 @@ from typing import Optional
 from loguru import logger
 
 from unitotem_node.models.screen_control import OutputConfig, ScreenControl, screen_control
-from . import cec, ddc_ctl, serial, wayland, wol
+from . import cec, ddc_ctl, gpio, serial, wayland, wol
 from ._exec import ToolMissing, ToolTimeout
 from .ddc import DdcError
 from utils.outputs import find_renamed
@@ -32,7 +32,7 @@ _probing: Optional[asyncio.Task] = None
 # The only truth about such a screen is what was commanded; it is forgotten by a switch-on and when the output disappears
 # (the monitor drops its link for an instant when it is switched on by hand). Kept in a state file (not in the configuration, not in
 # the backup) so a restart, a resume or a power cut still knows which screens WE put to standby and must wake with the same mechanism.
-_BLIND_MECHANISMS = ('ddc', 'cec', 'serial')
+_BLIND_MECHANISMS = ('ddc', 'cec', 'serial', 'gpio')
 STATE_FILE = Path(os.environ.get('UNITOTEM_SCREEN_STATE', '/var/lib/unitotem/screen_state.json'))
 
 
@@ -91,6 +91,7 @@ def _availability(name: str, cfg: OutputConfig, x_output: Optional[wayland.Outpu
         'wol': {'available': cfg.wol is not None, 'reason': '' if cfg.wol else 'no MAC address configured'},
         'serial': {'available': cfg.serial is not None,
                    'reason': '' if cfg.serial else 'no serial port configured'},
+        'gpio': dict(zip(('available', 'reason'), gpio.availability(cfg.gpio))),
     }
     return result
 
@@ -140,6 +141,7 @@ async def screens() -> list[dict]:
                 'power_on_at_start': cfg.power_on_at_start,
                 'wol': cfg.wol.model_dump() if cfg.wol else None,
                 'serial': cfg.serial.model_dump() if cfg.serial else None,
+                'gpio': cfg.gpio.model_dump() if cfg.gpio else None,
                 'cec_device': cfg.cec_device,
             },
         })
@@ -221,6 +223,18 @@ async def _do_power(name: str, mechanism: str, on: bool, cfg: OutputConfig, x: O
         if not command:
             raise ScreenControlError(f'no serial command configured to switch {"on" if on else "off"}')
         await serial.send(cfg.serial.port, cfg.serial.baud, command)
+    elif mechanism == 'gpio':
+        g = cfg.gpio
+        try:
+            if g.mode == 'level':
+                await gpio.set_level(g.chip, g.line, g.active_low, on)
+            elif on and x is not None and name not in _commanded_off:
+                # a power button toggles: pressing it on a screen that is on would switch it off
+                raise ScreenControlError('the screen is already on')
+            else:
+                await gpio.pulse(g.chip, g.line, g.active_low, g.pulse_ms)
+        except gpio.GpioError as exc:
+            raise ScreenControlError(str(exc)) from exc
 
 
 async def set_power(name: str, state: str, mechanism: str = 'auto', operator: bool = True) -> str:
@@ -326,7 +340,7 @@ def configure(name: str, **changes):
     cfg = screen_control.output(name)
     data = cfg.model_dump()
     for key, value in changes.items():
-        if key in ('wol', 'serial') and value is not None and not isinstance(value, dict):
+        if key in ('wol', 'serial', 'gpio') and value is not None and not isinstance(value, dict):
             raise ScreenControlError(f'{key} must be an object')
         data[key] = value
     try:

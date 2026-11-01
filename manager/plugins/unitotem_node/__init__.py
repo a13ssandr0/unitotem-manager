@@ -130,6 +130,8 @@ async def first_boot_context() -> dict:
 
 
 async def on_shutdown():
+    from .system.screens import gpio
+    gpio.release_all()
     from . import vnc
     await vnc.stop_all()
     from .system.touch_service import touch_service

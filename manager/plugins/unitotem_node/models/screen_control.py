@@ -22,7 +22,7 @@ def _legacy_mechanism(value):
     return 'output' if value == 'x' else value
 
 
-MechanismChoice = Annotated[Literal['auto', 'ddc', 'cec', 'output', 'wol', 'serial'], BeforeValidator(_legacy_mechanism)]
+MechanismChoice = Annotated[Literal['auto', 'ddc', 'cec', 'output', 'wol', 'serial', 'gpio'], BeforeValidator(_legacy_mechanism)]
 OUTPUT_NAME_RE = re.compile(r'^[A-Za-z0-9_.-]{1,64}$')
 
 
@@ -63,6 +63,22 @@ class SerialConfig(BaseModel, validate_assignment=True):
         return v
 
 
+class GpioConfig(BaseModel, validate_assignment=True):
+    """One line of a GPIO chip that powers the monitor (a relay) or presses its power button. `on` means the line is ASSERTED: high, or low
+    with `active_low` (the way a relay board or an optocoupler is wired is the installer's to say)."""
+    chip: str = 'gpiochip0'
+    line: int = Field(ge=0, le=1023)
+    mode: Literal['level', 'pulse'] = 'level'       # level: asserted = powered; pulse: a press of `pulse_ms` for on and for off
+    active_low: bool = False
+    pulse_ms: int = Field(default=500, ge=50, le=5000)
+
+    @field_validator('chip')
+    @classmethod
+    def _chip(cls, v: str) -> str:
+        from unitotem_node.system.screens.gpio import normalise_chip
+        return normalise_chip(v)
+
+
 class OutputConfig(BaseModel, validate_assignment=True):
     on_mechanism: MechanismChoice = 'auto'
     off_mechanism: MechanismChoice = 'auto'
@@ -71,6 +87,7 @@ class OutputConfig(BaseModel, validate_assignment=True):
     power_on_at_start: bool = True
     wol: Optional[WolConfig] = None
     serial: Optional[SerialConfig] = None
+    gpio: Optional[GpioConfig] = None
     cec_device: Optional[str] = None
 
     @field_validator('cec_device')
