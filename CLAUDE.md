@@ -263,7 +263,7 @@ splitters dragged, per-pane playlist, split/close buttons); **admin** for `set_a
   (areas clamped, a tree that is not valid is ignored). `setTickerPlacement(mode, pos)` sets `#area[data-ticker|data-ticker-pos]` for the ticker package.
 - **Gotchas**: `touch-action` for the pinch switch is per pane (and `html` allows it if any pane does); the DevTools focus reports carry a per-frame id and `pagehide` says "no longer focused" (several
   same-origin iframes share one DevTools session, and a closed pane's iframe never sends a focusout); the playlists of panes of OTHER nodes count as "used" when a client is unpaired
-  (`bundle.plan_for`), the panes of the leaving client are not carried over (its layouts are dropped, what they showed stays on the server); `Viewers/layout` is a read AND the broadcast after
+  (`bundle.plan_for`), the panes' playlists and the layouts of the leaving client travel with it (`bundle.collect_windows`, see Remote control); `Viewers/layout` is a read AND the broadcast after
   every change, `close_pane` answers `Viewers/list` (the main assignment may have changed); tests that touch `utils.backup`/`remote.bundle` need `/var/lib/unitotem` (use a conftest-free
   plugin that skips the mkdir, as `tools/gen-api-types.py` does, on a dev host).
 - **Turned and mirrored windows (the 55" vertical panel)**: the area, the panes, the screensaver overlay and the keyboard all live in CONTENT space inside `body[r]`/`main[f]`, so a window
@@ -333,7 +333,7 @@ port (`cmdargs.port_link`, 4443), served by the `websockets` library because hyp
 `/remote` on 443 is loopback only. An unpaired client announces itself over mDNS (zeroconf), servers list it and adopt it after
 the user compares the certificate fingerprint; manual pairing by address works from both sides. Adopting moves the client's
 playlists and uploads to the server (streamed, hash-checked, all-or-nothing); unpairing returns what the client showed and
-removes from the server only what nothing else uses (`plan_leave`). All Remote functions are admin only.
+removes from the server only what nothing else uses (`plan_leave`). The windows travel too (2026-11-01, user decision): the manifest has an optional `windows` map (per screen name: audio output, keyboard, screensaver, refresh, language, orientation, flip and the layout with its ticker; `bundle.collect_windows`), stored on arrival under the new viewer id (`apply_windows`: validated one by one, an invalid entry is left out and never fails the transfer, all-or-nothing with `undo`, the panes' playlists remapped to the ids they got on arrival), the sender drops its copy once the other node has everything (`WebviewManager.drop_viewer_settings`) and the windows of the receiving viewer are told everything again (`windows_arrived`). The playlists of the panes (not only the main ones) go with the leaving node (`plan_leave(panes=)`). A node that sends no `windows` (an older release) is read as having none. Unit-tested (`tests/test_remote_windows.py`), NOT run between two real nodes. All Remote functions are admin only.
 
 ## Notifications
 `utils/notifications.py` is the ONLY way to raise one: `notifications.notify(key, level, title, text, source=, audience=, link=)` and

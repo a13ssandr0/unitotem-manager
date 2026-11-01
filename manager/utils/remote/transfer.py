@@ -39,6 +39,7 @@ from utils.remote.link import control_frame, is_control, parse_control
 CHUNK = 512 * 1024
 MAX_FILES = 5000
 MAX_PLAYLISTS = 500
+MAX_WINDOWS = 64
 MAX_FILE_SIZE = 1 << 40
 STEP_TIMEOUT = 120               # the longest silence tolerated from the other side
 _SHA256 = re.compile(r'[0-9a-f]{64}')
@@ -57,10 +58,11 @@ class Plan:
     assignments: list[tuple[str, str]]     # (screen name, playlist id) of the windows of the node that leaves
     remove_playlists: set[str]              # removed here after the other node has everything
     remove_files: set[str]                  # likewise
+    windows: dict = field(default_factory=dict)     # what the node's windows are like, per screen name (bundle.collect_windows)
 
 
 def plan_leave(playlist_files: dict[str, set[str]], assignments: list[tuple[str, str, str]], leaving: str,
-               default: Optional[str] = None) -> Plan:
+               default: Optional[str] = None, panes: Iterable[str] = ()) -> Plan:
     """What goes with a node that is unpaired, and what stays behind.
 
     `playlist_files`: every playlist of this node and the uploaded files it uses. `assignments`: (viewer id, screen name,
@@ -72,9 +74,10 @@ def plan_leave(playlist_files: dict[str, set[str]], assignments: list[tuple[str,
       viewer also shows, or that is the default one, stays untouched;
     * a file is removed here only if every playlist using it is removed too: a file used by anything that stays, stays.
     Playlists nobody shows are not the leaving node's business and are never touched.
+    `panes` are the playlists shown by the other panes of the leaving node's windows: they go with it like the main ones.
     """
     mine = [(screen, pid) for viewer, screen, pid in assignments if viewer == leaving and pid in playlist_files]
-    sent = list(dict.fromkeys(pid for _screen, pid in mine))
+    sent = list(dict.fromkeys([*(pid for _screen, pid in mine), *(pid for pid in panes if pid in playlist_files)]))
     shared = {pid for viewer, _screen, pid in assignments if viewer != leaving}
     if default is not None:
         shared.add(default)
@@ -126,6 +129,12 @@ def validate_manifest(manifest) -> dict:
         for a in assignments:
             if not (isinstance(a, (list, tuple)) and len(a) == 2 and all(isinstance(x, str) for x in a)):
                 raise ValueError('bad assignment')
+        windows = manifest.get('windows', {})
+        if not isinstance(windows, dict) or len(windows) > MAX_WINDOWS:
+            raise ValueError('bad windows')
+        for screen, state in windows.items():
+            if not isinstance(screen, str) or not 0 < len(screen) <= 64 or not isinstance(state, dict):
+                raise ValueError('bad window')
     except ValueError as e:
         raise TransferError(f'Invalid transfer: {e}') from None
     return manifest

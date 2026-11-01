@@ -1,5 +1,7 @@
 # TODO archive (2026-08-05 .. 2026-10-31)
 
+2026-11-01 DONE (item 7): the windows of a node travel with its playlists on adoption and on unpair (settings per screen + layouts, panes' playlists included and remapped, validated on arrival, all-or-nothing with an undo, the sender drops its copy afterwards, the receiving viewer is told everything again); `tests/test_remote_windows.py` (13). NOT run between two real nodes.
+
 2026-11-01 DONE (items 5-6 of the open list): playlist reorder by drag and drop exercised in headless Chrome with a real mouse and a native drag (`tools/ui-reorder.py`: two playlists, the third asset dragged to the top through the handle, order read back from the API, the other playlist untouched). FINDING: the drag handle replaces the row's icon only while the pointer is
   on the row (`hoveredRow`), so on a phone it needs a first tap before the drag; not changed. "Show confirmation on command execution" (BACKLOG) CLOSED WITHOUT CODE: the API is id-less on purpose (CLAUDE.md), so a success cannot be tied to the request that caused it; what a command changes is pushed to every open page and shown (the audit of 2026-10-27), a refusal is a banner (base.vue), and the commands with no visible result (power, update,
   restore, copy slot) already show their own dialog or progress. Reopen it by saying which action still gives no sign.
