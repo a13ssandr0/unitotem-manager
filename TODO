@@ -1,14 +1,12 @@
 === CURRENT WORK ===
 
-Touch panels, the guided setup (plan approved 2026-10-31, `~/.claude/plans/sleepy-roaming-kahn.md`): method 1 (automatic: the output's turn and mirror applied to the panel) and the
-manual orientation of a separate panel are DONE and verified on the real panel of Pi A. Still to build, in this order: (2) mapping by touching the four corners, (3) calibration by exact
-points, and the simple guided web UI ("Touch doesn't match? Fix it" dialog, totem overlay built inert, "Try it" step, API `start_setup/confirm_setup/cancel_setup/reset`, events
-`Settings/Display/Touch/setup`, `SetTouchSetup`). The raw events are read from `/dev/input/eventN` in the node; nothing is saved before the visitor says the dot follows the finger.
+Touch panels, the guided setup: BUILT and verified on Pi A with a virtual panel (8 cases end to end, including a real tap through the compositor, and the web dialog in a browser): mapping by the four quarters, calibration by five points, the totem's veil (lit quarter / circle, no
+text), "Try it", nothing stored before "Yes, keep it". NOT done: the real panel of Pi A has not been set up by a person yet (needs the user's finger: Display page -> "Touch doesn't match? Fix it"); on Pi A the compositor's `LANG=C` is a volatile drop-in (the unit change is in
+debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so a reboot of Pi A loses it and a calibration with decimals would not apply until then.
 
 === OPEN (history: docs/TODO-archive.md; what each thing is: CLAUDE.md) ===
 
 --- To build (mine) ---
-* Touch guided setup, see CURRENT WORK.
 * Drag and drop of a link or a file onto a page must not navigate the window away (CEF drag handler; the window already undoes a navigation away, this stops it earlier).
 * Remote control: adopting a client that has its own window layouts, and unpairing one that has panes (its layouts are dropped, what they showed stays on the server); per-window
   settings (audio output, keyboard, language, screensaver, refresh) do not travel with the playlists on adoption.
@@ -167,3 +165,5 @@ Configure network with a tool like nmtui (needed?)
 # https://github.com/heftig/NetworkManager
 # https://python-sdbus-networkmanager.readthedocs.io/en/latest/examples.html
 # https://github.com/python-sdbus/python-sdbus-networkmanager
+No assets and Welcome screen text need to be equal no matter the orientation
+Screen splitting needs its own modal to avoid accidental changes

@@ -104,14 +104,24 @@ export interface Api {
         set_volume: ApiCall<{ name: string; volume: number }>
       }
       Touch: {
+        /** Ends the setup without keeping anything; the stored configuration is back at once. [requires: admin] */
+        cancel_setup: ApiCall<Record<string, never>>
+        /** The visitor tried the result and it is right: keep it. [requires: admin] */
+        confirm_setup: ApiCall<Record<string, never>>
         /** Touch screens found on this machine with their output (None: automatic), the remembered ones that are not [requires: admin] */
         devices: ApiCall<Record<string, never>>
         /** Drop the mapping of a device that is not plugged in any more. [requires: admin] */
         forget: ApiCall<{ key: string }>
+        /** Back to automatic: the panel follows its screen with no correction (what a freshly plugged panel is). [requires: admin] */
+        reset: ApiCall<{ key: string }>
         /** Turn and/or mirror the touch input of a panel that is not glued to its screen and has another natural orientation (a landscape [requires: admin] */
         set_orientation: ApiCall<{ key: string; turn?: number; flip?: number }>
         /** Map a touch screen, by its stable identity, to an output; None goes back to automatic (the whole screen). [requires: admin] */
         set_output: ApiCall<{ key: string; output?: null | string }>
+        /** The guided setup now running (phase 'idle' when there is none): the step, the target the totem shows, a message. Pushed at every change. [requires: admin] */
+        setup: ApiCall<Record<string, never>>
+        /** Starts the guided setup of a touch screen: `method` 'corners' (touch the four corners, no precision) or 'points' (touch five targets [requires: admin] */
+        start_setup: ApiCall<{ key: string; method: string }>
       }
       /** Whether the viewer displays assets whose certificate does not [requires: admin] */
       allow_insecure_certs: ApiCall<Record<string, never>>

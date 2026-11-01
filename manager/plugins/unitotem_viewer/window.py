@@ -77,6 +77,10 @@ class PageCommands:
         per pane, keeps the ones that survive playing and drops the others. The page sanitises what it is given."""
         self._cef.execute_js(f'setWindowLayout({json.dumps(area)}, {json.dumps(tree)})')
 
+    def set_touch_setup(self, state: dict):
+        """The guided setup of this window's touch panel (node: system/touch_setup.py): draws the target to touch, or takes the veil away."""
+        self._cef.execute_js(f'touchSetup({json.dumps(state)})')
+
     def set_audio_output(self, device: Optional[str]):
         """Send this window's sound to the output with that name (its description, as the browser lists it);
         None means the default one, i.e. whatever the system decides."""

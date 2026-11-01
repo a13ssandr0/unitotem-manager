@@ -54,6 +54,7 @@ class TouchService:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._timer: Optional[asyncio.TimerHandle] = None
         self._on_change: Optional[OnChange] = None
+        self.trial: Optional[tuple[str, tuple]] = None      # (device identity, matrix) a setup is trying: given to the compositor, never stored
 
     async def start(self, on_change: OnChange):
         """Apply the stored mapping and start listening for devices."""
@@ -117,8 +118,12 @@ class TouchService:
             self.devices = await asyncio.to_thread(touch.touch_devices)
             self.outputs = [o for o in await wayland.outputs() if o.active]
             mapping = touch.effective_mapping(touch_map.mapping, self.devices, [o.name for o in self.outputs])
-            self.available = await asyncio.to_thread(touch.apply_mapping, mapping, touch_map.orientation,
-                                                        {d.key: d.libinput_name or d.name for d in self.devices}) or bool(self.outputs)
+            orientation, calibration = touch_map.orientation, touch_map.calibration
+            if self.trial:                                  # a result being tried replaces what the panel has stored
+                orientation = {k: v for k, v in orientation.items() if k != self.trial[0]}
+                calibration = {**calibration, self.trial[0]: list(self.trial[1])}
+            self.available = await asyncio.to_thread(touch.apply_mapping, mapping, orientation,
+                                                        {d.key: d.libinput_name or d.name for d in self.devices}, calibration) or bool(self.outputs)
         except Exception as exc:
             logger.warning('Cannot apply the touch mapping: {}', exc)
 
@@ -130,12 +135,14 @@ class TouchService:
         devices = [{
             'key': d.key, 'name': d.name, 'vendor': d.vendor, 'product': d.product, 'serial': d.serial,
             'output': touch_map.mapping.get(d.key), 'connected': True, **_orientation(touch_map, d.key),
+            'calibrated': d.key in touch_map.calibration,
         } for d in self.devices]
-        for key in [*touch_map.mapping, *[k for k in touch_map.orientation if k not in touch_map.mapping]]:
+        for key in [*touch_map.mapping, *[k for k in [*touch_map.orientation, *touch_map.calibration] if k not in touch_map.mapping]]:
             output = touch_map.mapping.get(key)
             if key not in live:
                 devices.append({'key': key, 'name': key.split('|')[0], 'vendor': None, 'product': None,
-                                'serial': None, 'output': output, 'connected': False, **_orientation(touch_map, key)})
+                                'serial': None, 'output': output, 'connected': False, **_orientation(touch_map, key),
+                                'calibrated': key in touch_map.calibration})
         return {
             'devices': devices,
             'outputs': [{'name': o.name, 'x': o.x, 'y': o.y, 'width': o.width, 'height': o.height,
