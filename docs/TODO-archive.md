@@ -4,7 +4,7 @@
 `/pdf-view` gave pdf.js no font data, so a PDF that does not embed its fonts (Helvetica, Times...) used whatever the system had. The build now copies pdfjs-dist
 `standard_fonts` and `cmaps` to `static/assets/pdfjs/` (Vite plugin `pdfjsData`) and `pdf-view.js` passes `standardFontDataUrl`, `cMapUrl`, `cMapPacked`. Checked on Pi A
 with a hand-made one-page PDF using non-embedded Helvetica (`tools/gfx-bench/rotation/pdf-check.py`): the page draws the text, both folders are served (200).
-The 4096 px side cap is kept on purpose: a page larger than that is drawn scaled down to fit (quality limit, never a blank page).
+The 4096 px cap was then removed (user: production totems are 4K): a blank or refused canvas is detected, redrawn smaller and reported as a notification (`/pdf-view/failed`).
 
 2026-11-01 DONE (item 8 and a gap found on the way): a paired client could never show an uploaded image, video or PDF (its windows asked THEIR OWN manager for https://localhost/uploaded/<name>, where nothing is after adoption). Now the server sends each client the files its windows need (`utils/remote/filecache.py`, `kind: cache` transfers, `cache-have`, `utils/changes.py`), the client serves them from `/var/lib/unitotem/remote-files` and keeps playing without the server; PDFs on a client work through the same path. Unit-tested (12 tests, one full transfer); the serving was seen on Pi A, the push between two real nodes was not.
 
