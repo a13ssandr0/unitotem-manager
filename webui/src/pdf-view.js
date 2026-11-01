@@ -22,7 +22,11 @@ document.documentElement.style.cssText = `margin:0;height:100%;background:${back
 document.body.style.cssText = `margin:0;height:100%;background:${background};overflow:hidden`
 
 async function render() {
-  const pdf = await pdfjs.getDocument({url: '/uploaded/' + encodeURIComponent(file), useSystemFonts: true}).promise
+  // The standard fonts and the character maps come with the page (see vite.config.mjs), the other fonts a PDF does not carry fall back to the system's
+  const pdf = await pdfjs.getDocument({
+    url: '/uploaded/' + encodeURIComponent(file), useSystemFonts: true,
+    standardFontDataUrl: '/assets/pdfjs/standard_fonts/', cMapUrl: '/assets/pdfjs/cmaps/', cMapPacked: true,
+  }).promise
   const page = await pdf.getPage(Math.min(pageNumber, pdf.numPages))
   const base = page.getViewport({scale: 1})
   const ratio = window.devicePixelRatio || 1

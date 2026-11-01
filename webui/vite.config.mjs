@@ -8,10 +8,25 @@ import VueRouter from 'unplugin-vue-router/vite'
 // Utilities
 import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url'
+import { cpSync, rmSync } from 'node:fs'
+
+// The data pdf.js needs to draw the fonts a PDF does not carry (the standard ones: Helvetica, Times, Courier...) and the character maps of
+// Asian PDFs. Served from /assets/pdfjs/ so the page of a PDF looks the same whatever fonts the image has (pdf-view.js).
+const pdfjsData = () => ({
+  name: 'pdfjs-data',
+  closeBundle() {
+    const target = fileURLToPath(new URL('../manager/static/assets/pdfjs', import.meta.url))
+    rmSync(target, { recursive: true, force: true })
+    for (const dir of ['standard_fonts', 'cmaps']) {
+      cpSync(fileURLToPath(new URL(`node_modules/pdfjs-dist/${dir}`, import.meta.url)), `${target}/${dir}`, { recursive: true })
+    }
+  },
+})
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
+    pdfjsData(),
     VueRouter(),
     Vue({
       template: { transformAssetUrls },
