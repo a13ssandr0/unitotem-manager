@@ -363,14 +363,20 @@ another language.
 
 ## Progress tracking
 Project status and planning live in the `TODO` file at the repository root, not only in commit
-messages. It is structured as:
+messages. It is a SHORT list, read in full at the start of every session (not skimmed: a part
+that is skipped is a thing that gets forgotten). It is structured as:
 
-- `=== CURRENT WORK ===` — what is being worked on *right now*. Always kept at the top so the next
-  session immediately sees where the previous one stopped, with enough detail to resume without
-  re-deriving the context (what was verified, what is still open, which files are involved).
-- `=== NEXT ===` — the planned next steps.
+- `=== CURRENT WORK ===` — what is being worked on *right now*, with enough detail to resume
+  without re-deriving the context (what was verified, what is still open, which files are involved).
+- `=== OPEN ===` — everything that is still undone, grouped by who has to move it: to build (mine),
+  waiting for the user, waiting for unitotem-system or the next deb set, needs hardware I do not
+  have; plus a line saying what was closed so nobody asks again.
 - `=== BACKLOG ===` — the long-standing wish list. Entries already done are kept, commented out
   with `<!-- -->`; never delete them, they are the project's history.
+
+The running log of what was done, measured and found lives in `docs/TODO-archive.md` (newest
+first, never deleted, entries there may be superseded by later ones). When something is finished
+move its description there; when something new is found open, add it to `OPEN`.
 
 `TODO` is updated *during* the work, not only at the end: when a task is picked up, when something
 is verified, and when the session stops.
