@@ -1,3 +1,11 @@
+unitotem-manager (3.0.0~dev20) stable; urgency=medium
+
+  * Wi-Fi: a profile is no longer tied to the access point that was clicked (one row per network in the list, an optional lock, and the profile editor can drop an existing lock)
+  * Network: the editor of a connection loads its details again (SSID and BSSID are no longer a JSON error), and a static DNS server is written with its bytes in the right order
+  * Screens: power by a GPIO line (a relay in the supply, or a line that presses the power button), chosen per output, set to "on" when UniTotem stops; python3-libgpiod is recommended
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sun, 01 Nov 2026 16:00:00 +0100
+
 unitotem-manager (3.0.0~dev19) stable; urgency=medium
 
   * Touch: guided setup of a panel on the Display page (four quarters or five points, tried before it is kept); the configuration uses the names libinput gives
