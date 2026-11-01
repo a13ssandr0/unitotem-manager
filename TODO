@@ -18,7 +18,7 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
   Kernel logs stay on the journal/serial: the user does not want them disabled.
 
 --- Waiting for the user (decisions and things only they can see) ---
-* Wi-Fi roaming: Pi A's profile was unlocked and its DNS repaired (2026-11-01), but wpa_supplicant still picks a -66 dBm AP over a -38 dBm one of the same network and never roams (no signal monitoring on the Pi 4): a node-side "prefer the strongest access point" (event-driven, reactivate on a stronger AP) is proposed to the user, not built.
+* Wi-Fi roaming (decided with the user, 2026-11-01): it cannot be fixed in the driver (brcmfmac refuses CQM, roamoff=1), so the image's `unitotem-wifi-roam` timer (unitotem-system, every 30 s) stays if it proves stable; watch Pi A for flapping or dropped links (the strong AP 4a:98:23 sometimes times out in authentication: router side). Nothing to build in the manager.
 * Long press on the real panel: no context menu should appear (Pi A, dev code mounted; needs the user's finger).
 * H.264/AAC: the build ships the proprietary codecs (user rule); the patent/licensing question moves to whoever distributes the image (VM-TESTING.md 8b), not a technical decision.
 
