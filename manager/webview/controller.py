@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 
 from api.commons import SHUTDOWN_EVENT
+from utils import changes
 from utils.outputs import find_renamed
 from utils.models.assets import Asset, AssetsManager, first_boot, idle_asset, no_assets
 from utils.models.command_line import cmdargs
@@ -528,6 +529,7 @@ class WebviewManager:
         return Path(cmdargs.assets_file).parent / 'viewer_assignments.json'
 
     def _save_assignments(self):
+        changes.changed()
         """Write the viewer -> playlist map so it survives a restart.
 
         Playback on a totem must come back on its own after a reboot; needing
@@ -714,6 +716,12 @@ class WebviewManager:
         self._pending_window_assignments.pop(webview_id, None)
         self._legacy_assignments.pop(webview_id, None)
         self._save_assignments()
+
+    def refresh_viewer(self, webview_id: str):
+        """Show again, now, what each pane of a viewer is playing (its files have just arrived)."""
+        for loop in self._loops.values():
+            for key in [k for k in loop.assigned_webviews if k[0] == webview_id]:
+                asyncio.create_task(loop.send_current(*key))
 
     def drop_viewer_settings(self, webview_id: str):
         """Forget the settings of the windows of a viewer that left for good (they went with it, see bundle.collect_windows)."""

@@ -14,6 +14,8 @@ from typing import Any, Callable, Coroutine, Optional, Union
 from urllib.parse import urlsplit
 
 from loguru import logger
+
+from utils import changes
 from pydantic import BaseModel, Field, PrivateAttr, field_serializer, field_validator, model_validator
 from pydantic_core.core_schema import ValidationInfo
 from pydantic_extra_types.color import Color
@@ -533,6 +535,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
         self.on_assets_update()
         logger.info('Saving assets in {}', filepath)
         filepath = Path(filepath)
+        changes.changed()
         # Written aside and renamed over: a power cut must never leave half a playlist behind
         tmp = filepath.with_name(filepath.name + '.tmp')
         with open(tmp, 'w') as file:

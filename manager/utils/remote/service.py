@@ -16,7 +16,8 @@ from api.ws.endpoints import REMOTE_WS, WS
 from utils.models.command_line import cmdargs
 from utils.models.remote import RemoteManager
 from utils.notifications import notifications
-from utils.remote import bundle, pairing, transfer, viewers
+from utils import changes
+from utils.remote import bundle, filecache, pairing, transfer, viewers
 from utils.remote import identity as ident
 from utils.remote.discovery import AVAILABLE as DISCOVERY_AVAILABLE, Announcer, Browser
 from utils.remote.link import ClientUplink, LinkServer, control_frame
@@ -53,6 +54,10 @@ class RemoteService:
         self.notice: Optional[str] = None       # the last thing that went wrong that the page should say
         self._seen: set[str] = set()            # clients that were connected during this run
         self._offline_keys: set[str] = set()    # notifications raised for clients that went away
+        self._have: dict[str, dict[str, str]] = {}      # client id -> the files it keeps for its windows (name -> SHA-256), as it last said
+        self._cache_timer: Optional[asyncio.TimerHandle] = None
+        self._cache_lock = asyncio.Lock()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self.link.on_control = self._server_control
         self.uplink.on_control = self._client_control
         self.uplink.on_connected = self._uplink_connected
@@ -66,6 +71,8 @@ class RemoteService:
     async def start(self):
         """Bring up whatever the saved role needs. Never raises: remote control failing must not take the node with it."""
         try:
+            self._loop = asyncio.get_running_loop()
+            changes.listen(self._content_changed)
             self.rm.ensure_identity()
             transfer.clean_stale(self._stage_root)
             self._load_committed()
@@ -314,6 +321,7 @@ class RemoteService:
             raise PairingError('The client is offline, so its content cannot be moved to it. Unpair it anyway '
                                'to forget it and keep the content here.')
         await self.link.disconnect(client_id, reason='Unpaired by the server')
+        self._have.pop(client_id, None)
         rm.forget_client(client_id)
         await self.link.reload()        # the certificate leaves the listener for good
         self._reset_committed()
@@ -339,6 +347,7 @@ class RemoteService:
         rm.migrate_on_connect = False
         rm.role = 'server'
         self._reset_committed()
+        await asyncio.to_thread(filecache.clear)        # the server's files are not this node's to keep
         rm.save()
         await self.apply_role()
 
@@ -379,7 +388,14 @@ class RemoteService:
         except OSError:
             logger.warning('Cannot record the transfer {} as applied', tid)
 
-    def _receiver(self, viewer_id: str) -> Receiver:
+    def _receiver(self, viewer_id: str, cache: bool = False) -> Receiver:
+        if cache:
+            async def apply_cache(manifest, staged):
+                await asyncio.to_thread(filecache.apply_cache, manifest, staged)
+                asyncio.get_running_loop().create_task(self._announce_cache(), name='cache-have')
+
+            return Receiver(self._stage_root, filecache.folder(), apply_cache, set())
+
         async def apply(manifest, staged):
             await bundle.apply_bundle(manifest, staged, viewer_id)
             self._remember_committed(manifest['id'])
@@ -394,7 +410,8 @@ class RemoteService:
                     self._channels.pop(old).close()
             channel = self._channels[key] = Channel(send)
             viewer_id = peer.id if peer else bundle.LOCAL_VIEWER
-            channel.on_begin = lambda ch, first: receive_bundle(ch, first, self._receiver(viewer_id))
+            channel.on_begin = lambda ch, first: receive_bundle(
+                ch, first, self._receiver(viewer_id, cache=(first.get('manifest') or {}).get('kind') == 'cache'))
             channel.on_other = (lambda msg: self._server_other(peer, msg)) if peer else self._client_other
         return channel
 
@@ -407,7 +424,10 @@ class RemoteService:
             await self._channel_for(ws, ws.send).dispatch(raw)
 
     async def _server_other(self, peer, msg: dict):
-        if msg.get('link') == 'leave-request':
+        if msg.get('link') == 'cache-have':
+            self._have[peer.id] = filecache.clean_have(msg.get('files'))
+            self.cache_poke(0.2)
+        elif msg.get('link') == 'leave-request':
             async def leave():
                 try:
                     await self.unpair_client(peer.id)
@@ -430,6 +450,60 @@ class RemoteService:
     def _uplink_connected(self):
         if self.rm.migrate_on_connect and not self._migrating:
             asyncio.get_running_loop().create_task(self._migrate(), name='migrate')
+        asyncio.get_running_loop().create_task(self._announce_cache(), name='cache-have')
+
+    # ── the files the windows of a client need ────────────────────────────
+
+    async def _announce_cache(self):
+        """A client tells its server what it keeps for its windows, so that the server sends only what is missing."""
+        if not self.uplink.connected:
+            return
+        try:
+            have = await asyncio.to_thread(filecache.inventory)
+            await self.uplink.send(control_frame(link='cache-have', files=have))
+        except (ConnectionError, OSError) as exc:
+            logger.debug('Cannot tell the server what files this node keeps: {}', exc)
+
+    def _content_changed(self):
+        """What the windows show may have changed (any thread): the files the clients need are looked at again."""
+        if self._loop is not None:
+            try:
+                self._loop.call_soon_threadsafe(self.cache_poke)
+            except RuntimeError:
+                pass
+
+    def cache_poke(self, delay: float = 1.5):
+        """Look again, in a moment, at which files each client needs (changes come in bursts: one look serves them all)."""
+        if self.rm.role != 'server' or not self._have:
+            return
+        if self._cache_timer is not None:
+            self._cache_timer.cancel()
+        loop = asyncio.get_running_loop()
+        self._cache_timer = loop.call_later(delay, lambda: loop.create_task(self._sync_caches(), name='cache-sync'))
+
+    async def _sync_caches(self):
+        async with self._cache_lock:
+            for peer_id in list(self._have):
+                peer, sock = self.rm.peers.get(peer_id), self.link.socket_of(peer_id)
+                if peer is None or not peer.enabled or sock is None:
+                    continue
+                try:
+                    await self._sync_cache(peer, sock)
+                except (TransferError, ConnectionError) as exc:
+                    logger.warning('The files {} needs could not be sent: {}', peer.name, exc)
+
+    async def _sync_cache(self, peer, sock):
+        manifest = await filecache.build_manifest(self._have.get(peer.id, {}), filecache.wanted_names(peer.id))
+        if manifest is None:
+            return
+        await send_bundle(self._channel_for(sock, sock.ws.send, peer), manifest, upload_manager.folder)
+        sent = {f['name']: f['sha256'] for f in manifest['files']}
+        self._have[peer.id] = {**{n: d for n, d in self._have.get(peer.id, {}).items() if n in manifest['keep'] and n not in sent}, **sent}
+        try:
+            from webview.controller import WebviewManager
+            WebviewManager.get_instance().refresh_viewer(peer.id)      # what was shown before the file was there is shown again
+        except RuntimeError:
+            pass
 
     async def _migrate(self):
         """Just adopted: move what this node has to the server, restoring which of its windows play which playlist."""

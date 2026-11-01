@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Union
 
 from loguru import logger
+
+from utils import changes
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from utils.models.command_line import cmdargs
@@ -377,6 +379,10 @@ class WindowLayouts:
         return {'version': self.VERSION, 'windows': {k: v.model_dump(mode='json') for k, v in self.windows.items()}}
 
     def save(self):
+        changes.changed()
+        self._write()
+
+    def _write(self):
         path = self.file
         try:
             tmp = path.with_suffix('.tmp')

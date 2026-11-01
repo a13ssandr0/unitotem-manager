@@ -7,6 +7,8 @@ from typing import Optional
 
 from loguru import logger
 
+from utils import changes
+
 from utils.models.assets import AssetsManager
 from utils.models.command_line import cmdargs
 
@@ -113,6 +115,7 @@ class PlaylistsManager:
         return Path(cmdargs.assets_file).parent / 'playlists.json'
 
     def _save_index(self):
+        changes.changed()
         index = {
             'default': self._default_id,
             'playlists': {pid: str(am._filepath) for pid, am in self._playlists.items()}
