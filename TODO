@@ -7,11 +7,9 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
 === OPEN (history: docs/TODO-archive.md; what each thing is: CLAUDE.md) ===
 
 --- To build (mine), decided with the user on 2026-11-01; order: the simplest first, each closed for good ---
-1. Command confirmations ("Show confirmation on command execution", BACKLOG).
-2. Playlist page: drag-and-drop reorder with two playlists, exercised in a real browser (tools/ui-playlists.py covers create/switch/rename).
-3. Remote control: the per-window settings (audio output, keyboard, language, screensaver, refresh) and the window layouts of an adopted client TRAVEL with its playlists, and come back when it is unpaired.
-4. PDF: remote viewers (a client needs the file and its own /pdf-view), fonts that are not embedded, pages larger than 4096 px.
-5. Display power by GPIO (idea).
+1. Remote control: the per-window settings (audio output, keyboard, language, screensaver, refresh) and the window layouts of an adopted client TRAVEL with its playlists, and come back when it is unpaired.
+2. PDF: remote viewers (a client needs the file and its own /pdf-view), fonts that are not embedded, pages larger than 4096 px.
+3. Display power by GPIO (idea).
 
 --- Later, asked for by the user through unitotem-system (NOT started; do not start it before the user says) ---
 * Boot gap of about 7 s between Plymouth and the first frame of the boot splash, with the kernel console text on screen (measured on a Pi by unitotem-system: `plymouth deactivate` in
@@ -77,7 +75,7 @@ Wayland, rotation by the compositor, cookies, the keyboard, the network drops (2
 <!-- Allow asset enabling schedule (date/time) -->
 <!-- Handle 'reset' command in electron -->
 <!-- Allow drag-n-drop files -->
-Show confirmation on command execution (success popup/notification)
+<!-- DONE (closed without code, docs/TODO-archive.md 2026-11-01): Show confirmation on command execution (success popup/notification) -->
 <!-- Cache MediaInfo metadata -->
 <!-- Check for command redundancy (init_cmds) -->
 

@@ -1,5 +1,9 @@
 # TODO archive (2026-08-05 .. 2026-10-31)
 
+2026-11-01 DONE (items 5-6 of the open list): playlist reorder by drag and drop exercised in headless Chrome with a real mouse and a native drag (`tools/ui-reorder.py`: two playlists, the third asset dragged to the top through the handle, order read back from the API, the other playlist untouched). FINDING: the drag handle replaces the row's icon only while the pointer is
+  on the row (`hoveredRow`), so on a phone it needs a first tap before the drag; not changed. "Show confirmation on command execution" (BACKLOG) CLOSED WITHOUT CODE: the API is id-less on purpose (CLAUDE.md), so a success cannot be tied to the request that caused it; what a command changes is pushed to every open page and shown (the audit of 2026-10-27), a refusal is a banner (base.vue), and the commands with no visible result (power, update,
+  restore, copy slot) already show their own dialog or progress. Reopen it by saying which action still gives no sign.
+
 2026-11-01 DONE (items 1-4 of the open list, all checked on Pi A): the "first frame drawn" report counts once per page load; a drop of a link/file/text no longer navigates a window (`drop-check.py`: link and text kept the page, an own drop zone still got its drop); the pointer is hidden and shown for 3 s by a moving mouse, never by a touch (`cursor-check.py`, also inside the frame);
   notifications per user (two real accounts: root dismissed, the other still saw it, then it was gone for both), a refused manual suspend is a notification, an unanswered pairing request takes its notification away when it expires (a timer at ttl + 1 s, no polling).
 
