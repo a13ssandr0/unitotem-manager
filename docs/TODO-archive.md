@@ -1,5 +1,8 @@
 # TODO archive (2026-08-05 .. 2026-10-31)
 
+2026-11-01 DONE (items 1-4 of the open list, all checked on Pi A): the "first frame drawn" report counts once per page load; a drop of a link/file/text no longer navigates a window (`drop-check.py`: link and text kept the page, an own drop zone still got its drop); the pointer is hidden and shown for 3 s by a moving mouse, never by a touch (`cursor-check.py`, also inside the frame);
+  notifications per user (two real accounts: root dismissed, the other still saw it, then it was gone for both), a refused manual suspend is a notification, an unanswered pairing request takes its notification away when it expires (a timer at ttl + 1 s, no polling).
+
 The running log that `TODO` used to be: what was done, measured and found, newest first, kept verbatim as the history of the project
 (CLAUDE.md, "Progress tracking": nothing is deleted). `TODO` itself now lists only what is still open. Entries here may be superseded by
 later ones above them; several "OPEN" and "NOT verified" lines below were closed afterwards (see the git log and CLAUDE.md gotchas).

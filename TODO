@@ -7,15 +7,11 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
 === OPEN (history: docs/TODO-archive.md; what each thing is: CLAUDE.md) ===
 
 --- To build (mine), decided with the user on 2026-11-01; order: the simplest first, each closed for good ---
-1. First frame "drawn" line seen twice for one window on a Pi (2026-10-16): check that a page is not attached by two DevTools sessions.
-2. Drag and drop of a link or a file onto a page must not navigate the window away (CEF drag handler; the window already undoes a navigation away, this stops it earlier).
-3. Pointer of the viewer windows: hidden; with a mouse it appears when moved and goes away after a few seconds without movement; a touch never shows it.
-4. Notifications: a manual suspend refusal raises one; a pairing-request notification does not stay stale; dismissal and reading PER USER (today global).
-5. Command confirmations ("Show confirmation on command execution", BACKLOG).
-6. Playlist page: drag-and-drop reorder with two playlists, exercised in a real browser (tools/ui-playlists.py covers create/switch/rename).
-7. Remote control: the per-window settings (audio output, keyboard, language, screensaver, refresh) and the window layouts of an adopted client TRAVEL with its playlists, and come back when it is unpaired.
-8. PDF: remote viewers (a client needs the file and its own /pdf-view), fonts that are not embedded, pages larger than 4096 px.
-9. Display power by GPIO (idea).
+1. Command confirmations ("Show confirmation on command execution", BACKLOG).
+2. Playlist page: drag-and-drop reorder with two playlists, exercised in a real browser (tools/ui-playlists.py covers create/switch/rename).
+3. Remote control: the per-window settings (audio output, keyboard, language, screensaver, refresh) and the window layouts of an adopted client TRAVEL with its playlists, and come back when it is unpaired.
+4. PDF: remote viewers (a client needs the file and its own /pdf-view), fonts that are not embedded, pages larger than 4096 px.
+5. Display power by GPIO (idea).
 
 --- Later, asked for by the user through unitotem-system (NOT started; do not start it before the user says) ---
 * Boot gap of about 7 s between Plymouth and the first frame of the boot splash, with the kernel console text on screen (measured on a Pi by unitotem-system: `plymouth deactivate` in
