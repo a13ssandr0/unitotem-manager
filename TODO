@@ -17,6 +17,14 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
 * The "first frame drawn" line was seen twice for one window on a Pi (2026-10-16): check that a page is not attached by two DevTools sessions.
 * Display power by GPIO (idea).
 
+--- Later, asked for by the user through unitotem-system (NOT started; do not start it before the user says) ---
+* Boot gap of about 7 s between Plymouth and the first frame of the boot splash, with the kernel console text on screen (measured on a Pi by unitotem-system: `plymouth deactivate` in
+  the compositor's ExecStartPre at ~12.17 s, labwc execs at ~12.41 s, `unitotem-splash` (bootsplash.py) paints its first frame at ~19.7 s; tty1 is a text console meanwhile). A desktop avoids it because
+  the display manager puts the VT in graphics mode and ends Plymouth with `plymouth quit --retain-splash`, so the last frame stays. To try by hand on the Pi first, no reboot needed: (1) put tty1 in
+  graphics mode (KD_GRAPHICS) as soon as labwc starts so the kernel stops drawing text; (2) replace `pkill -KILL plymouthd` + `cat /dev/zero > /dev/fb0` in the compositor's ExecStartPost with
+  `plymouth quit --retain-splash`; (3) have labwc paint the splash background at once, and/or give the splash a normal CPUWeight and a faster start. The unit files are in the unitotem-viewer deb.
+  Kernel logs stay on the journal/serial: the user does not want them disabled.
+
 --- Waiting for the user (decisions and things only they can see) ---
 * Long press on the real panel: no context menu should appear (Pi A, dev code mounted; needs the user's finger).
 * Remote control: is TCP 4443 acceptable on the image (firewall)?
@@ -25,7 +33,7 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
 * Pointer cursor policy of the viewer windows.
 
 --- Waiting for unitotem-system (image) or for the next deb set ---
-* dev19 debs: everything since dev18 (touch name fix, inert pages, screen-off fix, names hardening, lockdown, developer tools, language per window, locale paks, profile
+* dev19 debs (unitotem-system said on 2026-11-01 that image 2026.10.43 = dev18 + a Wi-Fi reconnect fix is on all three boards and that new sets can be built): everything since dev18 (touch name fix, inert pages, screen-off fix, names hardening, lockdown, developer tools, language per window, locale paks, profile
   preferences, labwc rc.xml without default keybinds, hotspot fix). Build when the user or the system session says; cefpython is unchanged.
 * `/etc/chromium.d/50-unitotem-accel` is still in the image and configures a browser that is not installed (the viewer sets its switches itself).
 * Identity merge at OTA (`migrate-etc-overlay`): accounts and root's password across a slot switch, verify with a real A/B cycle; the browser profile (cookies) across a slot switch.
