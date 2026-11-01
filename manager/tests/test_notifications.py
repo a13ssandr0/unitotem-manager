@@ -283,3 +283,78 @@ def test_a_failing_push_does_not_break_the_producer_or_the_next_push(path):
         assert len(calls) == 2
 
     asyncio.run(scenario())
+
+
+# ── per user ─────────────────────────────────────────────────────────────────
+
+def everybody(item):
+    return {'ann', 'bob'}
+
+
+def test_what_one_user_dismisses_stays_for_the_others(center):
+    nid = center.notify('k', 'warning', 'Disk', 'full', audience='admin')
+    center.dismiss([nid], ['admin'], 'ann', everybody)
+    assert center.snapshot(['admin'], 'ann') == []
+    assert [n['id'] for n in center.snapshot(['admin'], 'bob')] == [nid]
+
+
+def test_it_is_gone_for_good_when_every_user_who_could_see_it_has_dismissed_it(center):
+    closed = []
+    center.listen_closed(lambda item, dismissed: closed.append((item.id, dismissed)))
+    nid = center.notify('k', 'warning', 'Disk', 'full', audience='admin')
+    center.dismiss([nid], ['admin'], 'ann', everybody)
+    assert closed == []                                   # the sender is told only when nobody can see it any more
+    center.dismiss([nid], ['admin'], 'bob', everybody)
+    assert closed == [(nid, True)]
+    assert center.snapshot(['admin'], 'ann') == [] and center.snapshot(['admin'], 'bob') == []
+
+
+def test_a_notification_without_a_key_is_removed_when_the_last_user_dismisses_it(center, path):
+    nid = center.notify(None, 'info', 'Once', 'text')
+    center.dismiss([nid], ['admin'], 'ann', everybody)
+    assert len(json.loads(path.read_text())['items']) == 1
+    center.dismiss([nid], ['admin'], 'bob', everybody)
+    assert json.loads(path.read_text())['items'] == []
+
+
+def test_reading_is_per_user(center):
+    nid = center.notify('k', 'info', 'Hello', 'text')
+    center.mark_read([nid], ['admin'], 'ann')
+    assert center.snapshot(['admin'], 'ann')[0]['read'] is True
+    assert center.snapshot(['admin'], 'bob')[0]['read'] is False
+
+
+def test_a_changed_notification_is_unread_and_undismissed_for_everybody_again(center):
+    nid = center.notify('k', 'warning', 'Disk', '90%')
+    center.mark_read([nid], ['admin'], 'ann')
+    center.dismiss([nid], ['admin'], 'bob', everybody)
+    center.notify('k', 'error', 'Disk', '99%')
+    assert center.snapshot(['admin'], 'bob')[0]['read'] is False
+    assert center.snapshot(['admin'], 'ann')[0]['read'] is False
+
+
+def test_the_state_of_each_user_survives_a_restart_and_an_older_file_still_reads(path):
+    first = NotificationCenter(path, Clock())
+    nid = first.notify('k', 'info', 'Hello', 'text')
+    first.mark_read([nid], ['admin'], 'ann')
+    first.dismiss([nid], ['admin'], 'bob', everybody)
+    second = NotificationCenter(path, Clock())
+    assert second.snapshot(['admin'], 'bob') == [] and second.snapshot(['admin'], 'ann')[0]['read'] is True
+    entry = json.loads(path.read_text())['items'][0]
+    older = {k: v for k, v in entry.items() if k not in ('read_by', 'dismissed_by')}      # what a release without per-user state wrote
+    path.write_text(json.dumps({'version': 1, 'items': [older]}))
+    assert NotificationCenter(path, Clock()).snapshot(['admin'], 'bob')[0]['title'] == 'Hello'
+
+
+def test_a_persistent_notification_cannot_be_dismissed_by_a_user(center):
+    nid = center.notify('bar', 'info', 'Working', progress=10, persistent=True)
+    center.dismiss([nid], ['admin'], 'ann', everybody)
+    assert [n['id'] for n in center.snapshot(['admin'], 'ann')] == [nid]
+
+
+def test_without_a_user_the_old_calls_still_mean_everybody(center):
+    nid = center.notify('k', 'info', 'Hello', 'text')
+    center.mark_read([nid], ['admin'])
+    assert center.snapshot(['admin'])[0]['read'] is True
+    center.dismiss([nid], ['admin'])
+    assert center.snapshot(['admin'], 'ann') == []

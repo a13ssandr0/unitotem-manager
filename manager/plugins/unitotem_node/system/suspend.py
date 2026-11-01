@@ -30,8 +30,8 @@ _armed: Optional[rtc.Rtc] = None
 last_refusal: Optional[dict] = None         # {'reason': str, 'when': epoch, 'timer': uuid or None}, for the web UI
 _tasks: set[asyncio.Task] = set()
 
-# One notification for "the suspend timer does not work": raised when a TIMER's suspend is refused (somebody asking by
-# hand gets the reason in their own dialog) or skipped, resolved by the next suspend that works.
+# One notification for "suspend does not work": raised when a suspend is refused (a timer's, or one asked by hand: whoever asked also gets the reason
+# in their own dialog, the others learn from the bell) or skipped, resolved by the next suspend that works.
 NOTIFY_KEY = 'suspend.problem'
 
 
@@ -41,8 +41,7 @@ def notify_problem(title: str, reason: str):
 
 
 def notify_refused(reason: str, timer: Optional[str]):
-    if timer is not None:
-        notify_problem('The node did not go to sleep', reason)
+    notify_problem('The node did not go to sleep' if timer is not None else 'Suspend refused', reason)
 
 
 async def _check_logind():

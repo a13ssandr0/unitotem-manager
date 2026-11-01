@@ -268,6 +268,8 @@ class RemoteService:
                 web_port=pairing.clean_port(body.get('web_port'), 443),
                 link_port=pairing.clean_port(body.get('link_port'), 4443), cert=cert))
         self.changed()
+        # a request that nobody answers expires by itself, and nothing else changes at that moment: look again then, so that its notification goes
+        asyncio.get_running_loop().call_later(self.requests.ttl + 1, self.changed)
         return self.hello()
 
     # ── changing roles ────────────────────────────────────────────────────

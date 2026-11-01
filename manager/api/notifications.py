@@ -5,9 +5,14 @@ from loguru import logger
 from api.ws.responses import WSResponse
 from api.ws.wsmanager import Context, WSAPIBase
 from utils.models.user import UserPerms, user_manager
-from utils.notifications import notifications
+from utils.notifications import notifications, visible_to
 
 MAX_IDS = 200       # more than the list can hold: a longer request is a mistake or an attack, either way cut
+
+
+def _eligible(item) -> set:
+    """The users who can see a notification: it is hidden for good when all of them have dismissed it."""
+    return {name for name, data in user_manager.items() if visible_to(item, data.permissions)}
 
 
 def _perms(ctx: Context) -> set:
@@ -23,7 +28,7 @@ async def push_all():
         if not sockets or user is None:
             continue
         try:
-            await WS.multicast(name, 'Notifications/list', notifications=notifications.snapshot(user.perms))
+            await WS.multicast(name, 'Notifications/list', notifications=notifications.snapshot(user.perms, name))
         except Exception as exc:        # a socket that just closed must not keep the others from their update
             logger.debug('Cannot push the notifications to {}: {}', name, exc)
 
@@ -36,25 +41,25 @@ class Notifications(WSAPIBase):
     @UserPerms.requires.none
     def list(ctx: Context):
         """The notifications this user may see, newest first (pushed again to every page whenever they change)."""
-        return WSResponse(notifications=notifications.snapshot(_perms(ctx)))
+        return WSResponse(notifications=notifications.snapshot(_perms(ctx), ctx.username))
 
     @staticmethod
     @UserPerms.requires.none
     def mark_read(ctx: Context, ids: List[str]):
         """Mark notifications as read (they stop counting in the badge)."""
-        notifications.mark_read(ids[:MAX_IDS], _perms(ctx))
+        notifications.mark_read(ids[:MAX_IDS], _perms(ctx), ctx.username)
 
     @staticmethod
     @UserPerms.requires.none
     def dismiss(ctx: Context, ids: List[str]):
-        """Remove notifications from the list, for everybody."""
-        notifications.dismiss(ids[:MAX_IDS], _perms(ctx))
+        """Remove notifications from this user's list (they stay for the others until every user who can see them has dismissed them)."""
+        notifications.dismiss(ids[:MAX_IDS], _perms(ctx), ctx.username, _eligible)
 
     @staticmethod
     @UserPerms.requires.none
     def dismiss_all(ctx: Context):
-        """Remove every notification this user can see."""
-        notifications.dismiss_all(_perms(ctx))
+        """Remove every notification this user can see from their list."""
+        notifications.dismiss_all(_perms(ctx), ctx.username, _eligible)
 
     @staticmethod
     @UserPerms.requires.none

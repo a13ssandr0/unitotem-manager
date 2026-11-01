@@ -595,11 +595,12 @@ def test_a_refused_timer_suspend_raises_one_admin_notification_and_a_good_one_re
     assert raised() == []
 
 
-def test_a_refusal_asked_by_hand_is_not_a_notification(machine):
+def test_a_refusal_asked_by_hand_is_a_notification_too(machine):
     machine['answer'] = 'no'
     with pytest.raises(SuspendRefused):
         asyncio.run(suspend.suspend_until(time.time() + 3600))
-    assert raised() == []
+    [one] = raised()
+    assert 'Suspend refused' in str(one)
 
 
 def test_a_bad_wake_schedule_and_a_failed_request_are_notified_too(machine):
@@ -647,3 +648,13 @@ def test_update_availability_follows_the_checks():
         assert notifications.snapshot(['admin']) == []
     finally:
         updater.availability.update(saved)
+
+
+def test_a_refused_manual_suspend_also_raises_a_notification(monkeypatch):
+    from unitotem_node.system import suspend
+    raised = []
+    monkeypatch.setattr(suspend.notifications, 'notify', lambda *a, **k: raised.append((a, k)))
+    suspend.notify_refused('No usable RTC', None)
+    suspend.notify_refused('No usable RTC', 'timer-1')
+    assert [a[2] for a, _ in raised] == ['Suspend refused', 'The node did not go to sleep']
+    assert all(a[3] == 'No usable RTC' and k['audience'] == 'admin' for a, k in raised)
