@@ -93,6 +93,27 @@ NO_DROP_SCRIPT = r"""
 })();
 """
 
+# The pointer of a mouse is hidden unless the mouse moved a moment ago; a touch never shows it. Every frame does it for itself (the cursor over a frame is
+# the frame's own, so the page that holds it cannot hide it): a style that hides the cursor everywhere is switched off while a mouse moves and on again after
+# CURSOR_HIDE_MS without movement. Only pointer events of type mouse count (the mouse events that follow a touch are not pointer moves).
+CURSOR_SCRIPT = r"""
+(() => {
+  if (window.__utCursor) return;
+  window.__utCursor = true;
+  const style = document.createElement('style');
+  style.dataset.utCursor = '';
+  style.textContent = '*, *::before, *::after { cursor: none !important; }';
+  (document.head || document.documentElement).append(style);
+  let timer = 0;
+  addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse') return;
+    style.disabled = true;
+    clearTimeout(timer);
+    timer = setTimeout(() => { style.disabled = false; }, %d);
+  }, {capture: true, passive: true});
+})();
+""" % 3000
+
 # What a special key is for the browser: (key, code, windowsVirtualKeyCode, text)
 SPECIAL_KEYS = {
     'Backspace': ('Backspace', 'Backspace', 8, None),
@@ -246,8 +267,8 @@ class Cdp:
         await self._send('Page.enable', session=session)
         await self._send('Network.enable', session=session)
         await self._apply_language(session)
-        await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT}, session)
-        await self._send('Runtime.evaluate', {'expression': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT}, session)
+        await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT + CURSOR_SCRIPT}, session)
+        await self._send('Runtime.evaluate', {'expression': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT + CURSOR_SCRIPT}, session)
         # frames of other origins appear as targets of their own
         await self._send('Target.setAutoAttach',
                          {'autoAttach': True, 'waitForDebuggerOnStart': False, 'flatten': True}, session)
