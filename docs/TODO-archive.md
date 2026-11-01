@@ -1,5 +1,11 @@
 # TODO archive (2026-08-05 .. 2026-10-31)
 
+## 2026-11-01 - PDF pages: standard font data and character maps
+`/pdf-view` gave pdf.js no font data, so a PDF that does not embed its fonts (Helvetica, Times...) used whatever the system had. The build now copies pdfjs-dist
+`standard_fonts` and `cmaps` to `static/assets/pdfjs/` (Vite plugin `pdfjsData`) and `pdf-view.js` passes `standardFontDataUrl`, `cMapUrl`, `cMapPacked`. Checked on Pi A
+with a hand-made one-page PDF using non-embedded Helvetica (`tools/gfx-bench/rotation/pdf-check.py`): the page draws the text, both folders are served (200).
+The 4096 px side cap is kept on purpose: a page larger than that is drawn scaled down to fit (quality limit, never a blank page).
+
 2026-11-01 DONE (item 8 and a gap found on the way): a paired client could never show an uploaded image, video or PDF (its windows asked THEIR OWN manager for https://localhost/uploaded/<name>, where nothing is after adoption). Now the server sends each client the files its windows need (`utils/remote/filecache.py`, `kind: cache` transfers, `cache-have`, `utils/changes.py`), the client serves them from `/var/lib/unitotem/remote-files` and keeps playing without the server; PDFs on a client work through the same path. Unit-tested (12 tests, one full transfer); the serving was seen on Pi A, the push between two real nodes was not.
 
 2026-11-01 DONE (item 7): the windows of a node travel with its playlists on adoption and on unpair (settings per screen + layouts, panes' playlists included and remapped, validated on arrival, all-or-nothing with an undo, the sender drops its copy afterwards, the receiving viewer is told everything again); `tests/test_remote_windows.py` (13). NOT run between two real nodes.

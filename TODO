@@ -7,8 +7,7 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
 === OPEN (history: docs/TODO-archive.md; what each thing is: CLAUDE.md) ===
 
 --- To build (mine), decided with the user on 2026-11-01; order: the simplest first, each closed for good ---
-1. PDF: fonts that are not embedded (pdf.js uses the system's), pages larger than 4096 px (the canvas cap).
-2. Display power by GPIO (idea).
+1. Display power by GPIO (idea).
 
 --- Later, asked for by the user through unitotem-system (NOT started; do not start it before the user says) ---
 * Boot gap of about 7 s between Plymouth and the first frame of the boot splash, with the kernel console text on screen (measured on a Pi by unitotem-system: `plymouth deactivate` in
