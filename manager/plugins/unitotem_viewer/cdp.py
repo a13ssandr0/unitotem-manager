@@ -81,6 +81,18 @@ ACTIVITY_SCRIPT = r"""
 # A kiosk has no printer dialog: a page that calls window.print() gets a function that does nothing, in every frame
 NO_PRINT_SCRIPT = "try { window.print = () => {}; } catch (e) {}"
 
+# A link, a file or a piece of text dropped on a window must not take it somewhere (the browser's own answer to a drop nobody handles is to open what was
+# dropped). Every frame accepts the drag and cancels the drop unless the page has handled it itself: a page with a drop zone calls preventDefault() on its
+# own, in the target phase, before these bubble listeners run, and keeps working.
+NO_DROP_SCRIPT = r"""
+(() => {
+  if (window.__utNoDrop) return;
+  window.__utNoDrop = true;
+  addEventListener('dragover', e => { e.preventDefault(); }, false);
+  addEventListener('drop', e => { if (!e.defaultPrevented) e.preventDefault(); }, false);
+})();
+"""
+
 # What a special key is for the browser: (key, code, windowsVirtualKeyCode, text)
 SPECIAL_KEYS = {
     'Backspace': ('Backspace', 'Backspace', 8, None),
@@ -234,8 +246,8 @@ class Cdp:
         await self._send('Page.enable', session=session)
         await self._send('Network.enable', session=session)
         await self._apply_language(session)
-        await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT}, session)
-        await self._send('Runtime.evaluate', {'expression': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT}, session)
+        await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT}, session)
+        await self._send('Runtime.evaluate', {'expression': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT}, session)
         # frames of other origins appear as targets of their own
         await self._send('Target.setAutoAttach',
                          {'autoAttach': True, 'waitForDebuggerOnStart': False, 'flatten': True}, session)

@@ -356,6 +356,7 @@ class WebviewApp:
         self._next_id = 0
         self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
         self._ws = None
+        self._framed: set[int] = set()      # windows whose page has reported its first frame (asyncio thread only)
         self._cdp: Optional[Cdp] = None
         self._gpu_checked = False
         self._keyboard_config: dict[int, dict] = {}     # window -> settings of its on-screen keyboard
@@ -442,6 +443,8 @@ class WebviewApp:
 
     def _page_reloaded(self, window_id: int):
         """A window's page loaded again (a reload by any means, or a recovery after a crash): the manager sends its content again."""
+        if self._ws_loop is not None:
+            self._ws_loop.call_soon_threadsafe(self._framed.discard, window_id)      # the page that loads reports its first frame again
         if self._ws_loop is not None and self._ws is not None:
             message = json.dumps({'target': 'WindowReloaded', 'window_id': window_id})
             asyncio.run_coroutine_threadsafe(self._ws.send(message), self._ws_loop)
@@ -465,6 +468,11 @@ class WebviewApp:
             pass
 
     def _on_frame_binding(self, window, _data):
+        # the page reports its first frame by itself and the viewer also asks for it when it attaches (the page may have drawn before):
+        # a window counts once per page load
+        if window in self._framed:
+            return
+        self._framed.add(window)
         self._bridge.first_frame.emit(window)
         if not self._gpu_checked:
             self._gpu_checked = True
@@ -741,6 +749,7 @@ class WebviewApp:
         watch.configure(saver.get('idle_timeout') if interactive else None, refresh.get('refresh_after_idle'))
 
     def _drop_window(self, window: int):
+        self._framed.discard(window)
         self._ticker_config.pop(window, None)
         self._ticker_items.pop(window, None)
         self._saver_config.pop(window, None)

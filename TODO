@@ -173,3 +173,5 @@ Configure network with a tool like nmtui (needed?)
 # https://github.com/python-sdbus/python-sdbus-networkmanager
 No assets and Welcome screen text need to be equal no matter the orientation
 Screen splitting needs its own modal to avoid accidental changes
+
+Tidy up the web ui
