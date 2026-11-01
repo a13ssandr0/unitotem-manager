@@ -123,6 +123,9 @@ async def main(args):
             failures.append('the dialog stayed open after saving')
     finally:
         chrome.terminate()
+        # the virtual panel's saved orientation does not stay behind in the node's configuration
+        subprocess.run([sys.executable, str(HERE / 'ws-probe.py'), '--host', host, '--user', args.user, '--password', args.password, '--timeout', '4',
+                        '--send', 'Settings/Display/Touch/forget', '--args', json.dumps({'key': 'UniTotem Test Touch|1209:7002|'})], capture_output=True)
         board(host, 'echo quit > /run/rot-touch.fifo; sleep 1; kill $(cat /var/lib/unitotem/touchdev.pid) 2>/dev/null; true')
     print('FAILED: ' + '; '.join(failures) if failures else 'ok')
     return 1 if failures else 0
