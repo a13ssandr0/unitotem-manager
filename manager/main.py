@@ -179,6 +179,20 @@ async def pdf_view(request: Request):
                         f'<script type="module" src="{js}"></script></body></html>')
 
 
+@WWW.post('/pdf-view/failed')
+async def pdf_view_failed(request: Request, file: str = '', problem: str = '', recovered: str = '0'):
+    """The PDF page says it could not draw a page at the size asked (a canvas the graphics stack refused or left blank). Loopback only."""
+    if request.client is None or request.client.host not in ('127.0.0.1', '::1'):
+        raise HTTPException(status_code=404)
+    clean = lambda text, size: ''.join(c for c in text if c.isprintable())[:size]
+    name, what = clean(file, 200), clean(problem, 200)
+    notifications.notify(
+        f'pdf.render.{name}', 'warning' if recovered == '1' else 'error', 'A PDF page did not draw',
+        f'{name}: {what}.' + (' It is shown at a lower resolution.' if recovered == '1' else ''),
+        source='viewer', audience='scheduler')
+    return {'status': 'ok'}
+
+
 WWW.include_router(routers.login.router)
 WWW.include_router(routers.setup.router)
 WWW.include_router(routers.websocket.remote.router)

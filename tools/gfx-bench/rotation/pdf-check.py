@@ -23,8 +23,8 @@ NAME = 'pdf-font-check.pdf'
 REMOTE = '/var/lib/unitotem/pdfcheck'
 
 
-def make_pdf() -> bytes:
-    stream = b'BT /F1 72 Tf 60 500 Td (Standard font) Tj ET'
+def make_pdf(blank=False) -> bytes:
+    stream = b'' if blank else b'BT /F1 72 Tf 60 500 Td (Standard font) Tj ET'
     objects = [b'<< /Type /Catalog /Pages 2 0 R >>', b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
                b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
                b'<< /Length %d >>\nstream\n' % len(stream) + stream + b'\nendstream',
@@ -62,11 +62,17 @@ asyncio.run(main())
 '''
 
 
+async def notified(api):
+    """True when a notification about a PDF page is in the bell."""
+    listing = await api.call('Notifications/list')
+    return any(str(n.get('id', '')).startswith('pdf.render.') or 'PDF page' in n.get('title', '') for n in listing.get('notifications', []))
+
+
 async def main(args):
     host = args.host
     work = tempfile.mkdtemp()
     local = os.path.join(work, NAME)
-    open(local, 'wb').write(make_pdf())
+    open(local, 'wb').write(make_pdf(args.blank))
     subprocess.run(vr.SSH + ['scp', '-O'] + vr.OPTS + [local, f'root@{host}:/var/lib/unitotem/uploaded/{NAME}'], capture_output=True, check=True)
     api = await vr.Api(host).__aenter__()
     views = (await api.call('Viewers/list'))['viewers']
@@ -105,7 +111,7 @@ async def main(args):
         subprocess.run(vr.SSH + ['scp', '-O'] + vr.OPTS + [os.path.join(HERE, '..', '..', 'ticker', 'board-cdp.py'), f'root@{host}:{REMOTE}/board-cdp.py'], capture_output=True)
         vr.ssh(host, f'python3 {REMOTE}/board-cdp.py shot {REMOTE}/pdf.png 0')
         subprocess.run(vr.SSH + ['scp', '-O'] + vr.OPTS + [f'root@{host}:{REMOTE}/pdf.png', args.out], capture_output=True)
-        ok = bool(result.get('canvas'))        # the font requests are made by the worker, which the page's timing list does not show: the pixels are the proof
+        ok = bool(result.get('canvas')) and not (await notified(api))        # the font requests are made by the worker, which the page's timing list does not show: the pixels are the proof
     finally:
         if before:
             await api.send('Viewers/assign_playlist', viewer_id=viewer, window_id=window['window_id'], playlist_id=before)
@@ -124,5 +130,6 @@ async def main(args):
 
 p = argparse.ArgumentParser()
 p.add_argument('--host', required=True)
+p.add_argument('--blank', action='store_true', help='a page with nothing on it: it must stay blank and raise no notification')
 p.add_argument('--out', default='/tmp/pdf-check.png')
 asyncio.run(main(p.parse_args()))
