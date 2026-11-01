@@ -323,7 +323,7 @@ class RemoteService:
     async def _hand_back(self, peer, sock):
         plan = bundle.plan_for(peer.id)
         channel = self._channel_for(sock, sock.ws.send, peer)
-        if plan.playlists:
+        if plan.playlists or plan.windows:
             manifest = await bundle.build_manifest(plan, scope='leave:' + peer.id)
             await send_bundle(channel, manifest, upload_manager.folder)
             await bundle.remove_handed_over(plan, peer.id)

@@ -715,6 +715,24 @@ class WebviewManager:
         self._legacy_assignments.pop(webview_id, None)
         self._save_assignments()
 
+    def drop_viewer_settings(self, webview_id: str):
+        """Forget the settings of the windows of a viewer that left for good (they went with it, see bundle.collect_windows)."""
+        prefix = f'{webview_id}|'
+        changed = False
+        for field_name in ('audio_outputs', 'keyboards', 'orientations', 'flips', 'screensavers', 'refreshes', 'languages'):
+            current = getattr(viewer_settings, field_name)
+            kept = {k: v for k, v in current.items() if not k.startswith(prefix)}
+            if len(kept) != len(current):
+                setattr(viewer_settings, field_name, kept)
+                changed = True
+        if changed:
+            viewer_settings.save()
+
+    def windows_arrived(self, webview_id: str):
+        """The settings and layouts of the windows of a viewer were replaced (a node joined or left): its windows are told everything again."""
+        self._audio_applied -= {k for k in self._audio_applied if k[0] == webview_id}
+        self._restore_assignments(webview_id)
+
     def get_assignment(self, webview_id: str, window_id: int) -> Optional[str]:
         screen_name = self._screen_of(webview_id, window_id)
         return self._assignments.get((webview_id, screen_name)) if screen_name else None
