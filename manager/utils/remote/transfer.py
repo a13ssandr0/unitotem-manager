@@ -129,6 +129,11 @@ def validate_manifest(manifest) -> dict:
         for a in assignments:
             if not (isinstance(a, (list, tuple)) and len(a) == 2 and all(isinstance(x, str) for x in a)):
                 raise ValueError('bad assignment')
+        keep = manifest.get('keep', [])
+        if not isinstance(keep, list) or len(keep) > MAX_FILES or not all(safe_name(n) for n in keep):
+            raise ValueError('bad keep list')
+        if manifest.get('kind', 'bundle') not in ('bundle', 'cache'):
+            raise ValueError('unknown kind')
         windows = manifest.get('windows', {})
         if not isinstance(windows, dict) or len(windows) > MAX_WINDOWS:
             raise ValueError('bad windows')

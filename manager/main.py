@@ -73,6 +73,12 @@ class UploadedFiles(StaticFiles):
     UI download them; nobody else on the network gets to read what was uploaded.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # a client shows the files its server sent it (utils.remote.filecache) from the same address, after its own uploads
+        from utils.remote import filecache
+        self.all_directories.append(filecache.folder())
+
     async def get_response(self, path: str, scope):
         client = scope.get('client')
         if client is None or client[0] not in ('127.0.0.1', '::1'):
