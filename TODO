@@ -18,6 +18,7 @@ debian/unitotem-viewer.unitotem-compositor.service, shipped by the next deb), so
   Kernel logs stay on the journal/serial: the user does not want them disabled.
 
 --- Waiting for the user (decisions and things only they can see) ---
+* Pi A (Wi-Fi only) is almost unreachable: its profile was tied to the farthest access point (fixed in code, 2026-11-01). Once it answers: Network page -> the Wi-Fi profile -> switch "Use the strongest access point" -> Save, then check the signal and that it roams; `vcgencmd get_throttled` for undervoltage.
 * Long press on the real panel: no context menu should appear (Pi A, dev code mounted; needs the user's finger).
 * H.264/AAC: the build ships the proprietary codecs (user rule); the patent/licensing question moves to whoever distributes the image (VM-TESTING.md 8b), not a technical decision.
 

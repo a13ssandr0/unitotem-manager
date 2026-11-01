@@ -173,8 +173,9 @@ class Network(WSAPIBase):
                              gateway: Optional[str] = None,
                              dns: Optional[list] = None,
                              ssid: Optional[str] = None,
-                             password: Optional[str] = None):
-        """Edit an existing connection profile in-place."""
+                             password: Optional[str] = None,
+                             unlock_bssid: bool = False):
+        """Edit an existing connection profile in-place. `unlock_bssid` lets a Wi-Fi profile that was tied to one access point use the strongest one."""
         from unitotem_node.system.network.networkmanager import edit_connection, get_all_connections
         try:
             await edit_connection(
@@ -182,7 +183,7 @@ class Network(WSAPIBase):
                 autoconnect=autoconnect,
                 ip_method=ip_method, ip_address=ip_address,
                 prefix_len=prefix_len, gateway=gateway, dns=dns,
-                ssid=ssid, password=password,
+                ssid=ssid, password=password, unlock_bssid=unlock_bssid,
             )
             return WSBroadcast(connections=await get_all_connections())
         except Exception as e:

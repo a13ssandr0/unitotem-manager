@@ -169,12 +169,12 @@
           <div v-if="!is_wireless_enabled" class="d-flex align-center justify-center pa-8 text-medium-emphasis">
             Wireless is disabled.
           </div>
-          <div v-else-if="wifiNetworks.length === 0 && !scanningWifi"
+          <div v-else-if="wifiGroups.length === 0 && !scanningWifi"
                class="d-flex align-center justify-center pa-8 text-medium-emphasis">
             No networks found. Try scanning.
           </div>
           <v-list v-else lines="one">
-            <v-list-item v-for="net in wifiNetworks" :key="net.hw_address">
+            <v-list-item v-for="net in wifiGroups" :key="net.ssid">
               <template v-slot:prepend>
                 <v-icon :icon="getSignalIcon(net.strength, net.flags)" class="mr-2"></v-icon>
               </template>
@@ -184,7 +184,7 @@
                 <!-- noinspection JSBitwiseOperatorUsage -->
                 <v-icon v-if="net.flags & 1" icon="mdi-lock" size="small" color="grey"></v-icon>
               </v-list-item-title>
-              <v-list-item-subtitle>{{ net.hw_address }}</v-list-item-subtitle>
+              <v-list-item-subtitle>{{ net.count > 1 ? net.count + ' access points, the strongest is used' : net.hw_address }}</v-list-item-subtitle>
               <template v-slot:append>
                 <v-btn
                   size="small"
@@ -234,6 +234,10 @@
               density="compact"
               class="mb-3"
             ></v-text-field>
+            <v-alert v-if="editorForm.lockedTo" type="warning" variant="tonal" density="compact" class="mb-3">
+              Tied to one access point ({{ editorForm.lockedTo }}): the node never moves to a stronger one of the same network.
+              <v-switch v-model="editorForm.unlock" color="primary" density="compact" hide-details label="Use the strongest access point"></v-switch>
+            </v-alert>
             <v-text-field
               v-model="editorForm.password"
               label="Password (leave empty to keep current)"
@@ -334,6 +338,17 @@
             density="compact"
             class="mb-3"
           ></v-select>
+
+          <v-switch
+            v-if="wifiForm.count > 1"
+            v-model="wifiForm.lockToAp"
+            color="primary"
+            density="compact"
+            hide-details
+            class="mb-2"
+            :label="'Only use this access point (' + wifiForm.apAddress + ')'"
+          ></v-switch>
+          <div v-if="wifiForm.lockToAp" class="text-caption text-medium-emphasis mb-3">The node will not move to a stronger access point of the same network.</div>
 
           <v-expand-transition>
             <div>
@@ -489,6 +504,16 @@ const has_wireless       = ref(false)
 const is_wireless_enabled = ref(false)
 const default_wireless_device = ref(null)
 const wifiNetworks       = ref([])
+// One row per network name: the same network seen from several access points is one network, and the profile must not be tied to one of them
+const wifiGroups = computed(() => {
+  const best = new Map()
+  for (const n of wifiNetworks.value) {
+    const seen = best.get(n.ssid)
+    if (!seen) best.set(n.ssid, {...n, count: 1})
+    else { seen.count++; if (n.strength > seen.strength) Object.assign(seen, n, {count: seen.count}) }
+  }
+  return [...best.values()]
+})
 const scanningWifi       = ref(false)
 
 // Editor dialog
@@ -496,7 +521,7 @@ const editorOpen    = ref(false)
 const editorConn    = ref(null)   // the connection metadata (id, type, path)
 const editorSaving  = ref(false)
 const editorForm    = reactive({
-  id: '', autoconnect: true, ssid: '', password: '',
+  id: '', autoconnect: true, ssid: '', password: '', lockedTo: '', unlock: false,
   ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
 })
 
@@ -505,7 +530,7 @@ const wifiDialogOpen = ref(false)
 const wifiConnecting = ref(false)
 const wifiAdvanced   = ref(false)
 const wifiForm       = reactive({
-  ssid: '', password: '', secured: false, bssid: null,
+  ssid: '', password: '', secured: false, bssid: null, lockToAp: false, apAddress: '', count: 1,
   device: null, ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
 })
 
@@ -585,6 +610,12 @@ api.Settings.Network.connection_details.on(data => {
     editorForm.gateway = ipv4.gateway || ''
     editorForm.dns     = ipv4.dns || []
     const wifi = d['802-11-wireless']
+    editorForm.lockedTo = ''
+    editorForm.unlock = false
+    if (wifi && wifi.bssid) {
+      const raw = typeof wifi.bssid === 'string' ? wifi.bssid : [...Uint8Array.from(wifi.bssid)].map(b => b.toString(16).padStart(2, '0')).join(':')
+      editorForm.lockedTo = raw.toUpperCase()
+    }
     if (wifi && wifi.ssid) {
       editorForm.ssid = typeof wifi.ssid === 'string'
         ? wifi.ssid
@@ -689,7 +720,7 @@ const openEditor = (conn) => {
   // Reset form then fill from what we know
   Object.assign(editorForm, {
     id: conn.id, autoconnect: conn.autoconnect,
-    ssid: '', password: '',
+    ssid: '', password: '', lockedTo: '', unlock: false,
     ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
   })
   // Fetch full details to populate IP fields
@@ -713,6 +744,7 @@ const saveEditor = () => {
     dns         : editorForm.dns,
     ssid        : editorForm.ssid || null,
     password    : editorForm.password || null,
+    unlock_bssid: !!editorForm.unlock,
   })
   editorSaving.value = false
 }
@@ -747,7 +779,7 @@ const openWifiConnect = (net) => {
   const secured = (net.flags & 1) !== 0
   Object.assign(wifiForm, {
     ssid: net.ssid, password: '', secured,
-    bssid: net.hw_address,
+    bssid: null, lockToAp: false, apAddress: net.hw_address, count: net.count,
     device: default_wireless_device.value || (wifiDevices.value[0]?.interface ?? null),
     ip_method: 'auto', ip_address: '', prefix_len: 24, gateway: '', dns: [],
   })
@@ -762,7 +794,7 @@ const connectWifi = () => {
     ssid      : wifiForm.ssid,
     device    : wifiForm.device,
     password  : wifiForm.password || null,
-    bssid     : wifiForm.bssid,
+    bssid     : wifiForm.lockToAp ? wifiForm.apAddress : null,
     ip_method : wifiForm.ip_method,
     ip_address: wifiForm.ip_method === 'manual' ? (wifiForm.ip_address || null) : null,
     prefix_len: wifiForm.prefix_len,

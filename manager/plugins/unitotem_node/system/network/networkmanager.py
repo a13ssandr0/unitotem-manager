@@ -366,7 +366,8 @@ async def edit_connection(conn_path: str,
                           gateway: Optional[str] = None,
                           dns: Optional[list[str]] = None,
                           ssid: Optional[str] = None,
-                          password: Optional[str] = None):
+                          password: Optional[str] = None,
+                          unlock_bssid: bool = False):
     """
     Partially update a connection's settings.
     Only the provided fields are changed; others are left untouched.
@@ -389,6 +390,12 @@ async def edit_connection(conn_path: str,
         if ssid is not None:
             wifi = dict(raw.get('802-11-wireless', {}))
             wifi['ssid'] = ('ay', ssid.encode())
+            new['802-11-wireless'] = wifi
+
+        if unlock_bssid:
+            # a profile tied to one access point never moves to a stronger one: drop the tie
+            wifi = dict(new.get('802-11-wireless', raw.get('802-11-wireless', {})))
+            wifi.pop('bssid', None)
             new['802-11-wireless'] = wifi
 
         if password is not None:

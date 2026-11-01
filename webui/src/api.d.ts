@@ -163,8 +163,8 @@ export interface Api {
       delete_connection: ApiCall<{ conn_path: string }>
       /** List all network devices with state, type, IP address, and active connection. [requires: admin] */
       devices: ApiCall<Record<string, never>>
-      /** Edit an existing connection profile in-place. [requires: admin] */
-      edit_connection: ApiCall<{ conn_path: string; conn_id?: null | string; autoconnect?: boolean | null; ip_method?: string; ip_address?: null | string; prefix_len?: number; gateway?: null | string; dns?: (any)[] | null; ssid?: null | string; password?: null | string }>
+      /** Edit an existing connection profile in-place. `unlock_bssid` lets a Wi-Fi profile that was tied to one access point use the strongest one. [requires: admin] */
+      edit_connection: ApiCall<{ conn_path: string; conn_id?: null | string; autoconnect?: boolean | null; ip_method?: string; ip_address?: null | string; prefix_len?: number; gateway?: null | string; dns?: (any)[] | null; ssid?: null | string; password?: null | string; unlock_bssid?: boolean }>
       /** [requires: admin] */
       has_wireless: ApiCall<Record<string, never>>
       hostname: ApiCall<Record<string, never>>
