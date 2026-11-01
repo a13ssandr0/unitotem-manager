@@ -13,11 +13,16 @@ import re
 from pathlib import Path
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from utils.models.command_line import cmdargs
 
 OUTPUT_NAME_RE = re.compile(r'^[A-Za-z0-9_.-]{1,64}$')
+
+
+def _is_matrix(value) -> bool:
+    return (isinstance(value, (list, tuple)) and len(value) == 6 and all(isinstance(x, (int, float)) and not isinstance(x, bool)
+            and abs(x) < 100 and x == x for x in value))
 
 
 class TouchMap(BaseModel, validate_assignment=True):
@@ -25,6 +30,28 @@ class TouchMap(BaseModel, validate_assignment=True):
     # device identity -> {'turn': 0..3, 'flip': 0..2}: how the touch input is turned/mirrored (same convention as a window's orientation and flip)
     # before it reaches the screen. Only for a panel that is not glued to its screen and has another natural orientation; absent = as the screen
     orientation: dict[str, dict] = Field(default_factory=dict)
+    # device identity -> the six numbers of the matrix that carries the panel's raw positions to the screen (guided setup by exact points, see
+    # system/touch_calibration.py); it replaces the orientation of the same panel, which is the special case of eight such matrices
+    calibration: dict[str, list[float]] = Field(default_factory=dict)
+
+    @field_validator('calibration', mode='before')
+    @classmethod
+    def _calibration(cls, v):
+        return {str(k): [float(x) for x in m] for k, m in (v or {}).items() if _is_matrix(m)}
+
+    def set_calibration(self, key: str, matrix) -> None:
+        """Stores (or, with None, drops) the calibration of a panel. A calibration takes the place of its orientation."""
+        if not key or len(key) > 512:
+            raise ValueError('not a touch device identity')
+        calibration = dict(self.calibration)
+        if matrix is None:
+            calibration.pop(key, None)
+        else:
+            if not _is_matrix(matrix):
+                raise ValueError('a calibration is six finite numbers')
+            calibration[key] = [round(float(x), 6) for x in matrix]
+            self.set_orientation(key, 0, 0)
+        self.calibration = calibration
 
     def set_orientation(self, key: str, turn: int, flip: int):
         if not key or len(key) > 512:
@@ -36,6 +63,8 @@ class TouchMap(BaseModel, validate_assignment=True):
             orientation.pop(key, None)
         else:
             orientation[key] = {'turn': turn, 'flip': flip}
+            if key in self.calibration:                  # an orientation chosen by hand replaces an older calibration
+                self.calibration = {k: v for k, v in self.calibration.items() if k != key}
         self.orientation = orientation
 
     def set(self, key: str, output: str | None):

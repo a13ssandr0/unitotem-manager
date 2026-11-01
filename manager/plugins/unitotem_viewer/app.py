@@ -896,6 +896,8 @@ class WebviewApp:
             asyncio.run_coroutine_threadsafe(self._set_touch_settings(window_id, refresh={
                 'refresh_after_idle': data.get('refresh_after_idle'),
                 'refresh_schedules': data.get('refresh_schedules') or []}), self._ws_loop)
+        elif target == 'SetTouchSetup' and win:
+            win.set_touch_setup({k: v for k, v in data.items() if k not in ('target', 'window_id')})
         elif target == 'SetLanguage' and win and self._ws_loop is not None:
             asyncio.run_coroutine_threadsafe(
                 self._set_language(window_id, data.get('language') or '', bool(data.get('reload'))), self._ws_loop)

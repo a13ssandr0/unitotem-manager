@@ -23,6 +23,10 @@ StandardError=journal
 UnsetEnvironment=TERM
 Environment=XDG_RUNTIME_DIR=/run/unitotem/xdg
 Environment=LIBSEAT_BACKEND=builtin
+# Only the manager drives the compositor and nothing it shows is translated, so it runs in the C locale. This matters for numbers: labwc reads a touch
+# panel's calibration matrix with the C library's strtof in the language of the process, and under a locale with a decimal comma "1.06" is refused and
+# the whole matrix silently dropped (the matrices that are only turns and mirrors have no decimals, which hid it).
+Environment=LANG=C
 # base configuration of the image, then the fragment of the node (touch screens)
 Environment=XDG_CONFIG_DIRS=/usr/share/unitotem/xdg:/run/unitotem/labwc/node
 ExecStartPre=-/usr/bin/timeout 5 /usr/bin/plymouth deactivate

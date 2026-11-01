@@ -70,8 +70,17 @@ def on_startup(loop):
         """Map every touch screen to its output now, and again whenever one (or a screen) appears or goes away."""
         from .system.touch_service import touch_service
 
+        from .system.touch_setup import touch_setup
+
         async def broadcast():
             await WS.broadcast('Settings/Display/Touch/devices', **touch_service.snapshot())
+            if touch_setup.session is not None:                     # a setup of a panel that was unplugged cannot go on
+                await touch_setup.panel_gone(touch_setup.session.key)
+
+        async def setup_changed(state: dict):
+            await WS.broadcast('Settings/Display/Touch/setup', **state)
+
+        touch_setup.bind(setup_changed)
 
         try:
             await touch_service.start(broadcast)
