@@ -608,7 +608,7 @@ api.Settings.Network.connection_details.on(data => {
       editorForm.prefix_len = ipv4['address-data'][0].prefix || 24
     }
     editorForm.gateway = ipv4.gateway || ''
-    editorForm.dns     = ipv4.dns || []
+    editorForm.dns     = ipv4['dns-data'] || []
     const wifi = d['802-11-wireless']
     editorForm.lockedTo = ''
     editorForm.unlock = false

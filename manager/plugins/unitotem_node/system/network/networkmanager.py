@@ -65,8 +65,20 @@ def _unpack(v):
     return v
 
 
+def _json_safe(v):
+    """Settings values as the page can read them: variants unwrapped at any depth, byte arrays (an SSID, a BSSID, a MAC address) as lists of numbers."""
+    v = _unpack(v)
+    if isinstance(v, (bytes, bytearray)):
+        return list(v)
+    if isinstance(v, dict):
+        return {k: _json_safe(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_json_safe(x) for x in v]
+    return v
+
+
 def _unpack_section(d: dict) -> dict:
-    return {k: _unpack(v) for k, v in d.items()}
+    return {k: _json_safe(v) for k, v in d.items()}
 
 
 def _device_for_path(path: str, bus, dtype_val):
@@ -284,8 +296,8 @@ def _build_ipv4_section(method: str, address: Optional[str],
         for d in (dns or []):
             try:
                 octets = list(map(int, d.split('.')))
-                # NM wants network-byte-order uint32 (little-endian for the uint type)
-                dns_uints.append(int.from_bytes(bytes(octets), 'big'))
+                # NM wants the address bytes in memory order, i.e. a little-endian uint32 on every machine we run on
+                dns_uints.append(int.from_bytes(bytes(octets), 'little'))
             except Exception:
                 pass
         return {
