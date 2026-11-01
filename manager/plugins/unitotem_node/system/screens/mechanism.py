@@ -20,14 +20,14 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-Mechanism = Literal['cec', 'ddc', 'output', 'wol', 'serial']
+Mechanism = Literal['cec', 'ddc', 'output', 'wol', 'serial', 'gpio']
 Action = Literal['on', 'off']
 
-# 'wol' and 'serial' are only ever available when somebody configured them for the output, which is the intent
+# 'wol', 'serial' and 'gpio' are only ever available when somebody configured them for the output, which is the intent
 # to use them: a monitor with Wake-on-LAN is woken by it first. WOL has no "off", it is simply never offered there.
 _ORDER: dict[Action, tuple[Mechanism, ...]] = {
-    'on':  ('wol', 'output', 'cec', 'ddc', 'serial'),
-    'off': ('output', 'ddc', 'cec', 'serial'),
+    'on':  ('wol', 'output', 'cec', 'ddc', 'serial', 'gpio'),
+    'off': ('output', 'ddc', 'cec', 'serial', 'gpio'),
 }
 
 

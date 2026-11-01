@@ -98,6 +98,21 @@
             <v-text-field v-model="form[screen.name].serial_off" label="Command to switch off" density="compact"
                           variant="outlined" hide-details style="max-width: 220px"></v-text-field>
           </div>
+          <div v-if="usesGpio(screen.name)" class="text-caption text-medium-emphasis mb-1">
+            GPIO line: a relay in the monitor's supply (level) or a line that presses its power button (pulse). The line is set to "on" when UniTotem stops.
+          </div>
+          <div v-if="usesGpio(screen.name)" class="d-flex flex-wrap ga-4 mb-3">
+            <v-select v-model="form[screen.name].gpio_chip" :items="gpioChips" label="Chip" density="compact" variant="outlined"
+                      hide-details style="max-width: 260px" no-data-text="No GPIO chip on this machine"></v-select>
+            <v-text-field v-model.number="form[screen.name].gpio_line" label="Line" type="number" min="0" density="compact"
+                          variant="outlined" hide-details style="max-width: 110px"
+                          :hint="gpioLineName(form[screen.name])" persistent-hint></v-text-field>
+            <v-select v-model="form[screen.name].gpio_mode" :items="gpioModes" label="Mode" density="compact" variant="outlined"
+                      hide-details style="max-width: 200px"></v-select>
+            <v-text-field v-if="form[screen.name].gpio_mode === 'pulse'" v-model.number="form[screen.name].gpio_pulse_ms" label="Press (ms)"
+                          type="number" density="compact" variant="outlined" hide-details style="max-width: 130px"></v-text-field>
+            <v-switch v-model="form[screen.name].gpio_active_low" color="primary" density="compact" hide-details label="Active low"></v-switch>
+          </div>
           <v-btn color="primary" variant="tonal" @click="save(screen)">Save</v-btn>
         </v-expansion-panel-text>
       </v-expansion-panel>
@@ -117,7 +132,7 @@ const volume = reactive({})
 const form = reactive({})
 const bauds = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
 
-const mechanismNames = {output: 'Display output', ddc: 'DDC/CI', cec: 'CEC', wol: 'Wake-on-LAN', serial: 'Serial'}
+const mechanismNames = {output: 'Display output', ddc: 'DDC/CI', cec: 'CEC', wol: 'Wake-on-LAN', serial: 'Serial', gpio: 'GPIO'}
 
 const mechanismChoices = (action) => [
   {title: 'Automatic', value: 'auto'},
@@ -142,6 +157,23 @@ function inputItems(screen) {
 const chosen = (name) => [form[name]?.on_mechanism, form[name]?.off_mechanism]
 const usesWol = (name) => chosen(name).some(m => m === 'auto' || m === 'wol')
 const usesSerial = (name) => chosen(name).some(m => m === 'auto' || m === 'serial')
+const usesGpio = (name) => chosen(name).some(m => m === 'auto' || m === 'gpio')
+
+const gpioModes = [{title: 'Level (relay on the supply)', value: 'level'}, {title: 'Pulse (power button)', value: 'pulse'}]
+const gpioChips = ref([])
+const gpioChipsInfo = ref([])
+// Pushed by the node when asked: the chips of this machine and the name of each line, so the installer sees what a number is
+api.Settings.Display.Screens.gpio_lines.on(data => {
+  gpioChipsInfo.value = data.chips
+  gpioChips.value = data.chips.filter(c => c.name).map(c => ({title: `${c.name} (${c.label})`, value: c.name}))
+})
+if (api.Settings.Display.Screens.gpio_lines) api.Settings.Display.Screens.gpio_lines()
+function gpioLineName(f) {
+  const chip = gpioChipsInfo.value.find(c => c.name === f?.gpio_chip)
+  const line = chip?.lines.find(l => l.offset === f.gpio_line)
+  if (!line) return ''
+  return [line.name, line.used_by && `used by ${line.used_by}`].filter(Boolean).join(', ')
+}
 
 function fillForm(screen) {
   const c = screen.config
@@ -151,6 +183,8 @@ function fillForm(screen) {
     wol_interface: c.wol?.interface ?? '', wol_repeat: c.wol?.repeat ?? 10,
     serial_port: c.serial?.port ?? '', serial_baud: c.serial?.baud ?? 9600,
     serial_on: c.serial?.on_command ?? '', serial_off: c.serial?.off_command ?? '',
+    gpio_chip: c.gpio?.chip ?? 'gpiochip0', gpio_line: c.gpio?.line ?? null, gpio_mode: c.gpio?.mode ?? 'level',
+    gpio_active_low: c.gpio?.active_low ?? false, gpio_pulse_ms: c.gpio?.pulse_ms ?? 500,
   }
   method[screen.name] ??= 'auto'
 }
@@ -182,6 +216,9 @@ function save(screen) {
   if (f.serial_port.trim()) {
     args.serial = {port: f.serial_port.trim(), baud: f.serial_baud, on_command: f.serial_on, off_command: f.serial_off}
   } else args.clear_serial = true
+  if (f.gpio_line !== null && f.gpio_line !== '') {
+    args.gpio = {chip: f.gpio_chip, line: f.gpio_line, mode: f.gpio_mode, active_low: f.gpio_active_low, pulse_ms: f.gpio_pulse_ms || 500}
+  } else args.clear_gpio = true
   api.Settings.Display.Screens.configure(args)
 }
 

@@ -182,6 +182,7 @@ const mechanismItems = [
   { title: 'CEC', value: 'cec' },
   { title: 'Wake-on-LAN', value: 'wol' },
   { title: 'Serial', value: 'serial' },
+  { title: 'GPIO', value: 'gpio' },
 ];
 const support = api.Power.suspend_support.use({init: true})
 const formatEpoch = (epoch) => new Date(epoch * 1000).toLocaleString()

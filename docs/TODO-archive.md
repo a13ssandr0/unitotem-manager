@@ -1,5 +1,11 @@
 # TODO archive (2026-08-05 .. 2026-10-31)
 
+## 2026-11-01 - Display power by GPIO
+New mechanism `gpio` next to output/DDC/CEC/WOL/serial (`unitotem_node/system/screens/gpio.py`, `GpioConfig` in `models/screen_control.py`, Display page fields, timers' mechanism list, `Settings/Display/Screens/gpio_lines` lists chips and line names). User decisions: level AND pulse
+modes, configurable per output; the line is asserted ("screen on") when the manager stops. Level: the line is requested already at the value wanted and held while the manager runs (`active_low` is libgpiod's own flag); pulse: asserted for `pulse_ms` (50-5000) then released, and an "on" pulse is refused while
+the screen is known to be on (a button toggles). GPIO is a blind mechanism like DDC/CEC/serial (what we switched off is remembered in screen_state.json) and last in the automatic order. Needs `python3-libgpiod` (API 2; Recommends of unitotem-node), the chip name is validated (`gpiochipN`, fullmatch). Tests: `tests/test_screens_gpio.py`.
+Not run on real hardware.
+
 ## 2026-11-01 - PDF pages: standard font data and character maps
 `/pdf-view` gave pdf.js no font data, so a PDF that does not embed its fonts (Helvetica, Times...) used whatever the system had. The build now copies pdfjs-dist
 `standard_fonts` and `cmaps` to `static/assets/pdfjs/` (Vite plugin `pdfjsData`) and `pdf-view.js` passes `standardFontDataUrl`, `cMapUrl`, `cMapPacked`. Checked on Pi A

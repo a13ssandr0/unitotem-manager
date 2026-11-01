@@ -8,9 +8,9 @@ export type ApiCall<P> = ((args?: P) => void) & {
 }
 export interface Api {
   Notifications: {
-    /** Remove notifications from the list, for everybody. */
+    /** Remove notifications from this user's list (they stay for the others until every user who can see them has dismissed them). */
     dismiss: ApiCall<{ ids: (string)[] }>
-    /** Remove every notification this user can see. */
+    /** Remove every notification this user can see from their list. */
     dismiss_all: ApiCall<Record<string, never>>
     /** Click on a notification (`default`) or on one of its action buttons: the sender is told, and the notification closes */
     invoke: ApiCall<{ id: string; action?: string }>
@@ -87,7 +87,9 @@ export interface Api {
     Display: {
       Screens: {
         /** Change how an output is controlled. `wol` is {mac, broadcast?, port?}, `serial` is [requires: admin] */
-        configure: ApiCall<{ name: string; on_mechanism?: null | string; off_mechanism?: null | string; power_on_at_start?: boolean | null; wol?: any | null; serial?: any | null; cec_device?: null | string; clear_wol?: boolean; clear_serial?: boolean }>
+        configure: ApiCall<{ name: string; on_mechanism?: null | string; off_mechanism?: null | string; power_on_at_start?: boolean | null; wol?: any | null; serial?: any | null; gpio?: any | null; cec_device?: null | string; clear_wol?: boolean; clear_serial?: boolean; clear_gpio?: boolean }>
+        /** The GPIO chips of this machine and their lines (name, and who uses each), for choosing the line of a screen. [requires: admin] */
+        gpio_lines: ApiCall<Record<string, never>>
         /** What X, DDC/CI and CEC each say about an output (None where they cannot tell). [requires: power] */
         power_state: ApiCall<{ name: string }>
         /** Find out what each monitor supports (DDC/CI buses and advertised inputs). Slow, runs in the background. [requires: admin] */
