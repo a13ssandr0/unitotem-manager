@@ -1,3 +1,16 @@
+unitotem-manager (3.0.0~dev19) stable; urgency=medium
+
+  * Touch: guided setup of a panel on the Display page (four quarters or five points, tried before it is kept); the configuration uses the names libinput gives
+  * Viewer lockdown: no context menu, downloads, print dialog, drops or browser shortcuts; a crashed or reloaded page is restored at once; the pointer hides unless a mouse moves
+  * Developer tools of a window in the administrator's browser (admin only, one-time token); camera and microphone granted, other prompts refused; password manager and autofill off
+  * Language of the pages per window (and the node's language as the default); only the en-US locale pack is shipped
+  * Notifications are per user; a refused manual suspend and an expired pairing request are notifications too
+  * Remote control: the windows of a node (settings per screen, layouts, panes) travel with its playlists, and the server sends a client the files its windows show
+  * PDF pages carry the standard font data and character maps, have no size cap, and a canvas that stays blank is redrawn smaller and reported
+  * The Wi-Fi is no longer disconnected when the manager stops; names are escaped everywhere they reach a file, a command or a page; the compositor runs with LANG=C
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sun, 01 Nov 2026 14:00:00 +0100
+
 unitotem-manager (3.0.0~dev18) stable; urgency=medium
 
   * Touch: a panel that is not glued to its screen can be given its own orientation (turn and mirror) on the Display page,
