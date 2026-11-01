@@ -28,6 +28,9 @@ How a producer uses it (core code and plugins alike: a plugin may import this mo
   it either way (it is the notification center, the freedesktop `persistence` capability). `actions` are freedesktop (id, label) pairs:
   the one named `default` is what a click on the notification does besides following its `link`; `invoke()` runs one and
   tells the listeners (`listen_action`), after which a notification that is not `resident` is dismissed.
+* Reading and dismissing are PER USER: what one user dismisses stays for the others, who may not have seen it. It disappears for
+  everybody once every user who could see it has dismissed it (and only then is the sender, if any, told it was closed).
+  Without a user (the older calls, the producers' own bookkeeping) they mean everybody.
 * The list is bounded, kept in /var/lib/unitotem (it is state, not configuration: it is not part of a backup) and
   survives a restart. The file has a version and every field is optional on reading, so the previous release can read
   what this one wrote and the other way round (rollback rule).
@@ -75,18 +78,20 @@ class Notification(BaseModel):
     link: Optional[str] = None
     created: float = 0
     updated: float = 0
-    read: bool = False
-    dismissed: bool = False
+    read: bool = False                      # read by everybody (what a release without per-user state wrote)
+    dismissed: bool = False                 # hidden from everybody
+    read_by: list[str] = Field(default_factory=list)          # users who read it
+    dismissed_by: list[str] = Field(default_factory=list)     # users who dismissed it: it stays for the others
     progress: Optional[float] = None        # 0-100, -1 = unknown, None = no bar
     persistent: bool = False                # cannot be dismissed (it is about work in progress)
     timeout: Optional[int] = None           # ms of pop-up: None = level default, 0 = until clicked
     actions: list = Field(default_factory=list)      # [id, label] pairs, only while the sender can be told (any shape is read, cleared on load)
     resident: bool = False                  # stays after an action was invoked
 
-    def public(self) -> dict:
+    def public(self, user: Optional[str] = None) -> dict:
         return {'id': self.id, 'level': self.level, 'title': self.title, 'text': self.text, 'source': self.source,
                 'audience': self.audience, 'link': self.link, 'created': self.created, 'updated': self.updated,
-                'read': self.read, 'progress': self.progress, 'persistent': self.persistent,
+                'read': self.read or (user is not None and user in self.read_by), 'progress': self.progress, 'persistent': self.persistent,
                 'timeout': self.timeout if self.timeout is not None else DEFAULT_TIMEOUT.get(self.level, 6000),
                 'actions': [{'id': a[0], 'label': a[1]} for a in self.actions if a[0] != 'default'],
                 'default_action': any(a[0] == 'default' for a in self.actions)}
@@ -232,6 +237,7 @@ class NotificationCenter:
                 same.progress, same.persistent = progress, persistent
                 same.timeout, same.actions, same.resident = timeout, actions, resident
                 same.updated, same.read, same.dismissed = now, False, False
+                same.read_by, same.dismissed_by = [], []
                 item = same
             else:
                 item = Notification(key=key, level=level, title=title, text=text, source=source,
@@ -275,38 +281,65 @@ class NotificationCenter:
 
     # ── what the pages do ────────────────────────────────────────────────────
 
-    def snapshot(self, perms: Iterable) -> list[dict]:
+    def snapshot(self, perms: Iterable, user: Optional[str] = None) -> list[dict]:
         """What a user with these capabilities sees, newest first."""
         with self._lock:
             self._load()
-            shown = [i for i in self._items if not i.dismissed and visible_to(i, perms)]
-        return [i.public() for i in sorted(shown, key=lambda i: i.updated, reverse=True)]
+            shown = [i for i in self._items if not i.dismissed and (user is None or user not in i.dismissed_by) and visible_to(i, perms)]
+            return [i.public(user) for i in sorted(shown, key=lambda i: i.updated, reverse=True)]
 
-    def mark_read(self, ids: Iterable[str], perms: Iterable) -> None:
+    def mark_read(self, ids: Iterable[str], perms: Iterable, user: Optional[str] = None) -> None:
         wanted = set(ids)
         with self._lock:
             self._load()
-            hit = [i for i in self._items if i.id in wanted and not i.read and visible_to(i, perms)]
+            hit = [i for i in self._items if i.id in wanted and not i.read and visible_to(i, perms)
+                   and (user is None or user not in i.read_by)]
             for item in hit:
-                item.read = True
+                if user is None:
+                    item.read = True
+                else:
+                    item.read_by.append(user)
             if hit:
                 self._changed()
 
-    def dismiss(self, ids: Iterable[str], perms: Iterable) -> None:
-        """Hide notifications from everybody. One with a key stays (hidden) until its producer resolves it, so that the
-        same unchanged problem is not raised again; one without a key is simply removed."""
+    def dismiss(self, ids: Iterable[str], perms: Iterable, user: Optional[str] = None,
+                eligible: Optional[Callable[[Notification], set]] = None) -> None:
+        """Hide notifications from `user` (from everybody when there is none). One with a key stays (hidden) until its producer resolves
+        it, so that the same unchanged problem is not raised again; one without a key is simply removed. `eligible(item)` says which users can
+        see it: when all of them have dismissed it, it is hidden for good and its sender is told."""
         wanted = set(ids)
         with self._lock:
             self._load()
-            hit = self._dismiss([i for i in self._items if i.id in wanted and not i.dismissed and not i.persistent
-                                 and visible_to(i, perms)])
+            hit = self._dismiss_for(user, [i for i in self._items if i.id in wanted and not i.dismissed and not i.persistent
+                                           and visible_to(i, perms)], eligible)
         self._tell_closed(hit, dismissed=True)
 
-    def dismiss_all(self, perms: Iterable) -> None:
+    def dismiss_all(self, perms: Iterable, user: Optional[str] = None, eligible: Optional[Callable[[Notification], set]] = None) -> None:
         with self._lock:
             self._load()
-            hit = self._dismiss([i for i in self._items if not i.dismissed and not i.persistent and visible_to(i, perms)])
+            hit = self._dismiss_for(user, [i for i in self._items if not i.dismissed and not i.persistent and visible_to(i, perms)], eligible)
         self._tell_closed(hit, dismissed=True)
+
+    def _dismiss_for(self, user: Optional[str], items: list[Notification], eligible) -> list[Notification]:
+        """The dismissal by one user: the items nobody else could still see go for good (returned), the others only disappear from this
+        user's list."""
+        if user is None:
+            return self._dismiss(items)
+        done, partly = [], False
+        for item in items:
+            if user in item.dismissed_by:
+                continue
+            item.dismissed_by.append(user)
+            item.read_by = [u for u in item.read_by if u != user] + [user]
+            remaining = (eligible(item) if eligible else {user}) - set(item.dismissed_by)
+            if remaining:
+                partly = True
+            else:
+                done.append(item)
+        hit = self._dismiss(done) if done else []
+        if partly and not hit:
+            self._changed()
+        return hit
 
     def _dismiss(self, hit: list[Notification]) -> list[Notification]:
         if not hit:

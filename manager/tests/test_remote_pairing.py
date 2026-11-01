@@ -206,3 +206,20 @@ def test_state_for_the_page_never_contains_a_key(node):
     text = repr(node.state())
     assert 'PRIVATE' not in text and 'BEGIN' not in text
     assert node.state()['server']['ip'] == '10.0.0.2'
+
+
+def test_a_request_nobody_answers_takes_its_notification_away_when_it_expires(node, monkeypatch):
+    """The expiry of a request changes nothing else, so the service looks again by itself at that moment."""
+    from utils.notifications import notifications
+    seen = []
+    monkeypatch.setattr(notifications, 'notify', lambda key, *a, **k: seen.append(('notify', key)))
+    monkeypatch.setattr(notifications, 'resolve', lambda key: seen.append(('resolve', key)))
+    node.requests.ttl = 0.05
+    cert, _ = ident.generate_identity('client')
+
+    async def go():
+        await node.accept_request({'cert': cert, 'name': 'lobby', 'web_port': 443, 'link_port': 4443}, '192.168.1.30')
+        assert ('notify', 'remote.pair-requests') in seen
+        await asyncio.sleep(1.2)                       # ttl + 1 s
+    run(go())
+    assert ('resolve', 'remote.pair-requests') in seen[seen.index(('notify', 'remote.pair-requests')):]
