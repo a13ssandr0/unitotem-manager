@@ -19,7 +19,7 @@ rsh() { run ssh "${SSH_OPTS[@]}" root@"$HOST" "$@"; }
 
 mkdir -p "$STAGE/pylib"
 PIP=${PIP:-"$ROOT/.venv/bin/pip"}
-[ -x "$PIP" ] || PIP=/home/alessandro/Sviluppo/Python/unitotem-manager/.venv/bin/pip
+[ -x "$PIP" ] || PIP=pip3
 "$PIP" install -q --target "$STAGE/pylib" feedparser
 for d in api utils webview static templates routers; do cp -r "$ROOT/manager/$d" "$STAGE/$d"; done
 cp "$ROOT/manager/main.py" "$STAGE/main.py"
