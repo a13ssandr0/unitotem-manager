@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from unitotem_node.models.screen_control import OutputConfig, SerialConfig, WolConfig
-from unitotem_node.system.screens import cec, serial, wayland, wol
+from unitotem_node.models.screen_control import OutputConfig, ScreenControl, SerialConfig, WolConfig
+from unitotem_node.system.screens import cec, control, serial, wayland, wol
 from unitotem_node.system.screens.ddc_ctl import power_off_value
 from unitotem_node.system.screens.mechanism import NoMechanismAvailable, candidates
 
@@ -271,3 +271,117 @@ def test_values_that_reach_a_command_are_checked_first():
         with pytest.raises(ValueError):
             render_hosts('127.0.0.1 localhost\n', bad)
     assert valid_hostname('unitotem') and valid_hostname('totem-1.example.org')
+
+
+CEC_LIST = 'vc4_hdmi (vc4-hdmi-0):\n\t/dev/cec0\n\nvc4_hdmi (vc4-hdmi-1):\n\t/dev/cec1\n\n'
+
+CEC_INFO = '\n'.join([
+    'Driver Info:',
+    '\tDriver Name                : vc4_hdmi',
+    '\tAdapter Name               : vc4-hdmi-0',
+    '\tCapabilities               : 0x0000031e',
+    '\t\tLogical Addresses',
+    '\tDriver version             : 6.18.50',
+    '\tAvailable Logical Addresses: 1',
+    '\tDRM Connector Info         : card 1, connector 35',
+    '\tPhysical Address           : 1.0.0.0',
+    '\tLogical Address Mask       : 0x0010',
+    '\tCEC Version                : 2.0',
+    '\tVendor ID                  : 0x000c03 (HDMI)',
+    "\tOSD Name                   : 'UniTotem'",
+    '\tLogical Addresses          : 1 (Allow RC Passthrough)',
+    '',
+    '\t  Logical Address          : 4 (Playback Device 1)',
+    '',
+])
+
+
+def test_cec_list_devices_takes_the_driver_before_the_adapter_name():
+    devices = cec.parse_list_devices(CEC_LIST)
+    assert devices == [cec.CecDevice('/dev/cec0', 'vc4_hdmi', 'vc4-hdmi-0'),
+                       cec.CecDevice('/dev/cec1', 'vc4_hdmi', 'vc4-hdmi-1')]
+
+
+def test_cec_adapter_info_of_a_configured_adapter():
+    info = cec.parse_adapter_info(CEC_INFO)
+    assert info == cec.AdapterInfo(drm_card=1, drm_connector=35, physical_address='1.0.0.0', configured=True)
+
+
+def test_cec_adapter_info_without_a_sink_or_a_logical_address():
+    text = CEC_INFO.replace('1.0.0.0', 'f.f.f.f').replace('0x0010', '0x0000')
+    assert cec.parse_adapter_info(text) == cec.AdapterInfo(1, 35, None, False)
+
+
+def test_cec_adapter_info_of_nothing_is_empty():
+    assert cec.parse_adapter_info('') == cec.AdapterInfo(None, None, None, False)
+
+
+def test_cec_connector_id_is_read_from_the_drm_sysfs(tmp_path):
+    (tmp_path / 'card1-HDMI-A-1').mkdir()
+    (tmp_path / 'card1-HDMI-A-1' / 'connector_id').write_text('35\n')
+    (tmp_path / 'card1-HDMI-A-2').mkdir()
+    (tmp_path / 'card1-HDMI-A-2' / 'connector_id').write_text('garbage\n')
+    assert cec.connector_id('HDMI-A-1', 1, str(tmp_path)) == 35
+    assert cec.connector_id('HDMI-A-2', 1, str(tmp_path)) is None
+    assert cec.connector_id('HDMI-A-3', 1, str(tmp_path)) is None
+    assert cec.connector_id('HDMI-A-1', 0, str(tmp_path)) is None
+
+
+def test_cec_device_for_output_matches_the_adapter_of_its_connector(monkeypatch):
+    import asyncio
+
+    infos = {
+        '/dev/cec0': cec.AdapterInfo(drm_card=1, drm_connector=35, physical_address='1.0.0.0', configured=True),
+        '/dev/cec1': cec.AdapterInfo(drm_card=1, drm_connector=44, physical_address='2.0.0.0', configured=True),
+    }
+    connectors = {'HDMI-A-1': 35, 'HDMI-A-2': 44}
+
+    async def adapter_info(device):
+        return infos[device]
+
+    def connector_id(output, card, root='/sys/class/drm'):
+        return connectors.get(output)
+
+    monkeypatch.setattr(cec, 'adapter_info', adapter_info)
+    monkeypatch.setattr(cec, 'connector_id', connector_id)
+    both = cec.parse_list_devices(CEC_LIST)
+    assert asyncio.run(cec.device_for_output('HDMI-A-2', both)) == '/dev/cec1'
+    assert asyncio.run(cec.device_for_output('HDMI-A-1', both)) == '/dev/cec0'
+    assert asyncio.run(cec.device_for_output('HDMI-A-3', both)) is None
+    # an adapter of another connector is never used, even when it is the only one
+    assert asyncio.run(cec.device_for_output('HDMI-A-3', [both[0]])) is None
+    # a USB adapter reports no connector: the only one of those is taken
+    infos['/dev/cec2'] = cec.AdapterInfo(drm_card=None, drm_connector=None, physical_address='3.0.0.0', configured=False)
+    usb = cec.CecDevice('/dev/cec2', 'cec-usb', 'pulse8')
+    assert asyncio.run(cec.device_for_output('HDMI-A-3', both + [usb])) == '/dev/cec2'
+    assert asyncio.run(cec.device_for_output('HDMI-A-1', both + [usb])) == '/dev/cec0'
+    # two of those: no way to tell which
+    infos['/dev/cec3'] = infos['/dev/cec2']
+    assert asyncio.run(cec.device_for_output('HDMI-A-3', [usb, cec.CecDevice('/dev/cec3', 'cec-usb', 'b')])) is None
+    assert asyncio.run(cec.device_for_output('HDMI-A-3', [])) is None
+
+
+@pytest.fixture
+def saved_outputs(monkeypatch):
+    from unitotem_node.system.screens import control
+    monkeypatch.setattr(ScreenControl, 'save', lambda self: None)
+    saved = dict(control.screen_control.outputs)
+    control.screen_control.outputs.clear()
+    yield control.screen_control.outputs
+    control.screen_control.outputs.clear()
+    control.screen_control.outputs.update(saved)
+
+
+def test_adopt_renamed_drops_the_old_entry_when_the_new_name_has_settings(saved_outputs):
+    saved_outputs['HDMI-1'] = OutputConfig(ddc_bus=9)
+    saved_outputs['HDMI-A-1'] = OutputConfig(ddc_bus=10)
+    control._adopt_renamed(['HDMI-A-1'])
+    assert list(saved_outputs) == ['HDMI-A-1']
+    assert saved_outputs['HDMI-A-1'].ddc_bus == 10
+
+
+def test_adopt_renamed_moves_the_settings_of_an_old_name(saved_outputs):
+    saved_outputs['HDMI-1'] = OutputConfig(ddc_bus=9)
+    control._adopt_renamed(['HDMI-A-1'])
+    assert list(saved_outputs) == ['HDMI-A-1']
+    assert saved_outputs['HDMI-A-1'].ddc_bus == 9

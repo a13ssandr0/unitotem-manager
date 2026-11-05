@@ -77,10 +77,11 @@ class Screens(WSAPIBase):
     async def configure(self, name: str, on_mechanism: Optional[str] = None, off_mechanism: Optional[str] = None,
                         power_on_at_start: Optional[bool] = None, wol: Optional[dict] = None,
                         serial: Optional[dict] = None, gpio: Optional[dict] = None, cec_device: Optional[str] = None,
-                        clear_wol: bool = False, clear_serial: bool = False, clear_gpio: bool = False):
+                        clear_wol: bool = False, clear_serial: bool = False, clear_gpio: bool = False,
+                        clear_cec: bool = False):
         """Change how an output is controlled. `wol` is {mac, broadcast?, port?}, `serial` is
         {port, baud?, on_command, off_command}, `gpio` is {chip, line, mode?, active_low?, pulse_ms?};
-        clear_wol / clear_serial / clear_gpio remove them."""
+        clear_wol / clear_serial / clear_gpio remove them; clear_cec goes back to the adapter wired to the output."""
         changes = {k: v for k, v in dict(on_mechanism=on_mechanism, off_mechanism=off_mechanism,
                                          power_on_at_start=power_on_at_start, wol=wol, serial=serial, gpio=gpio,
                                          cec_device=cec_device).items() if v is not None}
@@ -90,6 +91,8 @@ class Screens(WSAPIBase):
             changes['serial'] = None
         if clear_gpio:
             changes['gpio'] = None
+        if clear_cec:
+            changes['cec_device'] = None
         try:
             control.configure(name, **changes)
         except (ScreenControlError, ValueError) as exc:

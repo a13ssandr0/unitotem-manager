@@ -87,7 +87,7 @@ export interface Api {
     Display: {
       Screens: {
         /** Change how an output is controlled. `wol` is {mac, broadcast?, port?}, `serial` is [requires: admin] */
-        configure: ApiCall<{ name: string; on_mechanism?: null | string; off_mechanism?: null | string; power_on_at_start?: boolean | null; wol?: any | null; serial?: any | null; gpio?: any | null; cec_device?: null | string; clear_wol?: boolean; clear_serial?: boolean; clear_gpio?: boolean }>
+        configure: ApiCall<{ name: string; on_mechanism?: null | string; off_mechanism?: null | string; power_on_at_start?: boolean | null; wol?: any | null; serial?: any | null; gpio?: any | null; cec_device?: null | string; clear_wol?: boolean; clear_serial?: boolean; clear_gpio?: boolean; clear_cec?: boolean }>
         /** The GPIO chips of this machine and their lines (name, and who uses each), for choosing the line of a screen. [requires: admin] */
         gpio_lines: ApiCall<Record<string, never>>
         /** What X, DDC/CI and CEC each say about an output (None where they cannot tell). [requires: power] */

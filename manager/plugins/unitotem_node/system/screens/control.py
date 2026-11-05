@@ -73,11 +73,18 @@ async def _tools() -> dict:
     return {'ddc': (ddc_ok, ddc_reason), 'cec_devices': await cec.devices()}
 
 
-def _availability(name: str, cfg: OutputConfig, x_output: Optional[wayland.Output], tools: dict) -> dict[str, dict]:
+async def _cec_device(name: str, cfg: OutputConfig, adapters: list) -> Optional[str]:
+    """The CEC adapter of an output: the one chosen for it, else the one wired to its connector."""
+    if cfg.cec_device:
+        return cfg.cec_device
+    return await cec.device_for_output(name, adapters) if adapters else None
+
+
+def _availability(name: str, cfg: OutputConfig, x_output: Optional[wayland.Output], tools: dict,
+                  cec_device: Optional[str] = None) -> dict[str, dict]:
     """{mechanism: {'available': bool, 'reason': str}} for one output."""
     ddc_ok, ddc_reason = tools['ddc']
     adapters = tools['cec_devices']
-    cec_device = cfg.cec_device or (adapters[0].path if len(adapters) == 1 else None)
     result = {
         'output': {'available': x_output is not None,
                    'reason': '' if x_output is not None else 'the output is not connected to the compositor'},
@@ -87,7 +94,7 @@ def _availability(name: str, cfg: OutputConfig, x_output: Optional[wayland.Outpu
                                 else 'this monitor has DDC/CI but no power control over it'))},
         'cec': {'available': cec_device is not None,
                 'reason': '' if cec_device is not None else
-                ('no CEC adapter' if not adapters else 'several CEC adapters: choose one for this output')},
+                ('no CEC adapter' if not adapters else 'no CEC adapter is wired to this output: choose one')},
         'wol': {'available': cfg.wol is not None, 'reason': '' if cfg.wol else 'no MAC address configured'},
         'serial': {'available': cfg.serial is not None,
                    'reason': '' if cfg.serial else 'no serial port configured'},
@@ -101,10 +108,15 @@ def _adopt_renamed(present: list[str]):
     changed = False
     for old in list(screen_control.outputs):
         renamed = find_renamed(old, present)
-        if renamed is not None and renamed not in screen_control.outputs:
+        if renamed is None:
+            continue
+        if renamed not in screen_control.outputs:
             logger.info('Screen {} is now called {}: its settings follow', old, renamed)
             screen_control.outputs[renamed] = screen_control.outputs.pop(old)
-            changed = True
+        else:
+            logger.info('Screen {} is now called {}, which has settings of its own: the old entry is dropped', old, renamed)
+            del screen_control.outputs[old]
+        changed = True
     if changed:
         screen_control.save()
 
@@ -133,7 +145,7 @@ async def screens() -> list[dict]:
             'commanded_off': _commanded_off.get(name),
             'geometry': {'x': x.x, 'y': x.y, 'width': x.width, 'height': x.height, 'rotation': x.rotation} if x else None,
             'identity': cfg.identity,
-            'mechanisms': _availability(name, cfg, x, tools),
+            'mechanisms': _availability(name, cfg, x, tools, await _cec_device(name, cfg, tools['cec_devices'])),
             'ddc_features': cfg.ddc_features,
             'input_sources': {k: v for k, v in cfg.ddc_capabilities.get(ddc_ctl.VCP_INPUT, {}).items()},
             'config': {
@@ -144,6 +156,7 @@ async def screens() -> list[dict]:
                 'gpio': cfg.gpio.model_dump() if cfg.gpio else None,
                 'cec_device': cfg.cec_device,
             },
+            'cec_devices': [d.path for d in tools['cec_devices']],
         })
     return out
 
@@ -213,8 +226,9 @@ async def _do_power(name: str, mechanism: str, on: bool, cfg: OutputConfig, x: O
         was_off_by_us = _commanded_off.get(name, {}).get('mechanism') == 'ddc'
         await ddc_ctl.set_power(cfg.ddc_bus, on, cfg.ddc_capabilities, wake_reset=was_off_by_us)
     elif mechanism == 'cec':
-        adapters = await cec.devices()
-        device = cfg.cec_device or adapters[0].path
+        device = await _cec_device(name, cfg, await cec.devices())
+        if device is None:
+            raise ScreenControlError('no CEC adapter is wired to this output')
         await cec.set_power(device, on)
     elif mechanism == 'wol':
         await wol.wake(cfg.wol.mac, cfg.wol.broadcast, cfg.wol.port, cfg.wol.interface, cfg.wol.repeat)
@@ -249,7 +263,7 @@ async def set_power(name: str, state: str, mechanism: str = 'auto', operator: bo
         cfg = screen_control.output(name)
         x = await _x_output(name)
         tools = await _tools()
-        availability = _availability(name, cfg, x, tools)
+        availability = _availability(name, cfg, x, tools, await _cec_device(name, cfg, tools['cec_devices']))
         available = {m for m, v in availability.items() if v['available']}
         if on:
             # WOL and serial are about waking something the compositor cannot see; it can only switch on what it lists
@@ -290,8 +304,7 @@ async def power_state(name: str) -> dict:
              'commanded_off': _commanded_off.get(name)}
     if cfg.ddc_bus is not None and (await ddc_ctl.available())[0]:
         state['ddc'] = await ddc_ctl.power_state(cfg.ddc_bus)
-    adapters = await cec.devices()
-    device = cfg.cec_device or (adapters[0].path if len(adapters) == 1 else None)
+    device = await _cec_device(name, cfg, await cec.devices())
     if device:
         state['cec'] = await cec.power_state(device)
     return state
@@ -362,6 +375,7 @@ async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
     while True:
         attempt += 1
         x_outputs = {o.name: o for o in await wayland.outputs()}
+        _adopt_renamed(list(x_outputs))
         todo = [name for name, cfg in screen_control.outputs.items()
                 if cfg.power_on_at_start and not (name in x_outputs and x_outputs[name].active)]
         todo += [name for name, o in x_outputs.items() if not o.active and name not in todo
@@ -375,9 +389,23 @@ async def wake_all(budget: float = 240, interval: float = 20, on_done=None):
             for name in list(_commanded_off):
                 cfg = screen_control.outputs.get(name, OutputConfig())
                 if cfg.power_on_at_start and name in x_outputs and x_outputs[name].active and name not in todo:
+                    was = _commanded_off.get(name, {}).get('mechanism')
                     try:
                         await set_power(name, 'on', operator=False)
-                        logger.info('Woke screen {} that was switched off over {}', name, _commanded_off.get(name, {}).get('mechanism'))
+                        logger.info('Woke screen {} that was switched off over {}', name, was)
+                    except ScreenControlError as exc:
+                        logger.warning('Cannot wake screen {}: {}', name, exc)
+            # A TV switched off with its own remote keeps its link too, and only CEC can tell it is in standby
+            for name, o in x_outputs.items():
+                cfg = screen_control.outputs.get(name, OutputConfig())
+                if (not o.active or name in todo or name in _commanded_off or name in _operator_touched
+                        or not cfg.power_on_at_start or cfg.on_mechanism not in ('auto', 'cec')):
+                    continue
+                device = await _cec_device(name, cfg, await cec.devices())
+                if device and await cec.power_state(device) == 'standby':
+                    try:
+                        await set_power(name, 'on', 'cec', operator=False)
+                        logger.info('Woke screen {}: the TV reported standby over CEC', name)
                     except ScreenControlError as exc:
                         logger.warning('Cannot wake screen {}: {}', name, exc)
         if not todo:
