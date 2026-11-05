@@ -70,6 +70,7 @@ Package: unitotem-manager
 Architecture: all
 Depends: ${python3:Depends},
          ${misc:Depends},
+         adduser,
          mediainfo,
          openssl,
          python3-aiofiles,

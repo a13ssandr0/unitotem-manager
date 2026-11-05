@@ -1,3 +1,10 @@
+unitotem-manager (3.0.0~dev21) stable; urgency=medium
+
+  * First access: root starts without a password and with the login shell /usr/sbin/unitotem-first-admin, which creates the first administrator (the web /setup does the same) and then locks root to SSH keys
+  * Accounts: administrators are the members of the group sudo (normal accounts with home and bash), web access is the group users; the group unitotem is gone and root never logs in to the web
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Thu, 05 Nov 2026 23:30:00 +0100
+
 unitotem-manager (3.0.0~dev20) stable; urgency=medium
 
   * Wi-Fi: a profile is no longer tied to the access point that was clicked (one row per network in the list, an optional lock, and the profile editor can drop an existing lock)
