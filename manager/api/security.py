@@ -19,7 +19,9 @@ def _policy_problems(password: str, username: str) -> list[str]:
 class Security(WSAPIBase):
     @staticmethod
     def users():
-        return WSBroadcast(users={user: {'perms': list(data.permissions)} for user, data in user_manager.items()})
+        # Names and permissions go to the administrators only
+        admins = [user for user, data in user_manager.items() if UserPerms.admin in data.permissions]
+        return WSMulticast(admins, users={user: {'perms': list(data.permissions)} for user, data in user_manager.items()})
 
     @staticmethod
     @UserPerms.requires.none
@@ -40,6 +42,19 @@ class Security(WSAPIBase):
         security_settings.save()
         logger.info('Password policy {}', 'enforced' if enforce else 'not enforced')
         return self.password_policy()
+
+    @staticmethod
+    def login_user_list():
+        """Whether the login page lists the account names."""
+        admins = [user for user, data in user_manager.items() if UserPerms.admin in data.permissions]
+        return WSMulticast(admins, show=security_settings.show_login_users)
+
+    def set_login_user_list(self, show: bool):
+        """Show the account names on the login page, or ask for a typed user name."""
+        security_settings.show_login_users = show
+        security_settings.save()
+        logger.info('User list on the login page {}', 'shown' if show else 'hidden')
+        return self.login_user_list()
 
     def add_user(self, username: str, password: str):
         if username in user_manager:

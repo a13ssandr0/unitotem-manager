@@ -60,7 +60,7 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.success('User {} disconnected', user.name)
             break
         except Exception:
-            await WS.send(websocket, 'error', error='Exception', extra=format_exc())
             logger.error(format_exc())
+            await WS.send(websocket, 'error', error='Internal error')
     sessions.untrack(websocket)
     WS.disconnect(websocket, user.name)

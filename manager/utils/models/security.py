@@ -1,8 +1,9 @@
 """
 Security settings of the node that are not about one user, persisted next to the users (/etc/unitotem/security.json).
 
-Today: whether the password policy (utils/passwords.py) is ENFORCED when an administrator creates a user or changes a
-password. It is opt-in, decided with the user: off by default, a node whose owner wants it switches it on.
+show_login_users: whether the login page lists the account names (default on).
+enforce_password_policy: whether the password policy (utils/passwords.py) is ENFORCED when a user is created or a password
+changes. It is opt-in, decided with the user: off by default, a node whose owner wants it switches it on.
 """
 import json
 from pathlib import Path
@@ -15,6 +16,7 @@ from utils.models.command_line import cmdargs
 
 class SecuritySettings(BaseModel, validate_assignment=True):
     enforce_password_policy: bool = False
+    show_login_users: bool = True      # the login page lists the account names (names only)
 
     @staticmethod
     def _filepath() -> Path:
