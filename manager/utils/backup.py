@@ -20,7 +20,7 @@ from utils.models.assets import AssetsManager
 from utils.models.layout import WindowLayouts, window_layouts
 from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager
-from utils.models.user import user_manager
+from utils.models.user import UserPerms, user_manager
 from utils.plugins import BackupPart
 from utils.storage.uploadmanager import upload_manager
 
@@ -80,26 +80,31 @@ def _layouts_changed():
 def _export_users():
     """Each user with its capabilities and the password as the system keeps it (the hash of /etc/shadow, never the
     password): the archive is as sensitive as the node's private keys."""
-    return {name: {'permissions': sorted(data.permissions), 'shadow': osusers.password_hash(name)}
-            for name, data in user_manager.items()}
+    return {name: {'permissions': sorted(p for p in data.permissions if p != UserPerms.admin),
+                   'admin': osusers.is_admin(name),
+                   'shadow': osusers.password_hash(name)}
+            for name, data in user_manager.items() if name != 'root'}
 
 
 def _restore_users(data, _version):
-    """Recreates the accounts (system user, group, password) and their capabilities. An account of an archive from
-    before the users were the system's has no recoverable password and is skipped: if that leaves no administrator
-    the node asks for the first-access setup."""
+    """Recreates the accounts (system user, group users, password, group sudo for an administrator) and their
+    capabilities. An archive from before the admin flag lists an administrator as 'admin' in the permissions. An account
+    of an archive from before the users were the system's has no recoverable password and is skipped: if that leaves no
+    administrator the node asks for the first-access setup."""
     restored = {}
     for name, entry in data.items():
         shadow = entry.get('shadow')
         if not shadow:
             logger.warning('The backup has no password for the user {}: not restored', name)
             continue
+        permissions = entry.get('permissions', [])
+        admin = bool(entry.get('admin') or 'admin' in permissions)
         try:
-            osusers.restore_user(name, shadow)
+            osusers.restore_user(name, shadow, admin=admin)
         except osusers.OSUserError as e:
             logger.error('Cannot restore the user {}: {}', name, e)
             continue
-        restored[name] = {'permissions': entry.get('permissions', [])}
+        restored[name] = {'permissions': [p for p in permissions if p != UserPerms.admin]}
     user_manager.__init__(**restored)
     user_manager.save()
     sessions.close_soon()           # every password may be another one now: everybody logs in again

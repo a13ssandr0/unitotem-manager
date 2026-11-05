@@ -18,8 +18,10 @@
 
               <v-card-text v-else>
                 <p class="mb-4">
-                  This device has no accounts yet. Choose the administrator account: its username and password are
-                  the ones of the operating system, and the ones to log in to this interface.
+                  This device has no accounts yet. Create the administrator account. It is a normal administrator
+                  account: its username and password are the ones of the operating system and of this interface,
+                  and it also gets SSH and terminal access, with sudo. After setup, the root account is locked to
+                  SSH keys.
                 </p>
                 <v-form @submit.prevent="submit">
                   <v-text-field label="Administrator username" v-model="username" variant="outlined"

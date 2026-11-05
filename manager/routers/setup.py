@@ -17,9 +17,9 @@ from pydantic import BaseModel, Field
 import utils.constants as const
 from routers.login import LOGMAN, session_cookie
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
-from utils import osusers, passwords
+from utils import first_access, osusers, passwords
 from utils.models.security import security_settings
-from utils.models.user import UserData, UserPerms, user_manager
+from utils.models.user import user_manager
 from utils.system.ip import reachable_ipv4
 from webview.controller import WebviewManager
 
@@ -70,10 +70,13 @@ async def setup(data: SetupRequest):
             return JSONResponse({'detail': problems}, status_code=422)
         try:
             # useradd and chpasswd take a moment: not on the event loop
-            await asyncio.to_thread(osusers.create_user, data.username, data.password)
+            await asyncio.to_thread(first_access.create_first_admin, data.username, data.password)
+        except first_access.FirstAccessDone:
+            raise HTTPException(status_code=404)
+        except first_access.FirstAccessBusy:
+            return JSONResponse({'detail': ['Another first-access setup is running, try again']}, status_code=409)
         except osusers.OSUserError as e:
             return JSONResponse({'detail': [str(e)]}, status_code=409)
-        user_manager[data.username] = UserData(permissions={UserPerms.admin})
     logger.info('First access completed: administrator {} created', data.username)
     if WebviewManager._instance is not None:
         WebviewManager._instance.refresh_idle()     # the welcome screen of the totem gives way to the placeholder

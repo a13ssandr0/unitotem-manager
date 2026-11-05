@@ -20,8 +20,8 @@ class Security(WSAPIBase):
     @staticmethod
     def users():
         # Names and permissions go to the administrators only
-        admins = [user for user, data in user_manager.items() if UserPerms.admin in data.permissions]
-        return WSMulticast(admins, users={user: {'perms': list(data.permissions)} for user, data in user_manager.items()})
+        return WSMulticast(user_manager.admins(),
+                           users={user: {'perms': list(data.permissions)} for user, data in user_manager.items()})
 
     @staticmethod
     @UserPerms.requires.none
@@ -46,8 +46,7 @@ class Security(WSAPIBase):
     @staticmethod
     def login_user_list():
         """Whether the login page lists the account names."""
-        admins = [user for user, data in user_manager.items() if UserPerms.admin in data.permissions]
-        return WSMulticast(admins, show=security_settings.show_login_users)
+        return WSMulticast(user_manager.admins(), show=security_settings.show_login_users)
 
     def set_login_user_list(self, show: bool):
         """Show the account names on the login page, or ask for a typed user name."""
@@ -89,12 +88,17 @@ class Security(WSAPIBase):
             yield WSResponse(error=f"User {username} does not exist")
             return
         # An admin can never remove their own admin role
-        if ctx.username == username and UserPerms.admin in user_manager[username].permissions and UserPerms.admin not in perms:
+        if ctx.username == username and osusers.is_admin(username) and UserPerms.admin not in perms:
             yield WSResponse(error="An admin cannot remove their own admin role")
             yield self.users()
             return
 
-        user_manager.change_perms(username, perms)
+        try:
+            user_manager.change_perms(username, perms)
+        except osusers.OSUserError as e:
+            yield WSResponse(error=str(e))
+            yield self.users()
+            return
         logger.info(f'Changed permissions for {username}: {perms}')
         yield WSMulticast(ctx.username, 'reload')
         yield self.users()

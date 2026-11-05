@@ -11,7 +11,7 @@
           <thead>
           <tr>
             <th class="text-left">Username</th>
-            <th v-for="permission in permissions" :key="permission" class="text-center">{{ permission }}</th>
+            <th v-for="permission in permissions" :key="permission" class="text-center">{{ permission === 'Admin' ? 'Admin (sudo)' : permission }}</th>
             <th class="text-right"></th>
           </tr>
           </thead>
@@ -39,6 +39,10 @@
           </tbody>
         </v-table>
         <v-card-text class="pt-2">
+          <p class="text-caption text-medium-emphasis mb-4">
+            Admin is the sudo role. Granting it gives the user a shell, SSH and terminal access, and sudo with their
+            own password. Revoking it removes sudo and the shell; the account stays a web-only user.
+          </p>
           <v-switch :model-value="passwordPolicy.enforced" color="primary" density="compact" hide-details
                     label="Enforce the password policy when creating users or changing passwords"
                     @update:model-value="v => api.Settings.Security.set_password_policy({enforce: !!v})"></v-switch>

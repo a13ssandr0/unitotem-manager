@@ -67,8 +67,9 @@ class UserPerms(str, Enum):
 
 
 class UserData(BaseModel, validate_assignment=True):
-    """What a user may do in UniTotem. The password is the operating system's (PAM, see utils/osusers.py): a `password`
-    left by the previous version is ignored and no longer written."""
+    """What a user may do in UniTotem, as stored in users.json. The password is the operating system's (PAM, see
+    utils/osusers.py): a `password` left by the previous version is ignored and no longer written. Admin is not stored:
+    it is the membership of the group sudo, so it is dropped here."""
     permissions: set[UserPerms]
     # Sessions (cookies) issued before this moment are no longer valid, except the one with id `keep_sid` (the session
     # that changed its own password). Kept here so that it survives a restart.
@@ -79,15 +80,19 @@ class UserData(BaseModel, validate_assignment=True):
     @field_validator('permissions', mode='after')
     @classmethod
     def validate_perms(cls, val: set[UserPerms]):
-        if UserPerms.admin in val:
-            return {UserPerms.admin}
-        else:
-            return val
+        return {perm for perm in val if perm != UserPerms.admin}
 
     @field_serializer('permissions', mode='wrap')
     def serialize_perms(self, perms: set[UserPerms], nxt: SerializerFunctionWrapHandler):
         return nxt(list(perms))
 
+
+
+@dataclasses.dataclass
+class Account:
+    """An account as the UI shows it: its stored capabilities, plus admin when the system's group sudo says so."""
+    name: str
+    permissions: set[UserPerms]
 
 
 @dataclasses.dataclass
@@ -123,26 +128,34 @@ class UserManager(RootModel):
 
     def users(self):
         """Every account that can log in with a capability record: the ones in users.json and the members of the group
-        that were added to it by hand (they have no capability until an administrator gives them some)."""
-        return [*(name for name in self.root if osusers.exists(name)),
+        `users` that were added to it by hand (they have no capability until an administrator gives them some). root
+        never logs in to the web, so it is never listed."""
+        return [*(name for name in self.root if name != 'root' and osusers.exists(name)),
                 *(name for name in osusers.members() if name not in self.root)]
 
-    def items(self):
-        return [(name, self.root.get(name) or UserData(permissions=set())) for name in self.users()]
+    def items(self) -> list[tuple[str, Account]]:
+        """Every account with the capabilities the UI shows: the stored ones, and admin when the system says so."""
+        return [(name, Account(name, self._perms(name))) for name in self.users()]
+
+    def _perms(self, username: str) -> set[UserPerms]:
+        perms = set(self.root[username].permissions) if username in self.root else set()
+        if osusers.is_admin(username):
+            perms.add(UserPerms.admin)
+        return perms
 
     def add_user(self, username: str, password: str, permissions: set[UserPerms] = None):
-        """Creates the system account (raises osusers.OSUserError) and its capabilities."""
-        osusers.create_user(username, password)
-        self[username] = UserData(permissions=permissions or set())
+        """Creates the system account, in group sudo when admin is one of the permissions (raises osusers.OSUserError),
+        and stores the other capabilities."""
+        permissions = set(permissions or ())
+        osusers.create_user(username, password, admin=UserPerms.admin in permissions)
+        self[username] = UserData(permissions=permissions - {UserPerms.admin})
 
     def get_user(self, username: str):
-        """The user, if the account is root or in the group `unitotem` (so deleting it from the system or from the group
-        ends its sessions); root is an administrator."""
+        """The user, if its account can log in (group `users`, never root): its capabilities, and admin when it is in
+        the group sudo. Deleting the account from the system ends its sessions."""
         if not osusers.may_login(username):
             return None
-        if username in self.root:
-            return User(username, self.root[username].permissions)
-        return User(username, {UserPerms.admin} if username == 'root' else set())
+        return User(username, self._perms(username))
 
     def session_valid(self, username: str, sid: Optional[str], issued: Optional[float]) -> bool:
         """A cookie issued at `issued` for the session `sid`: not valid any more once the account's sessions were revoked
@@ -163,14 +176,22 @@ class UserManager(RootModel):
     def has_admin(self) -> bool:
         """An administrator who can log in exists (root does not count: a node always has root, and this decides whether
         the first-access setup is still to be done)."""
-        return any(UserPerms.admin in data.permissions and name != 'root' and osusers.may_login(name)
-                   for name, data in self.root.items())
+        return osusers.admin_exists()
+
+    def admins(self) -> list[str]:
+        """The names of the administrators (members of the group sudo that can log in)."""
+        return [name for name, data in self.items() if UserPerms.admin in data.permissions]
 
     def change_password(self, username: str, password: str):
         osusers.set_password(username, password)
 
     def change_perms(self, username: str, permissions: set[UserPerms]):
-        self.root.setdefault(username, UserData(permissions=set())).permissions = permissions
+        """Sets the capabilities. Admin is the membership of the group sudo: it is changed on the system first, so a
+        refusal (osusers.OSUserError) stores nothing."""
+        admin = UserPerms.admin in permissions
+        if admin != osusers.is_admin(username):
+            osusers.set_admin(username, admin)
+        self.root.setdefault(username, UserData(permissions=set())).permissions = permissions - {UserPerms.admin}
         self.callback()
         self.save()
 

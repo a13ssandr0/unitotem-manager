@@ -47,6 +47,8 @@ override_dh_auto_install-indep:
 	install -D -m 644 debian/labwc-rc.xml debian/unitotem-viewer/usr/share/unitotem/xdg/labwc/rc.xml
 	# launcher
 	install -D -m 755 debian/unitotem-manager.sh debian/unitotem-manager/usr/sbin/unitotem-manager
+	# first access: login shell of root and sshd ForceCommand while no administrator exists
+	install -D -m 755 debian/unitotem-first-admin debian/unitotem-manager/usr/sbin/unitotem-first-admin
 
 
 override_dh_auto_install-arch:

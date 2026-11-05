@@ -7,8 +7,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from routers import login, setup
+from utils import first_access
 from utils.models.security import SecuritySettings
-from utils.models.user import User, UserData, UserPerms
+from utils.models.user import User, UserPerms
 
 
 @pytest.mark.parametrize('src,expected', [
@@ -104,12 +105,16 @@ def test_set_passwd_takes_the_password_from_the_body(monkeypatch):
     assert c.post('/api/settings/set_passwd', json={'password': 'a'}).status_code == 422
 
 
-def _setup_client(monkeypatch, enforce):
+def _setup_client(monkeypatch, tmp_path, enforce):
     created = []
     settings = SecuritySettings(enforce_password_policy=enforce)
     monkeypatch.setattr(setup, 'security_settings', settings)
     monkeypatch.setattr(setup, 'user_manager', FakeSetupManager())
-    monkeypatch.setattr(setup.osusers, 'create_user', lambda u, p: created.append((u, p)))
+    # the real system is never touched: no accounts, no lock under /run, no sshd marker change
+    monkeypatch.setattr(first_access, 'LOCK_PATH', str(tmp_path / 'first-admin.lock'))
+    monkeypatch.setattr(setup.osusers, 'admin_exists', lambda: False)
+    monkeypatch.setattr(setup.osusers, 'create_user', lambda u, p, admin=False: created.append((u, p)))
+    monkeypatch.setattr(setup.osusers, 'close_first_access', lambda: None)
     monkeypatch.setattr(setup, 'WebviewManager', type('W', (), {'_instance': None}))
     monkeypatch.setattr(setup, 'session_cookie', lambda *a, **k: None)
     app = FastAPI()
@@ -117,14 +122,14 @@ def _setup_client(monkeypatch, enforce):
     return TestClient(app), created
 
 
-def test_setup_applies_the_enforced_policy(monkeypatch):
-    c, created = _setup_client(monkeypatch, True)
+def test_setup_applies_the_enforced_policy(monkeypatch, tmp_path):
+    c, created = _setup_client(monkeypatch, tmp_path, True)
     r = c.post('/setup', json={'username': 'boss', 'password': 'aaaaaaaa'})      # basic rules pass, policy refuses
     assert r.status_code == 422 and created == []
 
 
-def test_setup_without_enforcement_only_needs_the_basic_rules(monkeypatch):
-    c, created = _setup_client(monkeypatch, False)
+def test_setup_without_enforcement_only_needs_the_basic_rules(monkeypatch, tmp_path):
+    c, created = _setup_client(monkeypatch, tmp_path, False)
     assert c.post('/setup', json={'username': 'boss', 'password': 'aaaaaaaa'}).status_code == 200
     assert created == [('boss', 'aaaaaaaa')]
 
@@ -132,8 +137,10 @@ def test_setup_without_enforcement_only_needs_the_basic_rules(monkeypatch):
 def test_accounts_reach_administrators_only(monkeypatch):
     from api import security
     from api.ws.responses import WSMulticast
-    data = {'root': UserData(permissions={UserPerms.admin}), 'bob': UserData(permissions={UserPerms.audio})}
-    monkeypatch.setattr(security, 'user_manager', SimpleNamespace(items=lambda: list(data.items())))
+    from utils.models.user import Account
+    data = {'root': Account('root', {UserPerms.admin}), 'bob': Account('bob', {UserPerms.audio})}
+    monkeypatch.setattr(security, 'user_manager', SimpleNamespace(items=lambda: list(data.items()),
+                                                                admins=lambda: ['root']))
 
     async def run():
         return security.Security.users()
@@ -148,3 +155,27 @@ def test_websocket_errors_carry_no_traceback():
     from routers.websocket import web_ui
     src = inspect.getsource(web_ui.websocket_endpoint)
     assert 'format_exc()' in src and "extra=format_exc" not in src
+
+
+def test_root_cannot_log_in_to_the_web(monkeypatch):
+    # root is a member of the group users here, and PAM would accept its password: the web still refuses it
+    import grp
+    import pwd
+    import pam
+    from utils import osusers
+    root = pwd.struct_passwd(('root', 'x', 0, 0, 'root', '/root', '/bin/bash'))
+
+    def getpwnam(name):
+        if name != 'root':
+            raise KeyError(name)
+        return root
+    monkeypatch.setattr(osusers.pwd, 'getpwnam', getpwnam)
+    monkeypatch.setattr(osusers.grp, 'getgrnam', lambda name: grp.struct_group(('users', 'x', 100, ['root'])))
+    monkeypatch.setattr(pam.pam, 'authenticate', lambda *a, **k: pytest.fail('PAM asked about root'))
+    monkeypatch.setattr(login, 'user_manager', SimpleNamespace(users=lambda: [], authenticate=osusers.authenticate,
+                                                               has_admin=lambda: True))
+    login._login_limiter._events.clear()
+    app = FastAPI()
+    app.include_router(login.router)
+    c = TestClient(app, follow_redirects=False)
+    assert c.post('/auth/token', data={'username': 'root', 'password': 'right'}).status_code == 401
