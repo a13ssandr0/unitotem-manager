@@ -10,9 +10,11 @@
               <v-card-subtitle class="mb-4">{{ os_vers }}</v-card-subtitle>
               <v-card-text>
                 <v-form @submit.prevent="handleLogin">
-                  <v-select label="Username" name="username" v-model="username" :items="usersList" variant="outlined"></v-select>
+                  <v-select v-if="usersList.length" label="Username" name="username" v-model="username" :items="usersList" variant="outlined"></v-select>
+                  <v-text-field v-else label="Username" name="username" v-model="username" autocomplete="username" variant="outlined"></v-text-field>
                   <v-text-field id="password" label="Password" name="password" type="password" v-model="password" variant="outlined"></v-text-field>
                   <v-checkbox v-model="rememberMe" name="remember_me" label="Remember me" checked hide-details class="my-2"></v-checkbox>
+                  <v-alert v-if="error" type="error" variant="tonal" density="compact" class="mb-2">{{ error }}</v-alert>
                   <v-btn type="submit" color="primary" block size="large" variant="elevated" class="mt-4">Log In</v-btn>
                 </v-form>
               </v-card-text>
@@ -44,6 +46,7 @@ const ip_addr = ref(window.__INITIAL_STATE__.ip_addr)
 const os_vers = ref(window.__INITIAL_STATE__.os_vers)
 const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
 const usersList = ref([])
+const error = ref('')
 
 const handleLogin = () => {
   const formData = new URLSearchParams()
@@ -59,21 +62,29 @@ const handleLogin = () => {
     body: formData,
     credentials: "include"
   }).then((resp) => {
-    // TODO handle wrong password
-    window.location.href = window.__INITIAL_STATE__.src || '/';
+    if (resp.status === 401) {
+      error.value = 'Wrong user name or password'
+    } else if (resp.status === 429) {
+      error.value = 'Too many attempts, try again in a minute'
+    } else if (!resp.ok) {
+      error.value = 'Login failed (' + resp.status + ')'
+    } else {
+      window.location.href = window.__INITIAL_STATE__.src || '/';
+    }
   }).catch(err => {
     console.error('Login failed', err)
+    error.value = 'Cannot reach the node'
   })
 }
 
 onMounted(() => {
   document.title = hostname.value + ' - UniTotem Login'
 
-  fetch(`/login/users`).then(res => res.json()).then(users => {
+  fetch(`/login/users`).then(res => res.ok ? res.json() : []).then(users => {
     usersList.value = users
-    if (username.value === '' || !users.includes(username.value)){
+    if (users.length && !users.includes(username.value)){
       username.value = users[0]
     }
-  })
+  }).catch(() => {})
 })
 </script>

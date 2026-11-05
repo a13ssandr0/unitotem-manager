@@ -24,6 +24,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
 from loguru import logger
+from pydantic import BaseModel, Field
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -31,12 +32,34 @@ import utils.constants as const
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
 from utils.environment import environ
 from utils.models.user import User, user_manager
+from utils.models.security import security_settings
 from utils.osusers import OSUserError
+from utils.remote.pairing import RateLimiter
 from utils.system.ip import reachable_ipv4
 
 
 class NotAuthenticatedException(Exception):
     pass
+
+
+def safe_src(src: Optional[str]) -> str:
+    """A redirect target after login: only a path of this site (one leading '/', no scheme, no '//' or backslash, no
+    control characters); anything else is the home page."""
+    if (not src or len(src) > 2048 or not src.startswith('/') or src.startswith('//') or '\\' in src
+            or any(ord(c) < 32 or ord(c) == 127 for c in src)):
+        return '/'
+    return src
+
+
+# Per client address: attempts to log in, and reads of the user list on the login page
+_login_limiter = RateLimiter(limit=10, window=60)
+_users_limiter = RateLimiter(limit=30, window=60)
+
+
+def _limit(limiter: RateLimiter, request: Request):
+    host = request.client.host if request.client else ''
+    if not limiter.allow(host):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail='Too many requests')
 
 
 async def login_redirect(request, exc):
@@ -64,7 +87,7 @@ class LoginForm(OAuth2PasswordRequestForm):
                 scope=scope,
                 client_id=client_id,
                 client_secret=client_secret)
-        self.src = src or '/'
+        self.src = safe_src(src)
         self.remember_me = remember_me
 
 
@@ -112,8 +135,13 @@ def session_cookie(response: Response, username: str, remember: bool):
 router = APIRouter()
 
 
+class PasswordBody(BaseModel):
+    password: str = Field(max_length=2048)
+
+
 @router.post(LOGMAN.model.flows.password.tokenUrl)
-async def login(data: LoginForm = Depends()):
+async def login(request: Request, data: LoginForm = Depends()):
+    _limit(_login_limiter, request)
     # PAM can take a couple of seconds on a wrong password (pam_faildelay): not on the event loop
     if not await asyncio.to_thread(user_manager.authenticate, data.username, data.password):
         logger.error("Invalid credentials for user {}", data.username)
@@ -125,17 +153,23 @@ async def login(data: LoginForm = Depends()):
 
 
 @router.get("/login/users")
-async def get_users() -> list[str]:
+async def get_users(request: Request) -> list[str]:
+    """Account names for the login page (never permissions); empty when the administrator switched the list off."""
+    _limit(_users_limiter, request)
+    if not security_settings.show_login_users:
+        return []
     return list(user_manager.users())
+
 
 @router.get('/login')
 async def login_page(request: Request, src: Optional[str] = '/'):
+    src = safe_src(src)
     if not user_manager.has_admin():
         return RedirectResponse('/setup')
     try:
         await LOGMAN(request)
         # why are you trying to access login page from an authenticated session?
-        return RedirectResponse(src or '/')
+        return RedirectResponse(src)
     except NotAuthenticatedException:
         pass
 
@@ -148,7 +182,8 @@ async def login_page(request: Request, src: Optional[str] = '/'):
         "request": request,
         "assets": assets,
         "state": {
-            "src": src or '/',
+            "src": src,
+            "show_users": security_settings.show_login_users,
             "ut_vers": const.__version__,
             "os_vers": os_release()['PRETTY_NAME'],
             "ip_addr": reachable_ipv4(),
@@ -165,9 +200,9 @@ async def logout():
 
 
 @router.post("/api/settings/set_passwd")
-async def set_pass(request: Request, response: Response, password: str, user: User = Depends(LOGMAN)):
+async def set_pass(request: Request, response: Response, body: PasswordBody, user: User = Depends(LOGMAN)):
     from utils import passwords
-    from utils.models.security import security_settings
+    password = body.password
     problems = passwords.validate_basic(password)
     if not problems and security_settings.enforce_password_policy:
         problems = passwords.validate_password(password, user.name)

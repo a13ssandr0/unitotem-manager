@@ -42,7 +42,7 @@ class WSMulticast(WSResponse):
     _depth = 1
     users: str|list[str]
 
-    def __init__(self, users:str|list[str], target = None, **kwargs):
+    def __init__(self, users:str|list[str], /, target = None, **kwargs):     # positional only: a payload may have a `users` key
         super().__init__(target, **kwargs)
         self.users = users
 

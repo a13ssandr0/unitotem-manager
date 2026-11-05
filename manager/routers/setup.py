@@ -18,6 +18,7 @@ import utils.constants as const
 from routers.login import LOGMAN, session_cookie
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
 from utils import osusers, passwords
+from utils.models.security import security_settings
 from utils.models.user import UserData, UserPerms, user_manager
 from utils.system.ip import reachable_ipv4
 from webview.controller import WebviewManager
@@ -63,6 +64,8 @@ async def setup(data: SetupRequest):
         if user_manager.has_admin():
             raise HTTPException(status_code=404)
         problems = passwords.validate_basic(data.password) + passwords.validate_username(data.username)
+        if not problems and security_settings.enforce_password_policy:
+            problems = passwords.validate_password(data.password, data.username)
         if problems:
             return JSONResponse({'detail': problems}, status_code=422)
         try:
