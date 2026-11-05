@@ -3,8 +3,8 @@
 # (sysroot). Logs and stage markers are in $W/logs/. Re-runnable: finished stages (logs/x64.done, logs/arm64.done) are skipped.
 # Runs on the build server; paths can be overridden from the environment (CEF_WORK, CEF_DEPOT_TOOLS). See README.md.
 set -u
-W=${CEF_WORK:-/nas/cef-build/work}
-DT=${CEF_DEPOT_TOOLS:-/nas/cef-build/depot_tools}
+W=${CEF_WORK:?set CEF_WORK=<CEF work dir on the server>}
+DT=${CEF_DEPOT_TOOLS:?set CEF_DEPOT_TOOLS=<depot_tools dir on the server>}
 HASH=d58e84d17dd3f646c906ac633156cd0ec46638e9
 BRANCH=7727
 export PATH=$DT:$PATH

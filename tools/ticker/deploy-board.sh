@@ -1,5 +1,5 @@
 #!/bin/bash
-# Puts this checkout's manager code on an image board WITHOUT building a deb (CLAUDE.md, "Testing code on an image board"):
+# Puts this checkout's manager code on an image board WITHOUT building a deb (docs/manager/testing.md):
 # the changed directories are copied under /var/lib/unitotem/ticker-test and bind-mounted over /usr/share/unitotem-manager
 # (whole directories, because a bind needs an existing target and the ticker adds new files); feedparser (not in the image
 # yet: python3-feedparser is a new Depends) is put on PYTHONPATH by a volatile drop-in. Nothing survives a reboot.

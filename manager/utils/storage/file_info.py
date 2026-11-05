@@ -48,7 +48,8 @@ class FileInfo(BaseModel):
     pages: Optional[int] = None
 
 
-def get_dominant_color(pil_img: Image.Image, palette_size=16):  # https://stackoverflow.com/a/61730849/9655651
+# Adapted from a Stack Overflow answer by Pithikos (CC BY-SA 4.0): https://stackoverflow.com/a/61730849
+def get_dominant_color(pil_img: Image.Image, palette_size=16):
     # Resize image to speed up processing
     img = pil_img.copy()
     img.thumbnail((100, 100))

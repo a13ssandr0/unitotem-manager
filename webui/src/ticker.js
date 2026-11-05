@@ -112,6 +112,7 @@ function headline(item) {
   return el
 }
 
+// Inspired by Android RecyclerView: a small pool of reused elements serves a list of any length
 // ── the recycler: chained pages, each one constant-velocity compositor animation ──
 
 const speedPx = () => state.cfg.speed * state.font // px per second

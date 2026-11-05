@@ -2,7 +2,7 @@
 The facade of screen control: what can be done to each output, and doing it.
 
 Mechanisms: the compositor's own outputs (always there with a display), DDC/CI, CEC, Wake-on-LAN and serial. The first three are probed;
-WOL and serial exist only when configured for the output. See SCREEN-CONTROL-PLAN.md for the capability model.
+WOL and serial exist only when configured for the output. See docs/manager/screens-and-touch.md (unitotem repository) for the capability model.
 """
 from __future__ import annotations
 

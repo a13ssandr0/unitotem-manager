@@ -1,4 +1,4 @@
-/* What the page's CSS must do for the ticker (the contract of docs/layout-and-ticker.md), as a shim for the test page and for
+/* What the page's CSS must do for the ticker (the contract of docs/manager/layout-and-ticker.md in the unitotem repository), as a shim for the test page and for
    trying the ticker in the real viewer before boot-screen.html has its own #area. The page (package A) owns the real thing.
    ticker.js sets --ticker-h (px) on #area, the attributes data-ticker / data-ticker-pos, the height of #ticker-host. */
 #area { position: absolute; inset: 0; overflow: hidden; }

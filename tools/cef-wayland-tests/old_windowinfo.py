@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The old path: cef.WindowInfo() without a parent on Wayland (Chrome style window). Does CloseBrowser() destroy the toplevel?
-Prints the toplevels (wlrctl) before and after. Evidence for the note in docs/cef-wayland/native-path.md."""
+Prints the toplevels (wlrctl) before and after. Evidence for the note in docs/manager/cef/wayland-design.md (unitotem repository)."""
 import subprocess, sys, time, os
 from cefpython3 import cefpython as cef
 WLRCTL = '/var/lib/unitotem/wl/usr/bin/wlrctl'

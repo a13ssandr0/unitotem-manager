@@ -220,7 +220,7 @@ async def _eq_val(coro, value):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--host', default='192.168.122.50')
+    ap.add_argument('--host', required=True)
     ap.add_argument('--user', default='admin')
     ap.add_argument('--password', default='admin')
     ap.add_argument('--push', default='', help='command that makes the node raise a notification')

@@ -40,8 +40,8 @@ async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--host', required=True)
     ap.add_argument('--camera')
-    ap.add_argument('--reference', default='/tmp/claude-1000/equiv')
-    ap.add_argument('--out', default='/tmp/claude-1000/ui-rot')
+    ap.add_argument('--reference', default='/tmp/equiv')
+    ap.add_argument('--out', default='/tmp/ui-rot')
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     failures = 0

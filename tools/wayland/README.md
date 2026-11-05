@@ -1,6 +1,6 @@
 # Wayland test tooling
 
-The kiosk runs labwc (Wayland) only; see "THE KIOSK RUNS WAYLAND" in CLAUDE.md. This directory is for trying code on a board without
+The kiosk runs labwc (Wayland) only (docs/manager/viewer.md, unitotem repository). This directory is for trying code on a board without
 building an image.
 
 `session.sh start|stop` (root, from ssh) runs the REAL `unitotem-compositor.service` (a copy of `debian/unitotem-viewer.unitotem-compositor.service`

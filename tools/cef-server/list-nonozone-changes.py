@@ -2,7 +2,7 @@
 """List every line a CEF patch series adds or removes that is NOT inside a `BUILDFLAG(IS_OZONE)` conditional, with the enclosing
 preprocessor conditions. Windows and macOS are not built here, so this is the review aid for "the series changes nothing on them": each listed
 line must be a comment, an include, a declaration that is itself under `CEF_API_ADDED(CEF_EXPERIMENTAL)`, or something else with an argued
-effect (the output is the argument, see docs/cef-wayland/pr-cef.md).
+effect (the output is the argument, see docs/manager/cef/pr-cef.md (unitotem repository)).
 usage: list-nonozone-changes.py CEF_DIR BASE_COMMIT      (CEF_DIR is a git checkout with the series applied on top of BASE_COMMIT)"""
 import re, subprocess, sys
 cef, base = sys.argv[1], sys.argv[2]

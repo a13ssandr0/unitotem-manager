@@ -1,7 +1,7 @@
 #!/bin/sh
 # Prepares a test board for tools/wayland/session.sh: the Wayland stack of the kiosk extracted from the Debian trixie debs into
 # $W (default /var/lib/unitotem/wl) on the board, plus the code tree. Nothing is installed on the board, no dpkg change.
-#   tools/wayland/provision.sh HOST ARCH      ARCH = amd64 | arm64     (root, password unitotem, see CLAUDE.md for the ssh rules)
+#   tools/wayland/provision.sh HOST ARCH      ARCH = amd64 | arm64     (root, password unitotem)
 # Needs docker on this machine (the debs are downloaded in a trixie container, multiarch, no qemu), sshpass, zstd.
 set -e
 HOST=$1; ARCH=$2; W=${W:-/var/lib/unitotem/wl}

@@ -34,6 +34,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ── limits (all clamped) ─────────────────────────────────────────────────────
 
+# Inspired by Xibo and Wirespring digital-signage tickers: the crawl speed
+# Inspired by Legge et al. 1985 (scrolling-text reading rate) and a Japanese LED-sign study: default speed
 SPEED_MIN, SPEED_MAX, SPEED_DEFAULT = 0.25, 10.0, 2.5      # em/s, see above
 FONT_PERCENT_MIN, FONT_PERCENT_MAX = 1.0, 15.0              # % of the smaller side of the window
 FONT_PX_MIN, FONT_PX_MAX = 8.0, 400.0

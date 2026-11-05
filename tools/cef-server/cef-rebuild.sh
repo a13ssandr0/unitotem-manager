@@ -3,8 +3,8 @@
 # and make the distributions the wheels are built from. Incremental: minutes when only a few files changed. Re-runnable.
 #   sudo systemd-run --unit=cef-rebuild --working-directory=/nas/cef-build/work /nas/cef-build/work/cef-rebuild.sh
 set -u
-W=${CEF_WORK:-/nas/cef-build/work}
-DT=${CEF_DEPOT_TOOLS:-/nas/cef-build/depot_tools}
+W=${CEF_WORK:?set CEF_WORK=<CEF work dir on the server>}
+DT=${CEF_DEPOT_TOOLS:?set CEF_DEPOT_TOOLS=<depot_tools dir on the server>}
 HASH=d58e84d17dd3f646c906ac633156cd0ec46638e9
 BRANCH=7727
 export PATH=$DT:$PATH

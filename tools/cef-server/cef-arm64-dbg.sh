@@ -2,8 +2,8 @@
 # libcef.so arm64 (cross) with DCHECK/DVLOG enabled, in its OWN out dir (out/Dbg_arm64): only to see why the V4L2 decoder
 # pipeline stalls on the Pi 4. The release tree (out/Release_GN_arm64) is not touched.
 set -u
-W=${CEF_WORK:-/nas/cef-build/work}
-export PATH=${CEF_DEPOT_TOOLS:-/nas/cef-build/depot_tools}:$PATH DEPOT_TOOLS_UPDATE=0
+W=${CEF_WORK:?set CEF_WORK=<CEF work dir on the server>}
+export PATH=${CEF_DEPOT_TOOLS:?set CEF_DEPOT_TOOLS=<depot_tools dir on the server>}:$PATH DEPOT_TOOLS_UPDATE=0
 cd $W/chromium/src || exit 1
 mkdir -p out/Dbg_arm64
 cp out/Release_GN_arm64/args.gn out/Dbg_arm64/args.gn

@@ -1,6 +1,6 @@
 """
 Pure parsing of ddcutil's text output. No subprocess calls here - see the
-module docstring in __init__.py for why, and SCREEN-CONTROL-PLAN.md step 4 for
+module docstring in __init__.py for why, and docs/manager/screens-and-touch.md for
 where the subprocess-calling counterparts (detect(), capabilities(), getvcp(),
 setvcp() - async, wrapped in asyncio.to_thread, one asyncio.Lock per I2C bus)
 will live.
@@ -8,8 +8,8 @@ will live.
 Every parser here was written against and re-verified byte-for-byte against
 two real ddcutil versions on real hardware: 2.2.5 (dev host, three physical
 monitors, DDC/CI capable) and 2.2.0 (unitotem-test, trixie's packaged version,
-GTX 1060 passthrough, real 4K LG Ultrafine). See SCREEN-CONTROL-PLAN.md
-sections 1.1 and 10 for the full story, including the one genuine surprise:
+GTX 1060 passthrough, real 4K LG Ultrafine). See docs/manager/screens-and-touch.md
+(unitotem repository) for the full story, including the one genuine surprise:
 2.2.0 prints roughly ten lines of connector-resolution diagnostics to STDOUT
 (not stderr) ahead of the real result whenever it cannot resolve a DRM
 connector for the bus - which on the NVIDIA driver is always. Every parser
@@ -224,7 +224,7 @@ def parse_version(text: str) -> Optional[tuple[int, int]]:
 def supports_ddc(version: Optional[tuple[int, int]]) -> bool:
     """Whether this ddcutil version is new enough to trust for this project.
 
-    >= 2.0 is a hard requirement (SCREEN-CONTROL-PLAN.md §0): earlier
+    >= 2.0 is a hard requirement (docs/manager/screens-and-touch.md (unitotem repository)): earlier
     versions were never verified and Debian bookworm's packaged 1.4.1 is
     exactly the version this project chose NOT to support (the kiosk image
     moved to trixie instead, which packages 2.2.0). A node still running an

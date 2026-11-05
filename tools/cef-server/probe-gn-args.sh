@@ -3,8 +3,8 @@
 # (out/Probe_base: only ninja files, ~2 GB, nothing is compiled), report whether gn accepts it (CEF asserts some arguments) and
 # how many build steps ninja plans for libcef.so. Usage: probe-gn-args.sh <results-file> < sets   (one set per line: name|arg arg ...)
 set -u
-export PATH=/nas/cef-build/depot_tools:$PATH DEPOT_TOOLS_UPDATE=0
-cd /nas/cef-build/work/chromium/src || exit 1
+export PATH=${CEF_DEPOT_TOOLS:?set CEF_DEPOT_TOOLS=<depot_tools dir on the server>}:$PATH DEPOT_TOOLS_UPDATE=0
+cd "${CEF_WORK:?set CEF_WORK=<CEF work dir on the server>}/chromium/src" || exit 1
 OUT=out/Probe_base
 BASE=$(grep -v -E 'chrome_pgo_phase|target_cpu' /tmp/args.base.gn)
 RESULTS=${1:?results file}

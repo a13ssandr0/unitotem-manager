@@ -1,5 +1,5 @@
 """
-Monitor power/input/volume control via CEC, DDC/CI and X (SCREEN-CONTROL-PLAN.md).
+Monitor power/input/volume control via CEC, DDC/CI and X (docs/manager/screens-and-touch.md (unitotem repository)).
 
 This package must stay importable on a headless node with no PySide6/cefpython
 and no GUI at all - the WebSocket API needs to report "unavailable" for a

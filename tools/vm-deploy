@@ -5,7 +5,7 @@
 #   tools/vm-deploy --no-restart # sync only
 #
 # This is the normal iteration path - building a .deb is only for testing the
-# packaging itself. See VM-TESTING.md.
+# packaging itself. See docs/manager/testing-vm.md.
 set -e
 . "$(dirname "$0")/vm-env.sh"
 

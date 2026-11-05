@@ -3,7 +3,7 @@ Parser tests against real captured ddcutil output - two versions, two
 machines: 2.2.5 (dev host, three physical monitors) and 2.2.0 (unitotem-test,
 trixie's packaged version, GTX 1060 passthrough). See
 manager/utils/system/screens/ddc.py's module docstring and
-SCREEN-CONTROL-PLAN.md sections 1.1/6/10 for the full story.
+docs/manager/screens-and-touch.md (unitotem repository) for the full story.
 """
 import pytest
 

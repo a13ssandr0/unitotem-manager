@@ -30,7 +30,7 @@ _TRANSFORM_TO_ROTATION = {'normal': 'normal', '90': 'left', '180': 'inverted', '
 
 # What turning and mirroring the CONTENT of a window in the page (quarter turns clockwise, flip 1 horizontal / 2 vertical) looks like
 # when the compositor does it to the output instead: (turn, flip) -> wlr-randr transform. Compared picture by picture on a board
-# (docs/rotation-benchmark.md): all twelve are identical.
+# (docs/manager/screens-and-touch.md (unitotem repository)): all twelve are identical.
 CONTENT_TO_TRANSFORM = {
     (0, 0): 'normal', (0, 1): 'flipped', (0, 2): 'flipped-180',
     (1, 0): '270', (1, 1): 'flipped-270', (1, 2): 'flipped-90',
