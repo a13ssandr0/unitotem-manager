@@ -78,7 +78,7 @@ unitotem-manager (3.0.0~dev12) stable; urgency=medium
     updater's restart when an update is armed
   * Notifications follow the freedesktop specification; terminal and screen open with
     no second login; web UI reloads itself after a manager restart
-  * On-screen keyboard layouts extracted from the real Gboard; viewer no longer
+  * On-screen keyboard layouts extracted from the previous keyboard source; viewer no longer
     reports browser security messages
 
  -- Alessandro Campolo <campolo.alex@gmail.com>  Wed, 28 Oct 2026 12:00:00 +0100
