@@ -340,6 +340,10 @@ _start_ticker(loop)
 for _plugin, hook in plugins.each('on_startup'):
     hook(loop)
 
+# The first-access setup closes once an administrator exists, whoever created it; the accounts are watched for it
+from utils.first_access_watch import start as _start_first_access_watch  # noqa: E402
+_start_first_access_watch(loop)
+
 
 async def _serve_www():
     # a swallowed bind error would leave the manager up but unreachable:
