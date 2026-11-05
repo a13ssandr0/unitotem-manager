@@ -1,4 +1,6 @@
 """
+Adapted from psutil (BSD-3-Clause): https://github.com/giampaolo/psutil
+
 The small /proc and /sys helpers the sensor and CPU code needs.
 
 They used to be imported from psutil's private modules (`psutil._common`, `psutil._ntuples`, `psutil._pslinux`), whose

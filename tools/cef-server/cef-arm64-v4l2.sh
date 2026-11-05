@@ -2,8 +2,8 @@
 # CEF 147 arm64 (cross, sysroot) WITH V4L2 hardware video decode for the Raspberry Pi (use_v4l2_codec=true), same codecs as before.
 # Re-runnable; the previous arm64 distribution (no V4L2) is kept in binary_distrib-arm64-nov4l2/.
 set -u
-W=${CEF_WORK:-/nas/cef-build/work}
-DT=${CEF_DEPOT_TOOLS:-/nas/cef-build/depot_tools}
+W=${CEF_WORK:?set CEF_WORK=<CEF work dir on the server>}
+DT=${CEF_DEPOT_TOOLS:?set CEF_DEPOT_TOOLS=<depot_tools dir on the server>}
 HASH=d58e84d17dd3f646c906ac633156cd0ec46638e9
 BRANCH=7727
 export PATH=$DT:$PATH

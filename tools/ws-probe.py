@@ -29,8 +29,8 @@ import websockets
 async def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--host', default='192.168.122.50',
-                    help='manager host (default: the test VM)')
+    ap.add_argument('--host', required=True,
+                    help='manager host (e.g. the test VM address)')
     ap.add_argument('--user', default='admin')
     ap.add_argument('--password', default='admin')
     ap.add_argument('--send', metavar='TARGET', action='append', default=[],

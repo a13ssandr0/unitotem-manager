@@ -1,6 +1,5 @@
 """
-Thin client for the device's image updater, ``/usr/sbin/unitotem-update`` (contract: AB-DESIGN.md in
-unitotem-system). The manager only starts it and reads its answers, it never downloads or writes
+Thin client for the device's image updater, ``/usr/sbin/unitotem-update`` (contract: docs/system/ab-updates.md (unitotem repository)). The manager only starts it and reads its answers, it never downloads or writes
 images itself.
 """
 import asyncio

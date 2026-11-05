@@ -1,9 +1,9 @@
 #!/bin/bash
 # libcef.so x64 with the lean GN set in its OWN out dir (out/Release_Lean_x64); the release trees are not touched.
-# Measures how much a Wayland-only, GTK/CUPS/Bluetooth/Kerberos-free build really saves (docs/cef-lean-build.md).
+# Measures how much a Wayland-only, GTK/CUPS/Bluetooth/Kerberos-free build really saves (docs/manager/cef/lean-build.md).
 set -u
-export PATH=/nas/cef-build/depot_tools:$PATH DEPOT_TOOLS_UPDATE=0
-cd /nas/cef-build/work/chromium/src || exit 1
+export PATH=${CEF_DEPOT_TOOLS:?set CEF_DEPOT_TOOLS=<depot_tools dir on the server>}:$PATH DEPOT_TOOLS_UPDATE=0
+cd "${CEF_WORK:?set CEF_WORK=<CEF work dir on the server>}/chromium/src" || exit 1
 OUT=out/Release_Lean_x64
 mkdir -p $OUT
 cp out/Release_GN_x64/args.gn $OUT/args.gn

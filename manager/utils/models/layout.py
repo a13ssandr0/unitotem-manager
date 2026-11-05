@@ -1,5 +1,5 @@
 """
-Layout of a viewer window: the content rectangle (`Area`) and the tree of panes (`Leaf`/`Split`), see docs/layout-and-ticker.md.
+Layout of a viewer window: the content rectangle (`Area`) and the tree of panes (`Leaf`/`Split`), see docs/manager/layout-and-ticker.md (unitotem repository).
 
 A window is divided the way a terminal emulator divides its view: a pane is split in two, side by side (`h`) or stacked (`v`),
 as often as wanted, and a pane can be closed, the neighbour taking its space. Every pane (a leaf of the tree) plays its own
@@ -219,6 +219,7 @@ def _replace(node, leaf_id: int, make):
     return None
 
 
+# Inspired by Konsole (KDE): a window divided into panes, each pane with its own playlist
 def split_leaf(layout: WindowLayout, leaf_id: int, direction: str) -> tuple[WindowLayout, int]:
     """Divides a pane in two. The pane keeps its id (and its playlist), the new one gets the next id and goes to the right
     ('h') or below ('v'). Returns the new layout and the id of the new pane."""

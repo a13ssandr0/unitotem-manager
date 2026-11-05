@@ -30,12 +30,12 @@ def load(name, file):
 
 
 smoke = load('ui_smoke', 'ui-smoke.py')
-venus = load('venus_run', 'ticker/venus-run.py')
+board = load('board_run', 'ticker/board-run.py')
 PORT = 9348
 
 
 async def main(args):
-    api = await venus.Api(args.host).__aenter__()
+    api = await board.Api(args.host).__aenter__()
     failures, made = [], []
 
     def check(label, ok, detail=''):

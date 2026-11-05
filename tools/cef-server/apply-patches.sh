@@ -9,12 +9,12 @@
 # Run it after automate-git.py has applied CEF's own patches (our patches touch files CEF does not patch).
 #
 # patches/cef/ is a `git format-patch` series against the CEF repository (chromium/src/cef, commit d58e84d17) with the Wayland
-# work (CefWindow::SetFullscreenOnDisplay, CefDisplay::GetLabel, ...; see docs/cef-wayland/). The patches are applied (not
+# work (CefWindow::SetFullscreenOnDisplay, CefDisplay::GetLabel, ...; see docs/manager/cef/wayland-design.md). The patches are applied (not
 # committed) in chromium/src/cef with the same rules. After applying them run `python3 tools/version_manager.py -u --fast-check`
 # in chromium/src/cef to regenerate the C API wrappers, then rebuild.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SRC="${1:-${CEF_WORK:-/nas/cef-build/work}/chromium/src}"
+SRC="${1:-${CEF_WORK:?set CEF_WORK=<CEF work dir on the server>}/chromium/src}"
 [ -d "$SRC/.git" ] || { echo "not a Chromium checkout: $SRC" >&2; exit 2; }
 cd "$SRC"
 shopt -s nullglob

@@ -33,7 +33,7 @@ def load(name, *path):
     return mod
 
 
-vr = load('venus_run', '..', '..', 'ticker', 'venus-run.py')
+vr = load('board_run', '..', '..', 'ticker', 'board-run.py')
 smoke = load('ui_smoke', '..', '..', 'ui-smoke.py')
 CONFIGS = {'A': (0, 0, 'normal'), 'B1': (1, 0, 'normal'), 'B3': (3, 0, 'normal'), 'C90': (0, 0, '90'), 'C270': (0, 0, '270'),
            'C180': (0, 0, '180'), 'CF': (0, 0, 'flipped'), 'BF': (0, 1, 'normal'),

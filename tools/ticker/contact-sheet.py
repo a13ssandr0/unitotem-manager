@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Labelled montage of the screenshots of a venus-run.py output directory (Pillow): contact-sheet.py DIR"""
+"""Labelled montage of the screenshots of a board-run.py output directory (Pillow): contact-sheet.py DIR"""
 import glob
 import os
 import sys

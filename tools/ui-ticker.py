@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Browser test of webui/src/ticker.js in headless Chrome (CDP), against tools/ticker/testpage.html, which provides the
-elements and the CSS of the page contract (docs/layout-and-ticker.md). Needs google-chrome and the `websockets` package.
+elements and the CSS of the page contract (docs/manager/layout-and-ticker.md (unitotem repository)). Needs google-chrome and the `websockets` package.
 
     .venv/bin/python tools/ui-ticker.py [--shots DIR]
 

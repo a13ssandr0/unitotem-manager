@@ -1,7 +1,7 @@
 """
 Pure priority resolution between the three power-control mechanisms - no
 subprocess calls, no I/O; see the module docstring in __init__.py. The
-capability model itself (SCREEN-CONTROL-PLAN.md §2):
+capability model itself (docs/manager/screens-and-touch.md (unitotem repository)):
 
     Operation      DDC/CI (>= 2.0)          CEC                       output
     Power off      0xD6 <- 04/05            --standby (0x36)          wlopm --off X (DPMS; the output stays enabled)

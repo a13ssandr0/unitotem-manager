@@ -21,7 +21,7 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location('venus_run', os.path.join(HERE, '..', '..', 'ticker', 'venus-run.py'))
+spec = importlib.util.spec_from_file_location('board_run', os.path.join(HERE, '..', '..', 'ticker', 'board-run.py'))
 vr = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vr)
 
@@ -59,7 +59,7 @@ async def main():
     ap.add_argument('--configs', default='A,B1,C90,C270')
     ap.add_argument('--workloads', default=','.join(WORKLOADS))
     ap.add_argument('--repeat', type=int, default=1, help='run the whole workload list this many times per configuration (every run reloads the page)')
-    ap.add_argument('--videos', default='/tmp/claude-1000/rotvideos')
+    ap.add_argument('--videos', default='/tmp/rotvideos')
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     host = args.host

@@ -219,6 +219,7 @@ function onTap(button, action) {
   })
 }
 
+// Inspired by One Euro Filter (Casiez et al., CHI 2012): speed-adaptive low-pass filter for the drag position
 /** The 1 Euro filter (Casiez et al.) of one coordinate: the cutoff grows with the speed, so it is steady when slow and quick when fast. */
 function oneEuro(start, time, minCutoff = 1.5, beta = 0.05, derivativeCutoff = 1) {
   let value = start
@@ -376,6 +377,7 @@ async function buildLayout(id) {
 let current = null // what buildLayout() returned for the layout on show
 const GAP_PX = 8
 
+// Inspired by Gboard: tablet key geometry (keys as wide as their weight in the row, rows as tall as each other)
 /** Sets the size of every key of the page on show (called after every render): rows as tall as each other, keys as wide as their weight. */
 function sizeKeys() {
   if (!keyboard) return // simple-keyboard renders once while it is being constructed
@@ -680,6 +682,7 @@ export function configure(settings) {
 /** A field that has no room for the keyboard below it is brought up instead: the whole content of the window
  *  slides up, off the screen if it has to, and slides back when the keyboard goes. The transform is applied to #stage and
  *  #home-frame by the page's stylesheet (boot-screen.html), with the animation. */
+// Inspired by Apple iOS: the content slides up above the keyboard when the text field would be covered
 let contentShift = 0
 let anchor = null // the last text field that was touched: {top, bottom, at}, in layer coordinates, BEFORE any shift
 function setContentShift(px) {

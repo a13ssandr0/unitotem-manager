@@ -1,7 +1,7 @@
 # Graphics benchmarks and Wayland experiments
 
 Scripts used on 2026-10-19/20 to measure the viewer's graphics path on a Raspberry Pi 4 (V3D) and on an Intel Alder Lake
-laptop ("venus", Iris Xe). They run ON the target and talk to CEF over DevTools (`127.0.0.1:9223`), so they need the manager's
+laptop (Iris Xe). They run ON the target and talk to CEF over DevTools (`127.0.0.1:9223`), so they need the manager's
 python (`websockets`). Nothing here is installed by a package; copy to `/tmp/vp` (probes) and `/tmp/wlt` (Wayland harness).
 
 | script | what it measures |
@@ -23,4 +23,4 @@ The compositors are not in the image: they were extracted from Debian trixie `.d
 (only the packages missing from the device), so nothing is written to the root filesystem. `cage` looks for
 `/usr/bin/Xwayland`: point `WLR_XWAYLAND` at the extracted binary.
 
-Results and what they mean are in `CLAUDE.md` ("Graphics stack measurements, 2026-10-20") and in `TODO`.
+Results and what they mean are in `docs/manager/viewer.md` (unitotem repository) and in `TODO.md` (unitotem repository).

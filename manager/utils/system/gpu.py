@@ -210,7 +210,7 @@ VERIFIED: Dict[str, bool] = {
     # driver 535.261.03: selected correctly, and the absence of video-decode
     # switches is the *finding*, not an omission - see _NVIDIA_DRM_NAMES.
     "nvidia": True,
-    # Measured on an Intel Alder Lake-P Iris Xe (venus, iHD driver 25.2.3, 2026-10-20): the CDP Media domain reports
+    # Measured on an Intel Alder Lake-P Iris Xe (iHD driver 25.2.3, 2026-10-20): the CDP Media domain reports
     # kVideoDecoderName=VaapiVideoDecoder, kIsPlatformVideoDecoder=true for H.264 (4K60 BBB scaled to 1080p: 61 fps,
     # 0 dropped, 82% of a core under X11 + compositor) and HEVC 720p. AMD is still untested.
     # (SystemInfo.getInfo's videoDecoding array stays empty on this machine: do not use it as the signal.)

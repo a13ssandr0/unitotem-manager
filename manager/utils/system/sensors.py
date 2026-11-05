@@ -1,4 +1,6 @@
 """
+Adapted from psutil (BSD-3-Clause): https://github.com/giampaolo/psutil
+
 This module replaces function `sensors_temperatures` of psutil.
 
 In PR #2304 (https://github.com/giampaolo/psutil/pull/2304), not yet merged,

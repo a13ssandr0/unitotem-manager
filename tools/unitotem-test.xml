@@ -1,5 +1,5 @@
 <!--
-  UniTotem manager test VM. See VM-TESTING.md for the procedure this belongs to.
+  UniTotem manager test VM. See docs/manager/testing-vm.md for the procedure this belongs to.
 
   Run under qemu:///system (not session) because only the system instance can
   attach a tap to libvirt's 'default' NAT bridge, which is what gives the guest
@@ -50,7 +50,7 @@
 
       3D acceleration (accel3d='yes' plus an egl-headless graphics device) is
       NOT enabled here, and the reason is the host rather than this file: see
-      VM-TESTING.md, "GPU acceleration". Turning it on without that host-side
+      docs/manager/testing-vm.md, "GPU acceleration". Turning it on without that host-side
       prerequisite makes the domain fail to start outright, which is worse
       than a guest on llvmpipe.
     -->

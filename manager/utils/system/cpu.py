@@ -14,6 +14,7 @@ from utils.system.procfs import CLOCK_TICKS, get_procfs_path, open_binary, scput
 
 # reimplementation of psutil CPU related functions to get all CPU data at once
 # original implementation https://github.com/giampaolo/psutil
+# Adapted from psutil (BSD-3-Clause): https://github.com/giampaolo/psutil
 
 
 # =====================================================================

@@ -10,11 +10,11 @@
 # CROSS compiled inside the container (gcc-aarch64-linux-gnu + multiarch libraries), see tools/cef-wheels-inner.sh.
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-HOST="${BUILD_HOST:-alessandro@supercompiler}"
+HOST="${BUILD_HOST:?set BUILD_HOST=user@build-server}"
 SSH=(ssh -o BatchMode=yes -o ServerAliveInterval=15)
 RSYNC=(rsync -e "ssh -o BatchMode=yes" --rsync-path="sudo rsync")     # the server is a VM: alessandro uses sudo for docker and systemd
-SERVER_DIR=/nas/cef-wheels
-DISTRIB=/nas/cef-build/work/chromium/src/cef/binary_distrib
+SERVER_DIR=${CEF_WHEELS_DIR:?set CEF_WHEELS_DIR=<wheel build dir on the build server>}
+DISTRIB=${CEF_WORK:?set CEF_WORK=<CEF work dir on the build server>}/chromium/src/cef/binary_distrib
 
 case "${1:-}" in
 start)

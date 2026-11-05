@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Sets the bar of the first window of a board and/or its sources from the command line (uses the Api client of venus-run.py).
+Sets the bar of the first window of a board and/or its sources from the command line (uses the Api client of board-run.py).
 
-    venus-set.py HOST --bar '{"enabled": false}'                      # merged over the defaults of venus-run.py
-    venus-set.py HOST --feeds URL --source /big.xml                  # replaces every source by these (paths on --feeds, or full URLs)
+    board-set.py HOST --bar '{"enabled": false}'                      # merged over the defaults of board-run.py
+    board-set.py HOST --feeds URL --source /big.xml                  # replaces every source by these (paths on --feeds, or full URLs)
 """
 import argparse
 import asyncio
@@ -11,7 +11,7 @@ import importlib.util
 import json
 import os
 
-spec = importlib.util.spec_from_file_location('venus_run', os.path.join(os.path.dirname(__file__), 'venus-run.py'))
+spec = importlib.util.spec_from_file_location('board_run', os.path.join(os.path.dirname(__file__), 'board-run.py'))
 vr = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vr)
 

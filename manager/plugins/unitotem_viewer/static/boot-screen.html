@@ -76,7 +76,7 @@
       transform-origin: center center;
     }
 
-    /* What a window is made of (docs/layout-and-ticker.md): the backdrop (body and #stage, the margin colour) behind #area, a
+    /* What a window is made of (docs/manager/layout-and-ticker.md (unitotem repository)): the backdrop (body and #stage, the margin colour) behind #area, a
        rectangle of the window (percent, in the space of the content) that holds #panes, one .pane per leaf of the layout tree
        laid out side by side or stacked, and #ticker-host. A pane is a stage of its own: the containers below, its own zoom,
        audio and refresh. */
@@ -785,7 +785,7 @@
     }
 
     /**
-     * Where the ticker bar sits (see the page contract in docs/layout-and-ticker.md): mode 'off' | 'overlay' | 'reserve',
+     * Where the ticker bar sits (see the page contract in docs/manager/layout-and-ticker.md (unitotem repository)): mode 'off' | 'overlay' | 'reserve',
      * position 'top' | 'bottom'. The CSS above does the placement from these two attributes of #area; ticker.js sets --ticker-h.
      */
     function setTickerPlacement(mode, position) {
@@ -910,7 +910,7 @@
     }
 
     /**
-     * The RSS ticker (webui/src/ticker.js, served by the manager; package B of docs/layout-and-ticker.md). The viewer puts the
+     * The RSS ticker (webui/src/ticker.js, served by the manager; package B of docs/manager/layout-and-ticker.md (unitotem repository)). The viewer puts the
      * settings of the window in window.__utTickerConfig and the merged list in window.__utTickerItems over the DevTools
      * connection and calls this, or they were there first and this runs when the page has loaded. The module is loaded only
      * once the bar is enabled; it draws in #ticker-host inside #area and sets --ticker-h on #area.

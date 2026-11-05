@@ -1,4 +1,4 @@
-# Hardware counters sampler for venus (i915 throttle flags, GPU act freq, package temp/power, CPU throttle counters)
+# Hardware counters sampler for the dev laptop (i915 throttle flags, GPU act freq, package temp/power, CPU throttle counters)
 import glob, time
 def rd(p):
     try: return open(p).read().strip()

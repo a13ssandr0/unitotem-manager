@@ -3,8 +3,8 @@
 #   ./sync.sh push   repo -> server (default)    ./sync.sh pull   server -> repo
 # Only the *.sh files are transferred (never the trees, logs or automate-git.py). Env: CEF_HOST, CEF_WORK.
 set -eu
-HOST=${CEF_HOST:-alessandro@supercompiler}
-REMOTE=${CEF_WORK:-/nas/cef-build/work}
+HOST=${CEF_HOST:?set CEF_HOST=user@build-server}
+REMOTE=${CEF_WORK:?set CEF_WORK=<CEF work dir on the build server>}
 HERE=$(cd "$(dirname "$0")" && pwd)
 OPTS=(-av --include='*.sh' --exclude='*' -e "ssh -o BatchMode=yes")
 case "${1:-push}" in

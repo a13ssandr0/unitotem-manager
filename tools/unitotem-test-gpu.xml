@@ -1,11 +1,11 @@
 <!--
-  UniTotem manager test VM, GPU-passthrough variant. See VM-TESTING.md,
+  UniTotem manager test VM, GPU-passthrough variant. See docs/manager/testing-vm.md,
   "GPU acceleration", for the procedure this belongs to.
 
   Same domain name, same disk, same MAC and therefore the same 192.168.122.50 as
   tools/unitotem-test.xml - the two files are alternative definitions of one VM,
   swapped by destroying the domain, undefining it with the "keep-nvram" flag,
-  defining the other file and starting it again. See VM-TESTING.md for the exact
+  defining the other file and starting it again. See docs/manager/testing-vm.md for the exact
   commands, which cannot be repeated here: a double hyphen is illegal inside an
   XML comment, so command lines carrying long options cannot be written in one.
 
@@ -28,7 +28,7 @@
   Nothing is provided here to mirror the guest's framebuffer back to the host:
   the card drives a physical monitor on DP-1 and every measurement is taken over
   SSH and CEF's DevTools. Looking Glass was tried for this and must not be
-  retried; see VM-TESTING.md for why.
+  retried; see docs/manager/testing-vm.md for why.
 -->
 <domain type='kvm'>
   <name>unitotem-test</name>

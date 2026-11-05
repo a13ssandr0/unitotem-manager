@@ -13,7 +13,7 @@ from typing import Optional, Tuple, Any
 from jinja2 import Undefined
 
 
-# https://github.com/ansible/ansible/blob/0830b6905996fb02eefcba79a9b055961e251078/lib/ansible/plugins/filter/core.py#L476
+# Adapted from Ansible filter plugin core.py (GPL-3.0+, (c) 2012 Jeroen Hoekx): https://github.com/ansible/ansible/blob/0830b6905996fb02eefcba79a9b055961e251078/lib/ansible/plugins/filter/core.py#L476
 def flatten(mylist, levels=None, skip_nulls=True, remove_duplicates=True):
 
     ret = []

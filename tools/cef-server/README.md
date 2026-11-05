@@ -1,7 +1,7 @@
 # CEF build scripts (build server)
 
 Scripts that build CEF 147 (Chromium branch 7727, commit `d58e84d17dd3f646c906ac633156cd0ec46638e9`) from source with the
-proprietary codecs, on the build server `alessandro@supercompiler` (128 cores / 256 GB, sudo NOPASSWD). They used to live only
+proprietary codecs, on the build server (`CEF_HOST`, 128 cores / 256 GB, sudo NOPASSWD). They used to live only
 there; this directory is the source of truth. `./sync.sh push` copies them to `/nas/cef-build/work/`, `./sync.sh pull` brings
 the server's version back. The wheels themselves are built afterwards by `tools/build-cef-wheels.sh`.
 
@@ -23,7 +23,7 @@ user's say-so: it is what makes rebuilds incremental.
 Common: `use_sysroot=true symbol_level=1 is_official_build=true proprietary_codecs=true ffmpeg_branding=Chrome`
 
 - `proprietary_codecs=true ffmpeg_branding=Chrome`: mandatory, every build ships H.264/AAC (ffmpeg is linked into `libcef.so`, no swap possible).
-- `is_official_build=true`: never false; a non-official build segfaults in Skia (`malloc_usable_size`, see CLAUDE.md).
+- `is_official_build=true`: never false; a non-official build segfaults in Skia (`malloc_usable_size`, see docs/manager/cef.md (unitotem repository)).
   Needs PGO profiles (`--with-pgo-profiles`, `checkout_pgo_profiles`).
 - `use_sysroot=true`: Debian sysroot, needed for the arm64 cross build (`install-sysroot.py --arch=arm64`).
 - arm64 with V4L2: add `use_v4l2_codec=true use_vaapi=false`. They are mutually exclusive (`gn gen` asserts), and on arm64 `use_vaapi`
@@ -76,7 +76,7 @@ run it by hand before `cef-rebuild.sh` (or before `build-all.sh` on a fresh chec
 ### CEF series (`patches/cef/`)
 
 A `git format-patch` series against the CEF repository itself (`chromium/src/cef`, commit `d58e84d17`), with the Wayland work (design
-note: `docs/cef-wayland/design.md`, upstream PR drafts: `docs/cef-wayland/pr-cef.md`). They apply to pristine CEF with `git am`
+note: `docs/manager/cef/wayland-design.md`, upstream PR drafts: `docs/manager/cef/pr-cef.md` (unitotem repository)). They apply to pristine CEF with `git am`
 (checked on a clean clone) and `apply-patches.sh` applies the series as a whole (working tree only, no commit; checked as a unit because
 later patches touch lines of earlier ones). The C API wrappers are generated: after applying run
 `python3 tools/version_manager.py -u --fast-check` in `chromium/src/cef`, then `autoninja -C out/Release_GN_x64 libcef` (and `_arm64`).

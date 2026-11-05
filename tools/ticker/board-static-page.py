@@ -11,7 +11,7 @@ import importlib.util
 import os
 import sys
 
-spec = importlib.util.spec_from_file_location('venus_run', os.path.join(os.path.dirname(__file__), 'venus-run.py'))
+spec = importlib.util.spec_from_file_location('board_run', os.path.join(os.path.dirname(__file__), 'board-run.py'))
 vr = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vr)
 NAME = 'ticker-test-static-page'

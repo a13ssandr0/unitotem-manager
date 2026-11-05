@@ -581,7 +581,7 @@ class WebviewApp:
         # often CEF's queue is drained, so a longer interval would only cost
         # input latency for nothing. Leave it alone until the real cause is
         # found. Not the way out either: external_message_pump and
-        # multi_threaded_message_loop, both dead ends on Linux (see CLAUDE.md).
+        # multi_threaded_message_loop, both dead ends on Linux (see docs/manager/viewer.md (unitotem repository)).
         cef_timer.start(10)
         # Normally each splash goes when its window's page has drawn a frame (see _on_first_frame); this is only the
         # safety net, a splash must never stay for good

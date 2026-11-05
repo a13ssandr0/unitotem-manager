@@ -3,7 +3,7 @@
 translation units WITH and WITHOUT -DUSE_OZONE. Without it BUILDFLAG(IS_OZONE) is 0, which is what Windows and macOS see in shared
 code: this checks that code path (types, includes, guards) as far as Linux headers allow. It is NOT a Windows/macOS build: no Windows
 SDK/MSVC or Apple SDK is available (gn gen fails with KeyError 'WINDOWSSDKDIR' / mac_sdk.gni).
-Env OUTDIR=<out dir> selects another tree (default: the 147 tree's out/Release_GN_x64).
+Env OUTDIR=<out dir> is required (e.g. the out/Release_GN_x64 of the Chromium checkout).
 Env CEF_OVERLAY=/path/with/cef/dir: compile the files of that CEF checkout (its `cef/` directory is put first on the include path) instead of the
 tree's own, e.g. a master checkout against the flags of the Chromium 147 out dir (errors that come from the version gap show with the unpatched
 base too: compare the base and the patched counts).
@@ -11,7 +11,7 @@ usage (on the build server, in a tree with out/Release_GN_x64 built): sudo pytho
   FILE is relative to chromium/src/cef, e.g. libcef/browser/views/window_impl.cc
 """
 import os,re,subprocess,sys,shlex
-O=os.environ.get('OUTDIR','/nas/cef-build/work/chromium/src/out/Release_GN_x64')
+O=os.environ.get('OUTDIR') or sys.exit('usage: set OUTDIR=<out dir, e.g. .../chromium/src/out/Release_GN_x64>')
 txt=open(O+'/obj/cef/libcef_static.ninja').read()
 def var(n):
     m=re.search(r'^%s = (.*)$'%n,txt,re.M); return m.group(1)

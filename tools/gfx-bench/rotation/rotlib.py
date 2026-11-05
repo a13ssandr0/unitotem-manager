@@ -13,7 +13,7 @@ import os
 import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location('venus_run', os.path.join(HERE, '..', '..', 'ticker', 'venus-run.py'))
+spec = importlib.util.spec_from_file_location('board_run', os.path.join(HERE, '..', '..', 'ticker', 'board-run.py'))
 vr = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vr)
 

@@ -167,6 +167,7 @@ async def _refuse(websocket: WebSocket, code: int, reason: str):
     await websocket.close(code, reason)
 
 
+# Inspired by TrueNAS web shell: console as the web user, no second login, one-time token
 @router.websocket('/terminal')
 async def terminal(websocket: WebSocket):
     request = Request({'type': 'http'})

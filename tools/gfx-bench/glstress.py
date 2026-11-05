@@ -1,4 +1,4 @@
-# Runs ON venus: Aquarium with growing fish counts, fps + GPU frequency + CPU per step.
+# Runs ON the dev laptop: Aquarium with growing fish counts, fps + GPU frequency + CPU per step.
 import os, asyncio, json, sys, time, urllib.request, subprocess, glob
 import websockets
 BASE = 'http://127.0.0.1:9223'

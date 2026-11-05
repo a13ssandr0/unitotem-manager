@@ -1,6 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="modelValue" ref="win" class="floating-window elevation-12" :class="{maximized, minimized}" :style="style" @mousedown="raise">
+      <!-- Inspired by KDE Plasma: title bar with plain minimise/maximise/close buttons, double-click to maximise -->
       <div class="floating-title d-flex align-center" @pointerdown="startDrag" @dblclick="toggleMaximized">
         <v-icon v-if="icon" class="floating-title-icon">{{ icon }}</v-icon>
         <span class="floating-title-text text-subtitle-2 text-truncate">{{ title }}</span>
@@ -34,7 +35,7 @@
 /**
  * A window that floats over the page, not a dialog: it does not dim or block what is behind it, can be dragged by
  * its title bar, resized from any edge or corner, maximised, minimised to the taskbar and closed. Several can be open at once and the
- * one clicked comes to the front. It is the building block of the desktop-style interface (see TODO).
+ * one clicked comes to the front. It is the building block of the desktop-style interface (see TODO.md, unitotem repository).
  */
 import {computed, onBeforeUnmount, ref, watch} from 'vue'
 import {newWindowId, windows} from '@/windows'

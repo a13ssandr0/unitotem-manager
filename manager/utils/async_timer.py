@@ -1,4 +1,4 @@
-#https://stackoverflow.com/questions/45419723/python-timer-with-asyncio-coroutine
+# Adapted from a Stack Overflow answer by Mikhail Gerasimov (CC BY-SA 3.0): https://stackoverflow.com/a/45430833
 
 
 import asyncio
