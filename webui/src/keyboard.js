@@ -13,13 +13,13 @@
  * of the screen and on every rotation, not just while dragging.
  *
  * A key types when it is released, a long press on a letter or a symbol opens its variants
- * (accents, currencies...) to slide onto, the key `?123` switches to a page of symbols and `=\\<` to a second one, shift
- * pressed twice is caps lock and the backspace repeats while held. Moving and resizing is done here with pointer events instead of a library because the content can be
+ * (accents, currencies...) to slide onto, the key `?123` switches to a page of symbols and the key of that page that LatinIME labels
+ * for it (`~ [ <` in English) to a second one, shift pressed twice is caps lock and the backspace repeats while held. Moving and resizing is done here with pointer events instead of a library because the content can be
  * rotated and flipped with CSS (the page's orientation settings), and the libraries do not follow a transformed parent.
  */
 import Keyboard from 'simple-keyboard'
 import keyboardCss from 'simple-keyboard/build/css/index.css?inline'
-import SYMBOL_PAGES from './gboard/symbols.json'
+import SYMBOL_PAGES from './keyboard/symbols.json'
 import {parseLayoutId} from './keyboard-layouts.js'
 
 const BUTTON_PX = 56
@@ -33,22 +33,16 @@ const LONG_PRESS_MS = 380
 const REPEAT_DELAY_MS = 400
 const REPEAT_MS = 60
 const DOUBLE_TAP_MS = 400
-// The layouts are generated data, extracted from the keyboard's source application by tools/gboard/gboard_layouts.py (see its README): for every language the
-// rows of its tablet keyboard (number row, tab, caps lock, enter, shift...) with the weight of every key, what a long press on a key
-// offers and the two pages of symbols. One file per language, loaded when it is needed.
-const LANGUAGE_FILES = import.meta.glob('./gboard/layouts/*.json')
+// The layouts are generated data, extracted from AOSP LatinIME (Apache-2.0) by tools/keyboard/aosp_layouts.py (see its README): for every
+// language the rows of its tablet keyboard (java/res/xml-sw600dp: number row from kbd_pcqwerty.xml, letters, the bottom row
+// row_qwerty4.xml with `?123`, comma, space and period) with the width of every key, what a long press on a key offers and the two pages
+// of symbols (kbd_symbols.xml, kbd_symbols_shift.xml). One file per language, loaded when it is needed.
+const LANGUAGE_FILES = import.meta.glob('./keyboard/layouts/*.json')
 const FALLBACK_LAYOUT = 'en-US'
-// A row of the tablet layouts is 786 weight units wide (the layout resource: `weightSum="786"`)
+// A row of the tablet layouts is 786 weight units wide: LatinIME's `N%p` widths times 7.86 (ROW_WEIGHT in aosp_layouts.py)
 const ROW_WEIGHT = 786
-const BOTTOM = '{sym1} {space} {left} {right} {sym1}'
-const BOTTOM_SYM = '{abc} {numpad} {space} {left} {right} {abc}'
-// the bottom row (res/layout/..04f6): 58 for each arrow, 65 for the key at the right; the switch to the symbols is 58 plus the one of
-// the emoji key, which is not here (user: "useless and hard"), the space bar takes the rest
-const BOTTOM_WEIGHTS = [90.5, 0, 58, 58, 65]
-// the symbols pages (res/layout/..0512): back to the letters 90.5, the digit keyboard 90.5, space, the arrows, back to the letters 65
-const BOTTOM_SYM_WEIGHTS = [90.5, 90.5, 0, 58, 58, 65]
-const FUNCTION_TOKENS = {tab: '{tab}', bksp: '{bksp}', lock: '{lock}', enter: '{enter}', shift: '{shift}', sym1: '{sym1}', sym2: '{sym2}',
-  none: '{gap}', 'icon-sym1': '{pagecaps}', 'icon-sym2': '{pagecaps}'}
+const FUNCTION_TOKENS = {tab: '{tab}', bksp: '{bksp}', enter: '{enter}', shift: '{shift}', space: '{space}', sym1: '{sym1}', sym2: '{sym2}',
+  abc: '{abc}', numpad: '{numpad}', left: '{left}', right: '{right}'}
 
 const css = `${keyboardCss}
 #ut-kbd-layer { position: absolute; inset: 0; z-index: 2147483647; pointer-events: none; overflow: hidden;
@@ -280,14 +274,15 @@ function drag(handle, onMove, moveOnly = false) {
 
 const SPECIAL = {'{bksp}': 'Backspace', '{enter}': 'Enter', '{tab}': 'Tab', '{left}': 'ArrowLeft', '{right}': 'ArrowRight'}
 const REPEATING = new Set(['{bksp}', '{left}', '{right}'])
-const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{lock}': '⇪', '{tab}': '⇥', '{space}': ' ',
-  '{sym1}': '?123', '{sym2}': '=\\<', '{abc}': 'ABC', '{left}': '◀', '{right}': '▶', '{hide}': '⌨', '{numpad}': '▦', '{pagecaps}': ' ', '{gap}': ' '}
+// the labels of `?123`, `ABC` and the second symbols page are the ones of the language (the key's `t`), these are the fallback
+const DISPLAY = {'{bksp}': '⌫', '{enter}': '⏎', '{shift}': '⇧', '{tab}': '⇥', '{space}': ' ',
+  '{sym1}': '?123', '{sym2}': '~ [ <', '{abc}': 'ABC', '{left}': '◀', '{right}': '▶', '{numpad}': '▦', '{hide}': '⌨', '{gap}': ' '}
 
 
 const languages = new Map() // language -> promise of its file
 function loadLanguage(lang) {
   if (!languages.has(lang)) {
-    const load = LANGUAGE_FILES[`./gboard/layouts/${lang}.json`]
+    const load = LANGUAGE_FILES[`./keyboard/layouts/${lang}.json`]
     languages.set(lang, load ? load().then(module => module.default) : Promise.reject(new Error(`no keyboard layout for ${lang}`)))
   }
   return languages.get(lang)
@@ -296,8 +291,34 @@ function loadLanguage(lang) {
 /** The capital of a key (a sharp s stays one character); the file says it when it is not just that (a Turkish i). */
 const capital = text => { const up = text.toUpperCase(); return [...up].length === [...text].length ? up : text }
 
+const ARROW_WEIGHT = 70.74
+const arrows = () => [{f: 'left', w: ARROW_WEIGHT}, {f: 'right', w: ARROW_WEIGHT}]
+
+/**
+ * Makes every row span the full width and adds UniTotem's own keys: the arrows at the end of the bottom row (the one with the space bar,
+ * which takes all the room left) and, on the symbols pages, the key to the digit keyboard after the way back to the letters.
+ * A letter row that falls short has its keys widened in proportion.
+ */
+function fitRows(rows, symbols) {
+  return rows.map(row => {
+    if (!row.some(key => key.f === 'space')) {
+      const sum = row.reduce((total, key) => total + key.w, 0)
+      return sum >= ROW_WEIGHT ? row : row.map(key => ({...key, w: key.w * ROW_WEIGHT / sum}))
+    }
+    const keys = []
+    for (const key of row) {
+      keys.push(key)
+      if (symbols && key.f === 'abc') keys.push({f: 'numpad', w: ARROW_WEIGHT})
+    }
+    keys.push(...arrows())
+    const others = keys.reduce((total, key) => total + (key.f === 'space' ? 0 : key.w), 0)
+    return keys.map(key => key.f === 'space' ? {...key, w: ROW_WEIGHT - others} : key)
+  })
+}
+
 /** One page of the keyboard, for simple-keyboard (`layout`: its rows of keys) and for us (`meta`: what each key is: its weight and popup). */
-function pageOf(rows, {mode = 'default', bottom = BOTTOM, weights = BOTTOM_WEIGHTS}) {
+function pageOf(source, {mode = 'default', symbols = false}) {
+  const rows = fitRows(source, symbols)
   const layout = []
   const meta = []
   const display = {}
@@ -306,7 +327,9 @@ function pageOf(rows, {mode = 'default', bottom = BOTTOM, weights = BOTTOM_WEIGH
     const keys = []
     for (const key of row) {
       if (key.f) {
-        tokens.push(FUNCTION_TOKENS[key.f] ?? '{gap}')
+        const token = FUNCTION_TOKENS[key.f] ?? '{gap}'
+        tokens.push(token)
+        if (key.t) display[token] = key.t
         keys.push({w: key.w})
       } else if (!key.k || /\s/.test(key.k)) {
         tokens.push('{gap}')
@@ -317,16 +340,15 @@ function pageOf(rows, {mode = 'default', bottom = BOTTOM, weights = BOTTOM_WEIGH
         const text = mode === 'shift' ? (key.s ?? caps) : (mode === 'caps' ? caps : key.k)
         tokens.push(text)
         if (key.t) display[text] = key.t
-        const capsPopup = key.L ?? key.l?.map(capital)
+        const capsPopup = key.L ?? key.l?.map(p => Array.isArray(p) ? p.map(capital) : capital(p))
         const popup = mode === 'shift' ? (key.S ?? capsPopup) : (mode === 'caps' ? capsPopup : key.l)
-        keys.push({w: key.w, popup: popup ?? []})
+        // a long-press entry is a text, or [label, text]: the key shows the label and types the text (mirrored brackets, ligatures)
+        keys.push({w: key.w, popup: (popup ?? []).map(p => Array.isArray(p) ? {label: p[0], text: p[1]} : {label: p, text: p})})
       }
     }
     layout.push(tokens.join(' '))
     meta.push(keys)
   }
-  layout.push(bottom)
-  meta.push(bottom.split(' ').map((token, i) => ({w: weights[i]})))
   return {layout, meta, display}
 }
 
@@ -341,16 +363,16 @@ async function buildLayout(id) {
     default: pageOf(rows, {}),
     caps: pageOf(rows, {mode: 'caps'}),
     shift: pageOf(rows, {mode: 'shift'}),
-    sym1: pageOf(symbols[0], {bottom: BOTTOM_SYM, weights: BOTTOM_SYM_WEIGHTS}),
-    sym2: pageOf(symbols[1], {bottom: BOTTOM_SYM, weights: BOTTOM_SYM_WEIGHTS}),
+    sym1: pageOf(symbols[0], {symbols: true}),
+    sym2: pageOf(symbols[1], {symbols: true}),
   }
   const display = {}
   for (const name of Object.keys(pages)) Object.assign(display, pages[name].display)
   return {pages, display, simple: Object.fromEntries(Object.entries(pages).map(([name, p]) => [name, p.layout]))}
 }
 
-// Tablet geometry: a key is as wide as its weight says out of the 786 of the row (the layout resource of the keyboard), so tab,
-// backspace, caps lock, enter and shift keep the size they have there whatever the language, and every row ends where the others do
+// Tablet geometry: a key is as wide as its weight says out of the 786 of the row (LatinIME's `%p` widths), so backspace, enter and
+// shift keep the size they have there whatever the language
 let current = null // what buildLayout() returned for the layout on show
 const GAP_PX = 8
 
@@ -383,8 +405,8 @@ function appearance() {
   body.classList.toggle('ut-numeric', numeric)
   const themes = []
   if (shift && !caps) themes.push({class: 'ut-on', buttons: '{shift}'})
-  if (caps) themes.push({class: 'ut-on', buttons: '{lock}'})
-  return {layoutName: numeric ? 'default' : layoutName(), display: DISPLAY, buttonTheme: themes}
+  if (caps) themes.push({class: 'ut-on', buttons: '{shift}'})
+  return {layoutName: numeric ? 'default' : layoutName(), display: {...DISPLAY, ...(numeric ? {} : current?.display)}, buttonTheme: themes}
 }
 
 function refreshLayout() {
@@ -400,9 +422,7 @@ function typeKey(button) {
     return
   }
   if (button === '{hide}') { setOpen(false); return }
-  if (button === '{pagecaps}') { page = page === 'sym1' ? 'sym2' : 'sym1'; refreshLayout(); return }
   if (button === '{numpad}') { manualNumeric = true; numeric = true; applyLayout(); return }
-  if (button === '{lock}') { caps = !caps; shift = false; refreshLayout(); return }
   if (button === '{abc}' && manualNumeric) { manualNumeric = false; numeric = false; page = 'letters'; applyLayout(); return }
   if (button === '{sym1}' || button === '{sym2}' || button === '{abc}') {
     page = button === '{abc}' ? 'letters' : button.slice(1, -1)
@@ -426,12 +446,8 @@ function variantsOf(btn) {
 function addHints() {
   for (const button of body.querySelectorAll('.hg-button')) {
     button.querySelector('.ut-hint')?.remove()
-    // the key at caps lock's place on the symbols pages has an icon (a chevron over a bar)
-    if (button.getAttribute('data-skbtn') === '{pagecaps}' && !button.querySelector('svg')) {
-      button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" width="1.4em" height="1.4em" fill="currentColor"><path d="M12,8.41L16.59,13 18,11.59l-6,-6 -6,6L7.41,13 12,8.41zM6,18h12v-2H6v2z"/></svg>')
-    }
     const key = button.getAttribute('data-skbtn')
-    const first = variantsOf(button)[0]
+    const first = variantsOf(button)[0]?.label
     // on the letter page only a letter carries a hint, and only when it is a symbol (`q` has `%`, `e` has `|`; its accents
     // are only in the popup); the symbol pages show the first variant of every key
     const shown = first && (page !== 'letters' || (/^\p{L}$/u.test(key) && !/\p{L}/u.test(first)))
@@ -462,7 +478,7 @@ function openVariants(press) {
   const list = variantsOf(press.btn)
   if (!list.length) return
   preview.style.display = 'none'
-  alts.replaceChildren(...list.map(v => Object.assign(document.createElement('span'), {textContent: v})))
+  alts.replaceChildren(...list.map(v => Object.assign(document.createElement('span'), {textContent: v.label, utText: v.text})))
   alts.style.display = 'flex'
   const [bx, by] = offsetIn(press.btn, panel)
   const W = layer.clientWidth
@@ -532,7 +548,7 @@ function wireKeys(host) {
     const p = stop()
     if (!p || REPEATING.has(p.key)) return
     if (p.long) {
-      if (on) { send({text: on.textContent}); if (shift && !caps) { shift = false; refreshLayout() } }
+      if (on) { send({text: on.utText}); if (shift && !caps) { shift = false; refreshLayout() } }
       return
     }
     if (e.target.closest?.('.hg-button') === p.btn) typeKey(p.key)
@@ -551,7 +567,7 @@ async function applyLayout() {
   try { next = await buildLayout(config.layout) } catch (e) { console.error('keyboard layout', e); return }
   if (request !== layoutRequest || numeric) return // another layout was asked for meanwhile, or a number field took over
   current = next
-  keyboard.setOptions({layout: layoutOf(), display: {...DISPLAY, ...current.display}, ...appearance()})
+  keyboard.setOptions({layout: layoutOf(), ...appearance()})
 }
 
 // ── showing and hiding ──────────────────────────────────────────────────

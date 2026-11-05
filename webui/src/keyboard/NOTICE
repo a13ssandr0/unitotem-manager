@@ -1,0 +1,7 @@
+Keyboard layouts derived from AOSP LatinIME, Copyright (C) 2008-2025 The Android Open Source Project, Apache License 2.0
+Upstream: https://android.googlesource.com/platform/packages/inputmethods/LatinIME
+Commit: 127336e9f29d69607eab55982324b210279ae8c5
+License text: https://www.apache.org/licenses/LICENSE-2.0
+
+The files of this directory are generated from the resource files of LatinIME by tools/keyboard/aosp_layouts.py (layouts, key
+widths, long-press keys and symbols pages are the ones LatinIME defines for its tablet keyboards).
