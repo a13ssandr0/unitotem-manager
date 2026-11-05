@@ -3,7 +3,7 @@
 Which output transform shows the same picture as turning/mirroring the content in the page, by pixels. Needs a board whose HDMI
 output is visible from this PC (here: OBS's virtual camera on the dev PC).
 
-    .venv/bin/python tools/gfx-bench/rotation/rotation-equivalence.py --host 192.168.1.173 --camera /dev/video4 --out DIR
+    .venv/bin/python tools/gfx-bench/rotation/rotation-equivalence.py --host <host> --camera /dev/video4 --out DIR
 
 For every content orientation 0..3 and flip 0..2 it grabs the screen with the page turning the content, then with the content
 untouched and each of the 8 transforms, and prints the transform whose picture is closest (and how much closer than the runner-up).

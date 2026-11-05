@@ -3,7 +3,7 @@
 Compares rotating the CONTENT in the page (body[r]) with rotating the OUTPUT in the compositor (wlr-randr --transform),
 on a real board. Run from the dev PC (needs the repository's .venv for websockets/httpx).
 
-    .venv/bin/python tools/gfx-bench/rotation/rotation-bench.py --host 192.168.1.173 --out DIR [--seconds 30]
+    .venv/bin/python tools/gfx-bench/rotation/rotation-bench.py --host <host> --out DIR [--seconds 30]
         [--configs A,B1,C90,C270] [--workloads idle,video,...]
 
 It copies rotsrv.py / rotmeasure.py / the test videos to /var/lib/unitotem/rot on the board, puts the test page in a temporary

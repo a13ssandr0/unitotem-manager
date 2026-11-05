@@ -4,7 +4,7 @@ Drag-and-drop reorder of the Scheduler page with two playlists, in headless Chro
 is on a row) is pressed, the row is dragged over another one and dropped. DevTools intercepts the native drag (`Input.setInterceptDrags`) and the test drops it
 where the mouse is, like a person would. The order is read back from the node's own API, and the other playlist must not move. Everything it creates is removed.
 
-    tools/ui-reorder.py --host 192.168.0.254 --user root --password unitotem
+    tools/ui-reorder.py --host <host> --user root --password unitotem
 """
 import argparse
 import asyncio

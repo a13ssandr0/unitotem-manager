@@ -3,7 +3,7 @@
 Typing on a turned screen, with a finger: a virtual touch screen taps a text field, the on-screen keyboard opens by itself, and the keys
 are tapped one by one (their places read from the keyboard's own DOM); the field must end up with the text.
 
-    .venv/bin/python tools/gfx-bench/rotation/rotation-typing.py --host 192.168.1.173 [--turns 0,1,3] [--text ciao]
+    .venv/bin/python tools/gfx-bench/rotation/rotation-typing.py --host <host> [--turns 0,1,3] [--text ciao]
 """
 import argparse
 import asyncio

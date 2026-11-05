@@ -4,7 +4,7 @@ Who may open the developer tools of a window, on a real node: an administrator c
 gets nothing (no address, no front end files, no protocol), and a token asked for by one session is useless in another, in a
 foreign Origin, twice, or for another page. The account made for the check is always removed.
 
-    tools/devtools-access.py --host 192.168.0.254 --user root --password unitotem
+    tools/devtools-access.py --host <host> --user root --password unitotem
 """
 import argparse
 import asyncio

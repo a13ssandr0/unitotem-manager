@@ -4,7 +4,7 @@ The Developer tools button of the Viewers page, in a real (headless) Chrome: log
 first window and checks that a tab with the front end opens and is connected to the page of the window (its Elements panel
 shows the page's own document). Screenshots go to --out-dir.
 
-    tools/ui-devtools.py --host 192.168.0.254 --user root --password unitotem --out-dir /tmp/devtools-shots
+    tools/ui-devtools.py --host <host> --user root --password unitotem --out-dir /tmp/devtools-shots
 """
 import argparse
 import asyncio

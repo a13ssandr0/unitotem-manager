@@ -3,7 +3,7 @@
 Drives the REAL ticker on a board with a real monitor (run from the dev PC): configures sources and the window through
 the websocket API like the web UI does, and takes real pixels of the viewer's page with board-cdp.py running on the board.
 
-    .venv/bin/python tools/ticker/board-run.py --host 192.168.1.128 --feeds http://192.168.1.50:8765 --out DIR [--only NAME,...]
+    .venv/bin/python tools/ticker/board-run.py --host <host> --feeds http://<feed-host>:8765 --out DIR [--only NAME,...]
 
 Needs tools/ticker/board-cdp.py and board-cpu.py copied to /var/lib/unitotem/ticker-test on the board (deploy-board.sh does
 not do it: scp them) and a feed server running (tools/ticker/feedserver.py). Every ssh call has SSH_ASKPASS_REQUIRE=never.

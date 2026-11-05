@@ -4,7 +4,7 @@ A PDF whose text uses a font the file does not carry (Helvetica, one of the stan
 bundled standard font data from /assets/pdfjs/ and the window must show the text. Makes a one-page PDF, puts it in the uploads, plays it in the first window through
 a temporary playlist, looks at the page's requests and at its pixels over DevTools, then puts everything back.
 
-    .venv/bin/python tools/gfx-bench/rotation/pdf-check.py --host 192.168.0.254
+    .venv/bin/python tools/gfx-bench/rotation/pdf-check.py --host <host>
 """
 import argparse
 import asyncio

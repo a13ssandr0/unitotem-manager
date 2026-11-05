@@ -5,7 +5,7 @@ account), run a command, close the window; and over a plain websocket check that
 user without the admin capability, nobody without a valid one-time token (none, wrong, used twice, another
 session's) and no page of another origin gets a terminal.
 
-    tools/ui-terminal.py --host 192.168.0.254 --user root --password unitotem
+    tools/ui-terminal.py --host <host> --user root --password unitotem
 """
 import argparse
 import asyncio

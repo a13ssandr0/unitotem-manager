@@ -3,7 +3,7 @@
 What the web UI's "Watch the screen" window shows, and where a click in it lands, for each way of turning a screen.
 Run from the dev PC (repository .venv, google-chrome):
 
-    .venv/bin/python tools/gfx-bench/rotation/rotation-vnc.py --host 192.168.0.254 --out DIR [--configs A,B3,C90,C270,C180,CF]
+    .venv/bin/python tools/gfx-bench/rotation/rotation-vnc.py --host <host> --out DIR [--configs A,B3,C90,C270,C180,CF]
 
 For every configuration (names as in rotation-bench.py, plus U1/U2/U3/UF/UF2/U1F: the saved setting only, turned by the viewer) it puts rotsrv.py's `corners` page in the window, opens the screen
 window in a headless Chrome, saves a screenshot, switches Control on, clicks the middle of the top-left square of the picture

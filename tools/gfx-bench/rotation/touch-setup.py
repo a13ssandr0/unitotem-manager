@@ -5,7 +5,7 @@ up through the node's own API (corners, then exact points), the screen is turned
 a real tap through the compositor: after "Yes, keep it" a tap on the glass at the place that belongs to a point of the picture must reach the page at that
 point. Screenshots of the totem's veil (running and trying) are saved next to the results.
 
-    .venv/bin/python tools/gfx-bench/rotation/touch-setup.py --host 192.168.0.254 [--out /tmp/touch-setup]
+    .venv/bin/python tools/gfx-bench/rotation/touch-setup.py --host <host> [--out /tmp/touch-setup]
 """
 import argparse
 import asyncio

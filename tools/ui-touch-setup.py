@@ -3,7 +3,7 @@
 The "Touch doesn't match? Fix it" dialog of the Display page, driven in a real (headless) Chrome while a virtual touch panel on the board taps the
 targets: the choices, a step, the question after the taps, and "Yes, keep it". Screenshots go to --out-dir.
 
-    tools/ui-touch-setup.py --host 192.168.0.254 --user root --password unitotem --out-dir /tmp/touch-ui
+    tools/ui-touch-setup.py --host <host> --user root --password unitotem --out-dir /tmp/touch-ui
 """
 import argparse
 import asyncio

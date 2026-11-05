@@ -5,7 +5,7 @@ output with the node's own API and taps a point in ITS frame (the glass: what a 
 the corners page says where the tap arrived in its own content space. For a screen turned by the page the content point is
 the inverse of the page's turn/mirror; the compositor must give the same.
 
-    .venv/bin/python tools/gfx-bench/rotation/rotation-touch.py --host 192.168.1.173
+    .venv/bin/python tools/gfx-bench/rotation/rotation-touch.py --host <host>
 """
 import argparse
 import asyncio

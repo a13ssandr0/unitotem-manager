@@ -4,7 +4,7 @@ The Display page's real buttons (headless Chrome, real mouse events) against a b
 must be turned by the compositor (transform read back from the board, the page of the window left alone, the manager reports
 `turned_by_output`) and, when a camera sees the output, the picture must be the one the page produced in the equivalence run.
 
-    .venv/bin/python tools/gfx-bench/rotation/rotation-ui.py --host 192.168.1.173 [--camera /dev/video4 --reference DIR]
+    .venv/bin/python tools/gfx-bench/rotation/rotation-ui.py --host <host> [--camera /dev/video4 --reference DIR]
 """
 import argparse
 import asyncio
