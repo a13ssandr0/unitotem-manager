@@ -2,23 +2,15 @@ import asyncio
 import dataclasses
 import json
 import time
-import warnings
 from collections import namedtuple
 from enum import Enum
 from typing import Callable, Coroutine, Optional
 
 from loguru import logger
 from pydantic import BaseModel, RootModel, field_serializer, field_validator
-from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
 from utils import osusers, sessions
 from utils.models.command_line import cmdargs
-
-warnings.filterwarnings(
-    "ignore",
-    message="Pydantic serializer warnings.*\n.*field_name\=\'permissions\'.*",
-    category=UserWarning,
-)
 
 class RequiresMeta(type):
     def __getattr__(cls, name):
@@ -82,9 +74,9 @@ class UserData(BaseModel, validate_assignment=True):
     def validate_perms(cls, val: set[UserPerms]):
         return {perm for perm in val if perm != UserPerms.admin}
 
-    @field_serializer('permissions', mode='wrap')
-    def serialize_perms(self, perms: set[UserPerms], nxt: SerializerFunctionWrapHandler):
-        return nxt(list(perms))
+    @field_serializer('permissions')
+    def serialize_perms(self, perms: set[UserPerms]):
+        return sorted(perm.value for perm in perms)
 
 
 
