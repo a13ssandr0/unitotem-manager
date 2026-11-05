@@ -113,6 +113,13 @@
                           type="number" density="compact" variant="outlined" hide-details style="max-width: 130px"></v-text-field>
             <v-switch v-model="form[screen.name].gpio_active_low" color="primary" density="compact" hide-details label="Active low"></v-switch>
           </div>
+          <div v-if="(screen.cec_devices?.length ?? 0) > 1 && usesCec(screen.name)" class="text-caption text-medium-emphasis mb-1">
+            CEC adapter: the HDMI port the TV is connected to.
+          </div>
+          <div v-if="(screen.cec_devices?.length ?? 0) > 1 && usesCec(screen.name)" class="d-flex flex-wrap ga-4 mb-3">
+            <v-select v-model="form[screen.name].cec_device" :items="cecItems(screen)" label="CEC adapter" density="compact"
+                      variant="outlined" hide-details style="max-width: 260px"></v-select>
+          </div>
           <v-btn color="primary" variant="tonal" @click="save(screen)">Save</v-btn>
         </v-expansion-panel-text>
       </v-expansion-panel>
@@ -158,6 +165,12 @@ const chosen = (name) => [form[name]?.on_mechanism, form[name]?.off_mechanism]
 const usesWol = (name) => chosen(name).some(m => m === 'auto' || m === 'wol')
 const usesSerial = (name) => chosen(name).some(m => m === 'auto' || m === 'serial')
 const usesGpio = (name) => chosen(name).some(m => m === 'auto' || m === 'gpio')
+const usesCec = (name) => chosen(name).some(m => m === 'auto' || m === 'cec')
+
+function cecItems(screen) {
+  return [{title: 'Automatic (wired to this output)', value: 'auto'},
+    ...screen.cec_devices.map(p => ({title: p, value: p}))]
+}
 
 const gpioModes = [{title: 'Level (relay on the supply)', value: 'level'}, {title: 'Pulse (power button)', value: 'pulse'}]
 const gpioChips = ref([])
@@ -185,6 +198,7 @@ function fillForm(screen) {
     serial_on: c.serial?.on_command ?? '', serial_off: c.serial?.off_command ?? '',
     gpio_chip: c.gpio?.chip ?? 'gpiochip0', gpio_line: c.gpio?.line ?? null, gpio_mode: c.gpio?.mode ?? 'level',
     gpio_active_low: c.gpio?.active_low ?? false, gpio_pulse_ms: c.gpio?.pulse_ms ?? 500,
+    cec_device: c.cec_device ?? 'auto',
   }
   method[screen.name] ??= 'auto'
 }
@@ -219,6 +233,8 @@ function save(screen) {
   if (f.gpio_line !== null && f.gpio_line !== '') {
     args.gpio = {chip: f.gpio_chip, line: f.gpio_line, mode: f.gpio_mode, active_low: f.gpio_active_low, pulse_ms: f.gpio_pulse_ms || 500}
   } else args.clear_gpio = true
+  if (f.cec_device && f.cec_device !== 'auto') args.cec_device = f.cec_device
+  else args.clear_cec = true
   api.Settings.Display.Screens.configure(args)
 }
 

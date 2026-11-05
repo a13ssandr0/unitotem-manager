@@ -140,3 +140,41 @@ def test_start_up_wake_up_leaves_a_screen_the_operator_switched_off(fake_screen,
     assert len(ons) == 1 and fake_screen['calls'][-1] == ('HDMI-A-1', 'output', False)   # woken once at the start, never again after the operator's switch-off
     control.screen_control.outputs.pop('GONE-1', None)
     control._operator_touched.clear()
+
+
+def test_wake_all_wakes_a_tv_left_in_standby_over_cec(fake_screen, monkeypatch):
+    from unitotem_node.system.screens import cec
+    reply = {'state': 'standby'}
+
+    async def devices():
+        return [cec.CecDevice('/dev/cec0', 'vc4_hdmi', 'vc4-hdmi-0')]
+
+    async def device_for_output(name, adapters):
+        return '/dev/cec0'
+
+    async def power_state(device, address='0'):
+        return reply['state']
+
+    async def tools():
+        return {'ddc': (True, ''), 'cec_devices': await devices()}
+
+    monkeypatch.setattr(cec, 'devices', devices)
+    monkeypatch.setattr(cec, 'device_for_output', device_for_output)
+    monkeypatch.setattr(cec, 'power_state', power_state)
+    monkeypatch.setattr(control, '_tools', tools)
+    control._operator_touched.discard('HDMI-A-1')
+    # switched off with the TV's own remote: the link stays, CEC says standby
+    asyncio.run(control.wake_all(budget=0, interval=0))
+    assert fake_screen['calls'] == [('HDMI-A-1', 'cec', True)]
+    # already on: nothing sent
+    fake_screen['calls'].clear()
+    reply['state'] = 'on'
+    asyncio.run(control.wake_all(budget=0, interval=0))
+    assert fake_screen['calls'] == []
+    # not asked to power on at start, or switched on with another mechanism only: left as it is
+    reply['state'] = 'standby'
+    control.screen_control.outputs['HDMI-A-1'] = _cfg(power_on_at_start=False)
+    asyncio.run(control.wake_all(budget=0, interval=0))
+    control.screen_control.outputs['HDMI-A-1'] = _cfg(on_mechanism='ddc')
+    asyncio.run(control.wake_all(budget=0, interval=0))
+    assert fake_screen['calls'] == []
