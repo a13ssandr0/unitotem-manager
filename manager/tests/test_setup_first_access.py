@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from routers import login, setup
 from utils import first_access, osusers, passwords
-from utils.models.security import SecuritySettings
 
 
 class Env:
@@ -36,7 +35,6 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setattr(osusers, 'admin_exists', lambda: fake.admin_exists)
     monkeypatch.setattr(osusers, 'create_user', fake.create_user)
     monkeypatch.setattr(osusers, 'close_first_access', fake.close_first_access)
-    monkeypatch.setattr(setup, 'security_settings', SecuritySettings(enforce_password_policy=False))
     monkeypatch.setattr(setup, 'user_manager', SimpleNamespace(has_admin=lambda: fake.admin_exists))
     monkeypatch.setattr(setup, 'WebviewManager', SimpleNamespace(_instance=None))
     app = FastAPI()
@@ -91,12 +89,39 @@ def test_setup_refuses_when_the_system_refuses_the_account(env):
     assert env.calls == [('create_user', 'boss', 'correct-horse-9', True)]     # the window stays open
 
 
-@pytest.mark.parametrize('password', ['', 'new\nline', 'x' * (passwords.MAX_LENGTH + 1)])
+@pytest.mark.parametrize('password', ['', 'new\nline', 'x' * (passwords.POLICY['max_length'] + 1)])
 def test_weak_password_is_refused_with_nothing_created(env, password):
     r = post(env, password=password)         # refused by the basic rules
     assert r.status_code == 422
     assert r.json()['detail']
     assert env.calls == []
+
+
+def test_weak_password_is_refused_by_the_policy_with_a_message_list(env):
+    r = post(env, password='aaaaaaaa')      # long enough, but one character class
+    assert r.status_code == 422
+    assert r.json() == {'detail': passwords.validate_password('aaaaaaaa', 'boss')}
+    assert env.calls == []
+
+
+def test_setup_page_state_carries_the_password_policy(env, monkeypatch):
+    captured = {}
+
+    def fake_response(request, name, context):
+        captured.update(context)
+        return 'page'
+    monkeypatch.setattr(setup, 'templates', SimpleNamespace(TemplateResponse=fake_response))
+    assets = lambda *a, **k: {'js': ['setup.js'], 'css': []}
+    assets.cache_clear = lambda: None
+    monkeypatch.setattr(setup, 'get_vite_assets', assets)
+    monkeypatch.setattr(setup, 'load_vite_manifest', SimpleNamespace(cache_clear=lambda: None))
+    monkeypatch.setattr(setup, 'is_vite_dev', lambda request: False)
+    monkeypatch.setattr(setup, 'reachable_ipv4', lambda: '192.0.2.10')
+    r = env.client.get('/setup')
+    assert r.status_code == 200
+    state = captured['state']
+    assert state['rules'] == passwords.rules_spec()
+    assert not {'min_length', 'max_length'} & set(state)
 
 
 def test_invalid_user_name_is_refused_with_nothing_created(env):

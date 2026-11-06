@@ -1,35 +1,55 @@
 """
 What a new account may be called and which password it may have.
 
-Always: the classic `passwd`/`useradd` rules (`validate_username`, `validate_basic`, `BASIC_RULES`). A stricter policy
-(`validate_password`, `RULES`) is opt-in (security.json). The web UI shows the rules in force so that the person is told
-before the server refuses.
+The password policy mirrors PAM (pam_pwquality) as configured for the system accounts, and is always applied.
+`manager/tests/password_vectors.json` holds the PAM-observed results and is the shared spec. `POLICY` is the single
+source of the numbers; `rules_spec()` gives the same rules to the web UI, which shows them before the server refuses.
 """
 import re
+import string
+from typing import Any
 
-MIN_LENGTH = 10
-MAX_LENGTH = 128
-# what useradd accepts on Debian (NAME_REGEX): the classic Unix account name
+# Numbers of the policy. Lengths: min_length and pam_max_bytes count UTF-8 bytes, max_length counts characters.
+POLICY: dict[str, Any] = {
+    'min_length': 8,
+    'max_length': 128,
+    'min_classes': 2,
+    'max_repeat': 3,
+    'username_min_len': 4,
+    'pam_max_bytes': 511,
+}
+
+# What useradd accepts on Debian (NAME_REGEX): the classic Unix account name
 USERNAME_PATTERN = re.compile(r'^[a-z_][a-z0-9_-]{0,31}$')
-BASIC_MIN_LENGTH = 1
 
-# What every default or lazy choice ends up being; compared after lower-casing and dropping digits and punctuation
-_COMMON = frozenset({'password', 'passwort', 'admin', 'administrator', 'unitotem', 'changeme', 'qwerty', 'letmein',
-                     'welcome', 'raspberry', 'kiosk', 'totem'})
+# Character classes, ASCII only: anything outside the three ranges is "other" (symbols, spaces, non-ASCII)
+_LOWER = re.compile(r'[a-z]')
+_UPPER = re.compile(r'[A-Z]')
+_DIGIT = re.compile(r'[0-9]')
+_OTHER = re.compile(r'[^a-zA-Z0-9]')
+_ASCII_FOLD = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 
-# What is always required, like `passwd` itself: something, without characters that would break the way it is handed over
-BASIC_RULES = [
-    f'At most {MAX_LENGTH} characters',
-    'No control characters',
-]
+# Rule ids in the order PAM checks them; the first failing id is the only one reported
+_ORDER = ('max_length', 'control', 'min_length', 'classes', 'repeat', 'username')
 
-# The stricter policy an administrator can switch on (security.json)
-RULES = [
-    f'At least {MIN_LENGTH} characters, at most {MAX_LENGTH}',
-    'Different from the username',
-    'Not a common word or a repetition of one character',
-    'No control characters',
-]
+_MESSAGES = {
+    'type': 'The password must be text',
+    'max_length': f'The password must be at most {POLICY["max_length"]} characters long',
+    'control': 'The password must not contain control characters',
+    'min_length': f'The password is shorter than {POLICY["min_length"]} characters',
+    'classes': f'The password contains less than {POLICY["min_classes"]} character classes',
+    'repeat': f'The password contains more than {POLICY["max_repeat"]} same characters consecutively',
+    'username': 'The password contains the user name in some form',
+}
+
+# Checklist rows shown to the person, in display order (control characters are not a row)
+_RULE_TEXTS = (
+    ('min_length', f'At least {POLICY["min_length"]} characters'),
+    ('classes', f'At least {POLICY["min_classes"]} of: lowercase, uppercase, digits, symbols'),
+    ('repeat', f'No character more than {POLICY["max_repeat"]} times in a row'),
+    ('username', 'Does not contain the username'),
+    ('max_length', f'At most {POLICY["max_length"]} characters'),
+)
 
 
 def validate_username(username: str) -> list[str]:
@@ -40,37 +60,38 @@ def validate_username(username: str) -> list[str]:
     return []
 
 
-def validate_basic(password: str) -> list[str]:
-    """The rules of plain `passwd`: not empty, no control characters (a newline would end the line `chpasswd` reads), bounded."""
+def failed_ids(password: str, username: str = '') -> list[str]:
+    """The id of the first rule the password breaks, in PAM order; an empty list means the password is fine."""
     if not isinstance(password, str):
-        return ['The password must be text']
-    problems = []
-    if len(password) < BASIC_MIN_LENGTH:
-        problems.append('The password must not be empty')
-    if len(password) > MAX_LENGTH:
-        problems.append(f'The password must be at most {MAX_LENGTH} characters long')
-    if any(ord(c) < 32 or ord(c) == 127 for c in password):
-        problems.append('The password must not contain control characters')
-    return problems
+        return ['type']
+    # Lone surrogates are not valid UTF-8: they count as one replacement byte
+    data = password.encode('utf-8', errors='replace')
+    folded = password.translate(_ASCII_FOLD)
+    failed = set()
+    if len(password) > POLICY['max_length'] or len(data) > POLICY['pam_max_bytes']:
+        failed.add('max_length')
+    elif any(ord(c) < 32 or ord(c) == 127 for c in password):
+        failed.add('control')
+    elif len(data) < POLICY['min_length']:
+        failed.add('min_length')
+    elif sum(bool(p.search(password)) for p in (_LOWER, _UPPER, _DIGIT, _OTHER)) < POLICY['min_classes']:
+        failed.add('classes')
+    elif re.search(rb'(.)\1{%d}' % POLICY['max_repeat'], data, re.DOTALL):
+        failed.add('repeat')
+    elif (isinstance(username, str) and len(username) >= POLICY['username_min_len']
+          and (username.translate(_ASCII_FOLD) in folded or username.translate(_ASCII_FOLD)[::-1] in folded)):
+        failed.add('username')
+    return [rule for rule in _ORDER if rule in failed]
 
 
 def validate_password(password: str, username: str = '') -> list[str]:
-    """What the STRICTER policy objects to (an empty list means it is fine); applied only when the node enforces it
-    (`security.json`). The basic rules of `validate_basic` apply always."""
-    if not isinstance(password, str):
-        return ['The password must be text']
-    problems = []
-    if len(password) < MIN_LENGTH:
-        problems.append(f'The password must be at least {MIN_LENGTH} characters long')
-    if len(password) > MAX_LENGTH:
-        problems.append(f'The password must be at most {MAX_LENGTH} characters long')
-    if any(ord(c) < 32 or ord(c) == 127 for c in password):
-        problems.append('The password must not contain control characters')
-    if username and password.casefold() == username.casefold():
-        problems.append('The password must be different from the username')
-    if password and len(set(password)) == 1:
-        problems.append('The password must not be a single repeated character')
-    letters = re.sub(r'[^a-z]', '', password.casefold())
-    if letters in _COMMON:
-        problems.append('The password is too common')
-    return problems
+    """What is wrong with the password, in words (an empty list means it is fine)."""
+    return [_MESSAGES[rule] for rule in failed_ids(password, username)]
+
+
+def rules_spec() -> dict[str, Any]:
+    """The policy numbers and the checklist rows, JSON-serialisable, for the web UI."""
+    return {
+        **POLICY,
+        'rules': [{'id': rule_id, 'text': text} for rule_id, text in _RULE_TEXTS],
+    }

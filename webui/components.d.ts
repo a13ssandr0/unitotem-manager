@@ -17,6 +17,7 @@ declare module 'vue' {
     NotificationMenu: typeof import('./src/components/NotificationMenu.vue')['default']
     NotificationToasts: typeof import('./src/components/NotificationToasts.vue')['default']
     PaneTree: typeof import('./src/components/PaneTree.vue')['default']
+    PasswordChecklist: typeof import('./src/components/PasswordChecklist.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScreenControl: typeof import('./src/components/ScreenControl.vue')['default']

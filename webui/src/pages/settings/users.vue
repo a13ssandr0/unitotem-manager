@@ -43,15 +43,9 @@
             Admin is the sudo role. Granting it gives the user a shell, SSH and terminal access, and sudo with their
             own password. Revoking it removes sudo and the shell; the account stays a web-only user.
           </p>
-          <v-switch :model-value="passwordPolicy.enforced" color="primary" density="compact" hide-details
-                    label="Enforce the password policy when creating users or changing passwords"
-                    @update:model-value="v => api.Settings.Security.set_password_policy({enforce: !!v})"></v-switch>
           <v-switch :model-value="loginUserList.show" color="primary" density="compact" hide-details
                     label="Show the list of users on the login page"
                     @update:model-value="v => api.Settings.Security.set_login_user_list({show: !!v})"></v-switch>
-          <ul v-if="passwordPolicy.enforced" class="text-caption text-medium-emphasis ml-8">
-            <li v-for="rule in passwordPolicy.rules" :key="rule">{{ rule }}</li>
-          </ul>
         </v-card-text>
       </v-card>
     </div>
@@ -77,6 +71,7 @@
             :type="showPassword ? 'text' : 'password'"
             :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             @click:append-inner="showPassword = !showPassword"
+            :maxlength="passwordSpec?.max_length"
             class="mb-2"
           ></v-text-field>
           <v-text-field
@@ -87,16 +82,19 @@
             :type="showConfirmPassword ? 'text' : 'password'"
             :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
             @click:append-inner="showConfirmPassword = !showConfirmPassword"
+            :maxlength="passwordSpec?.max_length"
             :error-messages="passwordErrorMessages"
             @keyup.enter="addUser"
           ></v-text-field>
+          <PasswordChecklist class="pb-2" :spec="passwordSpec" :password="newPassword" :username="newUsername"
+                             :confirm="confirmPassword" @valid="v => addValid = v"></PasswordChecklist>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="dialog = false">
             Cancel
           </v-btn>
-          <v-btn color="primary" variant="text" @click="addUser" :disabled="!passwordsMatch || !newUsername.trim()">
+          <v-btn color="primary" variant="text" @click="addUser" :disabled="!addValid || !newUsername.trim()">
             Add
           </v-btn>
         </v-card-actions>
@@ -117,6 +115,7 @@
             :type="showPassword ? 'text' : 'password'"
             :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
             @click:append-inner="showPassword = !showPassword"
+            :maxlength="passwordSpec?.max_length"
             class="mb-2"
           ></v-text-field>
           <v-text-field
@@ -128,15 +127,18 @@
             :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
             @click:append-inner="showConfirmPassword = !showConfirmPassword"
             @keyup.enter="changePassword"
+            :maxlength="passwordSpec?.max_length"
             :error-messages="passwordErrorMessages"
           ></v-text-field>
+          <PasswordChecklist class="pb-2" :spec="passwordSpec" :password="newPassword" :username="selectedUser || ''"
+                             :confirm="confirmPassword" @valid="v => changeValid = v"></PasswordChecklist>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="passwordDialog = false">
             Cancel
           </v-btn>
-          <v-btn color="primary" variant="text" @click="changePassword" :disabled="!passwordsMatch">
+          <v-btn color="primary" variant="text" @click="changePassword" :disabled="!changeValid">
             Save
           </v-btn>
         </v-card-actions>
@@ -153,6 +155,7 @@
 import {ref, computed} from 'vue'
 import {api} from '@/api'
 import CardColumn from '@/components/CardColumn.vue'
+import PasswordChecklist from '@/components/PasswordChecklist.vue'
 
 const dialog = ref(false)
 const passwordDialog = ref(false)
@@ -162,19 +165,18 @@ const confirmPassword = ref('')
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 const selectedUser = ref(null)
+// set by the checklists: every rule met and the passwords match
+const addValid = ref(false)
+const changeValid = ref(false)
 
-// Opt-in: the first account of a node always follows the policy, the ones made later only when this is on
-const passwordPolicy = api.Settings.Security.password_policy.use({initial: {enforced: false, rules: []}})
+// The server's password policy spec; the checklist and the maxlength come from it
+const passwordSpec = api.Settings.Security.password_policy.use({pick: 'rules', initial: null})
 
 const loginUserList = api.Settings.Security.login_user_list.use({initial: {show: true}})
 
 const users = ref({})
 
 const permissions = ref(['Scheduler', 'Audio', 'Power', 'Admin'])
-
-const passwordsMatch = computed(() => {
-  return newPassword.value === confirmPassword.value && newPassword.value.trim() !== '';
-});
 
 const passwordErrorMessages = computed(() => {
   if (confirmPassword.value && newPassword.value !== confirmPassword.value) {
@@ -193,7 +195,7 @@ function openAddUserDialog() {
 }
 
 function addUser() {
-  if (newUsername.value.trim() && passwordsMatch.value) {
+  if (newUsername.value.trim() && addValid.value) {
     api.Settings.Security.add_user({username: newUsername.value, password: newPassword.value});
     newUsername.value = ''; // Reset
     newPassword.value = '';
@@ -212,7 +214,7 @@ function openPasswordDialog(username) {
 }
 
 function changePassword() {
-  if (selectedUser.value && passwordsMatch.value) {
+  if (selectedUser.value && changeValid.value) {
     api.Settings.Security.set_user_password({username: selectedUser.value, password: newPassword.value});
     passwordDialog.value = false;
   }

@@ -6,7 +6,6 @@ Installed as the login shell of root and as the sshd ForceCommand of the first-a
 passes (`shell -c <command>`, sftp subsystem, environment) is ignored: this program never runs anything else.
 """
 import getpass
-import json
 import os
 import signal
 import sys
@@ -15,8 +14,6 @@ import traceback
 
 # Where the manager modules (utils/) are installed by unitotem-manager (debian/rules).
 MANAGER_DIR = '/usr/share/unitotem-manager'
-# Written by utils/models/security.py next to users.json. Read directly: that module parses the command line on import.
-SECURITY_FILE = '/etc/unitotem/security.json'
 CLEAN_ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C.UTF-8'}
 TIMEOUT_SECONDS = 300
 ATTEMPTS = 3
@@ -24,15 +21,6 @@ ATTEMPTS = 3
 MSG_ADMIN_EXISTS = 'Root accepts SSH keys only. Log in with an administrator account.'
 MSG_NO_TERMINAL_FIRST = 'First access: connect with an interactive terminal (ssh -t).'
 MSG_FAILED = 'First access failed. Details are in the system log.'
-
-
-def _policy_enforced(security_file: str) -> bool:
-    """Whether the stricter password policy is switched on; any problem reading the file means off."""
-    try:
-        with open(security_file) as file:
-            return json.load(file).get('enforce_password_policy') is True
-    except Exception:
-        return False
 
 
 def _log_to_syslog(text: str):
@@ -66,7 +54,7 @@ def _restore_signals(previous: list):
         signal.signal(signum, handler)
 
 
-def _run(input_fn, getpass_fn, manager_dir, security_file, is_tty) -> int:
+def _run(input_fn, getpass_fn, manager_dir, is_tty) -> int:
     sys.path.insert(0, manager_dir)
     from utils import first_access, osusers, passwords
     from loguru import logger
@@ -82,7 +70,9 @@ def _run(input_fn, getpass_fn, manager_dir, security_file, is_tty) -> int:
         print(MSG_ADMIN_EXISTS)
         return 0
 
-    enforce = _policy_enforced(security_file)
+    print('Password rules:')
+    for rule in passwords.rules_spec()['rules']:
+        print(f"  - {rule['text']}")
     for _ in range(ATTEMPTS):
         name = input_fn('User name: ').strip()
         problems = passwords.validate_username(name)
@@ -99,9 +89,7 @@ def _run(input_fn, getpass_fn, manager_dir, security_file, is_tty) -> int:
         if password != again:
             print('The passwords do not match.')
             continue
-        problems = passwords.validate_basic(password)
-        if enforce:
-            problems += passwords.validate_password(password, name)
+        problems = passwords.validate_password(password, name)
         if problems:
             print('\n'.join(problems))
             continue
@@ -125,7 +113,7 @@ def _run(input_fn, getpass_fn, manager_dir, security_file, is_tty) -> int:
 
 
 def main(argv_ignored=None, *, input_fn=input, getpass_fn=getpass.getpass, manager_dir=MANAGER_DIR,
-         security_file=SECURITY_FILE, is_tty=None) -> int:
+         is_tty=None) -> int:
     # argv_ignored is accepted only so that every caller shape works: nothing in it is read
     os.umask(0o077)
     os.environ.clear()
@@ -134,7 +122,7 @@ def main(argv_ignored=None, *, input_fn=input, getpass_fn=getpass.getpass, manag
         is_tty = sys.stdin.isatty
     previous = _install_signals()
     try:
-        return _run(input_fn, getpass_fn, manager_dir, security_file, is_tty)
+        return _run(input_fn, getpass_fn, manager_dir, is_tty)
     except (EOFError, KeyboardInterrupt):
         return 1
     except SystemExit:

@@ -104,3 +104,47 @@ def test_export_then_restore_keeps_the_administrator(monkeypatch, system, users_
     monkeypatch.setattr(backup, 'user_manager', UserManager())
     backup._restore_users(archive, 1)
     assert sorted(system.restored) == [('alice', HASH_ALICE, True), ('bob', HASH_BOB, False)]
+
+
+# ── security settings (show_login_users only) ───────────────────────────────
+
+@pytest.fixture
+def security(monkeypatch, users_file):
+    """A fresh settings object; security.json lands next to users.json, in tmp_path."""
+    from utils.models.security import SecuritySettings
+    settings = SecuritySettings()
+    monkeypatch.setattr('utils.models.security.security_settings', settings)
+    return settings
+
+
+@pytest.mark.parametrize('show', [False, True])
+def test_export_security_carries_show_login_users(security, show):
+    security.show_login_users = show
+    assert backup._export_security() == {'show_login_users': show}
+
+
+@pytest.mark.parametrize('show', [False, True])
+def test_restore_security_sets_show_login_users_and_saves(security, users_file, show):
+    backup._restore_security({'show_login_users': show}, 1)
+    assert security.show_login_users is show
+    assert json.loads((users_file.parent / 'security.json').read_text()) == {'show_login_users': show}
+
+
+def test_restore_security_without_the_key_shows_the_users(security, users_file):
+    security.show_login_users = False
+    backup._restore_security({}, 1)
+    assert security.show_login_users is True
+
+
+def test_restore_security_accepts_an_old_archive_with_the_removed_flag(security, users_file):
+    backup._restore_security({'enforce_password_policy': True, 'show_login_users': False}, 1)
+    assert security.show_login_users is False
+    assert 'enforce_password_policy' not in (users_file.parent / 'security.json').read_text()
+
+
+@pytest.mark.parametrize('show', [False, True])
+def test_reset_security_shows_the_users(security, users_file, show):
+    security.show_login_users = not show
+    backup._reset_security()
+    assert security.show_login_users is True
+    assert json.loads((users_file.parent / 'security.json').read_text()) == {'show_login_users': True}

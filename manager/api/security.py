@@ -9,11 +9,8 @@ from api.ws.wsmanager import WSAPIBase
 
 
 def _policy_problems(password: str, username: str) -> list[str]:
-    """What objects to the password: the basic rules always, the stricter policy when the node enforces it."""
-    problems = passwords.validate_basic(password)
-    if not problems and security_settings.enforce_password_policy:
-        problems = passwords.validate_password(password, username)
-    return problems
+    """What objects to the password under the password policy (an empty list means it is accepted)."""
+    return passwords.validate_password(password, username)
 
 
 class Security(WSAPIBase):
@@ -33,15 +30,8 @@ class Security(WSAPIBase):
     @staticmethod
     @UserPerms.requires.none
     def password_policy():
-        """Whether the password policy is enforced for the passwords an administrator sets, and what it asks."""
-        return WSBroadcast(enforced=security_settings.enforce_password_policy, rules=passwords.RULES)
-
-    def set_password_policy(self, enforce: bool):
-        """Opt in or out of enforcing the password policy when users are created or their password changes."""
-        security_settings.enforce_password_policy = enforce
-        security_settings.save()
-        logger.info('Password policy {}', 'enforced' if enforce else 'not enforced')
-        return self.password_policy()
+        """The password policy: the numbers and the checklist rows the password form shows."""
+        return WSBroadcast(rules=passwords.rules_spec())
 
     @staticmethod
     def login_user_list():

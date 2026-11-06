@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 from loguru import logger
 
-from utils import first_access, osusers
+from utils import first_access, osusers, passwords
 
 REPO_MANAGER = Path(__file__).resolve().parents[1]          # manager/
 SCRIPT = Path(__file__).resolve().parents[2] / 'debian' / 'unitotem-first-admin'
@@ -44,6 +44,8 @@ MSG_ADMIN_EXISTS = 'Root accepts SSH keys only. Log in with an administrator acc
 MSG_NO_TERMINAL = 'First access: connect with an interactive terminal (ssh -t).'
 MSG_FAILED = 'First access failed. Details are in the system log.'
 GOOD_PASSWORD = 'Correct-Horse-42'
+RULE_LINES = ['  - ' + rule['text'] for rule in passwords.rules_spec()['rules']]
+RULES_OUT = 'Password rules:\n' + ''.join(line + '\n' for line in RULE_LINES)
 SIGNALS = (signal.SIGINT, signal.SIGQUIT, signal.SIGTSTP, signal.SIGHUP, signal.SIGTERM)
 
 
@@ -90,15 +92,11 @@ def _forbidden_spawn(monkeypatch):
     return spawned
 
 
-def _run(monkeypatch, tmp_path, *, input_fn, getpass_fn=None, is_tty=True, security=None, argv=ARGV):
+def _run(monkeypatch, tmp_path, *, input_fn, getpass_fn=None, is_tty=True, argv=ARGV):
     """Runs script.main with every spawn guarded and checks the clean environment afterwards."""
     spawned = _forbidden_spawn(monkeypatch)
-    security_file = tmp_path / 'security.json'
-    if security is not None:
-        security_file.write_text(security)
     rc = script.main(argv, input_fn=input_fn, getpass_fn=getpass_fn or _scripted([]),
-                     manager_dir=str(REPO_MANAGER), security_file=str(security_file),
-                     is_tty=lambda: is_tty)
+                     manager_dir=str(REPO_MANAGER), is_tty=lambda: is_tty)
     assert spawned == []
     assert dict(os.environ) == CLEAN_ENV
     return rc
@@ -186,7 +184,7 @@ def test_success_creates_admin_then_closes_window_with_umask_077(monkeypatch, tm
     rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']),
               getpass_fn=_scripted([GOOD_PASSWORD, GOOD_PASSWORD]))
     assert rc == 0
-    assert capfd.readouterr().out == 'Administrator alice created. Log in again as alice.\n'
+    assert capfd.readouterr().out == RULES_OUT + 'Administrator alice created. Log in again as alice.\n'
     assert fake_os.calls == [('create', 'alice', GOOD_PASSWORD, True, False), ('close',)]
     assert fake_os.umask_at_create == 0o077
 
@@ -198,7 +196,7 @@ def test_real_create_first_admin_reports_done_when_admin_appears_under_lock(monk
     rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']),
               getpass_fn=_scripted([GOOD_PASSWORD, GOOD_PASSWORD]))
     assert rc == 0
-    assert capfd.readouterr().out == MSG_ADMIN_EXISTS + '\n'
+    assert capfd.readouterr().out == RULES_OUT + MSG_ADMIN_EXISTS + '\n'
     assert fake_os.calls == []
     assert (tmp_path / 'lock' / 'first-admin.lock').exists()
 
@@ -251,30 +249,49 @@ def test_exactly_three_attempts_then_too_many_attempts(monkeypatch, tmp_path, fa
 
 # Password policy
 
-@pytest.mark.parametrize('security', [
-    '{"enforce_password_policy": true}',
-])
-def test_policy_rejects_weak_password_that_basic_rules_accept(monkeypatch, tmp_path, fake_os, capfd, security):
+
+
+def test_weak_password_is_refused_with_reasons_then_strong_accepted(monkeypatch, tmp_path, fake_os, capfd):
     getpass = _scripted(['short1', 'short1', GOOD_PASSWORD, GOOD_PASSWORD])
-    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice', 'alice']), getpass_fn=getpass,
-              security=security)
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice', 'alice']), getpass_fn=getpass)
     assert rc == 0
     out = capfd.readouterr().out
-    assert 'at least 10 characters' in out
+    for reason in passwords.validate_password('short1', 'alice'):
+        assert reason + '\n' in out
     assert fake_os.calls[0] == ('create', 'alice', GOOD_PASSWORD, True, False)
 
 
-def test_without_policy_the_same_weak_password_is_accepted(monkeypatch, tmp_path, fake_os, capfd):
-    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']), getpass_fn=_scripted(['short1', 'short1']))
+def test_rules_are_printed_once_before_the_first_password_prompt(monkeypatch, tmp_path, fake_os, capfd):
+    getpass = _scripted(['short1', 'short1', 'short2', 'short2', GOOD_PASSWORD, GOOD_PASSWORD])
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice'] * 3), getpass_fn=getpass)
     assert rc == 0
-    assert fake_os.calls[0] == ('create', 'alice', 'short1', True, False)
+    out = capfd.readouterr().out
+    lines = out.splitlines()
+    assert lines.count('Password rules:') == 1
+    assert lines[:len(RULE_LINES) + 1] == ['Password rules:'] + RULE_LINES
+    assert out.index('Password rules:') < out.index(passwords.validate_password('short1', 'alice')[0])
 
 
-@pytest.mark.parametrize('security', ['{"enforce_password_policy": "true"}', 'not json', '[]'])
-def test_policy_is_off_unless_the_flag_is_exactly_true(monkeypatch, tmp_path, fake_os, capfd, security):
-    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']), getpass_fn=_scripted(['short1', 'short1']),
-              security=security)
+def test_password_containing_the_username_is_refused(monkeypatch, tmp_path, fake_os, capfd):
+    getpass = _scripted(['my-ALICE-pass-42', 'my-ALICE-pass-42', GOOD_PASSWORD, GOOD_PASSWORD])
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice', 'alice']), getpass_fn=getpass)
     assert rc == 0
+    out = capfd.readouterr().out
+    assert passwords.validate_password('my-ALICE-pass-42', 'alice')
+    assert passwords.validate_password('my-ALICE-pass-42', 'alice')[0] in out
+
+
+def test_three_refused_passwords_exit_1_with_too_many_attempts(monkeypatch, tmp_path, fake_os, capfd):
+    getpass = _scripted(['short1', 'short1'] * 3)
+    prompts = _scripted(['alice'] * 3)
+    rc = _run(monkeypatch, tmp_path, input_fn=prompts, getpass_fn=getpass)
+    assert rc == 1
+    assert len(prompts.prompts) == 3
+    out = capfd.readouterr().out
+    assert out.count('Password rules:') == 1
+    assert out.count(passwords.validate_password('short1', 'alice')[0] + '\n') == 3
+    assert out.endswith('Too many attempts.\n')
+    assert fake_os.calls == []
 
 
 # Interruption and failure
@@ -284,7 +301,7 @@ def test_eof_or_interrupt_exits_1_quietly(monkeypatch, tmp_path, fake_os, capfd,
     rc = _run(monkeypatch, tmp_path, input_fn=_scripted([interrupt]), getpass_fn=_scripted([]))
     assert rc == 1
     captured = capfd.readouterr()
-    assert captured.out == ''
+    assert captured.out == RULES_OUT
     assert captured.err == ''
     assert fake_os.calls == []
 
@@ -292,7 +309,7 @@ def test_eof_or_interrupt_exits_1_quietly(monkeypatch, tmp_path, fake_os, capfd,
 def test_eof_at_password_prompt_exits_1_quietly(monkeypatch, tmp_path, fake_os, capfd):
     rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']), getpass_fn=_scripted([EOFError()]))
     assert rc == 1
-    assert capfd.readouterr().out == ''
+    assert capfd.readouterr().out == RULES_OUT
     assert fake_os.calls == []
 
 
@@ -306,7 +323,7 @@ def test_generic_failure_prints_only_the_short_message_and_logs_details(monkeypa
               getpass_fn=_scripted([GOOD_PASSWORD, GOOD_PASSWORD]))
     assert rc == 1
     captured = capfd.readouterr()
-    assert captured.out == MSG_FAILED + '\n'
+    assert captured.out == RULES_OUT + MSG_FAILED + '\n'
     assert captured.err == ''
     logged = '\n'.join(str(item) for item in syslog_calls)
     assert 'Traceback' in logged
@@ -351,7 +368,7 @@ def test_first_admin_done_during_create_reports_already_set_up(monkeypatch, tmp_
     prompts = _scripted(['alice', 'bob'])
     rc = _run(monkeypatch, tmp_path, input_fn=prompts, getpass_fn=_scripted([GOOD_PASSWORD] * 4))
     assert rc == 0
-    assert capfd.readouterr().out == MSG_ADMIN_EXISTS + '\n'
+    assert capfd.readouterr().out == RULES_OUT + MSG_ADMIN_EXISTS + '\n'
     assert len(prompts.prompts) == 1
 
 
@@ -362,7 +379,7 @@ def test_first_access_busy_exits_1(monkeypatch, tmp_path, fake_os, capfd):
     monkeypatch.setattr(first_access, 'create_first_admin', busy)
     rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']), getpass_fn=_scripted([GOOD_PASSWORD] * 2))
     assert rc == 1
-    assert capfd.readouterr().out == 'Another first access is in progress. Try again in a minute.\n'
+    assert capfd.readouterr().out == RULES_OUT + 'Another first access is in progress. Try again in a minute.\n'
 
 
 # Environment and argv
@@ -445,7 +462,7 @@ def test_alarm_handler_prints_timeout_and_exits(monkeypatch, tmp_path, fake_os, 
     rc = _run(monkeypatch, tmp_path, input_fn=ask, getpass_fn=_scripted([]))
     assert rc == 1
     assert exited == [True]
-    assert capfd.readouterr().out == 'Timed out.\n'
+    assert capfd.readouterr().out == RULES_OUT + 'Timed out.\n'
     assert signal.getsignal(signal.SIGALRM) is _sentinel_handler
     assert signal.getitimer(signal.ITIMER_REAL)[0] == 0
 
@@ -494,9 +511,7 @@ def _build_copy(tmp_path, admin_exists):
     (stub / 'utils' / 'first_access.py').write_text(STUB_FIRST_ACCESS.replace('MARKER', repr(str(marker))))
     text = SCRIPT.read_text()
     text = text.replace("MANAGER_DIR = '/usr/share/unitotem-manager'", f'MANAGER_DIR = {str(stub)!r}')
-    text = text.replace("SECURITY_FILE = '/etc/unitotem/security.json'",
-                        f"SECURITY_FILE = {str(tmp_path / 'absent.json')!r}")
-    assert str(stub) in text and str(tmp_path / 'absent.json') in text
+    assert str(stub) in text
     copy = tmp_path / 'unitotem-first-admin-copy.py'
     copy.write_text(text)
     return copy, marker

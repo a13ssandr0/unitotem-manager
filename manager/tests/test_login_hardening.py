@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from routers import login, setup
-from utils import first_access
+from utils import first_access, passwords
 from utils.models.security import SecuritySettings
 from utils.models.user import User, UserPerms
 
@@ -37,8 +37,7 @@ class FakeSetupManager:
 @pytest.fixture
 def client(monkeypatch):
     settings = SecuritySettings()
-    for module in (login, setup):
-        monkeypatch.setattr(module, 'security_settings', settings, raising=False)
+    monkeypatch.setattr(login, 'security_settings', settings)
     monkeypatch.setattr('utils.models.security.security_settings', settings)
     # plain stand-in: the pydantic user manager refuses instance attributes that are not fields
     fake = SimpleNamespace(users=lambda: ['alice', 'bob'],
@@ -92,8 +91,6 @@ def test_set_passwd_takes_the_password_from_the_body(monkeypatch):
     fake = SimpleNamespace(change_password=lambda u, p: changed.append((u, p)),
                            revoke_sessions=lambda *a, **k: None)
     monkeypatch.setattr(login, 'user_manager', fake)
-    # the policy is enforced here, so a short password is refused
-    monkeypatch.setattr(login, 'security_settings', SecuritySettings(enforce_password_policy=True))
     app = FastAPI()
     app.include_router(login.router)
     app.dependency_overrides[login.LOGMAN] = lambda: User(name='alice', perms=set(), sid='s')
@@ -102,13 +99,14 @@ def test_set_passwd_takes_the_password_from_the_body(monkeypatch):
     assert changed == []
     r = c.post('/api/settings/set_passwd', json={'password': 'longenough-1'})
     assert r.status_code == 200 and changed == [('alice', 'longenough-1')]
-    assert c.post('/api/settings/set_passwd', json={'password': 'a'}).status_code == 422
+    weak = c.post('/api/settings/set_passwd', json={'password': 'a'})
+    assert weak.status_code == 422
+    assert weak.json()['detail'] == passwords.validate_password('a', 'alice')
+    assert changed == [('alice', 'longenough-1')]
 
 
-def _setup_client(monkeypatch, tmp_path, enforce):
+def _setup_client(monkeypatch, tmp_path):
     created = []
-    settings = SecuritySettings(enforce_password_policy=enforce)
-    monkeypatch.setattr(setup, 'security_settings', settings)
     monkeypatch.setattr(setup, 'user_manager', FakeSetupManager())
     # the real system is never touched: no accounts, no lock under /run, no sshd marker change
     monkeypatch.setattr(first_access, 'LOCK_PATH', str(tmp_path / 'first-admin.lock'))
@@ -122,16 +120,26 @@ def _setup_client(monkeypatch, tmp_path, enforce):
     return TestClient(app), created
 
 
-def test_setup_applies_the_enforced_policy(monkeypatch, tmp_path):
-    c, created = _setup_client(monkeypatch, tmp_path, True)
-    r = c.post('/setup', json={'username': 'boss', 'password': 'aaaaaaaa'})      # basic rules pass, policy refuses
+def test_setup_always_applies_the_policy(monkeypatch, tmp_path):
+    c, created = _setup_client(monkeypatch, tmp_path)
+    r = c.post('/setup', json={'username': 'boss', 'password': 'aaaaaaaa'})      # too few character classes
     assert r.status_code == 422 and created == []
+    assert r.json()['detail'] == passwords.validate_password('aaaaaaaa', 'boss')
+    assert r.json()['detail'] and all(isinstance(m, str) for m in r.json()['detail'])
 
 
-def test_setup_without_enforcement_only_needs_the_basic_rules(monkeypatch, tmp_path):
-    c, created = _setup_client(monkeypatch, tmp_path, False)
-    assert c.post('/setup', json={'username': 'boss', 'password': 'aaaaaaaa'}).status_code == 200
-    assert created == [('boss', 'aaaaaaaa')]
+def test_setup_refuses_a_password_containing_the_username(monkeypatch, tmp_path):
+    c, created = _setup_client(monkeypatch, tmp_path)
+    r = c.post('/setup', json={'username': 'boss', 'password': 'the-BOSS-1'})
+    assert r.status_code == 422 and created == []
+    assert r.json()['detail'] == passwords.validate_password('the-BOSS-1', 'boss')
+    assert passwords.failed_ids('the-BOSS-1', 'boss') == ['username']
+
+
+def test_setup_accepts_a_strong_password(monkeypatch, tmp_path):
+    c, created = _setup_client(monkeypatch, tmp_path)
+    assert c.post('/setup', json={'username': 'boss', 'password': 'Aa1-strong'}).status_code == 200
+    assert created == [('boss', 'Aa1-strong')]
 
 
 def test_accounts_reach_administrators_only(monkeypatch):

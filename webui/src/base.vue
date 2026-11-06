@@ -120,7 +120,7 @@
     <SuspendDialog v-if="allowed('Power/suspend')" v-model="suspendDialog" />
 
     <v-snackbar v-model="errorSnack" color="error" :timeout="8000" multi-line>
-      {{ errorText }}
+      <span class="error-snack-text">{{ errorText }}</span>
     </v-snackbar>
 
     <v-dialog :model-value="!connected" persistent max-width="400" class="reconnect-dialog">
@@ -291,9 +291,7 @@ function connectWs() {
     if (Object.hasOwn(data, 'error')) {
       // Whoever sent the failing command gets this, nobody else
       console.error(data.target + ' returned ' + data.error, data.extra ?? '')
-      // for an unexpected exception the server sends the traceback as `extra`: its last line says what happened
-      const detail = data.extra ? String(data.extra).trim().split('\n').at(-1) : ''
-      errorText.value = detail && detail !== data.error ? `${data.error}: ${detail}` : String(data.error)
+      errorText.value = errorMessage(data.error, data.extra)
       errorSnack.value = true
       return
     }
@@ -315,6 +313,18 @@ function connectWs() {
   }
 }
 
+// `extra` is a list of reasons (one per line), or a text: a traceback of an unexpected exception (its last line says
+// what happened) or a short reason
+function errorMessage(error, extra) {
+  if (Array.isArray(extra)) {
+    const reasons = extra.map(String).filter(Boolean)
+    if (reasons.length) return reasons.join('\n')
+    return String(error)
+  }
+  const detail = extra ? String(extra).trim().split('\n').at(-1) : ''
+  return detail && detail !== error ? `${error}: ${detail}` : String(error)
+}
+
 onMounted(() => {
   loadSchema()
   connectWs()
@@ -327,3 +337,10 @@ onUnmounted(() => {
 
 </script>
 
+
+<style scoped>
+/* one line per reason (the server sends a list of reasons as `extra`) */
+.error-snack-text {
+  white-space: pre-line;
+}
+</style>

@@ -128,13 +128,13 @@ def _export_security():
 
 def _restore_security(data, _version):
     from utils.models.security import SecuritySettings, security_settings
-    security_settings.enforce_password_policy = SecuritySettings(**data).enforce_password_policy
+    security_settings.show_login_users = SecuritySettings(**data).show_login_users     # missing key: default (shown)
     security_settings.save()
 
 
 def _reset_security():
     from utils.models.security import security_settings
-    security_settings.enforce_password_policy = False
+    security_settings.show_login_users = True
     security_settings.save()
 
 
