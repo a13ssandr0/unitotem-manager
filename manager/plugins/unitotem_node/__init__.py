@@ -107,6 +107,19 @@ def on_startup(loop):
             logger.exception('Hostname watch stopped')
 
     loop.create_task(hostname_watch(), name='hostname_watch')
+
+    async def datetime_watch():
+        from .api.date_time import status_fields
+
+        async def pushed():
+            await WS.broadcast('Settings/DateTime/status', **await status_fields())
+
+        try:
+            await dbus_system.watch_timedate(pushed)
+        except Exception:
+            logger.exception('Date and time watch stopped')
+
+    loop.create_task(datetime_watch(), name='datetime_watch')
     from .system import desktop_notifications
     loop.create_task(desktop_notifications.serve(), name='desktop_notifications')
 
@@ -242,6 +255,7 @@ PLUGIN = Plugin(
         ('unitotem_node.api.audio', 'Audio', 'Settings'),
         ('unitotem_node.api.network', 'Network', 'Settings'),
         ('unitotem_node.api.timers', 'Timers', 'Settings'),
+        ('unitotem_node.api.date_time', 'DateTime', 'Settings'),
         ('unitotem_node.api.power', 'Power', None),
         ('unitotem_node.api.updater', 'Update', 'Settings'),
         ('unitotem_node.api.display', 'Display', 'Settings'),

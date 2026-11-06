@@ -206,6 +206,7 @@ const tabs = ref([
   {id: 'remote', name: 'Remote control', icon: 'mdi-remote', needs: 'Settings/Remote/mode'},
   {id: 'users', name: 'Users', icon: 'mdi-account-key', needs: 'Settings/Security/users'},
   {id: 'timers', name: 'Timers', icon: 'mdi-alarm', needs: 'Settings/Timers/jobs'},
+  {id: 'datetime', name: 'Date and time', icon: 'mdi-clock-outline', needs: 'Settings/DateTime/status'},
   {id: 'network', name: 'Network', icon: 'mdi-ethernet', needs: 'Settings/Network/devices'},
   {id: 'updates', name: 'Updates', icon: 'mdi-update', needs: 'Settings/Update/status'},
   {id: 'backup', name: 'Backup and restore', icon: 'mdi-history', needs: 'Settings/Security/users'},
