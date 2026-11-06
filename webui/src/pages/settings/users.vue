@@ -39,10 +39,6 @@
           </tbody>
         </v-table>
         <v-card-text class="pt-2">
-          <p class="text-caption text-medium-emphasis mb-4">
-            Admin is the sudo role. Granting it gives the user a shell, SSH and terminal access, and sudo with their
-            own password. Revoking it removes sudo and the shell; the account stays a web-only user.
-          </p>
           <v-switch :model-value="loginUserList.show" color="primary" density="compact" hide-details
                     label="Show the list of users on the login page"
                     @update:model-value="v => api.Settings.Security.set_login_user_list({show: !!v})"></v-switch>
