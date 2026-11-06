@@ -23,6 +23,8 @@ from typing import Optional
 
 from loguru import logger
 
+from utils import passwords
+
 USERS_GROUP = 'users'                      # web access
 ADMIN_GROUP = 'sudo'                       # administrators of UniTotem
 FIRST_ACCESS_GROUP = 'unitotem-first-admin'  # root's marker while the first-access window is open
@@ -43,8 +45,12 @@ def valid_name(name: str) -> bool:
     return isinstance(name, str) and NAME.fullmatch(name) is not None
 
 
-def _run(args: list[str], secret: Optional[str] = None):
-    result = subprocess.run(args, input=secret, capture_output=True, text=True, timeout=30)
+CHPASSWD_ENV = {'LANG': 'C.UTF-8', 'PATH': '/usr/sbin:/usr/bin:/sbin:/bin'}   # English messages from PAM, whatever the locale
+BAD_PASSWORD = 'BAD PASSWORD: '
+
+
+def _run(args: list[str], secret: Optional[str] = None, env: Optional[dict] = None):
+    result = subprocess.run(args, input=secret, capture_output=True, text=True, timeout=30, env=env)
     if result.returncode != 0:
         logger.error('{} failed ({}): {}', args[0], result.returncode, result.stderr.strip())
         raise OSUserError(result.stderr.strip() or f'{args[0]} failed')
@@ -139,6 +145,11 @@ def create_user(name: str, password: str, hashed: bool = False, admin: bool = Fa
                           'at most 32 characters')
     if exists(name):
         raise OSUserError('An account with this name already exists on the system')
+    if not hashed:
+        # refused before any command: a weak password must not create the account and then delete it
+        problems = passwords.validate_password(password, name)
+        if problems:
+            raise OSUserError('; '.join(problems))
     if admin:
         _run(['adduser', '--disabled-password', '--comment', GECOS, '--', name])
     else:
@@ -168,7 +179,14 @@ def set_password(name: str, password: str, hashed: bool = False):
         raise OSUserError('Not a password hash')
     if not isinstance(password, str) or '\n' in password or '\r' in password or '\0' in password:
         raise OSUserError('Invalid characters in the password')
-    _run(['chpasswd', *(['--encrypted'] if hashed else [])], f'{name}:{password}\n')
+    try:
+        _run(['chpasswd', *(['--encrypted'] if hashed else [])], f'{name}:{password}\n', env=CHPASSWD_ENV)
+    except OSUserError as e:
+        # the raw stderr is already in the log (_run); the person gets only the PAM reasons or a generic refusal
+        reasons = [line[len(BAD_PASSWORD):] for line in str(e).splitlines() if line.startswith(BAD_PASSWORD)]
+        if reasons:
+            raise OSUserError('; '.join(reasons)) from None
+        raise OSUserError('The password was refused') from None
 
 
 def set_admin(name: str, admin: bool):

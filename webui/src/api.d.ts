@@ -216,12 +216,10 @@ export interface Api {
       delete_user: ApiCall<{ username: string }>
       /** Whether the login page lists the account names. [requires: admin] */
       login_user_list: ApiCall<Record<string, never>>
-      /** Whether the password policy is enforced for the passwords an administrator sets, and what it asks. */
+      /** The password policy: the numbers and the checklist rows the password form shows. */
       password_policy: ApiCall<Record<string, never>>
       /** Show the account names on the login page, or ask for a typed user name. [requires: admin] */
       set_login_user_list: ApiCall<{ show: boolean }>
-      /** Opt in or out of enforcing the password policy when users are created or their password changes. [requires: admin] */
-      set_password_policy: ApiCall<{ enforce: boolean }>
       /** [requires: admin] */
       set_user_password: ApiCall<{ username: string; password: string }>
       /** [requires: admin] */

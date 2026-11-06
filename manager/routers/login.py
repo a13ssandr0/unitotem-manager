@@ -203,9 +203,7 @@ async def logout():
 async def set_pass(request: Request, response: Response, body: PasswordBody, user: User = Depends(LOGMAN)):
     from utils import passwords
     password = body.password
-    problems = passwords.validate_basic(password)
-    if not problems and security_settings.enforce_password_policy:
-        problems = passwords.validate_password(password, user.name)
+    problems = passwords.validate_password(password, user.name)
     if problems:
         raise HTTPException(status_code=422, detail=problems)
     try:

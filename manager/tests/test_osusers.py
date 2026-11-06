@@ -69,7 +69,7 @@ class FakeSystem:
                                                  entry.pw_gecos, entry.pw_dir, shell))
 
     # ── the commands ──
-    def run(self, args, secret=None):
+    def run(self, args, secret=None, env=None):
         args = list(args)
         self.calls.append((args, secret))
         program = args[0]
@@ -167,6 +167,27 @@ def pam_calls(monkeypatch):
 
 
 PASSWORD = 'pw-1234567890'
+REAL_RUN = osusers._run     # captured before the fixtures replace it: the chpasswd tests run the real _run over a mocked subprocess
+
+PAM_SHORT_STDERR = ('BAD PASSWORD: The password is shorter than 8 characters\n'
+                    'chpasswd: (user bob) pam_chauthtok() failed, error:\n'
+                    'Authentication token manipulation error\n'
+                    'chpasswd: (line 1, user bob) password not changed\n')
+
+
+@pytest.fixture
+def chpasswd_stderr(monkeypatch):
+    """Runs the real _run; subprocess.run is mocked to return the given rc and stderr. Records the calls."""
+    recorded = []
+    state = {'rc': 1, 'stderr': PAM_SHORT_STDERR}
+
+    def fake_subprocess_run(args, input=None, capture_output=None, text=None, timeout=None, env=None):
+        recorded.append({'args': args, 'input': input, 'env': env, 'timeout': timeout})
+        return osusers.subprocess.CompletedProcess(args, state['rc'], '', state['stderr'])
+
+    monkeypatch.setattr(osusers, '_run', REAL_RUN)
+    monkeypatch.setattr(osusers.subprocess, 'run', fake_subprocess_run)
+    return state, recorded
 
 
 # ── who may log in ──────────────────────────────────────────────────────────
@@ -565,3 +586,83 @@ def test_revoked_sessions_stop_working_except_the_kept_one(system, users_file):
     manager.revoke_sessions('alice')                                   # an administrator changed it: nobody is kept
     assert not manager.session_valid('alice', 'mine', issued)
     assert manager.session_valid('nobody', 'x', issued)               # no record, nothing to revoke
+
+
+# ── chpasswd: the refusal messages ─────────────────────────────────────────
+
+def test_chpasswd_runs_with_a_minimal_english_environment(chpasswd_stderr):
+    state, recorded = chpasswd_stderr
+    state['rc'], state['stderr'] = 0, ''
+    osusers.set_password('bob', PASSWORD)
+    assert recorded[0]['env'] == {'LANG': 'C.UTF-8', 'PATH': '/usr/sbin:/usr/bin:/sbin:/bin'}
+    assert recorded[0]['args'] == ['chpasswd']
+    assert recorded[0]['input'] == f'bob:{PASSWORD}\n'     # the secret on stdin, never in argv
+    assert PASSWORD not in ' '.join(recorded[0]['args'])
+
+
+def test_pam_reason_is_the_only_message(chpasswd_stderr):
+    with pytest.raises(osusers.OSUserError) as info:
+        osusers.set_password('bob', 'short')
+    assert str(info.value) == 'The password is shorter than 8 characters'
+    assert 'chpasswd:' not in str(info.value)
+    assert 'pam_chauthtok' not in str(info.value)
+
+
+def test_each_bad_password_line_becomes_one_message_joined_by_semicolons(chpasswd_stderr):
+    state, _ = chpasswd_stderr
+    state['stderr'] = ('BAD PASSWORD: The password is shorter than 8 characters\n'
+                       'BAD PASSWORD: The password contains the user name in some form\n'
+                       'chpasswd: (line 1, user bob) password not changed\n')
+    with pytest.raises(osusers.OSUserError) as info:
+        osusers.set_password('bob', 'short')
+    assert str(info.value) == ('The password is shorter than 8 characters; '
+                               'The password contains the user name in some form')
+
+
+def test_other_chpasswd_failure_is_a_generic_refusal_and_the_raw_stderr_is_only_logged(chpasswd_stderr):
+    state, _ = chpasswd_stderr
+    state['stderr'] = 'chpasswd: (line 1, user bob) password not changed\n'
+    logged = []
+    handler = osusers.logger.add(lambda message: logged.append(message), level='WARNING')
+    try:
+        with pytest.raises(osusers.OSUserError) as info:
+            osusers.set_password('bob', PASSWORD)
+    finally:
+        osusers.logger.remove(handler)
+    assert str(info.value) == 'The password was refused'
+    assert 'password not changed' not in str(info.value)
+    assert any('password not changed' in line for line in logged)
+
+
+def test_chpasswd_failure_without_stderr_is_the_generic_refusal(chpasswd_stderr):
+    state, _ = chpasswd_stderr
+    state['stderr'] = ''
+    with pytest.raises(osusers.OSUserError) as info:
+        osusers.set_password('bob', PASSWORD)
+    assert str(info.value) == 'The password was refused'
+
+
+# ── create_user: validation before any command ─────────────────────────────
+
+def test_create_user_with_a_weak_password_raises_before_adduser(system):
+    weak = 'abc'
+    expected = '; '.join(osusers.passwords.validate_password(weak, 'dave'))
+    assert expected
+    with pytest.raises(osusers.OSUserError) as info:
+        osusers.create_user('dave', weak)
+    assert str(info.value) == expected
+    assert system.calls == []                  # no adduser, no delete
+    assert not osusers.exists('dave')
+
+
+def test_create_user_with_a_hash_skips_validation(system, monkeypatch):
+    calls = []
+
+    def spy(password, username=''):
+        calls.append((password, username))
+        return ['would refuse']
+
+    monkeypatch.setattr(osusers.passwords, 'validate_password', spy)
+    osusers.create_user('erin2', '$y$j9T$salt$hash', hashed=True)
+    assert calls == []
+    assert osusers.exists('erin2')

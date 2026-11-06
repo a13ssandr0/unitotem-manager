@@ -2,8 +2,7 @@
 Security settings of the node that are not about one user, persisted next to the users (/etc/unitotem/security.json).
 
 show_login_users: whether the login page lists the account names (default on).
-enforce_password_policy: whether the password policy (utils/passwords.py) is ENFORCED when a user is created or a password
-changes. It is opt-in, decided with the user: off by default, a node whose owner wants it switches it on.
+Unknown keys (e.g. the removed enforce_password_policy of older files) are ignored when the file is read.
 """
 import json
 from pathlib import Path
@@ -14,8 +13,7 @@ from pydantic import BaseModel
 from utils.models.command_line import cmdargs
 
 
-class SecuritySettings(BaseModel, validate_assignment=True):
-    enforce_password_policy: bool = False
+class SecuritySettings(BaseModel, validate_assignment=True, extra='ignore'):
     show_login_users: bool = True      # the login page lists the account names (names only)
 
     @staticmethod

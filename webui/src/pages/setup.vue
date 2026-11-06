@@ -31,16 +31,15 @@
                   <v-text-field label="Repeat the password" v-model="repeat" variant="outlined" type="password"
                                 autocomplete="new-password" name="password-repeat" :maxlength="max_length"></v-text-field>
 
-                  <ul class="text-caption text-medium-emphasis mb-4 pl-4">
-                    <li v-for="rule in rules" :key="rule">{{ rule }}</li>
-                  </ul>
+                  <PasswordChecklist class="mb-4" :spec="spec" :password="password" :username="username"
+                                     :confirm="repeat" @valid="v => passwordValid = v"></PasswordChecklist>
 
                   <v-alert v-if="errors.length" type="error" variant="tonal" density="compact" class="mb-2">
                     <div v-for="error in errors" :key="error">{{ error }}</div>
                   </v-alert>
 
                   <v-btn type="submit" color="primary" block size="large" variant="elevated" class="mt-4"
-                         :loading="busy" :disabled="busy">
+                         :loading="busy" :disabled="busy || !canSubmit">
                     Create administrator
                   </v-btn>
                 </v-form>
@@ -54,15 +53,16 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import PasswordChecklist from '@/components/PasswordChecklist.vue'
 
 const state = window.__INITIAL_STATE__
 const hostname = ref(state.hostname)
 const ip_addr = ref(state.ip_addr)
 const os_vers = ref(state.os_vers)
-const rules = state.rules || []
-const min_length = state.min_length
-const max_length = state.max_length
+// the password policy spec from the server (min_length, max_length, rules: [{id, text}])
+const spec = state.rules || null
+const max_length = spec?.max_length
 
 const username = ref('admin')
 const password = ref('')
@@ -70,18 +70,19 @@ const repeat = ref('')
 const errors = ref([])
 const busy = ref(false)
 const done = ref(null)
+// set by the checklist: every password rule met and the two passwords match
+const passwordValid = ref(false)
+const canSubmit = computed(() => passwordValid.value && username.value.trim() !== '')
 
 function check() {
   const problems = []
   if (!username.value.trim()) problems.push('Enter a username')
-  if (password.value.length < min_length) problems.push(`The password must be at least ${min_length} characters long`)
-  if (password.value !== repeat.value) problems.push('The two passwords do not match')
   return problems
 }
 
 async function submit() {
   errors.value = check()
-  if (errors.value.length) return
+  if (errors.value.length || !canSubmit.value) return
   busy.value = true
   try {
     const response = await fetch('/setup', {

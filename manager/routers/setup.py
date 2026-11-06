@@ -18,7 +18,6 @@ import utils.constants as const
 from routers.login import LOGMAN, session_cookie
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
 from utils import first_access, osusers, passwords
-from utils.models.security import security_settings
 from utils.models.user import user_manager
 from utils.system.ip import reachable_ipv4
 from webview.controller import WebviewManager
@@ -30,7 +29,7 @@ _lock = asyncio.Lock()        # two simultaneous setups: one wins, the other fin
 class SetupRequest(BaseModel):
     """Everything is bounded: whoever can reach this page can send anything to it."""
     username: str = Field(max_length=64)
-    password: str = Field(max_length=passwords.MAX_LENGTH * 4)
+    password: str = Field(max_length=passwords.POLICY['max_length'] * 4)
 
 
 @router.get('/setup')
@@ -51,9 +50,7 @@ async def setup_page(request: Request):
             'os_vers': os_release()['PRETTY_NAME'],
             'ip_addr': reachable_ipv4(),
             'hostname': gethostname(),
-            'rules': passwords.BASIC_RULES,
-            'min_length': passwords.BASIC_MIN_LENGTH,
-            'max_length': passwords.MAX_LENGTH,
+            'rules': passwords.rules_spec(),
         },
     })
 
@@ -63,9 +60,7 @@ async def setup(data: SetupRequest):
     async with _lock:
         if user_manager.has_admin():
             raise HTTPException(status_code=404)
-        problems = passwords.validate_basic(data.password) + passwords.validate_username(data.username)
-        if not problems and security_settings.enforce_password_policy:
-            problems = passwords.validate_password(data.password, data.username)
+        problems = passwords.validate_username(data.username) + passwords.validate_password(data.password, data.username)
         if problems:
             return JSONResponse({'detail': problems}, status_code=422)
         try:
