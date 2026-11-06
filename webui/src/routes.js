@@ -38,6 +38,11 @@ const routes = [
             component: () => import('@/pages/settings/timers.vue'),
           },
           {
+            path: 'datetime',
+            name: 'Date and time',
+            component: () => import('@/pages/settings/datetime.vue'),
+          },
+          {
             path: 'network',
             name: 'Network',
             component: () => import('@/pages/settings/network.vue'),

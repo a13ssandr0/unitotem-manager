@@ -1,3 +1,9 @@
+unitotem-manager (3.0.0~dev24) stable; urgency=medium
+
+  * Settings: new "Date and time" page: the time zone is chosen from the list of the system (systemd-timedated) and network time (NTP) can be switched and its synchronisation seen; timers and schedules follow the new zone without a restart
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Fri, 06 Nov 2026 22:45:00 +0100
+
 unitotem-manager (3.0.0~dev23) stable; urgency=medium
 
   * Password policy: one policy for every account, always on and enforced by PAM (at least 8 bytes, 2 character classes, at most 3 repeated characters, not containing the user name); the manager checks the same rules before asking the system, and the "Enforce the password policy" switch is gone

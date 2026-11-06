@@ -84,6 +84,14 @@ export interface Api {
       /** `device` None means the default one. [requires: audio] */
       set_volume: ApiCall<{ volume: number; device?: null | string }>
     }
+    DateTime: {
+      /** [requires: admin] */
+      set_ntp: ApiCall<{ enabled: boolean }>
+      /** [requires: admin] */
+      set_timezone: ApiCall<{ timezone: string }>
+      /** [requires: admin] */
+      status: ApiCall<Record<string, never>>
+    }
     Display: {
       Screens: {
         /** Change how an output is controlled. `wol` is {mac, broadcast?, port?}, `serial` is [requires: admin] */

@@ -238,3 +238,136 @@ async def watch_hostname(on_change=None):
                 await on_change(current)
             except Exception:
                 logger.exception('Hostname change callback failed')
+
+
+# ── timedated ──────────────────────────────────────────────────────────────
+
+class _Timedated(DbusInterfaceCommonAsync, interface_name='org.freedesktop.timedate1'):
+    """
+    Proxy for org.freedesktop.timedate1 (systemd-timedated).
+    SetTimezone and SetNTP need polkit action org.freedesktop.timedate1.set-timezone / set-ntp.
+    """
+
+    @dbus_method_async(result_signature='as', method_name='ListTimezones')
+    async def list_timezones(self) -> list[str]: ...
+
+    @dbus_method_async('sb', method_name='SetTimezone')
+    async def set_timezone(self, timezone: str, interactive: bool) -> None: ...
+
+    @dbus_method_async('bb', method_name='SetNTP')
+    async def set_ntp(self, enabled: bool, interactive: bool) -> None: ...
+
+    @dbus_property_async('s', property_name='Timezone')
+    def timezone(self) -> str: ...
+
+    @dbus_property_async('b', property_name='NTP')
+    def ntp(self) -> bool: ...
+
+    @dbus_property_async('b', property_name='CanNTP')
+    def can_ntp(self) -> bool: ...
+
+    @dbus_property_async('b', property_name='NTPSynchronized')
+    def ntp_synchronized(self) -> bool: ...
+
+    @dbus_property_async('b', property_name='LocalRTC')
+    def local_rtc(self) -> bool: ...
+
+    @dbus_property_async('t', property_name='TimeUSec')
+    def time_usec(self) -> int: ...
+
+
+def _get_timedated(bus) -> _Timedated:
+    return _Timedated.new_proxy('org.freedesktop.timedate1', '/org/freedesktop/timedate1', bus)
+
+
+# Zone names of the system's zoneinfo: Z lines are zones (name in field 2), L lines are links (name in field 3).
+ZONEINFO_INDEX = '/usr/share/zoneinfo/tzdata.zi'
+ZONE_TAB = '/usr/share/zoneinfo/zone1970.tab'
+_ZONE_NAME = re.compile(r'[A-Za-z][A-Za-z0-9_+\-]*(?:/[A-Za-z0-9_+\-]+)*')
+
+
+def _zones_from_index(index: str = ZONEINFO_INDEX, tab: str = ZONE_TAB) -> set[str]:
+    """Zone names from the zoneinfo index; zone1970.tab (the third column) when the index is not there."""
+    try:
+        zones = set()
+        with open(index, encoding='utf-8') as fh:
+            for line in fh:
+                fields = line.split()
+                if fields[:1] == ['Z'] and len(fields) > 1:
+                    zones.add(fields[1])
+                elif fields[:1] == ['L'] and len(fields) > 2:
+                    zones.add(fields[2])
+        return zones
+    except OSError:
+        with open(tab, encoding='utf-8') as fh:
+            return {f[2] for f in (l.split('\t') for l in fh if not l.startswith('#')) if len(f) > 2}
+
+
+async def list_timezones() -> list[str]:
+    """Every zone name timedated accepts (links included), sorted; UTC always present."""
+    from loguru import logger
+    try:
+        with _system_bus() as bus:
+            zones = set(await _get_timedated(bus).list_timezones())
+    except Exception as exc:
+        logger.warning('timedated ListTimezones failed ({}), reading the zoneinfo index', exc)
+        zones = _zones_from_index()
+    return sorted({z for z in zones if _ZONE_NAME.fullmatch(z)} | {'UTC'})
+
+
+def _reload_zone():
+    """The process caches the zone at its first use: a TZ override would hide /etc/localtime (the link timedated
+    writes), so it is dropped and the zone read again."""
+    import time
+    os.environ.pop('TZ', None)
+    time.tzset()
+
+
+async def timedate_status() -> dict:
+    with _system_bus() as bus:
+        proxy = _get_timedated(bus)
+        return {
+            'timezone': await proxy.timezone,
+            'ntp': await proxy.ntp,
+            'can_ntp': await proxy.can_ntp,
+            'synchronized': await proxy.ntp_synchronized,
+        }
+
+
+async def set_timezone(tz: str):
+    """Set the system time zone (the /etc/localtime link, via timedated) and make this process follow it."""
+    if not isinstance(tz, str) or not _ZONE_NAME.fullmatch(tz) or tz not in await list_timezones():
+        raise ValueError('Unknown time zone')
+    with _system_bus() as bus:
+        await _get_timedated(bus).set_timezone(tz, False)
+    _reload_zone()
+
+
+async def set_ntp(enabled: bool):
+    with _system_bus() as bus:
+        proxy = _get_timedated(bus)
+        if not await proxy.can_ntp:
+            raise ValueError('This node has no network time service to switch')
+        await proxy.set_ntp(bool(enabled), False)
+
+
+async def watch_timedate(on_change=None):
+    """
+    Follow the time zone and NTP state whoever changes them (this UI, `timedatectl`): timedated announces a change with
+    PropertiesChanged, so nothing polls. A new zone reaches this process here; `on_change()` is awaited after each
+    relevant change.
+    """
+    from loguru import logger
+    bus = sdbus.sd_bus_open_system()
+    proxy = _get_timedated(bus)
+    async for _interface, changed, _invalidated in proxy.properties_changed:
+        if not {'Timezone', 'NTP', 'NTPSynchronized', 'CanNTP'} & set(changed):
+            continue
+        if 'Timezone' in changed:
+            logger.info('Time zone changed')
+            _reload_zone()
+        if on_change is not None:
+            try:
+                await on_change()
+            except Exception:
+                logger.exception('Date and time change callback failed')
