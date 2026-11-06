@@ -67,11 +67,13 @@ class WSManager:
             self.last[msg['target']] = text
         return text
 
-    async def send(self, websocket: WebSocket, target: str, nocache=False, **kwargs):
+    # The leading parameters are positional only: the message fields travel in **kwargs and may be named like them
+    # (the `users` list of Security/users).
+    async def send(self, websocket: WebSocket, target: str, /, nocache=False, **kwargs):
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         await websocket.send_text(text)
 
-    async def multicast(self, users: str|list[str], target: str, nocache=False, **kwargs):
+    async def multicast(self, users: str|list[str], target: str, /, nocache=False, **kwargs):
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         if isinstance(users, str):
             users = [users]
@@ -79,7 +81,7 @@ class WSManager:
             for websocket in list(self.active_users[user]):
                 await self._deliver(websocket, text)
 
-    async def broadcast(self, target: str, nocache=False, **kwargs):
+    async def broadcast(self, target: str, /, nocache=False, **kwargs):
         text = self.prepare_message({'target': target, **kwargs}, nocache=nocache)
         for connection in list(self.active_connections):
             await self._deliver(connection, text)

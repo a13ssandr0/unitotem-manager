@@ -1,3 +1,9 @@
+unitotem-manager (3.0.0~dev22) stable; urgency=medium
+
+  * Users page: the list of users and the replies of add, delete and change of users no longer fail with "Internal error" (the message field `users` collided with the recipients parameter of the websocket multicast)
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Fri, 06 Nov 2026 03:30:00 +0100
+
 unitotem-manager (3.0.0~dev21) stable; urgency=medium
 
   * First access: root starts without a password and with the login shell /usr/sbin/unitotem-first-admin, which creates the first administrator (the web /setup does the same) and then locks root to SSH keys
