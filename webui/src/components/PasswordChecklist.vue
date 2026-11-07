@@ -49,7 +49,20 @@ watch(valid, value => emit('valid', value), {immediate: true})
 }
 .pw-row {
   min-height: 28px;
+  height: auto;
   padding-inline: 0;
+  align-items: flex-start;
+  overflow: visible;
+}
+.pw-row :deep(.v-list-item__content) {
+  min-width: 0;
+  overflow: visible;
+}
+.pw-row :deep(.v-list-item-title) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
 }
 .pw-unmet .pw-icon {
   color: rgb(var(--v-theme-on-surface));

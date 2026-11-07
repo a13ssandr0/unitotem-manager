@@ -33,7 +33,7 @@
             </td>
             <td class="text-right">
               <v-btn variant="text" icon="mdi-pencil" color="yellow" class="mr-2" aria-label="Edit" @click="openPasswordDialog(username)"></v-btn>
-              <v-btn variant="text" icon="mdi-delete" color="red" aria-label="Delete" @click="api.Settings.Security.delete_user({username: username})"></v-btn>
+              <v-btn variant="text" icon="mdi-delete" color="red" aria-label="Delete" @click="openDeleteDialog(username)"></v-btn>
             </td>
           </tr>
           </tbody>
@@ -51,7 +51,7 @@
         <v-card-title class="mt-2 ml-2">
           <span class="text-h5">Add User</span>
         </v-card-title>
-        <v-card-text class="pb-0">
+        <v-card-text class="pb-0 dialog-text">
           <v-text-field
             v-model="newUsername"
             label="Username"
@@ -102,7 +102,7 @@
         <v-card-title class="mt-2 ml-2">
           <span class="text-h5">Change Password for {{ selectedUser }}</span>
         </v-card-title>
-        <v-card-text class="pb-0">
+        <v-card-text class="pb-0 dialog-text">
           <v-text-field
             v-model="newPassword"
             label="New Password"
@@ -141,6 +141,23 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="deleteDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="mt-2 ml-2">
+          <span class="text-h5">Delete {{ deleteTarget }}?</span>
+        </v-card-title>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" autofocus @click="deleteDialog = false">
+            Cancel
+          </v-btn>
+          <v-btn color="error" variant="text" @click="confirmDelete">
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <template #fab>
       <v-btn icon="mdi-account-plus" color="primary" size="large" elevation="6" @click="openAddUserDialog" aria-label="Add user"></v-btn>
     </template>
@@ -155,6 +172,9 @@ import PasswordChecklist from '@/components/PasswordChecklist.vue'
 
 const dialog = ref(false)
 const passwordDialog = ref(false)
+const deleteDialog = ref(false)
+// kept after the dialog closes so the title does not change during the closing animation
+const deleteTarget = ref('')
 const newUsername = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
@@ -216,6 +236,16 @@ function changePassword() {
   }
 }
 
+function openDeleteDialog(username) {
+  deleteTarget.value = username;
+  deleteDialog.value = true;
+}
+
+function confirmDelete() {
+  api.Settings.Security.delete_user({username: deleteTarget.value});
+  deleteDialog.value = false;
+}
+
 function onPermissionChange(username) {
   const user = users.value[username];
   if (user.perms.includes('admin')) {
@@ -252,5 +282,9 @@ api.Settings.Security.users.on(data => {
 <style scoped>
 .darker-disabled-checkbox :deep(.mdi-checkbox-marked) {
   color: rgb(var(--v-theme-primary)) !important;
+}
+.dialog-text {
+  overflow-x: hidden;
+  min-width: 0;
 }
 </style>
