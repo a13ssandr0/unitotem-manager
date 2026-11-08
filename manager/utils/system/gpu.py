@@ -72,7 +72,7 @@ _DRM_TO_VA_DRIVER = {
 # forcing the feature on gets past the skip and then fails in the driver
 # (`nvidia_drv_video.so init failed`, CUDA initialization error), so there is
 # nothing to enable. NVIDIA therefore gets compositing flags only.
-_NVIDIA_DRM_NAMES = ("nvidia", "nvidia-drm")
+_NVIDIA_DRM_NAMES = ("nvidia", "nvidia-drm", "nouveau")
 
 # Software rasterisers. There is no hardware decoder behind these, and asking
 # for one is the exact mistake this module exists to avoid.
