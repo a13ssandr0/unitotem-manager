@@ -449,6 +449,29 @@ class WebviewApp:
             message = json.dumps({'target': 'WindowReloaded', 'window_id': window_id})
             asyncio.run_coroutine_threadsafe(self._ws.send(message), self._ws_loop)
 
+    def _screen_number(self, screen: QScreen) -> Optional[int]:
+        """The 1-based number of a connected screen, in the order WebviewInfo reports them; None if it is not connected."""
+        for i, s in enumerate(self._real_screens()):
+            if s.name() == screen.name():
+                return i + 1
+        return None
+
+    def _update_screen_labels(self):
+        """Every window learns its screen's number and name, for the idle pages: only while more than one screen is connected."""
+        many = len(self._real_screens()) > 1
+        for win in self.windows.values():
+            number = self._screen_number(win.screen) if many else None
+            win.set_screen_label(number, win.screen.name() if number else '')
+
+    def _identify(self, screen_name: Optional[str]):
+        """Shows the name and the number of one output on its window, or of every screen when no name is given (Identify)."""
+        for win in self.windows.values():
+            name = win.screen.name()
+            if screen_name is not None and name != screen_name:
+                continue
+            number = self._screen_number(win.screen)
+            win.identify(name, f'Screen {number}' if number else '')
+
     def _notify_screens_changed(self):
         """
         Push the current screen/window layout to the manager immediately
@@ -459,6 +482,7 @@ class WebviewApp:
         run()/_ws_client()), so the actual send has to be scheduled onto that
         loop rather than awaited directly here.
         """
+        self._update_screen_labels()
         if self._ws_loop is not None and self._ws is not None:
             asyncio.run_coroutine_threadsafe(self._send_webview_info(self._ws), self._ws_loop)
         try:
@@ -575,7 +599,7 @@ class WebviewApp:
         cef_timer = QTimer()
         cef_timer.timeout.connect(cef.MessageLoopWork)
         # 10ms, as in the cefpython examples. Raising it does NOT save CPU here:
-        # measured on the test VM with static content, the main thread sits at
+        # measured on a virtual machine with static content, the main thread sits at
         # 84% of a core at 10ms and 85% at 50ms - five times fewer ticks, no
         # difference. Whatever is spinning is the Qt event loop itself, not how
         # often CEF's queue is drained, so a longer interval would only cost
@@ -939,6 +963,8 @@ class WebviewApp:
                 win.turned_by_output = data['ok']
                 win.show_turn()
                 self._notify_screens_changed()
+        elif target == 'Identify':
+            self._identify(data.get('screen_name'))
         elif target == 'AddWindow':
             self._open_window(
                 screen_index=data.get('display', 0),

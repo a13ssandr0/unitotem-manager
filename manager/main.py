@@ -9,6 +9,14 @@ from functools import cache, lru_cache
 from pathlib import Path
 from typing import Literal, Union
 
+import utils.constants as const
+
+# --version is answered before the modules below load: utils.models.command_line parses argv when it is imported, and
+# the other options are read there (parse_known_args leaves them alone)
+_version = ArgumentParser(prog='unitotem-manager', add_help=False, allow_abbrev=False)
+_version.add_argument('--version', action='version', version=f'%(prog)s {const.__version__}')
+_version.parse_known_args()
+
 import urllib3
 from fastapi import (Depends, FastAPI, HTTPException, Request)
 from fastapi.middleware import Middleware
@@ -32,7 +40,7 @@ from api.ws.endpoints import REMOTE_WS, WS, api
 from api.ws.wsmanager import WSManager
 from routers.error import http_exception_handler
 from routers.login import LOGMAN, NotAuthenticatedException, login_redirect
-from templates import get_vite_assets, public_asset_files, templates
+from templates import get_vite_assets, public_asset_files, screen_context, templates
 from utils._logging import Logger
 from utils.models.command_line import cmdargs
 from utils.models.playlists import playlists_manager
@@ -112,10 +120,13 @@ WWW = FastAPI(
 # hotspot SSID, password and QR code are the only way in, and where nobody
 # can log in anyway since the screen is bolted to a wall.
 @WWW.api_route("/unitotem-{page}", response_class=HTMLResponse, methods=['GET', 'HEAD'])
-async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']]):
+async def first_boot_page(request: Request, page: Union[Literal['first-boot'], Literal['no-assets']],
+                          screen: str = '', index: str = ''):
     """
     The two pages the local viewer shows on its own: the first-boot welcome
-    screen and the "no assets" placeholder.
+    screen and the "no assets" placeholder. `screen` and `index` (optional)
+    name the output the page is shown on, given only when more than one
+    screen is connected (see templates.screen_context).
 
     Served without authentication, and only to loopback. They are only ever
     fetched by the viewer running on this same machine, so anyone reaching
@@ -128,7 +139,7 @@ async def first_boot_page(request: Request, page: Union[Literal['first-boot'], L
         logger.warning('Rejected non-local request for /unitotem-{} from {}',
                        page, request.client.host if request.client else 'unknown')
         raise HTTPException(status_code=404)
-    context = {'wifi': None}
+    context = {'wifi': None, **screen_context(screen, index)}
     for _plugin, hook in plugins.each('first_boot_context'):
         try:
             context.update(await hook())
@@ -204,16 +215,6 @@ for _plugin, _factory in plugins.each('routers'):
 WWW.include_router(routers.backup.router)
 WWW.include_router(routers.scheduler.router)
 
-
-parser = ArgumentParser()
-parser.add_argument('--no-gui', action='store_true',
-                    help='Headless mode: run only the backend, skip the local webview')
-parser.add_argument('--http-bind', default=const.default_bind)
-parser.add_argument('--http-port', default=const.default_port)
-parser.add_argument('--https-bind', default=const.default_bind_secure)
-parser.add_argument('--https-port', default=const.default_port_secure)
-parser.add_argument('--config', default=const.default_config_file)
-parser.add_argument('--version', action='version', version='%(prog)s ' + const.__version__)
 
 loop = asyncio.get_event_loop()
 logger.debug('Got event loop {}', id(loop))
@@ -345,9 +346,13 @@ from utils.first_access_watch import start as _start_first_access_watch  # noqa:
 _start_first_access_watch(loop)
 
 
+exit_status = 0
+
+
 async def _serve_www():
     # a swallowed bind error would leave the manager up but unreachable:
-    # fail loudly and shut down instead
+    # fail loudly and shut down instead, with a failing exit status so that systemd restarts the service
+    global exit_status
     try:
         await serve(WWW, HyperConfig().from_mapping(
                 bind=f'{cmdargs.bind_secure}:{cmdargs.port_secure}', insecure_bind=f'{cmdargs.bind}:{cmdargs.port}',
@@ -359,9 +364,11 @@ async def _serve_www():
                 'CAP_NET_BIND_SERVICE on the python binary (sudo setcap CAP_NET_BIND_SERVICE=+eip '
                 '<venv>/bin/python3), or pick higher ports with --port/--port_secure.',
                 cmdargs.port, cmdargs.port_secure)
+        exit_status = 1
         await _shutdown()
     except Exception as e:
         logger.critical('Web server failed to start: {}', e)
+        exit_status = 1
         await _shutdown()
 
 
@@ -397,7 +404,6 @@ asyncio_thread.start()
 
 # ── the local windows, on the main thread, if the viewer is installed ─────
 
-exit_status = 0
 if _viewer_will_notify:
     try:
         if not _gui(_schedule_shutdown):

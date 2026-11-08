@@ -4,12 +4,11 @@
       This node has no display to ask: touch screens cannot be listed or mapped here.
     </v-card-text>
     <template v-else>
-      <v-card-text v-if="!devices.length" class="text-medium-emphasis">
-        No touch screen is connected. When one is plugged in it appears here. A touch screen built into its monitor needs nothing: touches land
-        where they should, also when the monitor is turned or mirrored.
+      <v-card-text v-if="!visible.length" class="text-medium-emphasis">
+        No touch screen.
       </v-card-text>
       <v-list v-else lines="two">
-        <v-list-item v-for="dev in devices" :key="dev.key">
+        <v-list-item v-for="dev in visible" :key="dev.key">
           <template v-slot:prepend>
             <v-icon :color="dev.connected ? 'green' : 'grey'">
               {{ dev.connected ? 'mdi-gesture-tap' : 'mdi-power-plug-off' }}
@@ -116,7 +115,10 @@
 import {computed, ref, watch} from 'vue'
 import {api} from '@/api'
 
+// output: the screen this section belongs to. A touch screen mapped to it is listed, and so is one on automatic (whole desktop)
+const props = defineProps({output: {type: String, default: null}})
 const devices = ref([])
+const visible = computed(() => devices.value.filter(d => !d.output || d.output === props.output))
 const outputs = ref([])
 const available = ref(true)
 const setup = ref({phase: 'idle'})      // the guided setup running now (pushed by the node, so every open page shows the same step)

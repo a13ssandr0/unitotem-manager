@@ -63,9 +63,10 @@ Patches are plain `git diff` output relative to `chromium/src`, applied AFTER `a
     tools/cef-server/apply-patches.sh [/nas/cef-build/work/chromium/src]      # DRY_RUN=1 to only check
 
 It is idempotent (an already applied patch is detected with `git apply --check --reverse` and skipped), checks each patch before
-applying it, stops on the first one that fits neither state, and never applies `experimental-*`. The build scripts do not call it:
-run it by hand before `cef-rebuild.sh` (or before `build-all.sh` on a fresh checkout). `automate-git.py --force-clean` or
-`--force-update` resets the files, so re-run it afterwards.
+applying it, stops on the first one that fits neither state (earlier patches stay applied), and never applies `experimental-*`.
+`build-all.sh` (x64 and arm64) and `cef-rebuild.sh` call it themselves, after `automate-git.py` and before each build. `cef-arm64-v4l2.sh`,
+`cef-arm64-dbg.sh` and `cef-lean-x64.sh` do not: run `apply-patches.sh` first. `automate-git.py --force-clean` or `--force-update`
+resets the files, so the next build re-applies them. `sync.sh` ships `patches/` with the scripts (the script reads them from its own directory).
 
 | patch | file | fixes | runtime switch |
 |---|---|---|---|
@@ -89,6 +90,7 @@ later patches touch lines of earlier ones). The C API wrappers are generated: af
 | `0004-views-Use-the-entered-output-for-CefWindow-GetDisplay.patch` | `CefWindow::GetDisplay()` follows the entered output on Wayland |
 | `0005-tests-Add-views-tests-...patch` | ceftests `ViewsWindowTest.WindowFullscreenOnDisplay` |
 | `0006-views-Add-CefDisplayObserver.patch` | `CefDisplayObserver` and `CefDisplay::AddObserver/RemoveObserver` (experimental API), independent of 0001-0004, plus a ceftests registration test |
+| `0007-native-Build-the-OSR-menu-offset-only-with-X11.patch` | `menu_runner_views_aura.cc` guarded by `SUPPORTS_OZONE_X11` (needed with `ozone_platform_x11=false`). Not a commit of the CEF repository: its `From` id is the git hash of its own text, not a real commit id. |
 
 `check-nonozone.py` (syntax-only compile of the touched units without `USE_OZONE`, what Windows/macOS see) is the only cross-platform check available on the server.
 
@@ -101,10 +103,10 @@ Never write into `binary_distrib/` while a wheel build reads it.
 
 ## Rebuilding and making wheels
 
-1. `./sync.sh push` (scripts to the server), then on the server `apply-patches.sh` (the copy in `/nas/cef-build/work`).
+1. `./sync.sh push` (scripts and `patches/` to the server). `cef-rebuild.sh` applies the patches itself.
 2. `sudo systemd-run --unit=cef-rebuild --working-directory=/nas/cef-build/work /nas/cef-build/work/cef-rebuild.sh` rebuilds BOTH
    distributions (x64 native, arm64 cross with V4L2) incrementally and re-creates `chromium/src/cef/binary_distrib/`. Follow it with
    `tail -f /nas/cef-build/work/logs/stages.log`. Never run two builds at once and never delete the tree.
-3. `tools/build-cef-wheels.sh start|status|fetch` (from the repository): copies `vendor/cefpython`, builds cp310-cp314 wheels for x86_64
+3. `tools/build-cef-wheels.sh start|status|fetch` (from the repository): copies `vendor/cefpython`, builds cp313 wheels (`CEF_PYTHON`) for x86_64
    and aarch64 inside a trixie container from those distributions (`WHEEL_VERSION=147.0+codecs`), and `fetch` rsyncs them to
    `vendor/cefpython-wheels/` (not in git). `python3-cefpython3` for arm64: `TARGET_ARCH=arm64 tools/build-debs.sh cefpython`.

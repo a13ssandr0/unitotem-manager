@@ -157,6 +157,56 @@ def test_the_listener_is_not_started_for_a_client_node(server):
     assert asyncio.run(main()) is False
 
 
+def _busy_port():
+    import socket
+    blocker = socket.socket()
+    blocker.bind(('127.0.0.1', 0))
+    blocker.listen()
+    return blocker, blocker.getsockname()[1]
+
+
+def test_a_busy_port_is_tried_again_until_the_listener_comes_up(server, monkeypatch):
+    blocker, port = _busy_port()
+    monkeypatch.setattr(link_module, 'cmdargs', SimpleNamespace(bind_link='127.0.0.1', port_link=port))
+    monkeypatch.setattr(link_module, 'RETRY_DELAYS', (0.05, 0.05, 0.05))
+
+    async def main():
+        srv = LinkServer(REMOTE_WS, lambda: None)
+        await srv.start()
+        assert srv.running is False
+        blocker.close()                          # the port is freed: the next attempt gets it
+        for _ in range(100):
+            if srv.running:
+                break
+            await asyncio.sleep(0.05)
+        try:
+            assert srv.running is True
+        finally:
+            await srv.stop()
+
+    asyncio.run(main())
+
+
+def test_stop_cancels_a_pending_retry(server, monkeypatch):
+    blocker, port = _busy_port()
+    monkeypatch.setattr(link_module, 'cmdargs', SimpleNamespace(bind_link='127.0.0.1', port_link=port))
+    monkeypatch.setattr(link_module, 'RETRY_DELAYS', (60,))
+
+    async def main():
+        srv = LinkServer(REMOTE_WS, lambda: None)
+        await srv.start()
+        retry = srv._retry
+        assert retry is not None and not retry.done()
+        await srv.stop()
+        await asyncio.sleep(0)
+        assert retry.cancelled() and srv._retry is None
+
+    try:
+        asyncio.run(main())
+    finally:
+        blocker.close()
+
+
 def test_frames():
     import json
     from base64 import b64encode

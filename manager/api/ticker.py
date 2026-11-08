@@ -157,5 +157,6 @@ class Ticker(WSAPIBase):
         except ValidationError as e:
             return WSResponse(error=_first_error(e))
         ticker.windows().put(key, new)
-        await push.tell_window(_vm().send_webview_command, viewer_id, window_id, new, ticker.store().merged())
+        if _vm()._supports_layout(viewer_id):       # an older viewer knows no bar messages
+            await push.tell_window(_vm().send_webview_command, viewer_id, window_id, new, ticker.store().merged())
         await _to_admins('Ticker/settings', viewer_id=viewer_id, window_id=window_id, settings=new.model_dump())

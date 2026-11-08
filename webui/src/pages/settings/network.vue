@@ -478,15 +478,19 @@
       </v-card>
     </v-dialog>
 
-    <!-- Error snackbar -->
-    <v-snackbar v-model="errorSnack" color="error" :timeout="4000">{{ errorMsg }}</v-snackbar>
-
   </div>
 </template>
 
 <script setup>
 import {api} from '@/api'
-import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, reactive, onMounted, onBeforeUnmount, onUnmounted, watch } from 'vue'
+
+// The failure of a command arrives as a window event (base.vue shows the message); this runs `callback` for the target's failures
+function onApiError(target, callback) {
+  const listener = e => { if (e.detail.target === target) callback(e.detail) }
+  window.addEventListener('unitotem:api-error', listener)
+  onUnmounted(() => window.removeEventListener('unitotem:api-error', listener))
+}
 
 // ── state ──────────────────────────────────────────────────────────────────
 
@@ -558,10 +562,6 @@ let pendingAddr = null
 const deleteDialogOpen = ref(false)
 const connToDelete = ref(null)
 
-// Error
-const errorSnack = ref(false)
-const errorMsg   = ref('')
-
 // Convenience
 const wifiDevices = computed(() => devices.value.filter(d => d.type === 2))
 
@@ -573,14 +573,17 @@ api.Settings.Network.hostname.on(data => {
 }, {init: true})
 
 api.Settings.Network.devices.on(data => {
-  if (data.error) { showError(data.error); return }
   if (data.devices !== undefined) devices.value = data.devices
 }, {init: true})
 
-// Saving a profile answers with the refreshed list, which is also what closes the editor
 api.Settings.Network.connections.on(data => {
   if (data.connections !== undefined) connections.value = data.connections
-  if (editorSaving.value) {
+}, {init: true})
+
+// Saving a profile answers on the edit target with the refreshed list, which is also what closes the editor
+api.Settings.Network.edit_connection.on(data => {
+  if (data.connections !== undefined) connections.value = data.connections
+  if (editorSaving.value && data.connections !== undefined) {
     editorSaving.value = false
     editorOpen.value = false
     if (pendingAddr) {
@@ -595,10 +598,18 @@ api.Settings.Network.connections.on(data => {
       }
     }
   }
-}, {init: true})
+})
+onApiError('Settings/Network/edit_connection', () => {
+  editorSaving.value = false
+  pendingAddr = null
+})
+
+// Deleting answers on its own target too
+api.Settings.Network.delete_connection.on(data => {
+  if (data.connections !== undefined) connections.value = data.connections
+})
 
 api.Settings.Network.connection_details.on(data => {
-  if (data.error) { showError(data.error); return }
   if (data.details && editorOpen.value) {
     const d = data.details
     const ipv4 = d.ipv4 || {}
@@ -637,6 +648,7 @@ api.Settings.Network.connect_wifi.on(data => {
     api.Settings.Network.connections()
   }
 })
+onApiError('Settings/Network/connect_wifi', () => { wifiConnecting.value = false })
 
 api.Settings.Network.has_wireless.on(data => {
   has_wireless.value = data.wireless
@@ -659,6 +671,7 @@ api.Settings.Network.wireless_networks.on(data => {
   wifiNetworks.value = data.wifis ?? []
   scanningWifi.value = false
 })
+onApiError('Settings/Network/wireless_networks', () => { scanningWifi.value = false })
 
 // ── actions ────────────────────────────────────────────────────────────────
 
@@ -746,7 +759,6 @@ const saveEditor = () => {
     password    : editorForm.password || null,
     unlock_bssid: !!editorForm.unlock,
   })
-  editorSaving.value = false
 }
 
 // ── delete ─────────────────────────────────────────────────────────────────
@@ -867,8 +879,4 @@ const getBand = (frequency) => {
   return `${frequency} MHz`
 }
 
-const showError = (msg) => {
-  errorMsg.value = msg
-  errorSnack.value = true
-}
 </script>

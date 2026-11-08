@@ -6,7 +6,7 @@ Plymouth's script plugin can only rasterize text through Image.Text(), which
 depends on the plymouth-label package and a system font being present in the
 initramfs - neither is guaranteed on the kiosk image. Pre-rendering the
 wordmark here removes that runtime dependency entirely and lets us reuse the
-exact font (NotoSans.ttf) and layout that manager/webview/static/boot-screen.html
+exact font (NotoSans.ttf) and layout that manager/plugins/unitotem_viewer/static/boot-screen.html
 renders live, so the Plymouth splash and the viewer's boot screen are the same
 picture.
 
@@ -29,7 +29,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, features
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FONT_PATH = REPO_ROOT / "manager" / "webview" / "static" / "NotoSans.ttf"
+FONT_PATH = REPO_ROOT / "manager" / "plugins" / "unitotem_viewer" / "static" / "NotoSans.ttf"
 OUT_DIR = Path(__file__).resolve().parent / "unitotem"
 
 # Screen-width tiers the theme picks from at runtime (unitotem.script scales

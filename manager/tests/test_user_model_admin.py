@@ -1,6 +1,7 @@
 """Admin is the membership of the group sudo, not a stored permission: the model reads it from the system, stores
 capabilities only, and changes the system first."""
 import json
+import warnings
 from types import SimpleNamespace
 
 import pytest
@@ -160,3 +161,14 @@ def test_users_json_never_contains_admin(system, users_file):
     for entry in json.loads(users_file.read_text()).values():
         assert 'admin' not in entry['permissions']
     assert 'admin' not in users_file.read_text()
+
+
+def test_permissions_serialize_without_warnings_even_when_held_as_plain_strings():
+    # a list built without validation (model_construct) holds plain strings: the serializer must take them too
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        data = UserData.model_construct(permissions=['scheduler', 'audio'], invalid_before=0.0, keep_sid=None)
+        assert data.model_dump()['permissions'] == ['audio', 'scheduler']
+        assert json.loads(data.model_dump_json())['permissions'] == ['audio', 'scheduler']
+        validated = UserData(permissions={UserPerms.power})
+        assert validated.model_dump(mode='json')['permissions'] == ['power']

@@ -284,11 +284,6 @@ class Cdp:
 
     # ── load errors ────────────────────────────────────────────────
 
-    def _window_of(self, session: Optional[str]) -> Optional[int]:
-        info = self._sessions.get(session or '')
-        page = info['page'] if info else None
-        return self._sessions.get(page, {}).get('window') if page else None
-
     def _load_failed(self, session: Optional[str], params: dict):
         url = self._documents.pop((session or '', params.get('requestId', '')), '')
         window = self._window_of(session)
@@ -362,8 +357,8 @@ class Cdp:
         base = tag.split('-')[0]
         return tag if base == tag else f'{tag},{base}'
 
-    def _window_of(self, session: str) -> Optional[int]:
-        info = self._sessions.get(session)
+    def _window_of(self, session: Optional[str]) -> Optional[int]:
+        info = self._sessions.get(session or '')
         if not info:
             return None
         if info['window'] is not None:

@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from loguru import logger
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from utils.models.command_line import cmdargs
 
@@ -76,6 +76,13 @@ def normalize_schedule(expression: str) -> str:
     if not croniter.is_valid(normalized):
         raise ValueError(f'{expression!r} is not a valid schedule')
     return normalized
+
+
+class OutputMode(BaseModel, validate_assignment=True):
+    """A mode an output was confirmed to: width and height in pixels, refresh rate in mHz (wlr-randr's unit)."""
+    width: int = Field(ge=1, le=16384)
+    height: int = Field(ge=1, le=16384)
+    refresh_mhz: int = Field(ge=1, le=1000000)
 
 
 class ScreensaverSettings(BaseModel, validate_assignment=True):
@@ -165,6 +172,21 @@ class ViewerSettings(BaseModel, validate_assignment=True):
     # audio outputs: a vertical panel must come back vertical after a reboot. Older versions ignore these keys.
     orientations: dict[str, int] = {}
     flips: dict[str, int] = {}
+
+    # The mode of each output, confirmed by the operator, keyed like the orientations (`local-webview|<output>`); replayed at boot
+    # by plugins/unitotem_viewer/output_transform.py. An entry that does not validate is dropped, the others are kept.
+    modes: dict[str, OutputMode] = {}
+
+    @field_validator('modes', mode='before')
+    @classmethod
+    def _modes(cls, v):
+        kept = {}
+        for key, mode in (v or {}).items():
+            try:
+                kept[str(key)] = OutputMode.model_validate(mode)
+            except ValidationError:
+                continue
+        return kept
 
     @field_validator('orientations', mode='before')
     @classmethod

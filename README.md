@@ -12,16 +12,41 @@ Functional specification: [docs/manager/overview.md](https://github.com/a13ssand
 
 ## Packages
 
-| Package | Content |
-|---|---|
-| `unitotem-manager` | Core: web server, websocket API, scheduler, users, uploads, backup |
-| `unitotem-node` | Node plugin: network, audio, displays, power, timers, updates |
-| `unitotem-viewer` | Viewer plugin: CEF windows, compositor and splash units |
-| `unitotem` | Metapackage of the three above |
-| `python3-cefpython3` | CEF 147 Python bindings |
-| `plymouth-theme-unitotem` | Boot splash theme |
+| Package | Arch | Content |
+|---|---|---|
+| `unitotem` | all | Metapackage: the three packages below and the splash theme |
+| `unitotem-manager` | all | Core: web server, websocket API, scheduler, users, uploads, backup |
+| `unitotem-node` | all | Node plugin: network, audio, displays, power, timers, updates |
+| `unitotem-viewer` | all | Viewer plugin: CEF windows, compositor and splash units |
+| `plymouth-theme-unitotem` | all | Boot splash theme (recommended by `unitotem`) |
+| `python3-cefpython3` | amd64, arm64 | CEF 147 Python bindings |
+| `python3-fastapi-login`, `python3-sdbus-networkmanager` | all | Third-party Python libraries, not in Debian (`packaging/`) |
 
 Build the packages with `tools/build-debs.sh` (needs Docker; output in `dist/`). Dependencies are listed in `debian/control`.
+
+## Install
+
+Debian 13 (trixie), amd64 or arm64. Add the apt repository (key and source list, as the image does):
+
+```sh
+sudo curl -fsSL https://a13ssandr0.github.io/unitotem-manager/KEY.gpg -o /etc/apt/trusted.gpg.d/unitotem-manager.asc
+sudo curl -fsSL https://a13ssandr0.github.io/unitotem-manager/unitotem-manager.list -o /etc/apt/sources.list.d/unitotem-manager.list
+sudo apt-get update
+sudo apt-get install unitotem
+```
+
+`unitotem` installs a totem: manager, node integration, viewer and splash. A server that only orchestrates other nodes takes `unitotem-manager` alone; it touches nothing of the machine it runs on.
+
+After the first start, open `https://<address>/setup` and create the first administrator account.
+
+## Update
+
+```sh
+sudo apt-get update
+sudo apt-get install unitotem
+```
+
+The packages depend on the exact same version of each other (`= ${source:Version}`), so they upgrade together. `apt-get purge` also removes the certificate `/etc/ssl/unitotem.pem` and the state in `/etc/unitotem` and `/var/lib/unitotem`.
 
 ## Run for development
 

@@ -4,12 +4,16 @@ The "Touch doesn't match? Fix it" dialog of the Display page, driven in a real (
 targets: the choices, a step, the question after the taps, and "Yes, keep it". Screenshots go to --out-dir.
 
     tools/ui-touch-setup.py --host <host> --user root --password unitotem --out-dir /tmp/touch-ui
+
+The board is reached as root over SSH with the password of UI_SSH_PASSWORD (default: unitotem). The password goes
+to sshpass through its environment (-e), never on a command line; the child processes get no DISPLAY and no askpass.
 """
 import argparse
 import asyncio
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,16 +25,26 @@ import websockets
 
 PORT = 9347
 HERE = Path(__file__).resolve().parent
-SSH = ['sshpass', '-p', 'unitotem']
-OPTS = ['-o', 'PreferredAuthentications=password', '-o', 'PubkeyAuthentication=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'StrictHostKeyChecking=no',
-        '-o', 'LogLevel=ERROR']
-ENV = {**os.environ, 'SSH_ASKPASS_REQUIRE': 'never'}
-ENV.pop('DISPLAY', None)
-ENV.pop('SSH_ASKPASS', None)
+HOST_RE = re.compile(r'[A-Za-z0-9.-]{1,253}')
+SSH_PASSWORD = os.environ.get('UI_SSH_PASSWORD', 'unitotem')
+SSH = ['sshpass', '-e']
+OPTS = ['-o', 'PreferredAuthentications=password', '-o', 'PubkeyAuthentication=no', '-o', 'UserKnownHostsFile=/dev/null',
+        '-o', 'StrictHostKeyChecking=no', '-o', 'LogLevel=ERROR', '-o', 'ConnectTimeout=10']
+# Same child environment as deploy/lib.sh (_sshpass): no askpass, no display, never a prompt.
+ENV = {k: v for k, v in os.environ.items() if k not in ('DISPLAY', 'SSH_ASKPASS')}
+ENV.update(SSH_ASKPASS_REQUIRE='never', SSHPASS=SSH_PASSWORD)
 
 
 def board(host, command, timeout=60):
-    return subprocess.run(SSH + ['ssh'] + OPTS + [f'root@{host}', command], capture_output=True, text=True, timeout=timeout, env=ENV).stdout.strip()
+    """Runs one fixed shell command on the board; `--` ends the options before the destination."""
+    return subprocess.run(SSH + ['ssh'] + OPTS + ['--', f'root@{host}', command], capture_output=True, text=True, timeout=timeout,
+                          env=ENV).stdout.strip()
+
+
+def host_name(value):
+    if not HOST_RE.fullmatch(value):
+        raise argparse.ArgumentTypeError('expected a host name or an IPv4 address')
+    return value
 
 
 class Cdp:
@@ -66,7 +80,8 @@ async def main(args):
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     host, failures = args.host, []
-    subprocess.run(SSH + ['scp', '-O'] + OPTS + [str(HERE / 'gfx-bench/rotation/touchdev.py'), f'root@{host}:/var/lib/unitotem/touchdev.py'], capture_output=True, env=ENV)
+    subprocess.run(SSH + ['scp', '-O'] + OPTS + [str(HERE / 'gfx-bench/rotation/touchdev.py'), f'root@{host}:/var/lib/unitotem/touchdev.py'],
+                   capture_output=True, env=ENV)
     board(host, 'cd /var/lib/unitotem && (SINGLE_TOUCH=0 nohup python3 touchdev.py >/dev/null 2>&1 & echo $! > touchdev.pid); sleep 3; ls /run/rot-touch.fifo')
     chrome = subprocess.Popen(['google-chrome', '--headless=new', f'--remote-debugging-port={PORT}', '--no-sandbox', '--ignore-certificate-errors',
                                f'--user-data-dir={tempfile.mkdtemp()}', '--window-size=1100,900', 'about:blank'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -85,8 +100,9 @@ async def main(args):
         base = f'https://{host}'
         await cdp.call('Page.navigate', url=base + '/login')
         await asyncio.sleep(2)
+        # the login travels as JSON string literals: values never become page script
         await cdp.eval("fetch('/auth/token',{method:'POST',credentials:'include',body:new URLSearchParams("
-                       f"{{username:'{args.user}',password:'{args.password}'}})}}).then(r=>r.status)", True)
+                       f"{{username:{json.dumps(args.user)},password:{json.dumps(args.password)}}})}}).then(r=>r.status)", True)
         await cdp.call('Page.navigate', url=base + '/settings/display')
         await asyncio.sleep(7)
         await shot(cdp, out / '1-card.png')
@@ -132,7 +148,7 @@ async def main(args):
 
 
 p = argparse.ArgumentParser()
-p.add_argument('--host', required=True)
+p.add_argument('--host', required=True, type=host_name)
 p.add_argument('--user', default='admin')
 p.add_argument('--password', default='admin')
 p.add_argument('--out-dir', default='/tmp/touch-ui')

@@ -38,7 +38,7 @@ def edid_identity(edid: bytes) -> Optional[str]:
     None outright rather than a partial string.
 
     Verified against three real, distinct captures: the LG Ultrafine on
-    unitotem-test's DP-1 (via xrandr --props) and the dev host's own
+    a test board's DP-1 (via xrandr --props) and a PC's own
     HDMI-A-1/DP-1 outputs (via /sys/class/drm/<conn>/edid) - all decode to
     the manufacturer/model/serial ddcutil independently reported for the same
     bus.

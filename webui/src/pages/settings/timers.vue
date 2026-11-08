@@ -145,6 +145,23 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="deleteDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="mt-2 ml-2">
+          <span class="text-h5">Delete timer?</span>
+        </v-card-title>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" autofocus @click="deleteDialog = false">
+            Cancel
+          </v-btn>
+          <v-btn color="error" variant="text" @click="confirmDelete">
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <template #fab>
       <v-btn icon="mdi-plus" color="primary" size="large" elevation="6" @click="dialog = true" aria-label="Add timer"></v-btn>
     </template>
@@ -243,6 +260,8 @@ const defaultItem = {
 const timers = ref([]);
 
 const dialog = ref(false);
+const deleteDialog = ref(false);
+const deleteUuid = ref(null);
 const editedIndex = ref(-1);
 const editedItem = ref({ ...defaultItem });
 
@@ -274,9 +293,13 @@ function deleteItem(item) {
   // fresh getJobs, and the listener below rewrites it. Splicing locally without
   // ever sending the command - which is what this did - made a deletion look
   // like it worked until the next refresh brought the timer back.
-  if (confirm('Are you sure you want to delete this item?')) {
-    api.Settings.Timers.delete_job({ uuid: item.uuid });
-  }
+  deleteUuid.value = item.uuid;
+  deleteDialog.value = true;
+}
+
+function confirmDelete() {
+  api.Settings.Timers.delete_job({ uuid: deleteUuid.value });
+  deleteDialog.value = false;
 }
 
 function setEnabled(item, state) {

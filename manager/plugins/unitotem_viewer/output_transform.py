@@ -1,10 +1,11 @@
 """
-Turns and mirrors the outputs the way the settings say, the moment the compositor answers: run by unitotem-compositor.service
+Sets the mode and turns and mirrors the outputs the way the settings say, the moment the compositor answers: run by unitotem-compositor.service
 (ExecStartPost), before the boot splash draws, so that every picture from the first one is already turned.
 
 A plain script with no imports from the rest of UniTotem (it must start in a fraction of a second and never fail): the stored
-values are those of viewer_settings.json (`orientations`, `flips`, keyed `<viewer id>|<output name>`), the same ones the web UI
-sets, and CONTENT_TO_TRANSFORM is the table of unitotem_node.system.screens.wayland (a test keeps the two equal).
+values are those of viewer_settings.json (`modes`, `orientations`, `flips`, keyed `<viewer id>|<output name>`), the same ones the web UI
+sets. CONTENT_TO_TRANSFORM is the table of unitotem_node.system.screens.wayland and mode_argument its `--mode` format (a test keeps
+the two equal). A saved mode is applied only when the compositor still lists it.
 
     output_transform.py [CONFIG_DIR]
 """
@@ -24,20 +25,67 @@ CONTENT_TO_TRANSFORM = {
 }
 
 
-def plan(settings: dict, outputs: set) -> list:
-    """[(output, transform)] for the outputs of this node that have a turn or a mirror saved and are present now."""
+def mode_argument(width: int, height: int, refresh_mhz: int) -> str:
+    """wlr-randr's `--mode` value (WIDTHxHEIGHT@RATEHz), the rate in exact thousandths of a hertz."""
+    return f'{width}x{height}@{refresh_mhz // 1000}.{refresh_mhz % 1000:03d}Hz'
+
+
+def listed_modes(entries) -> dict:
+    """Output name -> the set of (width, height, refresh_mhz) that `wlr-randr --json` lists for it. Malformed entries are skipped."""
+    found = {}
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict) or not isinstance(entry.get('name'), str):
+            continue
+        modes = found.setdefault(entry['name'], set())
+        for raw in entry.get('modes') or []:
+            try:
+                width, height = int(raw['width']), int(raw['height'])
+                refresh_mhz = round(float(raw['refresh']) * 1000)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if width > 0 and height > 0 and refresh_mhz > 0:
+                modes.add((width, height, refresh_mhz))
+    return found
+
+
+def saved_mode(value, listed: set):
+    """The saved (width, height, refresh_mhz) when the compositor lists it, else None."""
+    if not isinstance(value, dict):
+        return None
+    try:
+        mode = (int(value['width']), int(value['height']), int(value['refresh_mhz']))
+    except (KeyError, TypeError, ValueError):
+        return None
+    return mode if mode in listed else None
+
+
+def saved_transform(turn, flip):
+    """The wlr-randr transform of a saved turn and flip, None when there is none (normal) or the values cannot be read."""
+    if isinstance(turn, bool) or not isinstance(turn, int) or isinstance(flip, bool) or flip not in (0, 1, 2):
+        return None
+    transform = CONTENT_TO_TRANSFORM[(turn % 4, flip)]
+    return None if transform == 'normal' else transform
+
+
+def plan(settings: dict, outputs: dict) -> list:
+    """[(output, wlr-randr options)] for the outputs of this node that have a mode, a turn or a mirror saved and are present now.
+    `outputs` maps each output name to the modes the compositor lists for it (see listed_modes)."""
     turns, flips = settings.get('orientations') or {}, settings.get('flips') or {}
+    modes = settings.get('modes') or {}
     wanted = []
-    for key in sorted(set(turns) | set(flips)):
+    for key in sorted(set(turns) | set(flips) | set(modes)):
         viewer, _, name = key.partition('|')
         if viewer != LOCAL_VIEWER or name not in outputs:
             continue
-        turn, flip = turns.get(key, 0), flips.get(key, 0)
-        if isinstance(turn, bool) or not isinstance(turn, int) or isinstance(flip, bool) or flip not in (0, 1, 2):
-            continue
-        transform = CONTENT_TO_TRANSFORM[(turn % 4, flip)]
-        if transform != 'normal':
-            wanted.append((name, transform))
+        args = []
+        mode = saved_mode(modes.get(key), outputs[name])
+        if mode is not None:
+            args += ['--mode', mode_argument(*mode)]
+        transform = saved_transform(turns.get(key, 0), flips.get(key, 0))
+        if transform is not None:
+            args += ['--transform', transform]
+        if args:
+            wanted.append((name, ['--output', name] + args))
     return wanted
 
 
@@ -47,12 +95,12 @@ def main(config_dir: str) -> int:
         with open(os.path.join(config_dir, 'viewer_settings.json')) as file:
             settings = json.load(file)
         listed = subprocess.run(['wlr-randr', '--json'], env=env, capture_output=True, text=True, timeout=5)
-        outputs = {entry['name'] for entry in json.loads(listed.stdout)}
-        wanted = plan(settings, outputs)
+        wanted = plan(settings, listed_modes(json.loads(listed.stdout)))
         if wanted:
+            # one invocation: the mode and the transform of every output are one configuration
             command = ['wlr-randr']
-            for name, transform in wanted:
-                command += ['--output', name, '--transform', transform]
+            for _, options in wanted:
+                command += options
             subprocess.run(command, env=env, capture_output=True, timeout=5)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f'unitotem output transform: {error}', file=sys.stderr)

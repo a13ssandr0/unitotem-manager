@@ -517,3 +517,20 @@ def test_orientation_is_kept_per_screen_and_sent_when_the_window_appears(tmp_pat
         assert settings.orientations == {} and settings.flips == {}
         assert ws.commands('SetOrientation')[-1]['orientation'] == 0
     run(go())
+
+
+def test_a_turn_or_mirror_change_publishes_the_viewers_to_every_page(tmp_path, monkeypatch, settings):
+    from api.ws.endpoints import WS
+    published = []
+
+    async def broadcast(target, /, nocache=False, **kwargs):
+        published.append((target, kwargs))
+    monkeypatch.setattr(WS, 'broadcast', broadcast)
+
+    async def go():
+        mgr, ws = make_manager(tmp_path, monkeypatch)
+        await mgr.set_orientation(VIEWER, 0, 1)
+        await mgr.set_flip(VIEWER, 0, 2)
+        assert [t for t, _ in published] == ['Viewers/list', 'Viewers/list']
+        assert published[-1][1]['viewers'][VIEWER]['windows'][0]['flip'] == 2
+    run(go())

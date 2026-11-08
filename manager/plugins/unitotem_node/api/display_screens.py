@@ -10,11 +10,12 @@ from typing import Optional
 from api.ws.responses import WSBroadcast, WSResponse
 from api.ws.wsmanager import WSAPIBase
 from utils.models.user import UserPerms
+from unitotem_node.api.display_identify import IdentifyScreen
 from unitotem_node.system.screens import control
 from unitotem_node.system.screens.control import ScreenControlError
 
 
-class Screens(WSAPIBase):
+class Screens(IdentifyScreen, WSAPIBase):
     async def _broadcast(self):
         await self.ws.broadcast('Settings/Display/Screens/screens', screens=await control.screens(),
                                 probing=control.probing())

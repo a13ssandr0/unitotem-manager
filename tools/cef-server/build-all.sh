@@ -12,11 +12,20 @@ export DEPOT_TOOLS_UPDATE=0
 export GN_DEFINES="use_sysroot=true symbol_level=1 is_official_build=true proprietary_codecs=true ffmpeg_branding=Chrome"
 cd $W || exit 1
 log() { echo "$(date +%F\ %T) $*" | tee -a logs/stages.log; }
+# Our Chromium and CEF patches go on after automate-git.py has downloaded and patched the tree, before any build.
+# apply-patches.sh is idempotent (applied patches are skipped), so it runs before every build stage.
+apply_patches() { bash "$W/apply-patches.sh" "$W/chromium/src" >> logs/apply-patches.log 2>&1 \
+  || { log "apply-patches FAILED (see logs/apply-patches.log)"; exit 1; }; }
 
 if [ ! -f logs/x64.done ]; then
-  log "x64: download + build"
+  log "x64: download"
   python3 automate-git.py --download-dir=$W --depot-tools-dir=$DT --no-depot-tools-update --branch=$BRANCH --checkout=$HASH \
-    --no-chromium-history --with-pgo-profiles --x64-build --no-debug-build --no-distrib-docs --build-target=cefsimple --force-build \
+    --no-chromium-history --with-pgo-profiles --x64-build --no-debug-build --no-distrib-docs --no-build \
+    > logs/x64-download.log 2>&1 || { log "x64 download FAILED (tree kept)"; exit 1; }
+  apply_patches
+  log "x64: build"
+  python3 automate-git.py --download-dir=$W --depot-tools-dir=$DT --no-depot-tools-update --branch=$BRANCH --checkout=$HASH \
+    --no-update --x64-build --no-debug-build --no-distrib-docs --build-target=cefsimple --force-build \
     > logs/x64.log 2>&1 && touch logs/x64.done
   [ -f logs/x64.done ] || { log "x64 FAILED (tree kept)"; exit 1; }
   log "x64 done"
@@ -26,6 +35,7 @@ if [ ! -f logs/arm64.done ]; then
   log "arm64: sysroot + cross build"
   ( cd chromium/src && python3 build/linux/sysroot_scripts/install-sysroot.py --arch=arm64 ) > logs/arm64-sysroot.log 2>&1 \
     || { log "arm64 sysroot FAILED"; exit 1; }
+  apply_patches
   python3 automate-git.py --download-dir=$W --depot-tools-dir=$DT --no-depot-tools-update --branch=$BRANCH --checkout=$HASH \
     --no-update --arm64-build --no-debug-build --no-distrib-docs --build-target=cefsimple --force-build \
     > logs/arm64.log 2>&1 && touch logs/arm64.done

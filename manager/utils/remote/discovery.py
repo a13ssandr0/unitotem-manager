@@ -34,6 +34,8 @@ PROTOCOL_VERSION = '1'
 _ID = re.compile(r'[0-9a-f]{32}')
 _CONTROL = re.compile(r'[\x00-\x1f\x7f]')
 MAX_NAME = 64
+# A failed announcement or browse (no address yet, a busy socket) is tried again, seconds apart, doubling, at most a minute
+RETRY_DELAYS = (5, 10, 20, 40, 60, 60, 60, 60, 60, 60)
 
 
 @dataclass(frozen=True)
@@ -100,12 +102,18 @@ def local_addresses() -> list[str]:
     return out
 
 
+def _cancel(task: Optional[asyncio.Task]):
+    if task is not None:
+        task.cancel()
+
+
 class Announcer:
     """Makes this node visible as an unpaired client for as long as it is one."""
 
     def __init__(self):
         self._zc = None
         self._info = None
+        self._retry: Optional[asyncio.Task] = None
 
     @property
     def active(self) -> bool:
@@ -114,10 +122,16 @@ class Announcer:
     async def start(self, node_id: str, name: str, web_port: int, link_port: int):
         if not AVAILABLE or self._info is not None:
             return
+        _cancel(self._retry)
+        args = (node_id, name, web_port, link_port)
+        if not await self._announce(*args):
+            self._retry = asyncio.get_running_loop().create_task(self._retry_announce(args), name='announce-retry')
+
+    async def _announce(self, node_id: str, name: str, web_port: int, link_port: int) -> bool:
         addresses = [socket.inet_aton(a) for a in local_addresses()]
         if not addresses:
             logger.warning('No network address to announce this client at')
-            return
+            return False
         self._info = ServiceInfo(
             SERVICE_TYPE, f'unitotem-{node_id[:12]}.{SERVICE_TYPE}', addresses=addresses, port=web_port,
             properties={'v': PROTOCOL_VERSION, 'id': node_id, 'name': name[:MAX_NAME], 'web': str(web_port),
@@ -126,12 +140,29 @@ class Announcer:
         try:
             self._zc = AsyncZeroconf(ip_version=IPVersion.V4Only)
             await self._zc.async_register_service(self._info)
-            logger.info('Announcing this node as an unpaired client')
         except Exception as e:
             logger.error('Cannot announce this client on the network: {}', e)
-            await self.stop()
+            try:
+                await self._close()
+            except Exception as close_error:        # nothing was registered: nothing more to undo
+                logger.debug('Closing the announcement failed: {}', close_error)
+            return False
+        logger.info('Announcing this node as an unpaired client')
+        return True
+
+    async def _retry_announce(self, args: tuple):
+        for delay in RETRY_DELAYS:
+            await asyncio.sleep(delay)
+            if await self._announce(*args):
+                return
+        logger.error('Still cannot announce this client on the network: tried again when the role is applied')
 
     async def stop(self):
+        _cancel(self._retry)
+        self._retry = None
+        await self._close()
+
+    async def _close(self):
         zc, info, self._zc, self._info = self._zc, self._info, None, None
         if zc is not None:
             try:
@@ -150,6 +181,7 @@ class Browser:
         self._by_name: dict[str, str] = {}
         self._zc = None
         self._browser = None
+        self._retry: Optional[asyncio.Task] = None
 
     @property
     def active(self) -> bool:
@@ -158,17 +190,39 @@ class Browser:
     async def start(self):
         if not AVAILABLE or self._browser is not None:
             return
+        _cancel(self._retry)
+        if not await self._open():
+            self._retry = asyncio.get_running_loop().create_task(self._retry_open(), name='browse-retry')
+
+    async def _open(self) -> bool:
         try:
             self._zc = AsyncZeroconf(ip_version=IPVersion.V4Only)
             self._browser = AsyncServiceBrowser(self._zc.zeroconf, SERVICE_TYPE, handlers=[self._on_change])
+            return True
         except Exception as e:
             logger.error('Cannot look for clients on the network: {}', e)
-            await self.stop()
+            try:
+                await self._close()
+            except Exception as close_error:        # nothing was opened: nothing more to undo
+                logger.debug('Closing the browser failed: {}', close_error)
+            return False
+
+    async def _retry_open(self):
+        for delay in RETRY_DELAYS:
+            await asyncio.sleep(delay)
+            if await self._open():
+                return
+        logger.error('Still cannot look for clients on the network: tried again when the role is applied')
 
     async def stop(self):
-        browser, zc, self._browser, self._zc = self._browser, self._zc, None, None
+        _cancel(self._retry)
+        self._retry = None
         self.found.clear()
         self._by_name.clear()
+        await self._close()
+
+    async def _close(self):
+        browser, zc, self._browser, self._zc = self._browser, self._zc, None, None
         if browser is not None:
             await browser.async_cancel()
         if zc is not None:

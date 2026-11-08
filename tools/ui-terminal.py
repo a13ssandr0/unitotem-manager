@@ -98,6 +98,13 @@ async def main(args):
                   await cdp.eval("!!document.querySelector('button[title=Terminal]')"))
             await cdp.eval("document.querySelector('button[title=Terminal]').click()")
             check('no login prompt: the shell starts at once', await wait_for('#') or await wait_for('$'))
+            # the checks run in a clean bash (no profile, no PROMPT_COMMAND, plain PS1): the administrator's PS1 can
+            # rewrite the title. exec replaces the login shell, so exit still closes the window.
+            await type_line("exec env -i HOME=\"$HOME\" TERM=xterm-256color PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin "
+                            "PS1='$ ' bash --norc --noprofile -i")
+            await asyncio.sleep(1.5)
+            await type_line("unset PROMPT_COMMAND; PS1='$ '")
+            await asyncio.sleep(0.5)
             await type_line('echo TERMINAL-$((6*7))-OK; id -un')
             check('a command runs in the session', await wait_for('TERMINAL-42-OK'))
             check('as the web user themselves', await wait_for(args.user))

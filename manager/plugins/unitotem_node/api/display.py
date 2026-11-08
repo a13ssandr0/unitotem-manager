@@ -3,10 +3,11 @@ from typing import Optional
 
 import aiohttp
 
+from unitotem_node.api.display_outputs import Outputs
 from unitotem_node.api.display_screens import Screens
 from unitotem_node.api.display_touch import Touch
 from api.ws.endpoints import WSAPIBase
-from api.ws.responses import WSBroadcast
+from api.ws.responses import WSBroadcast, WSResponse
 from utils.models.user import UserPerms
 from utils.models.viewer import viewer_settings
 from utils.system.gpu import detect_gpu
@@ -29,6 +30,8 @@ class Display(WSAPIBase):
     Screens = Screens
     # Settings/Display/Touch/*: which output each touch screen is mapped to
     Touch = Touch
+    # Settings/Display/Outputs/*: resolution and refresh rate of each output, with a timed confirmation
+    Outputs = Outputs
 
     def displays(self, viewer_id: Optional[str] = None):
         if viewer_id:
@@ -89,19 +92,21 @@ class Display(WSAPIBase):
             return WSBroadcast(**windows[window_id])
         return WSBroadcast()
 
+    # Replies go to the requesting client only and name their window; Viewers/list tells every page of a change
     def orientation(self, viewer_id: str, window_id: int = 0):
-        return WSBroadcast(orientation=_vm().get_orientation(viewer_id, window_id))
+        return WSResponse(self.orientation, viewer_id=viewer_id, window_id=window_id,
+                          orientation=_vm().get_orientation(viewer_id, window_id))
 
     def set_orientation(self, viewer_id: str, window_id: int, orientation: int):
         asyncio.create_task(_vm().set_orientation(viewer_id, window_id, orientation))
-        return WSBroadcast(self.orientation, orientation=orientation)
+        return WSResponse(self.orientation, viewer_id=viewer_id, window_id=window_id, orientation=orientation)
 
     def flip(self, viewer_id: str, window_id: int = 0):
-        return WSBroadcast(flip=_vm().get_flip(viewer_id, window_id))
+        return WSResponse(self.flip, viewer_id=viewer_id, window_id=window_id, flip=_vm().get_flip(viewer_id, window_id))
 
     def set_flip(self, viewer_id: str, window_id: int, flip: int):
         asyncio.create_task(_vm().set_flip(viewer_id, window_id, flip))
-        return WSBroadcast(self.flip, flip=flip)
+        return WSResponse(self.flip, viewer_id=viewer_id, window_id=window_id, flip=flip)
 
     def allow_insecure_certs(self):
         """Whether the viewer displays assets whose certificate does not

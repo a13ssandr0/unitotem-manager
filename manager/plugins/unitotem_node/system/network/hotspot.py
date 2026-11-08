@@ -16,7 +16,7 @@ from sdbus_async.networkmanager import (ActiveConnection, NetworkConnectionSetti
 
 from utils import constants as const
 from unitotem_node.system.network.misc import get_default_wireless
-from unitotem_node.system.network.wifi import open_system_bus
+from unitotem_node.system.network.wifi import SSID_MAX_BYTES, check_passphrase, check_ssid, open_system_bus
 
 load_dotenv(const.envfile)
 
@@ -26,7 +26,18 @@ if 'hotspot_uuid' not in environ:
     set_key(const.envfile, 'hotspot_uuid', environ['hotspot_uuid'])
 
 
+def _default_ssid() -> str:
+    """The hostname as SSID, cut to 32 bytes at a character boundary (a hostname can be longer)."""
+    return gethostname().encode()[:SSID_MAX_BYTES].decode('utf-8', 'ignore')
+
+
 async def start_hotspot(ssid: str = None, password: str = None):
+    """Starts the hotspot with the given values, the stored ones, or the defaults. Raises InvalidWifiSettings when a given
+    SSID or passphrase is out of range, before anything is read or written."""
+    if ssid is not None:
+        check_ssid(ssid)
+    if password is not None:
+        check_passphrase(password)
     try:
         with open_system_bus() as bus:
             logger.info('Starting hotspot')
@@ -83,7 +94,8 @@ async def start_hotspot(ssid: str = None, password: str = None):
             except NmSettingsInvalidConnectionError:
 
                 if ssid is None:
-                    ssid = gethostname()
+                    ssid = _default_ssid()
+                    check_ssid(ssid)                    # an empty hostname
                 if password is None:
                     password = (await netdev.hw_address).replace(':', '').upper()[-8:]
 

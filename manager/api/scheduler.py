@@ -49,14 +49,13 @@ def probe_media_type(url: str) -> MediaType:
     headers = {'User-Agent': user_agent()}
     mime = ''
     try:
-        resp = requests.head(url, timeout=5, allow_redirects=True,
-                             verify=False, headers=headers)
+        resp = requests.head(url, timeout=5, allow_redirects=True, headers=headers)
         # Plenty of servers refuse HEAD, or refuse an unfamiliar client
         # outright (Wikimedia answers 400 unless the User-Agent carries a
         # contact address). Any unsuccessful answer is retried as a one-byte
         # ranged GET, which is cheap and is what such servers do accept.
         if not resp.ok:
-            resp = requests.get(url, timeout=5, allow_redirects=True, verify=False,
+            resp = requests.get(url, timeout=5, allow_redirects=True,
                                 headers={**headers, 'Range': 'bytes=0-0'}, stream=True)
             resp.close()
         if resp.ok:
@@ -216,7 +215,7 @@ class Scheduler(WSAPIBase):
 
     # noinspection PyTypeHints
     @UserPerms.requires.scheduler
-    def edit_asset(self,
+    async def edit_asset(self,
              uuid: str,
              playlist_id: Optional[str] = None,
              name: Optional[str] = None,
@@ -243,7 +242,8 @@ class Scheduler(WSAPIBase):
             # to probe the URL and choose the container itself.
             filename = url.removeprefix('file:')
             info = upload_manager.files_info.get(filename) if url.startswith('file:') else None
-            asset.media_type = info.mime if info is not None else probe_media_type(url)
+            # The probe is blocking network I/O (up to 10 s): in a thread, or every client's websocket stalls with it
+            asset.media_type = info.mime if info is not None else await asyncio.to_thread(probe_media_type, url)
         if duration is not None and asset.duration != duration:
             asset.update_duration(duration)
         if fit is not None and asset.fit != fit:

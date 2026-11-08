@@ -129,15 +129,21 @@ class TickerService:
         await self._publish_items()
 
     async def _fetch_one(self, source: TickerSource):
-        st = self.store.state[source.id]
+        st = self.store.state.get(source.id)
+        if st is None:             # deleted after it was picked as due
+            return
         try:
             result = await self._fetch(source.url, st.etag, st.last_modified, insecure=self._insecure(),
                                        now=self._clock())
         except fetcher.FetchError as exc:
+            st.fetching = False
             self._failed(source, str(exc))
             return
         finally:
             st.fetching = False
+        # deleted, or its address replaced (a new state object), while fetching: the answer is for a source that is gone
+        if self.store.state.get(source.id) is not st:
+            return
         if result.not_modified:
             self.store.record_not_modified(source.id)
         else:
@@ -146,7 +152,9 @@ class TickerService:
         notifications.resolve(notification_key(source.id))
 
     def _failed(self, source: TickerSource, error: str):
-        st = self.store.state[source.id]
+        st = self.store.state.get(source.id)
+        if st is None:             # deleted meanwhile: nothing to record, nothing to notify
+            return
         st.fetching = False
         self.store.record_failure(source.id, error)
         st.next_due = self._clock() + min(source.interval, RETRY_BASE * 2 ** (st.fails - 1))

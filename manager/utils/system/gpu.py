@@ -203,10 +203,10 @@ PROFILES: Dict[str, Dict[str, str]] = {
 VERIFIED: Dict[str, bool] = {
     # Trivially true: the profile is empty, so it cannot change anything.
     "unknown": True,
-    # Measured on virtio-gpu/llvmpipe in the test VM: selected correctly,
+    # Measured on virtio-gpu/llvmpipe in a virtual machine: selected correctly,
     # adds nothing, and 1080p VP9 costs the same as before it existed.
     "software": True,
-    # Measured on a GTX 1060 passed through to the test VM, proprietary
+    # Measured on a GTX 1060 passed through to a virtual machine, proprietary
     # driver 535.261.03: selected correctly, and the absence of video-decode
     # switches is the *finding*, not an omission - see _NVIDIA_DRM_NAMES.
     "nvidia": True,

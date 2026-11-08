@@ -248,7 +248,7 @@ class WebviewManager:
         exists - a spinner that means "loading" while nothing is loading, and
         (before the boot screen was made compositor-only) the single largest
         item in an idle node's CPU budget: 38% of a core at 1280x800, 178% at
-        5120x2160, measured on the test VM.
+        5120x2160, measured on a virtual machine.
 
         It shows the same page an assigned-but-empty playlist shows, welcome
         screen included where that still applies - see idle_asset().
@@ -727,7 +727,7 @@ class WebviewManager:
         """Forget the settings of the windows of a viewer that left for good (they went with it, see bundle.collect_windows)."""
         prefix = f'{webview_id}|'
         changed = False
-        for field_name in ('audio_outputs', 'keyboards', 'orientations', 'flips', 'screensavers', 'refreshes', 'languages'):
+        for field_name in ('audio_outputs', 'keyboards', 'orientations', 'flips', 'screensavers', 'refreshes', 'languages', 'modes'):
             current = getattr(viewer_settings, field_name)
             kept = {k: v for k, v in current.items() if not k.startswith(prefix)}
             if len(kept) != len(current):
@@ -789,6 +789,12 @@ class WebviewManager:
                 viewer_settings.save()
         await self.send_webview_command(webview_id, 'SetOrientation',
                                        window_id=window_id, orientation=orientation)
+        await self._publish_viewers()
+
+    async def _publish_viewers(self):
+        """Every page shows the turn and mirror of the windows from Viewers/list."""
+        from utils.remote import viewers
+        await viewers.publish(self)
 
     @staticmethod
     def _audio_key(webview_id: str, screen_name: Optional[str]) -> str:
@@ -903,6 +909,7 @@ class WebviewManager:
                     viewer_settings.flips.pop(key, None)
                 viewer_settings.save()
         await self.send_webview_command(webview_id, 'SetFlip', window_id=window_id, flip=flip)
+        await self._publish_viewers()
 
     async def add_window(self, webview_id: str, display: int = 0, x: int = 0, y: int = 0,
                          width: int = 1920, height: int = 1080):

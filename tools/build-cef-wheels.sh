@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the cefpython3 wheels (Python 3.10-3.14, x86_64 + aarch64, proprietary codecs) on the build server.
+# Build the cefpython3 wheels (Python 3.13, x86_64 + aarch64, proprietary codecs) on the build server.
 #
 #   tools/build-cef-wheels.sh start      # copy the sources, start the build DETACHED (systemd unit, survives a lost connection)
 #   tools/build-cef-wheels.sh status
@@ -9,7 +9,14 @@
 # proprietary_codecs=true ffmpeg_branding=Chrome; x64 native, arm64 cross with Chromium's sysroot). The aarch64 wheels are
 # CROSS compiled inside the container (gcc-aarch64-linux-gnu + multiarch libraries), see tools/cef-wheels-inner.sh.
 set -euo pipefail
+# Python of the wheels: the product runs Python 3.13 (Debian trixie); debian/rules and debian/control pin the same version.
+CEF_PYTHON=3.13
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# Cache key of the CEF layouts in the container: sha256 of the patch set (every file, sorted by path) and of the pinned commit.
+cef_key() {
+    local patches="$1" commit="$2"
+    { (cd "$patches" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum); echo "cefpython $commit"; } | sha256sum | cut -d' ' -f1
+}
 HOST="${BUILD_HOST:?set BUILD_HOST=user@build-server}"
 SSH=(ssh -o BatchMode=yes -o ServerAliveInterval=15)
 RSYNC=(rsync -e "ssh -o BatchMode=yes" --rsync-path="sudo rsync")     # the server is a VM: alessandro uses sudo for docker and systemd
@@ -22,10 +29,11 @@ start)
     # cefpython3/ in the checkout may hold the artifacts of an older local build (stale libcef.so, extension modules): only __init__.py goes
     "${RSYNC[@]}" -a --delete --delete-excluded --exclude build --exclude .git --include cefpython3/__init__.py --exclude "cefpython3/*" "$REPO/vendor/cefpython/" "$HOST:$SERVER_DIR/src/"
     "${RSYNC[@]}" -a "$REPO/tools/cef-wheels-inner.sh" "$HOST:$SERVER_DIR/inner.sh"
+    CEF_KEY=$(cef_key "$REPO/tools/cef-server/patches" "$(git -C "$REPO/vendor/cefpython" rev-parse HEAD)")
     "${SSH[@]}" "$HOST" "sudo rm -f $SERVER_DIR/DONE $SERVER_DIR/FAILED $SERVER_DIR/out/*.whl; sudo systemd-run --unit=cef-wheels --collect --working-directory=$SERVER_DIR \
         bash -c 'docker run --rm -v $SERVER_DIR/src:/work/src -v $DISTRIB:/work/distrib:ro -v $SERVER_DIR/out:/work/out \
             -v $SERVER_DIR/tmp:/work/tmp -v $SERVER_DIR/inner.sh:/inner.sh:ro -e WHEEL_VERSION=${WHEEL_VERSION:-147.0+codecs} \
-            -e PYTHONS=\"${PYTHONS:-3.10 3.11 3.12 3.13 3.14}\" -e ARCHES=\"${ARCHES:-x86_64 aarch64}\" \
+            -e PYTHONS=$CEF_PYTHON -e CEF_KEY=$CEF_KEY -e ARCHES=\"${ARCHES:-x86_64 aarch64}\" \
             debian:trixie bash /inner.sh > $SERVER_DIR/build.log 2>&1 && touch $SERVER_DIR/DONE || touch $SERVER_DIR/FAILED'"
     ;;
 status)

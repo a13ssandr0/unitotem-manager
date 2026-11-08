@@ -136,7 +136,7 @@ def system(monkeypatch, tmp_path):
     users and sudo), bob (not a member), carol (primary group users), frank (supplementary member, no home yet), erin
     (administrator by primary group sudo, not in users: a nologin admin)."""
     fake = FakeSystem(tmp_path / 'home')
-    fake.put_account('root', 0, 0, 'root', home='/root')
+    fake.put_account('root', 0, 0, 'root', home='/root', make_home=False)
     fake.put_account('alice', 1001, OTHER_GID, osusers.GECOS)
     fake.put_account('bob', 1002, OTHER_GID, shell='/usr/sbin/nologin')
     fake.put_account('carol', 1003, USERS_GID, shell='/usr/sbin/nologin')

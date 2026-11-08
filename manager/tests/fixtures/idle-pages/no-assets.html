@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>UniTotem Manager</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        /* only to be looked at: a touch does nothing here */
+        html, body {
+            pointer-events: none;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            background: black;
+            color: white;
+            margin: 0;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.5;
+            -webkit-text-size-adjust: 100%;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        h1 {
+            font-size: 3.5vw;
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            line-height: 1.2;
+        }
+        
+        .no-assets {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+        }
+        
+        .sysinfo {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            margin: 1vw;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="no-assets">
+        <h1>No Assets</h1>
+    </div>
+
+    <div class="sysinfo">
+        <p style="font-size: 1vw; margin-block:0;">UniTotem 3.0.0~dev18<br>Running on Debian GNU/Linux 13 (trixie)<br>IP address: 192.168.0.254<br>Hostname: unitotem</p>
+    </div>
+</body>
+
+</html>

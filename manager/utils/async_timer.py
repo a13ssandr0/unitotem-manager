@@ -15,7 +15,15 @@ class Timer:
 
         self._timeout = timeout
         self._callback = callback
-        self._task = asyncio.ensure_future(self._job())
+        self._task = None
+        self._schedule()
+
+    def _schedule(self):
+        # A task only when there is something to wait for: a task that never runs is a coroutine never awaited
+        if self._timeout is not None and self._callback:
+            self._task = asyncio.ensure_future(self._job())
+        else:
+            self._task = None
 
     async def _job(self):
         if self._timeout is None or not self._callback:
@@ -26,11 +34,12 @@ class Timer:
             await c
 
     def cancel(self):
-        self._task.cancel()
-    
+        if self._task is not None:
+            self._task.cancel()
+
     def reset(self):
         self.cancel()
-        self._task = asyncio.ensure_future(self._job())
+        self._schedule()
 
     def set_timeout(self, timeout):
         if isinstance(timeout, datetime):

@@ -8,10 +8,13 @@ accepts it, no TCP port is ever opened, the server and its directory are gone af
 drop and after the idle timeout, and nobody but an administrator gets in. Then in headless Chrome: the button, the
 floating window, noVNC connected, the window staying open (and saying why) when the session ends, the Close button.
 
-    tools/ui-vnc.py --host 192.168.122.50
+    VM_HOST=<test VM> VM_KEY=<key> VM_KNOWN_HOSTS=<file> tools/ui-vnc.py --host <test VM> [--user admin --password admin]
 
-The node needs the VNC server on its PATH and UNITOTEM_VNC_IDLE_TIMEOUT=20 in the manager's environment (see the
-runner script in the report: the kiosk image has no tigervnc package and a read-only /usr).
+The VM_* settings are read by tools/vm-env.sh (see testing-vm.md). The manager of the node runs with
+UNITOTEM_VNC_IDLE_TIMEOUT=20 (idle test), and the node needs `wayvnc` on its PATH (docs/manager/node-system.md).
+Status: the token, origin, admin-only and teardown checks have NOT been re-run against the current Wayland path
+(wayvnc, --disable-input). The process and command-line checks (x0vncserver, -rfbport, -AcceptKeyEvents, the
+Xlib drawing on DISPLAY :0) are X11-era and need porting before a run means anything.
 """
 import argparse
 import asyncio

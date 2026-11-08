@@ -70,7 +70,9 @@ async def devtools_open(request: OpenRequest, user=Depends(require_perm('admin')
 @router.get('/devtools/{path:path}')
 async def devtools_file(path: str, user=Depends(require_perm('admin'))):
     """A file of the front end. The protocol endpoints (`page/`, `browser/`) and the target list are not files."""
-    if not _FILE.fullmatch(path) or path.split('/')[0] in _NOT_FILES:
+    # Empty and `.` segments are refused too: the endpoint would normalize them, so `/json` or `./page` would reach it
+    parts = path.split('/')
+    if not _FILE.fullmatch(path) or {'', '.'} & set(parts) or parts[0] in _NOT_FILES:
         raise HTTPException(404)
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as client:

@@ -174,19 +174,21 @@ class VncServer:
     async def stop(self):
         """Terminate the server and make sure it is gone, reaped and its directory removed."""
         proc = self.proc
-        if proc is not None:
-            for sig in (signal.SIGTERM, signal.SIGKILL):
-                if proc.returncode is not None:
-                    break
-                try:
-                    proc.send_signal(sig)
-                except ProcessLookupError:
-                    break
-                try:
-                    await asyncio.wait_for(proc.wait(), 2)
-                except asyncio.TimeoutError:
-                    continue
-        self.cleanup()
+        try:
+            if proc is not None:
+                for sig in (signal.SIGTERM, signal.SIGKILL):
+                    if proc.returncode is not None:
+                        break
+                    try:
+                        proc.send_signal(sig)
+                    except ProcessLookupError:
+                        break
+                    try:
+                        await asyncio.wait_for(proc.wait(), 2)
+                    except asyncio.TimeoutError:
+                        continue
+        finally:
+            self.cleanup()      # also when the caller is cancelled while the server is waited for
 
     def cleanup(self):
         shutil.rmtree(self.directory, ignore_errors=True)

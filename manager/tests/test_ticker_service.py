@@ -424,3 +424,45 @@ def test_backup_part_roundtrip_and_reset(store, windows, monkeypatch):
     # a hostile archive: bad entries are skipped, not fatal
     part.restore({'sources': [{'url': 'file:///etc/passwd'}, {'url': 'http://ok/rss'}]}, 1)
     assert [s.url for s in store.sources] == ['http://ok/rss']
+
+
+@aio
+async def test_a_source_deleted_during_its_fetch_is_dropped_quietly(store, clock):
+    """Deleted while the fetch is in flight: neither a success nor a failure reaches the store, the task goes on."""
+    fake = Fake()
+    service = TickerService(store, fetch=fake, clock=clock)
+    gone = store.add(TickerSource(url='http://gone/rss', interval=600))
+    kept = store.add(TickerSource(url='http://kept/rss', interval=600))
+    fake.script['http://kept/rss'] = [[it(1)]]
+
+    async def fetch_then_delete(url, etag=None, last_modified=None, *, insecure=False, now=None):
+        if url == 'http://gone/rss':
+            store.delete(gone.id)            # the user removes it while the request is out
+            raise fetcher.FetchError('The server answered HTTP 500')
+        return await fake(url, etag, last_modified, insecure=insecure, now=now)
+
+    service._fetch = fetch_then_delete
+    task = await start(service)
+    assert not task.done()                   # the scheduler did not die
+    assert [s.url for s in store.sources] == ['http://kept/rss']
+    assert [i['title'] for i in store.merged()] == ['t1']
+    await stop(service, task)
+
+
+@aio
+async def test_a_source_replaced_during_its_fetch_keeps_the_new_state(store, clock):
+    """The address changed while the old one was being fetched: its answer is not recorded for the new address."""
+    fake = Fake()
+    service = TickerService(store, fetch=fake, clock=clock)
+    a = store.add(TickerSource(url='http://old/rss', interval=600))
+    fake.script['http://old/rss'] = [[it(1)]]
+
+    async def fetch_then_edit(url, etag=None, last_modified=None, *, insecure=False, now=None):
+        store.edit(a.id, url='http://new/rss')
+        return await fake(url, etag, last_modified, insecure=insecure, now=now)
+
+    service._fetch = fetch_then_edit
+    task = await start(service)
+    assert store.state[a.id].items == []     # the new address has not been fetched yet
+    assert store.state[a.id].last_ok == 0
+    await stop(service, task)

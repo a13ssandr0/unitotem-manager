@@ -11,12 +11,17 @@ export PATH=$DT:$PATH
 export DEPOT_TOOLS_UPDATE=0
 cd $W || exit 1
 log() { echo "$(date +%F\ %T) $*" | tee -a logs/stages.log; }
+# Re-applies our patches (idempotent: applied ones are skipped) on the tree as automate-git.py left it, before each rebuild.
+apply_patches() { bash "$W/apply-patches.sh" "$W/chromium/src" >> logs/apply-patches.log 2>&1 \
+  || { log "apply-patches FAILED (see logs/apply-patches.log)"; exit 1; }; }
 COMMON="use_sysroot=true symbol_level=1 is_official_build=true proprietary_codecs=true ffmpeg_branding=Chrome"
+apply_patches
 log "rebuild x64"
 GN_DEFINES="$COMMON" python3 automate-git.py --download-dir=$W --depot-tools-dir=$DT --no-depot-tools-update --branch=$BRANCH --checkout=$HASH \
   --no-update --x64-build --no-debug-build --no-distrib-docs --build-target=cefsimple --force-build > logs/x64-rebuild.log 2>&1 \
   && log "rebuild x64 done" || { log "rebuild x64 FAILED"; exit 1; }
 log "rebuild arm64"
+apply_patches
 GN_DEFINES="$COMMON use_v4l2_codec=true use_vaapi=false" python3 automate-git.py --download-dir=$W --depot-tools-dir=$DT --no-depot-tools-update \
   --branch=$BRANCH --checkout=$HASH --no-update --arm64-build --no-debug-build --no-distrib-docs --build-target=cefsimple --force-build \
   > logs/arm64-rebuild.log 2>&1 && log "rebuild arm64 done" || { log "rebuild arm64 FAILED"; exit 1; }

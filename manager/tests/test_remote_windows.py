@@ -113,6 +113,26 @@ def test_the_state_of_a_screen_that_arrives_replaces_what_this_node_had_for_it(s
     assert 'peer-7|HDMI-A-1' not in viewer_settings.audio_outputs and stores.get('peer-7|HDMI-A-1').is_default
 
 
+def test_the_confirmed_output_modes_of_a_window_travel_and_are_validated(stores):
+    from utils.models.viewer import OutputMode
+    set_up_window('client', 'HDMI-A-1')
+    viewer_settings.modes = {'client|HDMI-A-1': OutputMode(width=1920, height=1200, refresh_mhz=60000)}
+    windows = json.loads(json.dumps(bundle.collect_windows('client')))
+    assert windows['HDMI-A-1']['modes'] == {'width': 1920, 'height': 1200, 'refresh_mhz': 60000}
+    viewer_settings.modes = {}
+    bundle.apply_windows({**windows, 'DP-1': {'modes': {'width': 0, 'height': 1, 'refresh_mhz': 1}}}, 'peer-7', {})
+    assert viewer_settings.modes == {'peer-7|HDMI-A-1': OutputMode(width=1920, height=1200, refresh_mhz=60000)}
+
+
+def test_a_viewer_that_leaves_takes_its_output_modes_with_it(stores):
+    from webview.controller import WebviewManager
+    from utils.models.viewer import OutputMode
+    mode = OutputMode(width=1280, height=720, refresh_mhz=50000)
+    viewer_settings.modes = {'client|HDMI-A-1': mode, 'server-side|DP-1': mode}
+    WebviewManager.drop_viewer_settings(WebviewManager.__new__(WebviewManager), 'client')
+    assert list(viewer_settings.modes) == ['server-side|DP-1']
+
+
 def test_a_node_with_only_set_up_windows_is_not_empty(stores, monkeypatch):
     monkeypatch.setattr(bundle.playlists_manager, '_playlists', {}, raising=False)
     monkeypatch.setattr(bundle, 'upload_manager', type('U', (), {'files': []})())

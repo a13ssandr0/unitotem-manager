@@ -28,3 +28,63 @@ def test_static_dns_is_written_in_memory_order():
     from unitotem_node.system.network.networkmanager import _build_ipv4_section
     section = _build_ipv4_section('manual', '192.168.0.254', 23, '192.168.1.1', ['192.168.1.1', '8.8.4.4'])
     assert [v.to_bytes(4, 'little') for v in section['dns'][1]] == [bytes([192, 168, 1, 1]), bytes([8, 8, 4, 4])]
+
+
+def test_invalid_ipv4_settings_are_refused():
+    import pytest
+    from unitotem_node.system.network.networkmanager import InvalidIPSettings, _build_ipv4_section
+    bad = [
+        ('static', '192.168.0.2', 24, None, None),          # unknown method
+        ('manual', None, 24, None, None),                   # static without an address
+        ('manual', '192.168.0.300', 24, None, None),        # not an address
+        ('manual', '192.168.0', 24, None, None),
+        ('manual', 3232235778, 24, None, None),             # an int is not an address string
+        ('manual', '192.168.0.2', 0, None, None),           # prefix out of range
+        ('manual', '192.168.0.2', 33, None, None),
+        ('manual', '192.168.0.2', True, None, None),        # bool is not a prefix
+        ('manual', '192.168.0.2', 24, 'gw', None),          # gateway not an address
+        ('manual', '192.168.0.2', 24, None, ['8.8.8.8', 'dns.example']),  # invalid DNS is refused, not dropped
+    ]
+    for args in bad:
+        with pytest.raises(InvalidIPSettings):
+            _build_ipv4_section(*args)
+
+
+def test_valid_static_ipv4_settings_are_built():
+    from unitotem_node.system.network.networkmanager import _build_ipv4_section
+    section = _build_ipv4_section('manual', '10.0.0.5', 24, '10.0.0.1', ['1.1.1.1'])
+    assert section['method'] == ('s', 'manual')
+    assert section['address-data'][1][0] == {'address': ('s', '10.0.0.5'), 'prefix': ('u', 24)}
+    assert section['gateway'] == ('s', '10.0.0.1')
+    assert section['dns'][1] == [int.from_bytes(bytes([1, 1, 1, 1]), 'little')]
+    assert _build_ipv4_section('auto', None, 24, None, None) == {'method': ('s', 'auto')}
+    assert _build_ipv4_section('link-local', None, 24, None, None) == {'method': ('s', 'link-local')}
+    assert _build_ipv4_section('disabled', None, 24, None, None) == {'method': ('s', 'disabled')}
+
+
+def test_api_answers_invalid_ip_settings_with_an_error(monkeypatch):
+    import asyncio
+    from contextlib import contextmanager
+    from unitotem_node.api.network import Network
+    from unitotem_node.system.network import networkmanager as nm
+
+    # the D-Bus layer is stubbed: validation must answer before anything reaches it
+    @contextmanager
+    def bus():
+        yield None
+
+    class Conn:
+        def __init__(self, path, bus): pass
+        async def get_settings(self): return {}
+        async def update(self, settings): raise AssertionError('settings were written with invalid input')
+
+    monkeypatch.setattr(nm, 'open_system_bus', bus)
+    monkeypatch.setattr(nm, 'NetworkConnectionSettings', Conn)
+
+    async def first(gen):
+        return [item async for item in gen][0]
+
+    r = asyncio.run(first(Network.connect_wifi('net', 'wlan0', ip_method='bogus')))
+    assert r.kwargs['error'] == 'Invalid IP settings' and 'bogus' in r.kwargs['extra']
+    r = asyncio.run(Network.edit_connection('/conn/1', ip_method='manual', ip_address='10.0.0.300', prefix_len=24))
+    assert r.kwargs['error'] == 'Invalid IP settings'

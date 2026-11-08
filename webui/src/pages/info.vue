@@ -55,6 +55,8 @@
                   <tr v-for="(temp, index) in temps" :key="`${controller}-${index}`">
                     <td class="pl-4">{{ temp.name }}</td>
                     <td class="text-right" :class="getTempColorClass(temp)">{{ temp.current }} °C</td>
+                    <!-- Limits above 300 °C are not real: the driver reports an unset limit as a sentinel (an NVMe drive
+                         shows 65261.85 °C, the value 65261850 m°C in hwmon). They are shown in grey, not hidden. -->
                     <template v-if="temp.high || temp.critical">
                       <td class="text-right" :class="{ 'text-grey': (temp.high || temp.critical) > 300 }">{{ temp.high || temp.critical }} °C</td>
                       <td class="text-right" :class="{ 'text-grey': (temp.critical || temp.high) > 300 }">{{ temp.critical || temp.high }} °C</td>
@@ -98,6 +100,20 @@
           </v-card-text>
         </v-card>
 
+        <v-card class="mb-6">
+          <v-card-title>Graphics</v-card-title>
+          <v-card-text>
+            <ul>
+              <li v-for="(value, key) in gpu" :key="key">
+                {{ gpuFeatureLabels[key] || key }}:
+                <span :style="{color: gpuStatusColors[(gpuStatusLabels[value] || {color: 'red'}).color].value}">
+                  {{ (gpuStatusLabels[value] || {label: 'Unknown'}).label }}
+                </span>
+              </li>
+            </ul>
+          </v-card-text>
+        </v-card>
+
         <v-card v-if="info.disks" class="mb-6">
           <v-card-title>Storage</v-card-title>
           <v-card-text>
@@ -122,6 +138,57 @@ const theme = useTheme();
 const isDark = computed(() => theme.global.current.value.dark);
 
 const info = ref(null);
+const gpu = ref({});
+
+// Graphics feature status of the viewer (chrome://gpu's list), labels and colours ported from Chromium's info_view
+// Inspired by Chromium's chrome://gpu page (content/browser/resources/gpu/info_view.ts)
+const gpuStatusColors = {
+  green:  computed(() => isDark.value ? '#0F0' : '#080'),
+  yellow: computed(() => isDark.value ? '#FF0' : '#880'),
+  red:    computed(() => '#f00'),
+}
+const gpuFeatureLabels = {
+  '2d_canvas': 'Canvas',
+  'gpu_compositing': 'Compositing',
+  'webgl': 'WebGL',
+  'multisampling': 'WebGL multisampling',
+  'texture_sharing': 'Texture Sharing',
+  'video_decode': 'Video Decode',
+  'rasterization': 'Rasterization',
+  'opengl': 'OpenGL',
+  'metal': 'Metal',
+  'vulkan': 'Vulkan',
+  'multiple_raster_threads': 'Multiple Raster Threads',
+  'native_gpu_memory_buffers': 'Native GpuMemoryBuffers',
+  'protected_video_decode': 'Hardware Protected Video Decode',
+  'surface_control': 'Surface Control',
+  'vpx_decode': 'VPx Video Decode',
+  'canvas_oop_rasterization': 'Canvas out-of-process rasterization',
+  'raw_draw': 'Raw Draw',
+  'video_encode': 'Video Encode',
+  'direct_rendering_display_compositor': 'Direct Rendering Display Compositor',
+  'webgpu': 'WebGPU',
+  'skia_graphite': 'Skia Graphite',
+  'webnn': 'WebNN',
+  'trees_in_viz': 'TreesInViz',
+  'webgpu_on_vk_via_gl_interop': 'WebGPU interop',
+}
+const gpuStatusLabels = {
+  'disabled_software': {label: 'Software only. Hardware acceleration disabled', color: 'yellow'},
+  'disabled_off': {label: 'Disabled', color: 'red'},
+  'disabled_off_ok': {label: 'Disabled', color: 'yellow'},
+  'unavailable_software': {label: 'Software only, hardware acceleration unavailable', color: 'yellow'},
+  'unavailable_off': {label: 'Unavailable', color: 'red'},
+  'unavailable_off_ok': {label: 'Unavailable', color: 'yellow'},
+  'enabled_readback': {label: 'Hardware accelerated but at reduced performance', color: 'yellow'},
+  'enabled_force': {label: 'Hardware accelerated on all pages', color: 'green'},
+  'enabled': {label: 'Hardware accelerated', color: 'green'},
+  'enabled_on': {label: 'Enabled', color: 'green'},
+  'enabled_force_on': {label: 'Force enabled', color: 'green'},
+}
+api.Settings.Display.gpu_feature_stats.on(data => {
+  gpu.value = data.features;
+}, {init: true})
 const cpuChartCanvas = ref(null);
 let cpuChart = null;
 

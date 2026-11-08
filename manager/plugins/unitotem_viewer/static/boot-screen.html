@@ -260,6 +260,14 @@
     #touch-setup .ts-finger { position: absolute; left: 0; top: 0; width: 9vmin; height: 9vmin; margin: -4.5vmin 0 0 -4.5vmin; border-radius: 50%; background: #29b6f6;
                               opacity: 0.85; pointer-events: none; will-change: transform; }
 
+    /* The name of an output and its screen, shown for a few seconds over the whole window when the viewer identifies the screens
+       (identify() below). In the content, so it turns and mirrors with it; no pointer events, it does not end the screensaver. */
+    #identify { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                background: rgba(0, 0, 0, 0.8); color: #fff; font-family: "Noto Sans", sans-serif; text-align: center; pointer-events: none; }
+    #identify[hidden] { display: none; }
+    #identify .id-name { font-size: 16vmin; font-weight: bold; line-height: 1.1; }
+    #identify .id-caption { font-size: 5vmin; margin-top: 2vmin; opacity: 0.85; }
+
     .image { object-position: center; }
     .video { object-position: center; }
 
@@ -309,6 +317,11 @@
       </div>
 
       <div id="shield"></div>
+
+      <div id="identify" hidden>
+        <div class="id-name"></div>
+        <div class="id-caption"></div>
+      </div>
 
       <div id="touch-setup" hidden></div>
     </div>
@@ -927,6 +940,20 @@
       tickerLoad.then(() => {
         window.utTicker.update(cfg, window.__utTickerItems || []);
       }).catch(e => { tickerLoad = null; console.error('ticker', e); });
+    }
+
+    /**
+     * Called by the Python viewer (Identify): the name of the output and the number of its screen, for `ms` milliseconds. A call
+     * while it is shown starts the time again.
+     */
+    let identifyTimer = null;
+    function identify(name, caption, ms) {
+      const box = document.getElementById('identify');
+      box.querySelector('.id-name').textContent = String(name);
+      box.querySelector('.id-caption').textContent = String(caption);
+      box.hidden = false;
+      clearTimeout(identifyTimer);
+      identifyTimer = setTimeout(() => { box.hidden = true; }, Math.min(60000, Math.max(1000, Number(ms) || 5000)));
     }
 
     /**
