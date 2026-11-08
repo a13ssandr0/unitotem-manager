@@ -72,23 +72,24 @@ class Asset(BaseModel, validate_assignment=True):
     dis_date: Optional[datetime] = None
     __dis_date_old: Optional[datetime] = None
 
-    __assets_manager: Optional[AssetsManager] = None
+    # The playlist that holds the asset (set by AssetsManager): told when a scheduled date changes the asset's state
+    _owner: Optional[AssetsManager] = PrivateAttr(default=None)
 
     def __enable(self):
         self.__ena_date_old = None
         self.ena_date = None
-        self.enable()
-        if self.__assets_manager:
-            self.__assets_manager.on_assets_update()
-            self.__assets_manager.save()
+        self.enabled = True
+        self.__owner_changed()
 
     def __disable(self):
         self.__dis_date_old = None
         self.dis_date = None
-        self.disable()
-        if self.__assets_manager:
-            self.__assets_manager.on_assets_update()
-            self.__assets_manager.save()
+        self.enabled = False
+        self.__owner_changed()
+
+    def __owner_changed(self):
+        if self._owner is not None:
+            self._owner.scheduled_change(self)
 
     # noinspection PyNestedDecorators
     @model_validator(mode='before')
@@ -136,8 +137,8 @@ class Asset(BaseModel, validate_assignment=True):
 
     def update_duration(self, duration):
         self.duration = duration
-        if self.__assets_manager:
-            self.__assets_manager.update_timer(self.uuid)
+        if self._owner is not None:
+            self._owner.update_timer(self.uuid)
 
     # noinspection PyNestedDecorators
     @field_validator('media_type', mode='before')
@@ -178,10 +179,12 @@ class Asset(BaseModel, validate_assignment=True):
         return c.as_hex('long')
 
     def __del__(self):
-        if self.uuid in TIMERS:
-            TIMERS[self.uuid]['ena'].cancel()
-            TIMERS[self.uuid]['dis'].cancel()
-            del TIMERS[self.uuid]
+        # a model that failed validation has no uuid (and no timers)
+        uuid = self.__dict__.get('uuid')
+        if uuid in TIMERS:
+            TIMERS[uuid]['ena'].cancel()
+            TIMERS[uuid]['dis'].cancel()
+            del TIMERS[uuid]
 
     def __bool__(self):
         return self.enabled
@@ -253,20 +256,35 @@ class AssetsManager(BaseModel, validate_assignment=True):
         # avoid assigning later or adding overheads with if statements
         self._waiting_timer = Timer(None, self._timer_fired)
 
+    @model_validator(mode='after')
+    def _adopt_assets(self):
+        # Every asset of the playlist reports to it, however it got there (construction, load, assignment)
+        for asset in self.assets:
+            self._adopt(asset)
+        return self
+
     def _asset(self, obj) -> Asset:
         """Build an asset for this playlist: one that comes without a duration gets the playlist's own default."""
         if isinstance(obj, dict) and obj.get('duration') is None:
             # a file with no duration of its own (an image, a PDF) arrives with None: that is "use the default"
             obj = {**obj, 'duration': self.default_duration}
-        return Asset.model_validate(obj)
+        return self._adopt(Asset.model_validate(obj))
+
+    def _position(self, uuid: str) -> int:
+        """Index of the asset with this uuid. Looked up without building an Asset: a temporary one would register
+        its own timers under the same uuid and cancel those of the real asset when it is collected."""
+        for i, asset in enumerate(self.assets):
+            if asset.uuid == uuid:
+                return i
+        raise ValueError(f'No asset with uuid {uuid} in list')
+
+    def _adopt(self, asset: Asset) -> Asset:
+        asset._owner = self
+        return asset
 
     def __getitem__(self, item):
         if isinstance(item, str):
-            for asset in self.assets:
-                if asset.uuid == item:
-                    return asset
-            else:
-                raise ValueError(f'No asset with uuid {item} in list')
+            return self.assets[self._position(item)]
         else:
             return self.assets[item]
 
@@ -323,8 +341,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
         if isinstance(__key, str):
             uuid = __key
             try:
-                # noinspection PyArgumentList
-                __key = self.assets.index(Asset(url='', uuid=uuid))
+                __key = self._position(uuid)
             except ValueError:
                 return
         else:
@@ -354,8 +371,10 @@ class AssetsManager(BaseModel, validate_assignment=True):
         # so it's only necessary to create a temporary asset with the uuid
         # contained in __value and use it to make the comparison
         if isinstance(__value, str):
-            # noinspection PyArgumentList
-            __value = Asset(url='', uuid=__value)
+            for i in range(max(__start, 0), min(__stop, len(self.assets))):
+                if self.assets[i].uuid == __value:
+                    return i
+            raise ValueError(f'No asset with uuid {__value} in list')
         return self.assets.index(__value, __start, __stop)
 
     def find(self, url: str):
@@ -393,8 +412,7 @@ class AssetsManager(BaseModel, validate_assignment=True):
         if index is None:
             temp_current = self._current
         elif isinstance(index, str):
-            # noinspection PyArgumentList
-            temp_current = self.assets.index(Asset(url='', uuid=index))
+            temp_current = self._position(index)
         else:
             temp_current = index % self.assets.__len__()
         self.__set_current(temp_current)
@@ -484,6 +502,14 @@ class AssetsManager(BaseModel, validate_assignment=True):
         while not SHUTDOWN_EVENT.is_set():
             yield self.current
             await self._waiting_evt.wait()
+
+    def scheduled_change(self, asset: Asset):
+        """A scheduled date has enabled or disabled the asset: the playback re-picks and the playlist is saved.
+        An asset that has since left this playlist is ignored."""
+        if not any(a is asset for a in self.assets):
+            return
+        self.revalidate_current()
+        self.save()
 
     def update_timer(self, uuid):
         """Call this function each time the duration of an asset is changed"""

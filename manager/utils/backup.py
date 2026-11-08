@@ -256,7 +256,7 @@ async def maybe_await(result):
 
 def from_legacy(config: dict) -> dict:
     """Archives written before the parts existed: {"CONFIG": {playlists, playlists_default, users}, "hostname",
-    "def_audio_dev", "netplan", "cron"} become the equivalent parts."""
+    "def_audio_dev"} become the equivalent parts. The netplan files and the cron lines are no part any more: ignored."""
     out = dict(config.get('parts', {}))
     cfg = config.get('CONFIG')
     if isinstance(cfg, str):
@@ -266,7 +266,7 @@ def from_legacy(config: dict) -> dict:
             out.setdefault('playlists', {'playlists': cfg['playlists'], 'default': cfg.get('playlists_default')})
         if 'users' in cfg:
             out.setdefault('users', cfg['users'])
-    for old, new in (('hostname', 'hostname'), ('def_audio_dev', 'audio'), ('netplan', 'netplan')):
+    for old, new in (('hostname', 'hostname'), ('def_audio_dev', 'audio')):
         if old in config:
             out.setdefault(new, config[old])
     return out

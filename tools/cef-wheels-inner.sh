@@ -7,10 +7,11 @@
 # /work/distrib    binary_distrib of the CEF build (cef_binary_*_linux64 and *_linuxarm64 directories)
 # /work/out        the wheels
 # /work/tmp        scratch (kept between runs: wrapper builds are reused)
+# CEF_KEY          cache key of the CEF layouts, set by build-cef-wheels.sh (sha256 of the patch set and the pinned commit)
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 VERSION="${WHEEL_VERSION:-147.0+codecs}"
-PYTHONS="${PYTHONS:-3.10 3.11 3.12 3.13 3.14}"
+PYTHONS="${PYTHONS:-3.13}"
 ARCHES="${ARCHES:-x86_64 aarch64}"
 JOBS="$(nproc)"
 W=/work/tmp
@@ -70,9 +71,10 @@ prepare_cef() {
     if [ "$arch" = x86_64 ]; then suffix=linux64; triple=x86_64-linux-gnu; strip=strip; else suffix=linuxarm64; triple=aarch64-linux-gnu; strip=aarch64-linux-gnu-strip; fi
     local src; src=$(ls -d /work/distrib/cef_binary_*_"$suffix")
     local root="$W/cef-$arch"
-    # the layout is cached between runs, but only while it is newer than the distribution it was made from: a rebuilt libcef.so must not be
-    # shadowed by an old one (the wheels of 2026-10-20 shipped the previous libcef, without the patches, because of this)
-    [ -f "$root/.ready" ] && [ "$root/.ready" -nt "$src/Release/libcef.so" ] && return 0
+    # the layout is cached between runs only while .ready holds the same CEF_KEY (patches and pinned commit unchanged) and is newer than
+    # the distribution it was made from: a changed libcef.so or patch set must not be shadowed by an old layout
+    # (the wheels of 2026-10-20 shipped the previous libcef, without the patches, because of this)
+    [ -f "$root/.ready" ] && [ "$(cat "$root/.ready")" = "$CEF_KEY" ] && [ "$root/.ready" -nt "$src/Release/libcef.so" ] && return 0
     log "CEF $arch: wrapper from $src"
     rm -rf "$root"; mkdir -p "$root/bin" "$root/lib"
     local dist="$W/dist-$arch"; rm -rf "$dist"; cp -a "$src" "$dist"
@@ -90,7 +92,7 @@ prepare_cef() {
     cp -a "$dist/include" "$root/include"
     "$strip" --strip-debug "$root/bin/libcef.so"
     readelf -h "$root/bin/libcef.so" | grep -E "Machine"
-    touch "$root/.ready"
+    echo "$CEF_KEY" > "$root/.ready"
 }
 
 build_wheel() {

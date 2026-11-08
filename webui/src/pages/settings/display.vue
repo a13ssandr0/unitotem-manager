@@ -6,283 +6,209 @@
       width="100%"
       :title="String($route.name)"
     >
-      <v-label class="d-block text-center">Click on a screen to change output device</v-label>
-      <div class="row d-flex justify-center pa-4" id="screen_container">
-        <svg :disabled="svg.disabled" :viewBox="svg.viewbox" height="200px" xmlns="http://www.w3.org/2000/svg">
-          <template v-for="disp in displays">
-            <rect
-              :x="disp.x"
-              :y="disp.y"
-              :width="disp.width"
-              :height="disp.height"
-              :fill="screenBGColor"/>
+      <v-card-text v-if="!outputs.length" class="text-medium-emphasis">No screen.</v-card-text>
+      <template v-else>
+        <div class="d-flex flex-wrap align-center ga-3 px-4 pt-2 pb-4">
+          <v-btn-toggle :model-value="selectedName" mandatory divided color="primary" variant="outlined"
+                        @update:model-value="v => picked = v">
+            <v-btn v-for="o in outputs" :key="o.name" :value="o.name">{{ o.name }}</v-btn>
+          </v-btn-toggle>
+          <v-spacer></v-spacer>
+          <v-btn variant="tonal" prepend-icon="mdi-monitor-eye" :disabled="!output || !canIdentify"
+                 @click="identify">Identify</v-btn>
+        </div>
 
-            <rect
-              :x="disp.x+disp.margin"
-              :y="disp.y+disp.margin"
-              :width="disp.width-2*disp.margin"
-              :height="disp.height-2*disp.margin"
-              :fill="screenFGColor"/>
-
-            <text
-              :x="disp.x+disp.width/2"
-              :y="disp.y+disp.height*2/5">{{ disp.name }}
-            </text>
-            <text
-              :x="disp.x+disp.width/2"
-              :y="disp.y+disp.height*3/5">
-              ({{ disp.width }}x{{ disp.height }})
-            </text>
-          </template>
-          <text x="500" y="500" v-if="svg.disabled" :fill="textColor">Disconnected</text>
-          <rect id="window_bound_rect"
-                :x="window_bound_rect.x"
-                :y="window_bound_rect.y"
-                :width="window_bound_rect.width"
-                :height="window_bound_rect.height"
-                fill="#00ff0055"></rect>
-        </svg>
-      </div>
-      <div class="d-flex justify-center align-center mb-4">
-        <v-label class="text-center mr-2">Screen orientation:</v-label>
-        <v-btn-toggle v-model="orientation" mandatory>
-          <v-btn @click="api.Settings.Display.set_orientation({viewer_id: currentViewerId, window_id: 0, orientation: 0})">
-            <v-icon :style="{ transform: 'rotate(0deg)' }">mdi-monitor</v-icon>
-          </v-btn>
-          <v-btn @click="api.Settings.Display.set_orientation({viewer_id: currentViewerId, window_id: 0, orientation: 1})">
-            <v-icon :style="{ transform: 'rotate(90deg)' }">mdi-monitor</v-icon>
-          </v-btn>
-          <v-btn @click="api.Settings.Display.set_orientation({viewer_id: currentViewerId, window_id: 0, orientation: 2})">
-            <v-icon :style="{ transform: 'rotate(180deg)' }">mdi-monitor</v-icon>
-          </v-btn>
-          <v-btn @click="api.Settings.Display.set_orientation({viewer_id: currentViewerId, window_id: 0, orientation: 3})">
-            <v-icon :style="{ transform: 'rotate(270deg)' }">mdi-monitor</v-icon>
-          </v-btn>
-        </v-btn-toggle>
-      </div>
-      <div class="d-flex justify-center align-center mb-4">
-        <v-label class="text-center mr-2">Screen flip:</v-label>
-        <v-btn-toggle v-model="flip" mandatory>
-          <v-btn @click="api.Settings.Display.set_flip({viewer_id: currentViewerId, window_id: 0, flip: 0})">
-            No
-          </v-btn>
-
-          <v-btn @click="api.Settings.Display.set_flip({viewer_id: currentViewerId, window_id: 0, flip: 1})">
-            <v-icon>mdi-reflect-horizontal</v-icon>
-          </v-btn>
-
-          <v-btn @click="api.Settings.Display.set_flip({viewer_id: currentViewerId, window_id: 0, flip: 2})">
-            <v-icon>mdi-reflect-vertical</v-icon>
-          </v-btn>
-        </v-btn-toggle>
-      </div>
-      <v-spacer style="height: 20px"></v-spacer>
-      <div class="d-flex justify-center align-center mb-4">
-        <div style="max-width: 700px">
-          <h2>Certificates</h2>
-          <v-switch
-            v-model="allowInsecureCerts"
-            @update:model-value="setAllowInsecureCerts"
-            color="primary"
-            hide-details
-            density="compact"
-            class="ms-10"
-            label="Accept invalid certificates for scheduled assets"
-          ></v-switch>
-          <div class="ms-10 text-caption text-medium-emphasis">
-            Lets the viewer show https assets whose certificate does not validate
-            (self-signed, expired or issued for another name). The connection is no
-            longer authenticated: anyone able to intercept it can replace what is
-            shown on the screen. Leave it off unless your assets are served from a
-            host with a certificate this node cannot verify.
+        <v-alert v-if="output?.pending" type="warning" variant="tonal" density="compact" class="mx-4 mb-4">
+          <div class="d-flex align-center flex-wrap ga-3">
+            <span>Keep the new mode? Reverts in {{ remaining }} s</span>
+            <v-spacer></v-spacer>
+            <v-btn color="primary" variant="flat" :disabled="!canConfirm" @click="keep">Keep</v-btn>
           </div>
-          <div class="ms-10 mt-1 text-caption text-warning" v-if="allowInsecureCertsDirty">
-            <v-icon icon="mdi-alert-outline" size="small" class="me-1"></v-icon>
-            Saved. The viewer applies this at startup: restart it (or reboot the
-            node) for the change to take effect.
+        </v-alert>
+
+        <div class="d-flex flex-wrap align-center ga-4 px-4 pb-4">
+          <v-select :model-value="currentRes" :items="resolutionItems" label="Resolution" density="compact"
+                    variant="outlined" hide-details style="max-width: 200px" :disabled="modeLocked"
+                    @update:model-value="setResolution"></v-select>
+          <v-select :model-value="output?.current?.refresh_mhz ?? null" :items="refreshItems" label="Refresh rate"
+                    density="compact" variant="outlined" hide-details style="max-width: 200px" :disabled="modeLocked"
+                    @update:model-value="setRefresh"></v-select>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" color="primary" :disabled="!output || !canReset" @click="reset">Reset</v-btn>
+        </div>
+
+        <div class="d-flex flex-wrap align-center ga-6 px-4 pb-4">
+          <div class="d-flex align-center ga-3">
+            <span class="text-body-2 text-medium-emphasis">Orientation</span>
+            <v-btn-toggle :model-value="turn" mandatory divided variant="outlined" density="comfortable"
+                          @update:model-value="setTurn">
+              <v-btn v-for="t in turns" :key="t.value" :value="t.value" :title="t.title"
+                     :disabled="!win || !canTurn">
+                <v-icon :style="{transform: `rotate(${t.value * 90}deg)`}">mdi-monitor</v-icon>
+              </v-btn>
+            </v-btn-toggle>
+          </div>
+          <div class="d-flex align-center ga-3">
+            <span class="text-body-2 text-medium-emphasis">Flip</span>
+            <v-btn-toggle :model-value="flipMode" mandatory divided variant="outlined" density="comfortable"
+                          @update:model-value="setFlip">
+              <v-btn :value="0" title="No flip" :disabled="!win || !canFlip">No</v-btn>
+              <v-btn :value="1" title="Left-right" :disabled="!win || !canFlip">
+                <v-icon>mdi-reflect-horizontal</v-icon>
+              </v-btn>
+              <v-btn :value="2" title="Top-bottom" :disabled="!win || !canFlip">
+                <v-icon>mdi-reflect-vertical</v-icon>
+              </v-btn>
+            </v-btn-toggle>
           </div>
         </div>
-      </div>
-      <v-spacer style="height: 20px"></v-spacer>
-      <div class="d-flex justify-center align-center mb-4">
-        <div>
-          <h2>Graphics Feature Status</h2>
-          <ul class="ms-10">
-            <li v-for="(value, key) in gpu" :key="key">
-              {{ gpuFeatureLabels[key] || key }}:
-              <span :style="{color: gpuStatusColors[(gpuStatusLabels[value] || {color: 'red'}).color].value}">
-                {{ (gpuStatusLabels[value] || {label: 'Unknown'}).label }}
-              </span>
-            </li>
-          </ul>
-        </div>
-      </div>
+      </template>
     </v-card>
-    <ScreenControl />
-    <TouchMapping />
+
+    <template v-if="selectedName">
+      <ScreenControl :screen="selectedName" />
+      <TouchMapping :output="selectedName" />
+    </template>
   </div>
 </template>
 
 <script setup>
-import {api} from '@/api'
+import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {api, canCall} from '@/api'
 import ScreenControl from '@/components/ScreenControl.vue'
 import TouchMapping from '@/components/TouchMapping.vue'
-import {computed, ref, watch} from 'vue'
-import {useTheme} from 'vuetify'
 
-const theme = useTheme()
+// The viewer of this node: its windows sit on this node's outputs, the only ones turned, mirrored or set here
+const LOCAL_VIEWER = 'local-webview'
 
-const textColor = computed(() => theme.global.current.value.colors['on-background'])
-const screenBGColor = computed(() => theme.global.current.value.colors['primary'])
-const screenFGColor = computed(() => theme.global.current.value.colors['secondary'])
-const isDark = computed(() => theme.global.current.value.dark)
+const user = api.Settings.Security.current_user.use()
+const canSetMode = computed(() => canCall('Settings/Display/Outputs/set_mode', user.value))
+const canConfirm = computed(() => canCall('Settings/Display/Outputs/confirm_mode', user.value))
+const canReset = computed(() => canCall('Settings/Display/Outputs/reset_output', user.value))
+const canIdentify = computed(() => canCall('Settings/Display/Screens/identify', user.value))
+const canTurn = computed(() => canCall('Settings/Display/set_orientation', user.value))
+const canFlip = computed(() => canCall('Settings/Display/set_flip', user.value))
 
-// Vuetify's static text-yellow utility class (Material "yellow", #FFEB3B) is
-// illegible on a light background regardless of theme - chrome://gpu itself
-// avoids exactly this by keying its --yellow CSS var off light/dark (see
-// content/browser/resources/gpu/info_view.html): a dark, muted olive in
-// light mode, a bright yellow in dark mode. Mirrored here, but keyed off
-// this app's own theme switcher rather than prefers-color-scheme, since the
-// user can override the OS preference in-app.
-const gpuStatusColors = {
-  green:  computed(() => isDark.value ? '#0F0' : '#080'),
-  yellow: computed(() => isDark.value ? '#FF0' : '#880'),
-  red:    computed(() => '#f00'),
-}
+// Outputs of this node (Settings/Display/Outputs/outputs), pushed on every change
+const outputs = ref([])
+// The output picked on the page; falls back to the first one when it is gone
+const picked = ref(null)
+const selectedName = computed(() => outputs.value.some(o => o.name === picked.value) ? picked.value : (outputs.value[0]?.name ?? null))
+const output = computed(() => outputs.value.find(o => o.name === selectedName.value) ?? null)
 
-// Ported from Chromium's own content/browser/resources/gpu/info_view.ts
-// (appendFeatureInfo_'s featureLabelMap/statusMap) so labels/colors match
-// chrome://gpu exactly instead of being guessed at.
-const gpuFeatureLabels = {
-  '2d_canvas': 'Canvas',
-  'gpu_compositing': 'Compositing',
-  'webgl': 'WebGL',
-  'multisampling': 'WebGL multisampling',
-  'texture_sharing': 'Texture Sharing',
-  'video_decode': 'Video Decode',
-  'rasterization': 'Rasterization',
-  'opengl': 'OpenGL',
-  'metal': 'Metal',
-  'vulkan': 'Vulkan',
-  'multiple_raster_threads': 'Multiple Raster Threads',
-  'native_gpu_memory_buffers': 'Native GpuMemoryBuffers',
-  'protected_video_decode': 'Hardware Protected Video Decode',
-  'surface_control': 'Surface Control',
-  'vpx_decode': 'VPx Video Decode',
-  'canvas_oop_rasterization': 'Canvas out-of-process rasterization',
-  'raw_draw': 'Raw Draw',
-  'video_encode': 'Video Encode',
-  'direct_rendering_display_compositor': 'Direct Rendering Display Compositor',
-  'webgpu': 'WebGPU',
-  'skia_graphite': 'Skia Graphite',
-  'webnn': 'WebNN',
-  'trees_in_viz': 'TreesInViz',
-  'webgpu_on_vk_via_gl_interop': 'WebGPU interop',
-}
-const gpuStatusLabels = {
-  'disabled_software': {label: 'Software only. Hardware acceleration disabled', color: 'yellow'},
-  'disabled_off': {label: 'Disabled', color: 'red'},
-  'disabled_off_ok': {label: 'Disabled', color: 'yellow'},
-  'unavailable_software': {label: 'Software only, hardware acceleration unavailable', color: 'yellow'},
-  'unavailable_off': {label: 'Unavailable', color: 'red'},
-  'unavailable_off_ok': {label: 'Unavailable', color: 'yellow'},
-  'enabled_readback': {label: 'Hardware accelerated but at reduced performance', color: 'yellow'},
-  'enabled_force': {label: 'Hardware accelerated on all pages', color: 'green'},
-  'enabled': {label: 'Hardware accelerated', color: 'green'},
-  'enabled_on': {label: 'Enabled', color: 'green'},
-  'enabled_force_on': {label: 'Force enabled', color: 'green'},
-}
+// Windows of the local viewer (Viewers/list): the window of an output is the one whose screen_name is its name
+const windows = ref([])
+const win = computed(() => windows.value.find(w => w.screen_name === selectedName.value) ?? null)
+const turn = ref(0)        // quarter turns of the selected window
+const flipMode = ref(0)    // 0 none, 1 left-right, 2 top-bottom
 
-const gpu = ref({})
-const allowInsecureCerts = ref(false)
-// Set once the switch has been changed here, to show the "restart the viewer"
-// notice only when there is actually a pending change to apply.
-const allowInsecureCertsDirty = ref(false)
-const displays = ref([])
-const orientation = ref(0)
-const flip = ref(0)
-const currentViewerId = ref(null)
+const turns = [
+  {value: 0, title: '0°'},
+  {value: 1, title: '90° clockwise'},
+  {value: 2, title: '180°'},
+  {value: 3, title: '90° counter-clockwise'},
+]
 
-const window_bound_rect = ref({})
+const resolutionOf = m => `${m.width}x${m.height}`
+const formatHz = mhz => `${Number((mhz / 1000).toFixed(2))} Hz`
+const currentRes = computed(() => output.value?.current ? resolutionOf(output.value.current) : null)
+// Locked when the output is off or has no mode, or when the user may not change modes: disabled, not hidden
+const modeLocked = computed(() => !canSetMode.value || !output.value?.enabled || !output.value?.current)
 
-const svg = ref({viewbox: "0 0 1000 1000", disabled: true})
-
-watch(displays, (_displays) => {
-    if (!_displays.length) {
-      svg.value = {viewbox: '0 0 1000 1000', disabled: true}
-    } else {
-      let w = 0, h = 0;
-      for (const disp of _displays) {
-        disp.margin = Math.min(disp.width, disp.height) * 0.025;
-        w = Math.max(w, disp.x + disp.width)
-        h = Math.max(h, disp.y + disp.height)
-      }
-      svg.value = {viewbox: `0 0 ${w} ${h}`, disabled: false}
-    }
+const resolutionItems = computed(() => {
+  const seen = new Map()
+  for (const m of output.value?.modes ?? []) {
+    if (!seen.has(resolutionOf(m))) seen.set(resolutionOf(m), {title: resolutionOf(m), value: resolutionOf(m), area: m.width * m.height})
   }
-)
+  return [...seen.values()].sort((a, b) => b.area - a.area)
+})
 
+const refreshItems = computed(() => {
+  const rates = new Set()
+  for (const m of output.value?.modes ?? []) {
+    if (resolutionOf(m) === currentRes.value) rates.add(m.refresh_mhz)
+  }
+  return [...rates].sort((a, b) => b - a).map(mhz => ({title: formatHz(mhz), value: mhz}))
+})
 
-function setAllowInsecureCerts(value) {
-  allowInsecureCertsDirty.value = true;
-  api.Settings.Display.set_allow_insecure_certs({allow: value});
+function setMode(mode) {
+  api.Settings.Display.Outputs.set_mode({name: output.value.name, width: mode.width, height: mode.height, refresh_mhz: mode.refresh_mhz})
 }
 
-// getDisplays/getBounds/getOrientation/getFlip all require a viewer_id -
-// resolve it first (defaulting to the first known viewer, usually the
-// local one) before fetching anything that depends on it.
-api.Settings.Display.gpu_feature_stats.on(data => {
-  gpu.value = data.features;
-}, {init: true})
+// A new resolution comes with its preferred refresh rate, or the highest one the output lists for it
+function setResolution(value) {
+  if (!value || value === currentRes.value) return
+  const modes = output.value.modes.filter(m => resolutionOf(m) === value)
+  if (!modes.length) return
+  setMode(modes.find(m => m.preferred) ?? modes.reduce((a, b) => (b.refresh_mhz > a.refresh_mhz ? b : a)))
+}
 
-api.Settings.Display.allow_insecure_certs.on(data => {
-  allowInsecureCerts.value = data.allow;
+function setRefresh(mhz) {
+  const cur = output.value?.current
+  if (!cur || mhz === cur.refresh_mhz) return
+  setMode({width: cur.width, height: cur.height, refresh_mhz: mhz})
+}
+
+// The server reverts a new mode after 15 s unless it is confirmed: the countdown follows revert_at (Unix seconds)
+const now = ref(Date.now() / 1000)
+let clock = null
+onMounted(() => { clock = setInterval(() => { now.value = Date.now() / 1000 }, 1000) })
+onBeforeUnmount(() => clearInterval(clock))
+const remaining = computed(() => Math.max(0, Math.ceil((output.value?.pending?.revert_at ?? 0) - now.value)))
+
+function keep() {
+  api.Settings.Display.Outputs.confirm_mode({name: output.value.name})
+}
+
+function reset() {
+  api.Settings.Display.Outputs.reset_output({name: output.value.name})
+}
+
+function identify() {
+  api.Settings.Display.Screens.identify({name: selectedName.value})
+}
+
+// Turn and mirror of the selected window: the replies carry the new value, the getters re-read it after a change
+function readTurn() {
+  if (!win.value) return
+  const args = {viewer_id: LOCAL_VIEWER, window_id: win.value.window_id}
+  api.Settings.Display.orientation(args)
+  api.Settings.Display.flip(args)
+}
+
+function syncTurn() {
+  turn.value = win.value?.orientation ?? 0
+  flipMode.value = win.value?.flip ?? 0
+  readTurn()
+}
+
+function setTurn(value) {
+  if (!win.value || value === null) return
+  api.Settings.Display.set_orientation({viewer_id: LOCAL_VIEWER, window_id: win.value.window_id, orientation: value})
+}
+
+function setFlip(value) {
+  if (!win.value || value === null) return
+  api.Settings.Display.set_flip({viewer_id: LOCAL_VIEWER, window_id: win.value.window_id, flip: value})
+}
+
+watch(selectedName, syncTurn)
+
+api.Settings.Display.Outputs.outputs.on(data => {
+  outputs.value = data.outputs
+  readTurn()
 }, {init: true})
 
 api.Viewers.list.on(data => {
-  // Re-broadcast whenever a webview's screens/windows change (see
-  // webview.app.WebviewApp._notify_screens_changed), not just once at
-  // page load - re-fetch so a hot-plugged/unplugged monitor shows up
-  // here immediately instead of only after a manual refresh. Keep the
-  // current viewer selected as long as it's still around; only pick a
-  // new one if none was selected yet or the selected one disconnected.
-  const ids = Object.keys(data.viewers || {});
-  if (!currentViewerId.value || !ids.includes(currentViewerId.value)) {
-    currentViewerId.value = ids.includes('local-webview') ? 'local-webview' : (ids[0] || null);
-  }
-  if (currentViewerId.value) {
-    api.Settings.Display.displays({viewer_id: currentViewerId.value});
-    api.Settings.Display.bounds({viewer_id: currentViewerId.value, window_id: 0});
-    api.Settings.Display.orientation({viewer_id: currentViewerId.value, window_id: 0});
-    api.Settings.Display.flip({viewer_id: currentViewerId.value, window_id: 0});
-  }
+  windows.value = data.viewers?.[LOCAL_VIEWER]?.windows ?? []
+  syncTurn()
 }, {init: true})
 
-api.Settings.Display.displays.on(data => {
-  displays.value = data.displays;
-})
-
-api.Settings.Display.bounds.on(data => {
-  window_bound_rect.value = data;
-})
-
 api.Settings.Display.orientation.on(data => {
-  orientation.value = data.orientation;
+  turn.value = data.orientation
 })
 
 api.Settings.Display.flip.on(data => {
-  flip.value = data.flip;
+  flipMode.value = data.flip
 })
 </script>
-
-<style scoped>
-svg rect {
-  rx: 50px;
-}
-
-svg text {
-  font-size: 150px;
-  text-anchor: middle;
-  dominant-baseline: middle;
-}
-</style>

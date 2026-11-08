@@ -26,7 +26,7 @@ LOCAL_VIEWER = 'local-webview'      # how the viewer of this very node is known 
 # the per-window settings of viewer_settings.json that travel with a node's windows (each is keyed "<viewer id>|<screen name>")
 # an output's name as a connector gives it (`HDMI-A-1`, `DP-2`): what a screen may be called in a transfer
 _SCREEN_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:+-]{0,63}')
-WINDOW_FIELDS = ('audio_outputs', 'keyboards', 'orientations', 'flips', 'screensavers', 'refreshes', 'languages')
+WINDOW_FIELDS = ('audio_outputs', 'keyboards', 'orientations', 'flips', 'screensavers', 'refreshes', 'languages', 'modes')
 
 
 def _vm():
@@ -126,8 +126,8 @@ def apply_windows(windows: dict, viewer_id: str, id_map: dict[str, str]) -> Call
     left out, never the transfer. Returns the function that puts everything back as it was."""
     from pydantic import ValidationError
     from utils.models.layout import WindowLayout, window_layouts
-    from utils.models.viewer import (KeyboardSettings, RefreshSettings, ScreensaverSettings, valid_language, viewer_settings)
-    models = {'keyboards': KeyboardSettings, 'screensavers': ScreensaverSettings, 'refreshes': RefreshSettings}
+    from utils.models.viewer import (KeyboardSettings, OutputMode, RefreshSettings, ScreensaverSettings, valid_language, viewer_settings)
+    models = {'keyboards': KeyboardSettings, 'screensavers': ScreensaverSettings, 'refreshes': RefreshSettings, 'modes': OutputMode}
     before = {name: dict(getattr(viewer_settings, name)) for name in WINDOW_FIELDS}
     layouts_before = dict(window_layouts.windows)
 

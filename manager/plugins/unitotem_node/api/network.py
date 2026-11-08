@@ -142,7 +142,8 @@ class Network(WSAPIBase):
         Add (or update) a WiFi profile and immediately activate it.
         Handles DHCP and static IP configurations.
         """
-        from unitotem_node.system.network.networkmanager import connect_wifi, get_devices, get_active_connections
+        from unitotem_node.system.network.networkmanager import connect_wifi, get_devices, get_active_connections, InvalidIPSettings
+        from unitotem_node.system.network.wifi import InvalidWifiSettings
         try:
             uid = await connect_wifi(
                 ssid=ssid, password=password,
@@ -159,6 +160,10 @@ class Network(WSAPIBase):
             yield WSBroadcast(Network.devices, devices=await get_devices())
             yield WSBroadcast(Network.active_connections, active=await get_active_connections())
             yield WSBroadcast(connected_uuid=uid)
+        except InvalidIPSettings as e:
+            yield WSResponse(error='Invalid IP settings', extra=str(e))
+        except InvalidWifiSettings as e:
+            yield WSResponse(error='Invalid Wi-Fi settings', extra=str(e))
         except Exception as e:
             logger.error('Network.connectWifi failed: {}', e)
             yield WSResponse(error=str(e))
@@ -176,7 +181,8 @@ class Network(WSAPIBase):
                              password: Optional[str] = None,
                              unlock_bssid: bool = False):
         """Edit an existing connection profile in-place. `unlock_bssid` lets a Wi-Fi profile that was tied to one access point use the strongest one."""
-        from unitotem_node.system.network.networkmanager import edit_connection, get_all_connections
+        from unitotem_node.system.network.networkmanager import edit_connection, get_all_connections, InvalidIPSettings
+        from unitotem_node.system.network.wifi import InvalidWifiSettings
         try:
             await edit_connection(
                 conn_path=conn_path, conn_id=conn_id,
@@ -186,6 +192,10 @@ class Network(WSAPIBase):
                 ssid=ssid, password=password, unlock_bssid=unlock_bssid,
             )
             return WSBroadcast(connections=await get_all_connections())
+        except InvalidIPSettings as e:
+            return WSResponse(error='Invalid IP settings', extra=str(e))
+        except InvalidWifiSettings as e:
+            return WSResponse(error='Invalid Wi-Fi settings', extra=str(e))
         except Exception as e:
             logger.error('Network.editConnection failed: {}', e)
             return WSResponse(error=str(e))

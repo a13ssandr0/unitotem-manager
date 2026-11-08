@@ -1,5 +1,6 @@
 __all__ = ["Audio"]
 
+import math
 from typing import Optional
 
 from loguru import logger
@@ -30,8 +31,11 @@ class Audio(WSAPIBase):
 
     @UserPerms.requires.audio
     def set_volume(self, volume: float, device: Optional[str] = None):
-        """`device` None means the default one."""
-        set_volume(device, volume)
+        """`device` None means the default one. Volume is a 0.0-1.0 level: values outside it are clamped; NaN, infinity and
+        non-numbers are refused (ValueError) before anything is sent to Pulse."""
+        if isinstance(volume, bool) or not isinstance(volume, (int, float)) or not math.isfinite(volume):
+            raise ValueError(f'{volume!r} is not a volume')
+        set_volume(device, min(max(float(volume), 0.0), 1.0))
         return self.devices()
 
     @UserPerms.requires.audio

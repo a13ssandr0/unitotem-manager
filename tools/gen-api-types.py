@@ -8,21 +8,35 @@ and argument checking for `api.Settings.Audio.volume({...})`. Run it after addin
     .venv/bin/python tools/gen-api-types.py
 """
 import asyncio
+import contextlib
 import pathlib
+import shutil
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.argv = sys.argv[:1]
 sys.path.insert(0, str(ROOT / 'manager'))
-# importing the API builds the upload manager, which wants an event loop and its folder
-asyncio.set_event_loop(asyncio.new_event_loop())
-pathlib.Path.mkdir = lambda *a, **k: None
-# ... and the folder is not created (see above): measure the root filesystem instead of failing on a dev host
-import shutil  # noqa: E402
-_disk_usage = shutil.disk_usage
-shutil.disk_usage = lambda path: _disk_usage(path if pathlib.Path(path).exists() else '/')
 
-from api.ws.endpoints import api  # noqa: E402
+
+@contextlib.contextmanager
+def _no_folders_during_import():
+    """The import builds the upload manager at module level (utils/storage/uploadmanager.py): it creates its folder
+    and reads the disk size of that folder. Both are replaced only for the import and restored afterwards; the
+    folder is not created and the disk size is taken from `/` when the folder does not exist."""
+    real_mkdir, real_disk_usage = pathlib.Path.mkdir, shutil.disk_usage
+    pathlib.Path.mkdir = lambda *a, **k: None
+    shutil.disk_usage = lambda path: real_disk_usage(path if pathlib.Path(path).exists() else '/')
+    try:
+        yield
+    finally:
+        pathlib.Path.mkdir = real_mkdir
+        shutil.disk_usage = real_disk_usage
+
+
+# the API needs an event loop at import
+asyncio.set_event_loop(asyncio.new_event_loop())
+with _no_folders_during_import():
+    from api.ws.endpoints import api  # noqa: E402
 
 
 def ts_type(schema: dict, defs: dict) -> str:

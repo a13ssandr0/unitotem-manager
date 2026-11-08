@@ -1,7 +1,9 @@
 #!/usr/bin/make -f
 # The CEF wheel is built separately (heavy, occasional: see vendor/cefpython) and consumed here.
 CEF_WHEEL_DIR ?= vendor/cefpython-wheels
-PYTAG := cp$(subst .,,$(shell python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])'))
+# Python of the wheel: 3.13 (trixie), the same as debian/control and tools/build-cef-wheels.sh
+CEF_PYTHON ?= 3.13
+PYTAG := cp$(subst .,,$(CEF_PYTHON))
 SHARE := debian/unitotem-manager/usr/share/unitotem-manager
 NODE := debian/unitotem-node/usr/share/unitotem-manager
 VIEWER := debian/unitotem-viewer/usr/share/unitotem-manager

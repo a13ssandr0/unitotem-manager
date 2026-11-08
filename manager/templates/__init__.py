@@ -1,4 +1,5 @@
 import json
+import re
 from functools import cache
 from pathlib import Path
 from platform import freedesktop_os_release as os_release
@@ -37,6 +38,19 @@ templates.env.filters['flatten'] = flatten
 for file in ['base.html', 'first-boot.html.j2', 'no-assets.html.j2', 'errors/error.html.j2']:
     with open(Path(__file__).parent.joinpath(file).resolve()) as f:
         files[file] = f.read()
+
+
+# An output name as the compositor reports it (HDMI-A-1, DP-2, Virtual-1); anything else is not shown
+_SCREEN_NAME = re.compile(r'[A-Za-z0-9._-]{1,64}')
+_SCREEN_INDEX = re.compile(r'[0-9]{1,3}')
+
+
+def screen_context(screen: str = '', index: str = '') -> dict:
+    """What the local viewer adds to the internal pages when more than one screen is connected: the output name and the
+    screen's number (1-based). Nothing is added for anything else, so a page of one screen renders exactly as before."""
+    if _SCREEN_NAME.fullmatch(screen) and _SCREEN_INDEX.fullmatch(index) and int(index) >= 1:
+        return {'screen_label': f'Screen {int(index)}: {screen}'}
+    return {}
 
 
 @cache

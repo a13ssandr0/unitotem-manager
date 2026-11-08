@@ -19,6 +19,26 @@ import asyncio  # noqa: E402
 
 asyncio.set_event_loop(asyncio.new_event_loop())
 
+# The env file (hotspot_uuid, auth token) is read and written at import time: point it into a temp folder before any
+# product module is imported, so no test reads or writes /etc/unitotem/unitotem.env.
+import atexit  # noqa: E402
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+
+from utils import constants as _constants  # noqa: E402
+from utils.models.command_line import cmdargs as _cmdargs  # noqa: E402
+
+_env_dir = Path(tempfile.mkdtemp(prefix='unitotem-test-env-'))
+atexit.register(shutil.rmtree, _env_dir, True)
+_cmdargs.__dict__['envfile'] = _env_dir / 'unitotem.env'
+_constants.envfile = _env_dir / 'unitotem.env'
+# Module-level singletons (assets, screen control, remote, users) load their file at import: none of them may read the real /etc/unitotem.
+for _name in ('assets_file', 'users_file', 'remote_file'):
+    _cmdargs.__dict__[_name] = _env_dir / f'{_name}.json'
+# Uploads (and the transfer staging beside them) live under the temp folder too.
+_constants.uploads_folder = _env_dir / 'uploaded'
+_cmdargs.__dict__['uploads_folder'] = _constants.uploads_folder
+
 FIXTURES = Path(__file__).parent / 'fixtures'
 
 
@@ -43,3 +63,10 @@ def _notifications_in_tmp(tmp_path, monkeypatch):
     monkeypatch.setattr(notifications, '_items', [])
     monkeypatch.setattr(notifications, '_loaded', True)
     monkeypatch.setattr(notifications, '_loop', None)
+
+
+@pytest.fixture(autouse=True)
+def _users_file_in_tmp(tmp_path, monkeypatch):
+    """users.json (and security.json beside it) never resolve to the real /etc/unitotem during a test."""
+    from utils.models.command_line import cmdargs
+    monkeypatch.setitem(cmdargs.__dict__, 'users_file', tmp_path / 'etc-users.json')

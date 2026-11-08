@@ -110,6 +110,7 @@ class UploadManager(FileSystemEventHandler):
                 out_filename = infile.filename
 
         out_filename = self.create_filename(out_filename)
+        self.mkdirs()  # the folder may be missing: created before the file is opened, the stream is not read yet
         try:
             async with aopen(out_filename, 'wb') as out:
                 if iscoroutinefunction(infile.read):
@@ -118,9 +119,10 @@ class UploadManager(FileSystemEventHandler):
                 else:
                     while buf := infile.read(_buf_size):
                         await out.write(buf)
-        except FileNotFoundError:
-            self.mkdirs()  # create directory if not exists
-            return await self.save(infile, out_filename)
+        except BaseException:
+            # the stream may be half read, so a retry would store a truncated file: the partial file goes, the error stays
+            out_filename.unlink(missing_ok=True)
+            raise
 
         file_data = get_file_info(out_filename)
         from utils.models.playlists import playlists_manager

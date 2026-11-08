@@ -123,7 +123,7 @@
     </main>
 
     <div class="sysinfo">
-        <p style="font-size: 1vw; margin-block:0;">UniTotem {{ut_vers}}<br>Running on {{os_vers}}<br>IP address: <span id="ip">{{ip_addr}}</span><br>Hostname: {{hostname}}</p>
+        <p style="font-size: 1vw; margin-block:0;">UniTotem {{ut_vers}}<br>Running on {{os_vers}}<br>IP address: <span id="ip">{{ip_addr}}</span><br>{% if screen_label %}{{screen_label}}<br>{% endif %}Hostname: {{hostname}}</p>
     </div>
 <script>
     // the address is pushed by the manager when the network changes (DHCP can finish after this page was drawn)

@@ -132,7 +132,10 @@ async def on_first_boot():
     try:
         if not default_ipv4():
             ssid, passwd = await start_hotspot()
-            logger.info(f'Not connected to any network, started fallback hotspot {ssid} with password {passwd}.')
+            if ssid:
+                logger.info(f'Not connected to any network, started fallback hotspot {ssid} with password {passwd}.')
+            else:
+                logger.error("Couldn't start wifi hotspot: start_hotspot returned no network")
     except Exception as e:
         logger.error(f"Couldn't start wifi hotspot: {e}")
 
@@ -186,19 +189,6 @@ def _export_audio():
         return None         # no sound server on this machine
 
 
-def _export_netplan():
-    from .system.network.netplan import get_netplan_file, get_netplan_file_list
-    return {name: get_netplan_file(name) for name in get_netplan_file_list()}
-
-
-def _restore_netplan(files, _version):
-    from .system.network.netplan import generate_netplan, set_netplan
-    set_netplan(filename=None, file_content=files, apply=False)
-    result = generate_netplan()
-    if isinstance(result, str):
-        raise ValueError(result)
-
-
 def _export_timers():
     from .models.timers import timer_manager
     return [t.model_dump() for t in timer_manager.timers.values()]
@@ -216,29 +206,101 @@ def _reset_timers():
     timer_manager.save()
 
 
+def _checked(value, what: str) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f'{what} is not a list of entries')
+    return value
+
+
 def _export_touch():
     from .models.touch_map import touch_map
-    return dict(touch_map.mapping)
+    return {'mapping': dict(touch_map.mapping), 'orientation': dict(touch_map.orientation),
+            'calibration': {k: list(m) for k, m in touch_map.calibration.items()}}
 
 
-def _restore_touch(mapping, _version):
+def _restore_touch(data, _version):
+    """Every entry is validated by the model's own setters before anything is stored. An archive from before the
+    orientation and the calibration were backed up is the flat mapping of device to output."""
     from .models.touch_map import TouchMap, touch_map
-    touch_map.mapping = TouchMap(mapping=mapping).mapping       # validated like any other write
+    data = _checked(data, 'The touch mapping')
+    if not isinstance(data.get('mapping'), dict):
+        data = {'mapping': data}
+    fresh = TouchMap()
+    for key, output in _checked(data.get('mapping', {}), 'The mapping').items():
+        if not isinstance(output, str):
+            raise ValueError(f'{key}: the output is not a name')
+        fresh.set(key, output)
+    for key, turn_flip in _checked(data.get('orientation', {}), 'The orientation').items():
+        if not isinstance(turn_flip, dict):
+            raise ValueError(f'{key}: the orientation is not turn and flip')
+        fresh.set_orientation(key, turn_flip.get('turn'), turn_flip.get('flip'))
+    for key, matrix in _checked(data.get('calibration', {}), 'The calibration').items():
+        fresh.set_calibration(key, matrix)          # a calibration replaces the orientation of its panel
+    touch_map.mapping, touch_map.orientation, touch_map.calibration = fresh.mapping, fresh.orientation, fresh.calibration
     touch_map.save()
+    _touch_changed()
 
 
 def _reset_touch():
     from .models.touch_map import touch_map
-    touch_map.mapping = {}
+    touch_map.mapping, touch_map.orientation, touch_map.calibration = {}, {}, {}
     touch_map.save()
+    _touch_changed()
+
+
+def _touch_changed():
+    """The touch input follows the stored mapping: applied now when the loop runs, else at the next start."""
+    from .system.touch_service import touch_service
+    try:
+        asyncio.get_running_loop().create_task(touch_service.refresh())
+    except RuntimeError:
+        pass        # no loop: the next start applies the stored mapping
+
+
+# The configuration of each output (mechanism, Wake-on-LAN, serial, GPIO, CEC adapter). The probe results (DDC bus,
+# advertised inputs, identity) describe the machine the archive was taken on: they are never restored, the local ones stay.
+_SCREEN_PROBE_FIELDS = ('identity', 'ddc_bus', 'ddc_capabilities', 'ddc_features')
+
+
+def _screen_config(name: str, entry: dict, current):
+    """A validated output with the configuration of `entry` and the probe results this machine already has."""
+    from .models.screen_control import OutputConfig
+    if not isinstance(entry, dict):
+        raise ValueError(f'{name}: not an output configuration')
+    config = {k: v for k, v in entry.items() if k not in _SCREEN_PROBE_FIELDS}
+    probe = {f: getattr(current, f) for f in _SCREEN_PROBE_FIELDS} if current is not None else {}
+    return OutputConfig(**config, **probe)          # the model's validators refuse a bad value
+
+
+def _export_screens():
+    from .models.screen_control import screen_control
+    return {name: cfg.model_dump(exclude=set(_SCREEN_PROBE_FIELDS)) for name, cfg in screen_control.outputs.items()}
+
+
+def _restore_screens(outputs, _version):
+    from .models.screen_control import OUTPUT_NAME_RE, ScreenControl, screen_control
+    outputs = _checked(outputs, 'The screen outputs')
+    restored = {}
+    for name, entry in outputs.items():
+        if not OUTPUT_NAME_RE.fullmatch(name):
+            raise ValueError(f'{name!r} is not an output name')
+        restored[name] = _screen_config(name, entry, screen_control.outputs.get(name))
+    screen_control.outputs = ScreenControl(outputs=restored).outputs
+    screen_control.save()
+
+
+def _reset_screens():
+    from .models.screen_control import screen_control
+    screen_control.outputs = {name: _screen_config(name, {}, cfg) for name, cfg in screen_control.outputs.items()}
+    screen_control.save()
 
 
 BACKUP = (
     BackupPart('hostname', 'Hostname', lambda: socket.gethostname(), _restore_hostname),
     BackupPart('audio', 'Default audio device', _export_audio, _restore_audio),
-    BackupPart('netplan', 'Network (netplan)', _export_netplan, _restore_netplan),
     BackupPart('timers', 'Timers', _export_timers, _restore_timers, _reset_timers),
-    BackupPart('touch', 'Touch screen mapping', _export_touch, _restore_touch, _reset_touch),
+    BackupPart('touch', 'Touch screens (mapping, orientation, calibration)', _export_touch, _restore_touch, _reset_touch),
+    BackupPart('screens', 'Screen power and control', _export_screens, _restore_screens, _reset_screens),
 )
 
 

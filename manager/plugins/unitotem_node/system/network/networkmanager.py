@@ -4,6 +4,8 @@ Full NetworkManager DBus wrapper using sdbus_async.networkmanager.
 Exposes high-level helpers for connection management, device state, and IP
 information — everything needed to replace the old netplan-based API.
 """
+import ipaddress
+import re
 import uuid as _uuid_mod
 from contextlib import contextmanager
 from typing import Optional
@@ -17,6 +19,8 @@ from sdbus_async.networkmanager import (
     DeviceType,
     DeviceState,
 )
+
+from unitotem_node.system.network.wifi import InvalidWifiSettings, check_passphrase, check_ssid
 
 try:
     from sdbus_async.networkmanager import NetworkDeviceGeneric
@@ -287,28 +291,50 @@ async def update_connection(conn_path: str, settings: dict):
         await nc.update(settings)
 
 
+IP_METHODS = ('auto', 'manual', 'link-local', 'disabled')
+
+
+class InvalidIPSettings(ValueError):
+    """IPv4 settings that cannot be applied; raised before anything is written to NetworkManager."""
+
+
+def _ipv4_address(value, what: str) -> bytes:
+    """The four bytes (network order) of an IPv4 address typed by a user."""
+    try:
+        if not isinstance(value, str):
+            raise ValueError
+        return ipaddress.IPv4Address(value).packed
+    except ValueError:
+        raise InvalidIPSettings(f'{value!r} is not an IPv4 {what}') from None
+
+
 def _build_ipv4_section(method: str, address: Optional[str],
                          prefix: int, gateway: Optional[str],
                          dns: Optional[list[str]]) -> dict:
-    """Build the ipv4 section of NM connection settings."""
-    if method == 'manual' and address:
-        dns_uints = []
-        for d in (dns or []):
-            try:
-                octets = list(map(int, d.split('.')))
-                # NM wants the address bytes in memory order, i.e. a little-endian uint32 on every machine we run on
-                dns_uints.append(int.from_bytes(bytes(octets), 'little'))
-            except Exception:
-                pass
-        return {
-            'method'      : ('s', 'manual'),
-            'address-data': ('aa{sv}', [
-                {'address': ('s', address), 'prefix': ('u', prefix)}
-            ]),
-            'gateway'     : ('s', gateway or ''),
-            'dns'         : ('au', dns_uints),
-        }
-    return {'method': ('s', method)}
+    """Build the ipv4 section of NM connection settings. Invalid values raise InvalidIPSettings."""
+    if method not in IP_METHODS:
+        raise InvalidIPSettings(f'{method!r} is not one of {list(IP_METHODS)}')
+    if method != 'manual':
+        return {'method': ('s', method)}
+    if not address:
+        raise InvalidIPSettings('static configuration needs an address')
+    _ipv4_address(address, 'address')
+    if isinstance(prefix, bool) or not isinstance(prefix, int) or not 1 <= prefix <= 32:
+        raise InvalidIPSettings(f'{prefix!r} is not a prefix length (1-32)')
+    if gateway:
+        _ipv4_address(gateway, 'gateway')
+    dns_uints = []
+    for d in (dns or []):
+        # NM wants the address bytes in memory order, i.e. a little-endian uint32 on every machine we run on
+        dns_uints.append(int.from_bytes(_ipv4_address(d, 'DNS server'), 'little'))
+    return {
+        'method'      : ('s', 'manual'),
+        'address-data': ('aa{sv}', [
+            {'address': ('s', address), 'prefix': ('u', prefix)}
+        ]),
+        'gateway'     : ('s', gateway or ''),
+        'dns'         : ('au', dns_uints),
+    }
 
 
 async def connect_wifi(ssid: str,
@@ -323,8 +349,14 @@ async def connect_wifi(ssid: str,
                        dns: Optional[list[str]] = None) -> str:
     """
     Add (or update) a WiFi connection and immediately activate it.
-    Returns the connection UUID.
+    Returns the connection UUID. Raises InvalidWifiSettings before anything is written if the SSID or passphrase is out of range.
     """
+    check_ssid(ssid)
+    if password:
+        check_passphrase(password, allow_raw_key=True)
+    if bssid and not re.fullmatch(r'[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}', bssid):
+        raise InvalidWifiSettings(f'{bssid!r} is not a BSSID')
+
     uid = conn_uuid or str(_uuid_mod.uuid4())
 
     settings: dict = {
@@ -384,6 +416,11 @@ async def edit_connection(conn_path: str,
     Partially update a connection's settings.
     Only the provided fields are changed; others are left untouched.
     """
+    if ssid is not None:
+        check_ssid(ssid)
+    if password is not None:
+        check_passphrase(password, allow_raw_key=True)
+
     with open_system_bus() as bus:
         nc = NetworkConnectionSettings(conn_path, bus)
         raw = await nc.get_settings()

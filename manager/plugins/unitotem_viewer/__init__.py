@@ -17,9 +17,15 @@ def run_gui(on_quit) -> bool:
     libraries are missing), in which case the server just carries on without a local display."""
     global _app
     try:
-        from .app import WebviewApp
+        from .app import WebviewApp, cef
     except ImportError as exc:
         logger.warning('Viewer unavailable ({}), running without a local display', exc)
+        ready.ready('no viewer')
+        return False
+    # app.py imports cefpython3 without failing and WebviewApp() raises ImportError later, outside this function's
+    # import guard: check here so that a missing CEF takes the same fallback
+    if cef is None:
+        logger.warning('Viewer unavailable (cefpython3 is not installed), running without a local display')
         ready.ready('no viewer')
         return False
 

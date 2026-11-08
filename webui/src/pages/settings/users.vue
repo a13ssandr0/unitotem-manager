@@ -46,6 +46,22 @@
       </v-card>
     </div>
 
+    <div class="d-flex justify-center" style="width: 100%">
+      <v-card class="ma-4" max-width="1000" width="100%" title="Certificates">
+        <v-card-text>
+          <v-switch :model-value="allowInsecureCerts" color="primary" density="compact" hide-details
+                    label="Accept invalid certificates for scheduled assets"
+                    @update:model-value="setAllowInsecureCerts"></v-switch>
+          <div class="text-caption text-medium-emphasis ms-10">
+            Off: https assets need a valid certificate. On: the connection is not authenticated, anyone on the path can change what is shown.
+          </div>
+          <div v-if="allowInsecureCertsDirty" class="text-caption text-warning ms-10 mt-1">
+            Applies after the viewer restarts.
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
+
     <v-dialog v-model="dialog" max-width="400px">
       <v-card>
         <v-card-title class="mt-2 ml-2">
@@ -191,6 +207,18 @@ const passwordSpec = api.Settings.Security.password_policy.use({pick: 'rules', i
 const loginUserList = api.Settings.Security.login_user_list.use({initial: {show: true}})
 
 const users = ref({})
+
+// Accept invalid certificates for the viewer (Settings/Display/allow_insecure_certs): stored now, applied at the viewer's start
+const allowInsecureCerts = ref(false)
+// Set once changed here, to show the restart note only when a change is pending
+const allowInsecureCertsDirty = ref(false)
+function setAllowInsecureCerts(value) {
+  allowInsecureCertsDirty.value = true
+  api.Settings.Display.set_allow_insecure_certs({allow: !!value})
+}
+api.Settings.Display.allow_insecure_certs.on(data => {
+  allowInsecureCerts.value = data.allow
+}, {init: true})
 
 const permissions = ref(['Scheduler', 'Audio', 'Power', 'Admin'])
 

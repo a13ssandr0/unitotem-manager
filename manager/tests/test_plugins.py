@@ -53,7 +53,8 @@ def test_old_backups_become_parts():
     parts = from_legacy(old)
     assert parts['playlists'] == {'playlists': {'a': {}}, 'default': 'a'}
     assert parts['users'] == {'root': {}}
-    assert (parts['hostname'], parts['audio'], parts['netplan']) == ('totem', 'sink', {'x.yaml': 'y'})
+    assert (parts['hostname'], parts['audio']) == ('totem', 'sink')
+    assert 'netplan' not in parts       # no part any more: an archive's netplan files are ignored
 
 
 def test_new_backups_are_left_alone():

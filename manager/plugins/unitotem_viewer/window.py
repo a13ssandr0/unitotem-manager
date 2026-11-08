@@ -10,6 +10,7 @@ import json
 import logging
 from typing import Optional
 from pathlib import Path
+from urllib.parse import urlencode
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QScreen
@@ -29,16 +30,21 @@ _FIT_NAMES  = ['contain', 'cover', 'fill']
 logger = logging.getLogger(__name__)
 
 DISPLAY_WAIT_MS, DISPLAY_WAIT_TRIES = 150, 40     # up to 6 s for the browser to know a new output
+IDENTIFY_MS = 5000                   # how long the name of a screen stays on it (Identify from the manager)
 FOCUS_DELAY_MS = 300                 # the new page's widget exists a moment after its load ends
 RECOVERY_BASE_MS, RECOVERY_MAX_MS = 200, 10000      # pause before reloading a page whose process died
 APP_ID = 'org.unitotem.viewer'       # xdg_toplevel.app_id of every window: what the compositor's rules can match
 
 _BOOT_URL = (Path(__file__).parent / 'static' / 'boot-screen.html').resolve().as_uri()
+_INTERNAL_PAGES = 'https://localhost/unitotem-'     # the idle pages the manager serves (no-assets, first-boot)
 
 
 class PageCommands:
     """What the manager asks of a window, done by calling the functions of boot-screen.html. Shared by the windows of both
     graphics stacks: they only have to provide `self._cef.execute_js`."""
+
+    screen_label = None     # (number, name) of the window's screen when more than one screen is connected, else None
+    _idle_shows: dict       # pane -> the arguments of its idle show(), to show it again when the screen label changes
 
     def show_asset(self, src: str, container: int, fit: int, bg_color: str,
                    volume: float = 1.0, muted: bool = False, zoom: float = 1.0,
@@ -51,6 +57,11 @@ class PageCommands:
         bg_color:  CSS colour string e.g. 'rgb(0,0,0)'
         idle:      there is nothing to play (the idle page): a screensaver has nothing to show
         """
+        if idle:
+            self._idle_shows[pane] = (src, container, fit, bg_color, volume, muted, zoom, allow_pinch_zoom, idle, pane)
+            src = self._with_screen_label(src)
+        else:
+            self._idle_shows.pop(pane, None)
         # A negative index means the media type is unknown: pass null so the
         # page probes the URL and decides for itself (see show() in
         # boot-screen.html). Falling back to 'boot' here instead, as this used
@@ -67,6 +78,28 @@ class PageCommands:
             f'{json.dumps(volume)}, {json.dumps(muted)}, {json.dumps(zoom)}, {json.dumps(bool(allow_pinch_zoom))}, '
             f'{json.dumps(bool(idle))}, {json.dumps(pane)})'
         )
+
+    def _with_screen_label(self, src: str) -> str:
+        """The idle page's address with the screen it is shown on: the page of a one-screen node is the same as ever."""
+        if self.screen_label is None or not src.startswith(_INTERNAL_PAGES):
+            return src
+        number, name = self.screen_label
+        return f"{src}{'&' if '?' in src else '?'}{urlencode({'screen': name, 'index': number})}"
+
+    def set_screen_label(self, number: Optional[int], name: str = ''):
+        """The screen's number (1-based) and output name, or None when only one screen is connected. The idle pages showing
+        now are shown again with it: they carry it in their address."""
+        label = (number, name) if number else None
+        if label == self.screen_label:
+            return
+        self.screen_label = label
+        for args in list(self._idle_shows.values()):
+            self.show_asset(*args[:8], idle=True, pane=args[9])
+
+    def identify(self, name: str, caption: str):
+        """Shows the name of the output and the screen's number over the whole window for IDENTIFY_MS, in the content of
+        the page (it turns and mirrors with it): boot-screen.html's identify()."""
+        self._cef.execute_js(f'identify({json.dumps(name)}, {json.dumps(caption)}, {IDENTIFY_MS})')
 
     def set_asset_audio(self, volume: float, muted: bool, pane: Optional[int] = None):
         """Change volume/mute of the asset being shown in a pane (None: the main one), without showing it again."""
@@ -236,6 +269,7 @@ class WebviewWindow(PageCommands):
         self._page_loaded = False           # boot-screen.html is there: its functions can be called
         self._display_id = None
         self._pending_js: list[str] = []
+        self._idle_shows: dict = {}
         self._loads = 0                     # how many times the page has finished loading: more than one is a reload
         self._recoveries = 0                # consecutive crashes without a page that stayed up
         self.closed = False

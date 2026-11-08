@@ -44,7 +44,7 @@ MAX_SESSIONS = 4
 IDLE_TIMEOUT = 15 * 60          # seconds without a keystroke
 LOGIN_PROGRAM = '/bin/login'
 NO_SHELL = ('nologin', 'false')
-_sessions: set[int] = set()
+_sessions: set = set()          # pids of open terminals, and a reserved slot while one is starting
 
 
 def _set_size(fd: int, cols: int, rows: int):
@@ -196,6 +196,13 @@ async def terminal(websocket: WebSocket):
         await websocket.close(1008, 'This account has no shell')
         return
 
+    # The limit is checked again and the slot taken with no await in between: the token read above lets other
+    # sockets pass the first check. The slot is held while the child starts, then replaced by its pid.
+    if len(_sessions) >= MAX_SESSIONS:
+        await websocket.close(1013, 'Too many open terminals')
+        return
+    slot = object()
+    _sessions.add(slot)
     sessions.track(websocket, user.name, user.sid)
     term = Terminal(websocket, user.name)
     try:
@@ -206,6 +213,8 @@ async def terminal(websocket: WebSocket):
         await websocket.close(1011, 'Cannot start the terminal')
         sessions.untrack(websocket)
         return
+    finally:
+        _sessions.discard(slot)
 
     started = time.monotonic()
     logger.info('Terminal opened by web user {} from {} (pid {})', user.name, peer, term.proc.pid)

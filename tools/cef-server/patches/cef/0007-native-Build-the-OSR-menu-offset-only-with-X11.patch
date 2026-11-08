@@ -1,4 +1,4 @@
-From 7000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 00071cd4e8cba5d85302f04b5380911c997483d4 Mon Sep 17 00:00:00 2001
 From: Alessandro Campolo <campolo.alex@gmail.com>
 Date: Sat, 31 Oct 2026 20:30:00 +0000
 Subject: [PATCH 7/7] native: Build the OSR menu offset only with X11

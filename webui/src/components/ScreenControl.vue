@@ -6,11 +6,11 @@
         Probe monitors
       </v-btn>
     </template>
-    <v-card-text v-if="!screens.length" class="text-medium-emphasis">
-      No screen is known. Screens appear here when the compositor reports an output, or once configured below.
+    <v-card-text v-if="!visible.length" class="text-medium-emphasis">
+      No screen is known.
     </v-card-text>
     <v-expansion-panels variant="accordion" multiple>
-      <v-expansion-panel v-for="screen in screens" :key="screen.name">
+      <v-expansion-panel v-for="screen in visible" :key="screen.name">
         <v-expansion-panel-title>
           <v-icon :color="screen.active && !screen.commanded_off ? 'green' : 'grey'" class="me-2">
             {{ screen.active && !screen.commanded_off ? 'mdi-monitor' : 'mdi-monitor-off' }}
@@ -128,10 +128,13 @@
 </template>
 
 <script setup>
-import {reactive, ref, watch} from 'vue'
+import {computed, reactive, ref, watch} from 'vue'
 import {api} from '@/api'
 
+// screen: the output name shown (one monitor per page section); null shows nothing
+const props = defineProps({screen: {type: String, default: null}})
 const screens = ref([])
+const visible = computed(() => screens.value.filter(s => s.name === props.screen))
 const probing = ref(false)
 const busy = reactive({})
 const method = reactive({})

@@ -229,8 +229,15 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { api } from '@/api'
+
+// The failure of a command arrives as a window event (base.vue shows the message); this runs `callback` for the target's failures
+function onApiError(target, callback) {
+  const listener = e => { if (e.detail.target === target) callback(e.detail) }
+  window.addEventListener('unitotem:api-error', listener)
+  onUnmounted(() => window.removeEventListener('unitotem:api-error', listener))
+}
 
 const state = ref({
   role: null, name: '', fingerprint: '', link_port: null, discovery: true,
@@ -308,10 +315,11 @@ api.Settings.Remote.mode.on(data => {
 
 api.Settings.Remote.probe.on(data => {
   probing.value = ''
-  if (data.error) return        // the page's error handler shows it
   probed.value = data
   adoptDialog.value = true
 })
+// base.vue shows the message; the button stops spinning
+onApiError('Settings/Remote/probe', () => { probing.value = '' })
 </script>
 
 <style scoped>

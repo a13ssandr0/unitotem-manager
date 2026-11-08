@@ -1,4 +1,5 @@
 from typing import Optional
+import re
 import time
 
 from pydantic import ValidationError
@@ -25,6 +26,9 @@ async def _refuse_suspend(timer: Timer) -> Optional[WSResponse]:
     except (suspend.SuspendRefused, wake.WakeError) as exc:
         return WSResponse(error='Cannot use this suspend timer', extra=str(exc))
     return None
+
+
+_UUID = re.compile(r'[0-9a-f]{32}')
 
 
 class Timers(WSAPIBase):
@@ -65,7 +69,10 @@ class Timers(WSAPIBase):
         yield self.jobs()
 
     def delete_job(self, uuid: str):
-        timer_manager.remove(uuid)
+        if not _UUID.fullmatch(uuid):
+            return WSResponse(error='Invalid job', extra='The job id is 32 lowercase hex digits')
+        if not timer_manager.remove(uuid):
+            return WSResponse(error='Not found', extra='Requested job does not exist')
         return self.jobs()
 
     async def edit_job(self, uuid: str, command: str = '', minute=None, hour=None, day_of_month=None, month=None,
@@ -88,9 +95,9 @@ class Timers(WSAPIBase):
             new = Timer(**{**old.model_dump(),
                            **{k: v for k, v in fields.items() if v is not None},
                            'action': command or old.action,
-                           'output': output or old.output,
+                           'output': old.output if output is None else (output or None),
                            'mechanism': mechanism or old.mechanism,
-                           'wake': wake or old.wake})
+                           'wake': old.wake if wake is None else (wake or None)})
         except ValidationError as exc:
             yield _invalid(exc)
             return

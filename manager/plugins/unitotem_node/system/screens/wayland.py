@@ -46,6 +46,16 @@ def transform_for(turn: int, flip: int) -> str:
 
 
 @dataclass(frozen=True)
+class Mode:
+    """One mode of an output. The refresh rate is in mHz (wlr-randr's own unit: 59.94 Hz is 59940), so it is exact."""
+    width: int
+    height: int
+    refresh_mhz: int
+    preferred: bool = False
+    current: bool = False
+
+
+@dataclass(frozen=True)
 class Output:
     name: str
     connected: bool
@@ -60,6 +70,33 @@ class Output:
     model: str = ''
     serial: str = ''
     enabled: bool = True          # driven by the compositor (blanking by power management leaves it enabled)
+    modes: tuple = ()             # the Mode entries with a refresh rate (the ones --mode can name), as the compositor lists them
+
+    @property
+    def current_mode(self) -> Optional[Mode]:
+        return next((m for m in self.modes if m.current), None)
+
+
+def mode_argument(width: int, height: int, refresh_mhz: int) -> str:
+    """The value of wlr-randr's `--mode`: WIDTHxHEIGHT@RATEHz. The rate is written in exact thousandths of a hertz (59940 is
+    59.940Hz), which wlr-randr reads back as the same 59940 mHz it lists."""
+    return f'{width}x{height}@{refresh_mhz // 1000}.{refresh_mhz % 1000:03d}Hz'
+
+
+def find_mode(modes, width: int, height: int, refresh_mhz: int) -> Optional[Mode]:
+    return next((m for m in modes if (m.width, m.height, m.refresh_mhz) == (width, height, refresh_mhz)), None)
+
+
+def _mode(raw) -> Optional[Mode]:
+    """A mode of `wlr-randr --json` ({width, height, refresh (Hz, float), preferred, current}), None when it cannot name one."""
+    try:
+        width, height = int(raw['width']), int(raw['height'])
+        refresh_mhz = round(float(raw.get('refresh') or 0) * 1000)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if width <= 0 or height <= 0 or refresh_mhz <= 0:
+        return None
+    return Mode(width, height, refresh_mhz, bool(raw.get('preferred')), bool(raw.get('current')))
 
 
 def parse_outputs(text: str, blanked: frozenset = frozenset()) -> list[Output]:
@@ -71,18 +108,20 @@ def parse_outputs(text: str, blanked: frozenset = frozenset()) -> list[Output]:
         return []
     found = []
     for entry in data if isinstance(data, list) else []:
-        mode = next((m for m in entry.get('modes', []) if m.get('current')), None)
+        raw_modes = [m for m in entry.get('modes') or [] if isinstance(m, dict)]
+        mode = next((m for m in raw_modes if m.get('current')), None)
         enabled = bool(entry.get('enabled')) and mode is not None
         position = entry.get('position') or {}
         transform = entry.get('transform') or 'normal'
         width, height = (mode['width'], mode['height']) if mode else (0, 0)
         if enabled and transform in ('90', '270', 'flipped-90', 'flipped-270'):
             width, height = height, width      # the rectangle the output covers in the layout is the rotated one
+        modes = tuple(m for m in map(_mode, raw_modes) if m is not None)
         found.append(Output(
             name=entry['name'], connected=True, active=enabled and entry['name'] not in blanked, enabled=enabled, width=width, height=height,
             x=int(position.get('x', 0)), y=int(position.get('y', 0)),
             rotation=_TRANSFORM_TO_ROTATION.get(transform, 'normal'), transform=transform,
-            make=entry.get('make') or '', model=entry.get('model') or '', serial=entry.get('serial') or ''))
+            make=entry.get('make') or '', model=entry.get('model') or '', serial=entry.get('serial') or '', modes=modes))
     return found
 
 
@@ -137,6 +176,34 @@ async def set_transform(name: str, transform: str):
     if transform not in TRANSFORMS:
         raise ValueError(f'Unknown transform {transform}')
     result = await run(['wlr-randr', '--output', name, '--transform', transform], timeout=15)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip() or f'wlr-randr exited with {result.returncode}')
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+async def set_mode(name: str, width: int, height: int, refresh_mhz: int):
+    """Switch one output to a mode the compositor lists for it now. Anything else is refused before wlr-randr runs
+    (ValueError); RuntimeError carries wlr-randr's own message when it refuses."""
+    check_output_name(name)
+    if not all(_is_int(v) for v in (width, height, refresh_mhz)):
+        raise ValueError('A mode is three integers: width, height and refresh in mHz')
+    output = next((o for o in await outputs() if o.name == name), None)
+    if output is None:
+        raise ValueError(f'{name} is not a connected output')
+    if find_mode(output.modes, width, height, refresh_mhz) is None:
+        raise ValueError(f'{mode_argument(width, height, refresh_mhz)} is not a mode of {name}')
+    result = await run(['wlr-randr', '--output', name, '--mode', mode_argument(width, height, refresh_mhz)], timeout=15)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip() or f'wlr-randr exited with {result.returncode}')
+
+
+async def reset_mode(name: str):
+    """The mode the output advertises as preferred, and the normal transform: how the compositor starts an output."""
+    check_output_name(name)
+    result = await run(['wlr-randr', '--output', name, '--preferred', '--transform', 'normal'], timeout=15)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip() or f'wlr-randr exited with {result.returncode}')
 

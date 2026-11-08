@@ -1,3 +1,4 @@
+import re
 from asyncio import sleep
 from contextlib import contextmanager
 
@@ -13,6 +14,31 @@ def open_system_bus():
         yield bus
     finally:
         bus.close()
+
+
+class InvalidWifiSettings(ValueError):
+    """SSID or passphrase outside the 802.11 limits; raised before anything is written to NetworkManager."""
+
+
+SSID_MAX_BYTES = 32
+PASSPHRASE_MIN, PASSPHRASE_MAX = 8, 63
+_RAW_PSK = re.compile(r'[0-9A-Fa-f]{64}')
+
+
+def check_ssid(ssid) -> None:
+    """An SSID is 1 to 32 bytes (not characters)."""
+    if not isinstance(ssid, str) or not 1 <= len(ssid.encode()) <= SSID_MAX_BYTES:
+        raise InvalidWifiSettings(f'SSID must be 1 to {SSID_MAX_BYTES} bytes')
+
+
+def check_passphrase(password, allow_raw_key: bool = False) -> None:
+    """A WPA passphrase is 8 to 63 characters; with `allow_raw_key` a 64 hex digit pre-shared key is accepted too."""
+    if not isinstance(password, str):
+        raise InvalidWifiSettings('passphrase must be text')
+    if allow_raw_key and _RAW_PSK.fullmatch(password):
+        return
+    if not PASSPHRASE_MIN <= len(password) <= PASSPHRASE_MAX:
+        raise InvalidWifiSettings(f'passphrase must be {PASSPHRASE_MIN} to {PASSPHRASE_MAX} characters')
 
 
 async def has_wireless():
@@ -64,7 +90,8 @@ async def get_access_points():
         aps = sorted([await AccessPoint(ap, bus).properties_get_all_dict('reuse') for ap in aps],
                      key=lambda ap: ap['strength'], reverse=True)
 
-        for ap in aps: ap['ssid'] = ap['ssid'].decode()
+        # an SSID is any bytes (802.11): a name that is not UTF-8 is shown with replacement characters, the list stays whole
+        for ap in aps: ap['ssid'] = ap['ssid'].decode('utf-8', 'replace')
 
         return aps
 

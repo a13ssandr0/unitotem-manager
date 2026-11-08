@@ -1,426 +1,85 @@
 <template>
   <v-container fluid class="pa-4">
-    <v-snackbar :model-value="!!devtoolsError" color="error" :timeout="8000" @update:model-value="devtoolsError = ''">{{ devtoolsError }}</v-snackbar>
-    <v-row>
-      <v-col>
-        <h2 class="text-h5 mb-4">Viewer Assignment Matrix</h2>
-        <p class="text-body-2 text-medium-emphasis mb-6">
-          Assign each connected viewer to a playlist. Each row is a playlist,
-          each column is a window (one screen = one window). The same playlist may drive several windows.
-        </p>
-      </v-col>
-    </v-row>
+    <h2 class="text-h5 mb-4">Viewers</h2>
 
-    <!-- Assignment matrix -->
-    <v-row v-if="windows.length && playlists.length">
-      <v-col>
-        <v-table density="comfortable" class="assignment-table">
-          <thead>
-            <tr>
-              <th class="playlist-col">Playlist</th>
-              <th v-for="win in windows" :key="win.key" class="text-center viewer-col">
-                <div class="d-flex flex-column align-center ga-1">
-                  <v-icon size="small">mdi-monitor</v-icon>
-                  <span class="text-caption font-weight-medium">{{ win.hostname }}</span>
-                  <span class="text-caption text-medium-emphasis">{{ win.screen_label }}</span>
-                  <span class="text-caption text-disabled">{{ win.width }}x{{ win.height }}</span>
-                  <span v-if="win.pane_count > 1" class="text-caption text-primary">{{ win.pane_count }} panes: this is the main one</span>
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="playlist in playlists" :key="playlist.playlist_id">
-              <td class="playlist-col">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="small" color="primary">mdi-playlist-play</v-icon>
-                  <div>
-                    <div class="font-weight-medium">{{ playlist.name }}</div>
-                    <div class="text-caption text-medium-emphasis">
-                      {{ playlist.enabled_count }}/{{ playlist.asset_count }} assets enabled
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td v-for="win in windows" :key="win.key" class="text-center">
-                <v-btn
-                  :icon="isAssigned(playlist.playlist_id, win) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
-                  :color="isAssigned(playlist.playlist_id, win) ? 'primary' : undefined"
-                  variant="text"
-                  size="small"
-                  :loading="pending === `${playlist.playlist_id}:${win.key}`"
-                  @click="toggle(playlist.playlist_id, win)"
-                />
-              </td>
-            </tr>
-            <tr>
-              <td class="playlist-col">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="small" color="primary">mdi-speaker</v-icon>
-                  <div>
-                    <div class="font-weight-medium">Sound output</div>
-                    <div class="text-caption text-medium-emphasis">Where each window plays its sound</div>
-                  </div>
-                </div>
-              </td>
-              <td v-for="win in windows" :key="win.key" class="text-center">
-                <v-select :items="outputItems(win)" :model-value="win.audio_output ?? ''" density="compact"
-                          variant="outlined" hide-details min-width="160"
-                          :disabled="!(audioOutputs[win.viewer_id] || []).length"
-                          @update:model-value="v => api.Viewers.set_audio_output({viewer_id: win.viewer_id, window_id: win.window_id, device: v || null})">
-                </v-select>
-              </td>
-            </tr>
-            <tr v-if="canDevtools">
-              <td class="playlist-col">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="small" color="primary">mdi-bug-outline</v-icon>
-                  <div>
-                    <div class="font-weight-medium">Developer tools</div>
-                    <div class="text-caption text-medium-emphasis">Inspect the page of a window in a new tab</div>
-                  </div>
-                </div>
-              </td>
-              <td v-for="win in windows" :key="win.key" class="text-center">
-                <v-btn variant="tonal" size="small" prepend-icon="mdi-open-in-new" :loading="devtoolsBusy === win.key"
-                       @click="openDevtools(win)">Open</v-btn>
-              </td>
-            </tr>
-            <tr v-if="canSetLanguage">
-              <td class="playlist-col">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="small" color="primary">mdi-translate</v-icon>
-                  <div>
-                    <div class="font-weight-medium">Language of the pages</div>
-                    <div class="text-caption text-medium-emphasis">What web pages are told to show (their own language setting)</div>
-                  </div>
-                </div>
-              </td>
-              <td v-for="win in windows" :key="win.key" class="text-center">
-                <v-autocomplete :items="contentLanguages" :model-value="win.language || ''" label="Language"
-                                density="compact" variant="outlined" hide-details class="keyboard-field"
-                                @update:model-value="v => setLanguage(win, v ?? '')"></v-autocomplete>
-              </td>
-            </tr>
-            <tr v-if="canConfigureKeyboard">
-              <td class="playlist-col">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="small" color="primary">mdi-keyboard</v-icon>
-                  <div>
-                    <div class="font-weight-medium">On-screen keyboard</div>
-                    <div class="text-caption text-medium-emphasis">For touch screens: opens by itself on a text field, or from its button</div>
-                  </div>
-                </div>
-              </td>
-              <td v-for="win in windows" :key="win.key" class="text-center">
-                <div class="d-flex flex-column ga-2 align-center">
-                  <v-switch :model-value="win.keyboard.enabled" label="Enabled" density="compact" hide-details color="primary"
-                            @update:model-value="v => setKeyboard(win, {enabled: !!v})"></v-switch>
-                  <v-select :items="keyboardPositions" :model-value="win.keyboard.button_position" label="Button position"
-                            density="compact" variant="outlined" hide-details min-width="160" :disabled="!win.keyboard.enabled"
-                            @update:model-value="v => setKeyboard(win, {button_position: v})"></v-select>
-                  <!-- fixed width on purpose: the column must not grow or shrink with the name that is selected -->
-                  <v-autocomplete :items="keyboardLanguages" :model-value="keyboardLanguage(win)" label="Keyboard language"
-                                  density="compact" variant="outlined" hide-details class="keyboard-field"
-                                  :disabled="!win.keyboard.enabled"
-                                  @update:model-value="v => v && setKeyboard(win, {layout: layoutId(v, undefined, languageVariants(v))})">
-                    <template #item="{props, item}">
-                      <v-list-item v-bind="props" :title="item.raw.title" :subtitle="item.raw.value"></v-list-item>
-                    </template>
-                  </v-autocomplete>
-                  <v-select :items="variantItems(keyboardLanguage(win))" :model-value="keyboardVariant(win)" label="Key arrangement"
-                            density="compact" variant="outlined" hide-details class="keyboard-field"
-                            :disabled="!win.keyboard.enabled || languageVariants(keyboardLanguage(win)).length < 2"
-                            @update:model-value="v => setKeyboard(win, {layout: layoutId(keyboardLanguage(win), v, languageVariants(keyboardLanguage(win)))})"></v-select>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td class="playlist-col">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="small" color="primary">mdi-gesture-tap</v-icon>
-                  <div>
-                    <div class="font-weight-medium">Interactive screen</div>
-                    <div class="text-caption text-medium-emphasis">Shows a home page; the playlist plays over it as a screensaver when nobody touches the screen, and the first touch ends it</div>
-                  </div>
-                </div>
-              </td>
-              <td v-for="win in windows" :key="win.key" class="text-center">
-                <div class="d-flex flex-column ga-2 align-center">
-                  <v-switch :model-value="saverOn(win)" label="Enabled" density="compact" hide-details color="primary"
-                            @update:model-value="v => setScreensaver(win, {enabled: !!v})"></v-switch>
-                  <template v-if="saverOn(win)">
-                    <v-text-field :model-value="win.screensaver.home_url" label="Home page" placeholder="https://"
-                                  density="compact" variant="outlined" hide-details min-width="200"
-                                  @change="e => setScreensaver(win, {home_url: e.target.value}, true)"></v-text-field>
-                    <v-text-field :model-value="win.screensaver.idle_timeout" label="Idle time (s)" type="number" min="5"
-                                  max="86400" density="compact" variant="outlined" hide-details min-width="160"
-                                  @change="e => setScreensaver(win, {idle_timeout: Number(e.target.value)}, true)"></v-text-field>
-                  </template>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td class="playlist-col">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="small" color="primary">mdi-refresh-auto</v-icon>
-                  <div>
-                    <div class="font-weight-medium">Page refresh</div>
-                    <div class="text-caption text-medium-emphasis">Reloads a web page shown for a long time, when idle and/or at given times</div>
-                  </div>
-                </div>
-              </td>
-              <td v-for="win in windows" :key="win.key" class="text-center">
-                <div v-if="win.screensaver.enabled" class="text-caption text-medium-emphasis">
-                  Not used on an interactive screen
-                </div>
-                <div v-else class="d-flex flex-column ga-2 align-center">
-                  <v-text-field :model-value="win.refresh.refresh_after_idle" label="After idle (s)" type="number" min="10"
-                                placeholder="never" density="compact" variant="outlined" hide-details min-width="160"
-                                @change="e => setRefresh(win, {refresh_after_idle: e.target.value ? Number(e.target.value) : null})"></v-text-field>
-                  <v-textarea :model-value="win.refresh.refresh_schedules.join('\n')" label="At times" rows="2" auto-grow
-                              placeholder="0 6 * * *" density="compact" variant="outlined" min-width="200"
-                              hint="minute hour day month weekday, one per line" persistent-hint
-                              @change="e => setRefresh(win, {refresh_schedules: e.target.value.split('\n').map(l => l.trim()).filter(Boolean)})"></v-textarea>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </v-table>
-      </v-col>
-    </v-row>
-
-    <!-- What each window is made of: the rectangle its content is drawn in, and its panes -->
-    <v-row v-if="windows.length" class="mt-2">
-      <v-col>
-        <h3 class="text-h6 mb-1">Window layout</h3>
-        <p class="text-body-2 text-medium-emphasis mb-4">
-          A window can leave blank space around its content (the area) and be divided into panes, each with a playlist of its own.
-          <template v-if="!canConfigureLayout">Only an administrator can change the area and the panes; the playlist of each pane can be chosen here.</template>
-        </p>
-        <v-row>
-          <v-col v-for="win in windows" :key="win.key" cols="12" lg="6" xl="4">
-            <WindowLayout :win="win" :playlists="playlists" :can-edit="canConfigureLayout"/>
-          </v-col>
-        </v-row>
-      </v-col>
-    </v-row>
+    <!-- Assignment matrix: the playlist of each window. The name of a window opens its details -->
+    <template v-if="windows.length">
+      <v-table density="comfortable" class="assignment-table">
+        <thead>
+          <tr>
+            <th class="playlist-col">Playlist</th>
+            <th v-for="win in windows" :key="win.key" class="text-center viewer-col">
+              <v-btn variant="text" size="small" class="text-none window-btn" :title="`${win.hostname}: ${win.screen_label}`"
+                     @click="selectedKey = win.key">
+                <span class="d-flex flex-column align-center">
+                  <span class="font-weight-medium">{{ win.screen_label }}</span>
+                  <span class="text-caption text-medium-emphasis">{{ win.hostname }}</span>
+                  <span class="text-caption text-disabled">
+                    {{ win.width }}x{{ win.height }}<template v-if="win.pane_count > 1"> · {{ win.pane_count }} panes</template>
+                  </span>
+                </span>
+              </v-btn>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="playlist in playlists" :key="playlist.playlist_id">
+            <td class="playlist-col">
+              <div class="font-weight-medium">{{ playlist.name }}</div>
+              <div class="text-caption text-medium-emphasis">{{ playlist.enabled_count }}/{{ playlist.asset_count }} assets enabled</div>
+            </td>
+            <td v-for="win in windows" :key="win.key" class="text-center">
+              <v-checkbox-btn :model-value="isAssigned(playlist.playlist_id, win)" color="primary" :disabled="!canAssign"
+                              :aria-label="`${playlist.name} on ${win.screen_label}`"
+                              @update:model-value="v => assign(playlist.playlist_id, win, !!v)"></v-checkbox-btn>
+            </td>
+          </tr>
+        </tbody>
+      </v-table>
+      <v-alert v-if="!playlists.length" type="info" variant="tonal" density="compact" icon="mdi-playlist-remove" class="mt-4">
+        No playlists. Create one in Scheduler.
+      </v-alert>
+    </template>
 
     <!-- Empty states -->
-    <v-row v-else-if="!viewers.length">
-      <v-col>
-        <v-alert type="info" variant="tonal" icon="mdi-monitor-off">
-          No viewers connected. Start the UniTotem viewer application on a display device.
-        </v-alert>
-      </v-col>
-    </v-row>
-
-    <v-row v-else-if="!playlists.length">
-      <v-col>
-        <v-alert type="info" variant="tonal" icon="mdi-playlist-remove">
-          No playlists available. Create a playlist in the Scheduler page.
-        </v-alert>
-      </v-col>
-    </v-row>
+    <v-alert v-else-if="!viewerCount" type="info" variant="tonal" icon="mdi-monitor-off">No viewers connected.</v-alert>
+    <v-alert v-else type="info" variant="tonal" icon="mdi-monitor-off">No windows on the connected viewers.</v-alert>
 
     <TickerSources v-if="canTicker" />
 
-    <!-- Viewer detail cards -->
-    <v-row v-if="viewers.length" class="mt-4">
-      <v-col v-for="viewer in viewers" :key="viewer.instance_id" cols="12" sm="6" lg="4">
-        <v-card variant="outlined">
-          <v-card-title class="d-flex align-center ga-2">
-            <v-icon>mdi-monitor</v-icon>
-            {{ viewer.hostname }}
-          </v-card-title>
-          <v-card-text>
-            <v-list density="compact">
-              <v-list-item>
-                <template #prepend><v-icon size="small">mdi-ip-network</v-icon></template>
-                <v-list-item-title class="text-caption">{{ viewer.ip }}</v-list-item-title>
-              </v-list-item>
-              <v-list-item v-if="viewer.assigned_playlist">
-                <template #prepend><v-icon size="small">mdi-playlist-play</v-icon></template>
-                <v-list-item-title class="text-caption">
-                  {{ playlistName(viewer.assigned_playlist) }}
-                </v-list-item-title>
-              </v-list-item>
-            </v-list>
-
-            <!-- Screen info -->
-            <div v-if="viewer.screens?.length" class="mt-2">
-              <div class="text-caption font-weight-medium mb-1">Screens</div>
-              <v-chip
-                v-for="(screen, i) in viewer.screens" :key="i"
-                size="x-small" class="mr-1 mb-1" variant="outlined"
-              >
-                {{ screen.name }} {{ screen.width }}×{{ screen.height }}
-              </v-chip>
-            </div>
-
-            <!-- Windows -->
-            <div v-if="viewer.windows?.length" class="mt-2">
-              <div class="text-caption font-weight-medium mb-1">Windows</div>
-              <v-chip
-                v-for="win in viewer.windows" :key="win.window_id"
-                size="x-small" class="mr-1 mb-1" variant="outlined"
-              >
-                #{{ win.window_id }} {{ win.width }}×{{ win.height }}
-              </v-chip>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+    <ViewerDetail v-model="detailOpen" :win="selected" :playlists="playlists" :outputs="selectedOutputs" />
   </v-container>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { api, canCall } from '@/api'
-import WindowLayout from '@/components/WindowLayout.vue'
-import keyboardIndex from '@/keyboard/index.json'
-import { layoutId, parseLayoutId } from '@/keyboard-layouts.js'
+import {ref, computed} from 'vue'
+import {api, canCall} from '@/api'
+import ViewerDetail from '@/components/ViewerDetail.vue'
+import {buildWindows} from '@/components/ViewerCore.js'
 
 const viewersMap = ref({})    // instance_id → viewer info
 const playlists = api.Scheduler.playlists.use({pick: 'playlists', initial: []})
-// One entry per window: {webview_id, window_id, playlist_id}
-const assignments = ref([])
-const pending = ref(null)
+const viewerCount = computed(() => Object.keys(viewersMap.value).length)
+// one column per window (see buildWindows)
+const windows = computed(() => buildWindows(viewersMap.value))
 
-const viewers = computed(() =>
-  Object.entries(viewersMap.value).map(([id, info]) => ({
-    instance_id: id,
-    ...info,
-    connected: true,
-  }))
-)
+// The details of a window are open while it exists: the window is read from the state on every render
+const selectedKey = ref(null)
+const selected = computed(() => windows.value.find(w => w.key === selectedKey.value) ?? null)
+const detailOpen = computed({get: () => !!selected.value, set: v => { if (!v) selectedKey.value = null }})
 
-// One column per window, grouped by host: a screen is a window, and each one
-// gets its own playlist. The screen name comes from the viewer, which is the
-// only place that knows which output a window sits on.
-const windows = computed(() =>
-  viewers.value.flatMap(viewer =>
-    (viewer.windows ?? []).map(win => ({
-      key: `${viewer.instance_id}:${win.window_id}`,
-      viewer_id: viewer.instance_id,
-      window_id: win.window_id,
-      hostname: viewer.hostname,
-      screen_label: win.screen_name ?? `window ${win.window_id}`,
-      width: win.width,
-      height: win.height,
-      assigned_playlist: win.assigned_playlist,
-      audio_output: win.audio_output,
-      keyboard: {enabled: true, button_position: 'bottom-right', layout: 'english', ...win.keyboard},
-      screensaver: {enabled: false, home_url: '', idle_timeout: 120, ...win.screensaver},
-      refresh: {refresh_after_idle: null, refresh_schedules: [], ...win.refresh},
-      orientation: win.orientation ?? 0,
-      flip: win.flip ?? 0,
-      turned_by_output: win.turned_by_output ?? false,     // the compositor turned the screen: width and height are the turned ones
-      hostname_label: viewer.hostname,
-      layout: {...DEFAULT_LAYOUT, ...win.layout},
-      pane_count: countLeaves((win.layout ?? DEFAULT_LAYOUT).tree),
-    }))
-  )
-)
-
-// What a window without a stored layout is: one pane filling it
-const DEFAULT_LAYOUT = {area: {left: 0, top: 0, width: 100, height: 100, margin_color: 'rgb(0,0,0)'},
-  tree: {kind: 'leaf', id: 1}, main: 1, panes: {}}
-const countLeaves = node => node.kind === 'leaf' ? 1 : countLeaves(node.a) + countLeaves(node.b)
-
-function isAssigned(playlistId, win) {
-  return win.assigned_playlist === playlistId
-}
-
-function playlistName(playlistId) {
-  return playlists.value.find(p => p.playlist_id === playlistId)?.name ?? playlistId
-}
-
-async function toggle(playlistId, win) {
-  pending.value = `${playlistId}:${win.key}`
-  try {
-    if (isAssigned(playlistId, win)) {
-      api.Viewers.unassign_playlist({ viewer_id: win.viewer_id, window_id: win.window_id })
-    } else {
-      api.Viewers.assign_playlist({ viewer_id: win.viewer_id, window_id: win.window_id, playlist_id: playlistId })
-    }
-  } finally {
-    pending.value = null
-  }
-}
-
-// Requests the current state on (re)connect
-// The keyboard of a panel is configuration of the panel, for administrators only: the row is not shown to anyone else
 const currentUser = api.Settings.Security.current_user.use()
-const canConfigureKeyboard = computed(() => canCall('Viewers/set_keyboard', currentUser.value))
-// The developer tools of a page: administrators only, and only where the node plugin that serves them is loaded
-const canDevtools = computed(() => canConfigureKeyboard.value && Boolean(window.__INITIAL_STATE__.plugins?.includes('node')))
-const devtoolsBusy = ref(null)
-const devtoolsError = ref('')
-async function openDevtools(win) {
-  devtoolsBusy.value = win.key
-  // The tab is opened by the click itself (a popup opened after a request is blocked), then pointed at the tools
-  const tab = window.open('about:blank', '_blank')
-  try {
-    const reply = await fetch('/devtools/open', {
-      method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({window_id: win.window_id}),
-    })
-    if (!reply.ok) throw new Error((await reply.json().catch(() => ({}))).detail || reply.statusText)
-    const {path} = await reply.json()
-    if (tab) tab.location.href = path.replace('{host}', location.host)
-  } catch (e) {
-    tab?.close()
-    devtoolsError.value = `Cannot open the developer tools: ${e.message}`
-  } finally {
-    devtoolsBusy.value = null
-  }
-}
+const canAssign = computed(() => canCall('Viewers/assign_playlist', currentUser.value))
 const canTicker = computed(() => !!currentUser.value?.perms && canCall('Ticker/sources', currentUser.value)) // admin only (the RSS ticker)
-// ... and so are the area and the panes of a window (the playlist of each pane is the scheduler's)
-// the language the pages of a window are told to show (administrators); the same languages as the keyboard's
-const canSetLanguage = computed(() => canCall('Viewers/set_language', currentUser.value))
-// the keyboard languages that are a language of a page (`zz` is LatinIME's "Alphabet (QWERTY)", for no language)
-const contentLanguages = computed(() => [{title: 'Language of the node', value: ''}, ...keyboardLanguages.filter(lang => lang.value !== 'zz')])
-function setLanguage(win, language) {
-  api.Viewers.set_language({viewer_id: win.viewer_id, window_id: win.window_id, language})
-}
-const canConfigureLayout = computed(() => canCall('Viewers/set_area', currentUser.value))
-const keyboardPositions = ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right']
-// The layouts of the on-screen keyboard come from the generated data in src/keyboard (AOSP LatinIME): one per language, some with variants (see keyboard-layouts.js)
-// The names of the languages as the data gives them ('English (US)', 'Hindi (Compact)'); the id goes under it
-const capitalise = text => text.replace(/\b\p{L}/gu, c => c.toUpperCase())
-const keyboardLanguages = keyboardIndex.map(lang => ({title: lang.name, value: lang.id}))
-  .sort((a, b) => a.title.localeCompare(b.title))
-const variantsByLanguage = Object.fromEntries(keyboardIndex.map(lang => [lang.id, lang.variants]))
-const languageVariants = lang => variantsByLanguage[lang] ?? []
-// 'bulgarian_bds' -> 'Bulgarian bds'; the first one is the language's own arrangement
-const variantItems = lang => languageVariants(lang).map((v, i) =>
-  ({title: capitalise(v.replace(/_/g, ' ')) + (i === 0 ? ' (default)' : ''), value: v}))
-const keyboardLanguage = win => parseLayoutId(win.keyboard.layout).lang
-const keyboardVariant = win => parseLayoutId(win.keyboard.layout).variant ?? languageVariants(keyboardLanguage(win))[0]
-function setKeyboard(win, patch) {
-  api.Viewers.set_keyboard({viewer_id: win.viewer_id, window_id: win.window_id, ...win.keyboard, ...patch})
+
+const isAssigned = (playlistId, win) => win.assigned_playlist === playlistId
+// one playlist per window: assigning another one replaces the current one
+function assign(playlistId, win, on) {
+  const ids = {viewer_id: win.viewer_id, window_id: win.window_id}
+  if (on) api.Viewers.assign_playlist({...ids, playlist_id: playlistId})
+  else api.Viewers.unassign_playlist(ids)
 }
 
-// What the server refuses (a bad address, a bad schedule) is reported by the page's error banner and leaves the settings
-// as they were: asking for them again puts the fields back to the real state.
-// The server refuses an enabled screensaver without a home page, so the switch alone only opens the fields
-const saverDraft = ref({})
-const saverOn = win => win.screensaver.enabled || !!saverDraft.value[win.key]
-function setScreensaver(win, patch, resync = false) {
-  const {enabled, home_url, idle_timeout} = {...win.screensaver, enabled: saverOn(win), ...patch}
-  saverDraft.value = {...saverDraft.value, [win.key]: enabled && !home_url}
-  if (enabled && !home_url) return
-  api.Viewers.set_screensaver({viewer_id: win.viewer_id, window_id: win.window_id, enabled, home_url, idle_timeout})
-  if (resync) setTimeout(() => api.Viewers.screensaver({viewer_id: win.viewer_id, window_id: win.window_id}), 500)
-}
-function setRefresh(win, patch) {
-  const {refresh_after_idle, refresh_schedules} = {...win.refresh, ...patch}
-  api.Viewers.set_refresh({viewer_id: win.viewer_id, window_id: win.window_id, refresh_after_idle, refresh_schedules})
-  setTimeout(() => api.Viewers.refresh({viewer_id: win.viewer_id, window_id: win.window_id}), 500)
-}
 function updateWindow(msg, key, value) {
   const win = viewersMap.value[msg.viewer_id]?.windows?.find(w => w.window_id === msg.window_id)
   if (win) win[key] = value
@@ -434,37 +93,35 @@ api.Viewers.language.on(({viewer_id, window_id, language}) => updateWindow({view
 api.Viewers.layout.on(({viewer_id, window_id, layout}) => { if (layout) updateWindow({viewer_id, window_id}, 'layout', layout) })
 
 const audioOutputs = ref({})   // viewer id -> outputs its windows can use
-
-const outputItems = (win) => [
-  {title: 'Default', value: ''},
-  ...(audioOutputs.value[win.viewer_id] || []).map(o => ({title: o.description, value: o.description})),
-]
-
 api.Viewers.audio_outputs.on(msg => {
   audioOutputs.value = {...audioOutputs.value, [msg.viewer_id]: msg.outputs}
 })
 
+// Requests the current state on (re)connect
 api.Viewers.list.on(msg => {
   Object.keys(msg.viewers ?? {}).forEach(id => api.Viewers.audio_outputs({viewer_id: id}))
   viewersMap.value = msg.viewers ?? {}
-  assignments.value = msg.assignments ?? {}
 }, {init: true})
 </script>
 
 <style scoped>
-.keyboard-field { width: 220px; max-width: 220px; }
 .assignment-table {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;
 }
 
 .playlist-col {
-  min-width: 220px;
+  min-width: 180px;
   padding: 12px 16px !important;
 }
 
 .viewer-col {
   min-width: 120px;
-  padding: 12px 8px !important;
+  padding: 8px !important;
+}
+
+.window-btn {
+  height: auto;
+  padding: 4px 8px;
 }
 </style>

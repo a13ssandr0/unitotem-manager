@@ -38,6 +38,10 @@ CLOSE_REPLACED = 4409               # another connection of the same node took o
 
 CONTROL_PREFIX = 'link:'            # text frames of the data transfer; a viewer command never starts like this
 
+# A port taken at boot (or a network not up yet) is tried again: seconds, doubling, at most a minute apart, then the
+# listener waits for the next time the role is applied
+RETRY_DELAYS = (5, 10, 20, 40, 60, 60, 60, 60, 60, 60)
+
 
 def is_control(raw) -> bool:
     return isinstance(raw, bytes) or raw.startswith(CONTROL_PREFIX)
@@ -86,6 +90,7 @@ class LinkServer:
         self.changed = changed
         self._server = None
         self._ctx: Optional[ssl.SSLContext] = None
+        self._retry: Optional[asyncio.Task] = None
         self._sockets: dict[str, LinkSocket] = {}
         # set by utils.remote.transfer: receives the control messages of a client (text with a "link" key, or bytes)
         self.on_control: Optional[Callable[[Peer, LinkSocket, object], Awaitable]] = None
@@ -104,15 +109,36 @@ class LinkServer:
         rm = RemoteManager.get_instance()
         if self._server is not None or rm.role != 'server':
             return
-        ctx = self._ctx = server_context(rm.ensure_identity(), rm.identity_key, rm.trusted_client_certs())
+        self._cancel_retry()
+        self._ctx = server_context(rm.ensure_identity(), rm.identity_key, rm.trusted_client_certs())
+        if not await self._listen():
+            # the web UI and the scheduler must not depend on this: a node whose port is taken is a standalone one
+            self._retry = asyncio.get_running_loop().create_task(self._retry_listen(), name='link-listen-retry')
+
+    async def _listen(self) -> bool:
         try:
-            self._server = await serve(self._handle, str(cmdargs.bind_link), cmdargs.port_link, ssl=ctx,
+            self._server = await serve(self._handle, str(cmdargs.bind_link), cmdargs.port_link, ssl=self._ctx,
                                        process_request=self._process_request, max_size=MAX_MESSAGE, compression=None)
         except OSError as e:
-            # the web UI and the scheduler must not depend on this: a node whose port is taken is a standalone one
             logger.error('Cannot listen for clients on port {}: {}', cmdargs.port_link, e)
-            return
+            return False
         logger.info('Listening for paired clients on port {}', cmdargs.port_link)
+        return True
+
+    async def _retry_listen(self):
+        for delay in RETRY_DELAYS:
+            await asyncio.sleep(delay)
+            if self._ctx is None:       # stopped meanwhile
+                return
+            if await self._listen():
+                return
+        logger.error('Still cannot listen for clients on port {}: tried again when the role is applied',
+                     cmdargs.port_link)
+
+    def _cancel_retry(self):
+        if self._retry is not None:
+            self._retry.cancel()
+            self._retry = None
 
     def pin(self, cert_pem: str):
         """A client was just paired: let its certificate through without restarting the listener (which would drop the
@@ -121,6 +147,7 @@ class LinkServer:
             self._ctx.load_verify_locations(cadata=cert_pem)
 
     async def stop(self):
+        self._cancel_retry()
         server, self._server, self._ctx = self._server, None, None
         if server is not None:
             server.close()          # also closes the connections: nobody is left talking to a context that is going away

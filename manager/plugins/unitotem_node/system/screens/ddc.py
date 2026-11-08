@@ -6,8 +6,8 @@ setvcp() - async, wrapped in asyncio.to_thread, one asyncio.Lock per I2C bus)
 will live.
 
 Every parser here was written against and re-verified byte-for-byte against
-two real ddcutil versions on real hardware: 2.2.5 (dev host, three physical
-monitors, DDC/CI capable) and 2.2.0 (unitotem-test, trixie's packaged version,
+two real ddcutil versions on real hardware: 2.2.5 (a PC, three physical
+monitors, DDC/CI capable) and 2.2.0 (a test board, trixie's packaged version,
 GTX 1060 passthrough, real 4K LG Ultrafine). See docs/manager/screens-and-touch.md
 (unitotem repository) for the full story, including the one genuine surprise:
 2.2.0 prints roughly ten lines of connector-resolution diagnostics to STDOUT
@@ -33,14 +33,14 @@ class DdcError(Exception):
 
 class BusNotFound(DdcError):
     """'Bus /dev/i2c-N does not exist.' - the --bus argument named a bus with
-    no I2C adapter at all. Confirmed real, dev host: `ddcutil --bus 30 getvcp
+    no I2C adapter at all. Confirmed real, a PC: `ddcutil --bus 30 getvcp
     --terse 62` -> exactly this line, exit 1."""
 
 
 class CommunicationFailed(DdcError):
     """'DDC communication failed for monitor on bus /dev/i2c-N' - the bus
     exists and ddcutil's own `detect` may even have listed a monitor on it,
-    but this specific VCP transaction got no reply. Confirmed real, dev host:
+    but this specific VCP transaction got no reply. Confirmed real, a PC:
     the Philips 246V5 on bus 7 answered 0x10/0x60/0x62/0x8D fine but failed
     exactly this way on 0x6D - capability is per-VCP-code, not per-display,
     which is why ddcutil detect's own verdict ('Invalid display') must never
@@ -168,7 +168,7 @@ def parse_getvcp_terse(text: str) -> Optional[VcpValue]:
         if kind == 'SNC' and len(fields) >= 4:
             return VcpValue(code, kind, int(fields[3].lstrip('x'), 16), None)
         if kind == 'CNC' and len(fields) >= 7:
-            # Field order confirmed on real hardware, dev host: 'VCP 0B CNC
+            # Field order confirmed on real hardware, a PC: 'VCP 0B CNC
             # x5d xdc x00 x00' -> max 0x5DDC, cur 0x0000 - max-hi max-lo
             # cur-hi cur-lo, NOT the other way round.
             max_value = (int(fields[3].lstrip('x'), 16) << 8) | int(fields[4].lstrip('x'), 16)
@@ -212,8 +212,8 @@ def parse_version(text: str) -> Optional[tuple[int, int]]:
     cannot be parsed at all (ddcutil not installed / unexpected output).
 
     Tolerates a trailing suffix after the two numbers: confirmed real,
-    unitotem-test's actual packaged binary identifies itself as
-    'ddcutil 2.2.0-dev' (not the '2.2.0' dpkg reports), and the dev host's
+    a test board's actual packaged binary identifies itself as
+    'ddcutil 2.2.0-dev' (not the '2.2.0' dpkg reports), and a PC's
     bookworm docs describe '1.4.1-1'-style suffixes too - neither is a
     plain X.Y, so the regex only anchors the leading two numbers.
     """

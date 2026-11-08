@@ -75,8 +75,9 @@ class UserData(BaseModel, validate_assignment=True):
         return {perm for perm in val if perm != UserPerms.admin}
 
     @field_serializer('permissions')
-    def serialize_perms(self, perms: set[UserPerms]):
-        return sorted(perm.value for perm in perms)
+    def serialize_perms(self, perms: set[UserPerms]) -> list[str]:
+        # UserPerms(perm) also takes the plain strings a list of permissions holds when the model was built without validation
+        return sorted(UserPerms(perm).value for perm in perms)
 
 
 

@@ -502,7 +502,7 @@ class RemoteService:
         try:
             from webview.controller import WebviewManager
             WebviewManager.get_instance().refresh_viewer(peer.id)      # what was shown before the file was there is shown again
-        except RuntimeError:
+        except (RuntimeError, ImportError):      # no local viewer on this node: nothing to refresh
             pass
 
     async def _migrate(self):

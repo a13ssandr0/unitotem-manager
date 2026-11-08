@@ -21,8 +21,8 @@ VM_KNOWN_HOSTS="${VM_KNOWN_HOSTS:?set VM_KNOWN_HOSTS=<known_hosts file of the te
 VM_APP_DIR="${VM_APP_DIR:-/var/unitotem-manager}"
 VM_VENV="${VM_VENV:-/var/unitotem-venv}"
 
-# rsync is not part of the kiosk image and cannot be apt-installed onto a
-# read-only root; it is unpacked into /var instead (see docs/manager/testing-vm.md).
+# rsync is not part of the kiosk image. The bootstrap installs it with the guest
+# root remounted rw, so it lands in /usr/bin (see docs/manager/testing-vm.md, Procedure 5).
 VM_RSYNC_PATH="${VM_RSYNC_PATH:-/usr/bin/rsync}"
 
 # ssh must NEVER pop up a graphical password prompt: on a KDE desktop a missing
@@ -30,6 +30,6 @@ VM_RSYNC_PATH="${VM_RSYNC_PATH:-/usr/bin/rsync}"
 # blocks automation until someone clicks it. Refusing askpass entirely turns
 # those cases into an immediate, visible error instead.
 export SSH_ASKPASS_REQUIRE=never
-unset SSH_ASKPASS
+unset SSH_ASKPASS DISPLAY
 
 VM_SSH_OPTS="-i $VM_KEY -o UserKnownHostsFile=$VM_KNOWN_HOSTS -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10"

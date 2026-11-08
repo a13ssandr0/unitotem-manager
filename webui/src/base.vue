@@ -99,8 +99,8 @@
         <v-card-text>This will reboot the system.</v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="rebootDialog = false">Cancel</v-btn>
-          <v-btn color="red darken-1" text @click="rebootDialog = false; api.Power.reboot()">Reboot</v-btn>
+          <v-btn variant="text" @click="rebootDialog = false">Cancel</v-btn>
+          <v-btn color="red-darken-1" variant="text" @click="rebootDialog = false; api.Power.reboot()">Reboot</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -111,8 +111,8 @@
         <v-card-text>This will power off the system.</v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="powerOffDialog = false">Cancel</v-btn>
-          <v-btn color="red darken-1" text @click="powerOffDialog = false; api.Power.poweroff()">Power Off</v-btn>
+          <v-btn variant="text" @click="powerOffDialog = false">Cancel</v-btn>
+          <v-btn color="red-darken-1" variant="text" @click="powerOffDialog = false; api.Power.poweroff()">Power Off</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -144,6 +144,9 @@ import SuspendDialog from '@/components/SuspendDialog.vue'
 import NotificationMenu from '@/components/NotificationMenu.vue'
 import NotificationToasts from '@/components/NotificationToasts.vue'
 import {api, attach, canCall, dispatch, initialCommands, loadSchema, notifyOpen, send} from '@/api'
+
+// Window event carrying the error message of a failed command (its `detail` is the message; see onApiError in the pages)
+const API_ERROR_EVENT = 'unitotem:api-error'
 
 const theme = useTheme()
 const router = useRouter()
@@ -294,6 +297,8 @@ function connectWs() {
       console.error(data.target + ' returned ' + data.error, data.extra ?? '')
       errorText.value = errorMessage(data.error, data.extra)
       errorSnack.value = true
+      // The failing command's own target is the page's: pages that must reset a spinner on failure listen for it (onApiError)
+      window.dispatchEvent(new CustomEvent(API_ERROR_EVENT, {detail: data}))
       return
     }
     dispatch(data)

@@ -92,3 +92,32 @@ def test_is_hotspot_enabled_compares_the_settings_object_of_the_active_connectio
     assert asyncio.run(hotspot.is_hotspot_enabled()) is False
     install(monkeypatch, profile_exists=True, active_settings=HOTSPOT)
     assert asyncio.run(hotspot.is_hotspot_enabled()) is True
+
+
+def test_first_boot_logs_success_only_when_a_hotspot_started(monkeypatch):
+    import asyncio
+    import utils.system.ip as ip
+    import unitotem_node
+    from unitotem_node.system.network import hotspot as hs
+    from loguru import logger
+
+    messages = []
+    sink = logger.add(lambda m: messages.append(m.record['level'].name + ' ' + m.record['message']), level='INFO')
+    monkeypatch.setattr(ip, 'default_ipv4', lambda: None)
+    try:
+        async def refused():
+            return '', ''                       # start_hotspot's answer when NetworkManager denies permission
+        monkeypatch.setattr(hs, 'start_hotspot', refused)
+        asyncio.run(unitotem_node.on_first_boot())
+        assert not any('started fallback hotspot' in m for m in messages)
+        assert any(m.startswith('ERROR') and 'Couldn\'t start wifi hotspot' in m for m in messages)
+
+        messages.clear()
+
+        async def started():
+            return 'UniTotem', 'ABCD1234'
+        monkeypatch.setattr(hs, 'start_hotspot', started)
+        asyncio.run(unitotem_node.on_first_boot())
+        assert any('started fallback hotspot UniTotem' in m for m in messages)
+    finally:
+        logger.remove(sink)

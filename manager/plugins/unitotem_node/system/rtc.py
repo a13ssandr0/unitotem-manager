@@ -148,7 +148,7 @@ def arm(rtc: Rtc, wake_epoch: float, now: Optional[float] = None) -> int:
         ahead = wake_epoch - now
         # the errno name, not strerror(): that one is translated to the language of the system
         reason = errno.errorcode.get(exc.errno, str(exc.errno)) if exc.errno else str(exc)
-        hint = (' Many real-time clocks can only hold an alarm less than 24 hours ahead (the CMOS RTC of the test VM '
+        hint = (' Many real-time clocks can only hold an alarm less than 24 hours ahead (the CMOS RTC of a virtual machine '
                 'refuses anything a day or more away); schedule an earlier wake-up.' if ahead >= 20 * 3600 else '')
         raise SuspendRefused(f'{rtc.name} refused a wake-up alarm {ahead / 3600:.0f} hours ahead ({reason}).{hint}') from exc
     if rtc.current_alarm() != alarm:

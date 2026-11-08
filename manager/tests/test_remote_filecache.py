@@ -154,3 +154,28 @@ def test_the_server_sends_a_client_what_its_windows_need_and_shows_it_again(node
     assert node._have['client-1'] == {'a.jpg': digest(b'a')} and shown == ['client-1']
     run(node._sync_cache(peer, sock))                              # up to date now: nothing more is sent
     assert len(sent) == 1
+
+
+def test_a_node_without_the_viewer_module_still_completes_the_cache_sync(node, monkeypatch, tmp_path):
+    """The files are sent, then the refresh of the windows fails to import: the sync is recorded, nothing escapes."""
+    uploads = tmp_path / 'uploads'
+    uploads.mkdir()
+    (uploads / 'a.jpg').write_bytes(b'a')
+    service_module = __import__('utils.remote.service', fromlist=['upload_manager', 'send_bundle'])
+    monkeypatch.setattr(service_module, 'upload_manager', type('U', (), {'folder': uploads})())
+    monkeypatch.setattr(filecache, 'upload_manager', type('U', (), {'folder': uploads})())
+    monkeypatch.setattr(filecache, 'wanted_names', lambda viewer: {'a.jpg'})
+    sent = []
+
+    async def fake_send(channel, manifest, folder, progress=None):
+        sent.append(manifest)
+
+    monkeypatch.setattr(service_module, 'send_bundle', fake_send)
+    monkeypatch.setattr(node, '_channel_for', lambda *a, **k: object())
+    monkeypatch.setitem(__import__('sys').modules, 'webview.controller', None)     # import raises ImportError
+    peer = type('Peer', (), {'id': 'client-2', 'name': 'lobby', 'enabled': True})()
+    sock = type('Sock', (), {'ws': type('W', (), {'send': None})()})()
+    node._have['client-2'] = {}
+    run(node._sync_cache(peer, sock))
+    assert len(sent) == 1
+    assert node._have['client-2'] == {'a.jpg': digest(b'a')}

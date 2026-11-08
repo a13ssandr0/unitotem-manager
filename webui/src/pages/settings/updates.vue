@@ -188,8 +188,15 @@
 </style>
 
 <script setup>
-import {computed, ref} from 'vue'
-import {api, onApi, useApiState} from '@/api'
+import {computed, onUnmounted, ref} from 'vue'
+import {api, onApi, onOpen, useApiState} from '@/api'
+
+// The failure of a command arrives as a window event (base.vue shows the message); this runs `callback` for the target's failures
+function onApiError(target, callback) {
+  const listener = e => { if (e.detail.target === target) callback(e.detail) }
+  window.addEventListener('unitotem:api-error', listener)
+  onUnmounted(() => window.removeEventListener('unitotem:api-error', listener))
+}
 
 const status = useApiState('Settings/Update/status', {pick: 'status'})
 const check = ref(null)
@@ -319,6 +326,9 @@ onApi('Settings/Update/check', data => {
   check.value = data.check
   checking.value = false
 })
+onApiError('Settings/Update/check', () => { checking.value = false })
+// An answer lost with the connection never comes: the check is not waited for after a reconnection
+onOpen(() => { checking.value = false })
 
 for (const command of ['fetch', 'cancel', 'apply', 'confirm', 'rollback', 'copy_to_other', 'set_policy']) {
   onApi('Settings/Update/' + command, data => {

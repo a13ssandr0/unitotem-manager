@@ -93,11 +93,23 @@ export interface Api {
       status: ApiCall<Record<string, never>>
     }
     Display: {
+      Outputs: {
+        /** Keep the mode waiting on an output: it is saved now and stays after the restart. [requires: admin] */
+        confirm_mode: ApiCall<{ name: string }>
+        /** Every connected output with its modes, current mode, saved mode, turn, mirror and pending change. [requires: admin] */
+        outputs: ApiCall<Record<string, never>>
+        /** Preferred mode, normal transform, and nothing saved for the output (mode, turn, mirror). [requires: admin] */
+        reset_output: ApiCall<{ name: string }>
+        /** Apply a mode the output lists; it is reverted after REVERT_AFTER seconds unless confirm_mode arrives. [requires: admin] */
+        set_mode: ApiCall<{ name: string; width: number; height: number; refresh_mhz: number }>
+      }
       Screens: {
         /** Change how an output is controlled. `wol` is {mac, broadcast?, port?}, `serial` is [requires: admin] */
         configure: ApiCall<{ name: string; on_mechanism?: null | string; off_mechanism?: null | string; power_on_at_start?: boolean | null; wol?: any | null; serial?: any | null; gpio?: any | null; cec_device?: null | string; clear_wol?: boolean; clear_serial?: boolean; clear_gpio?: boolean; clear_cec?: boolean }>
         /** The GPIO chips of this machine and their lines (name, and who uses each), for choosing the line of a screen. [requires: admin] */
         gpio_lines: ApiCall<Record<string, never>>
+        /** Shows the name and the number of a screen on its window for a few seconds. Without a name, every screen shows its own. [requires: power] */
+        identify: ApiCall<{ name?: null | string }>
         /** What X, DDC/CI and CEC each say about an output (None where they cannot tell). [requires: power] */
         power_state: ApiCall<{ name: string }>
         /** Find out what each monitor supports (DDC/CI buses and advertised inputs). Slow, runs in the background. [requires: admin] */

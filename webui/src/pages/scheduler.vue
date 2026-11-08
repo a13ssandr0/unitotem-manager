@@ -389,6 +389,47 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Delete playlist dialog -->
+    <v-dialog v-model="showDeletePlaylistDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="mt-2 ml-2">
+          <span class="text-h5">Delete the playlist "{{ playlistToDelete.name }}" and its assets?</span>
+        </v-card-title>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" autofocus @click="showDeletePlaylistDialog = false">
+            Cancel
+          </v-btn>
+          <v-btn color="error" variant="text" @click="confirmDeletePlaylist">
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete files dialog: only when a file is used by a playlist -->
+    <v-dialog v-model="showDeleteFilesDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="mt-2 ml-2">
+          <span class="text-h5">Delete the selected files?</span>
+        </v-card-title>
+        <v-card-text>
+          Used in: {{ filesUsedIn }}
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" autofocus @click="showDeleteFilesDialog = false">
+            Cancel
+          </v-btn>
+          <v-btn color="error" variant="text" @click="confirmDeleteFiles">
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="snackbar" :color="snackbarColor" :timeout="8000" multi-line>{{ snackbarText }}</v-snackbar>
   </v-container>
 </template>
 
@@ -420,6 +461,13 @@ const playlistItems = ref([]);
 const hoveredRow = ref(null);
 const isReloading = ref(false);
 const showSettingsDialog = ref(false);
+const showDeletePlaylistDialog = ref(false);
+const playlistToDelete = ref({id: null, name: ''});
+const showDeleteFilesDialog = ref(false);
+const filesUsedIn = ref('');
+const snackbar = ref(false);
+const snackbarText = ref('');
+const snackbarColor = ref('success');
 const defaultDuration = ref(30);
 const current_asset = ref(null);
 
@@ -525,16 +573,31 @@ const createPlaylist = () => {
 
 const deletePlaylist = () => {
   if (!currentPlaylist.value || currentPlaylist.value.is_default) return;
-  if (confirm(`Delete the playlist "${currentPlaylist.value.name}" and its assets?`)) {
-    api.Scheduler.delete_playlist({playlist_id: selectedPlaylist.value});
-    showSettingsDialog.value = false;
-  }
+  // the name is kept here: the dialog must show the playlist it was opened for
+  playlistToDelete.value = {id: selectedPlaylist.value, name: currentPlaylist.value.name};
+  showDeletePlaylistDialog.value = true;
+};
+
+const confirmDeletePlaylist = () => {
+  api.Scheduler.delete_playlist({playlist_id: playlistToDelete.value.id});
+  showDeletePlaylistDialog.value = false;
+  showSettingsDialog.value = false;
+};
+
+const notify = (text, color = 'success') => {
+  snackbarText.value = text;
+  snackbarColor.value = color;
+  snackbar.value = true;
 };
 
 
+// Asks the server again for everything this page shows: the playlists, the files and the selected playlist
 const reload = () => {
   if (isReloading.value) return;
   isReloading.value = true;
+  api.Scheduler.playlists();
+  api.Scheduler.files();
+  refreshPlaylist();
   setTimeout(() => {
     isReloading.value = false;
   }, 500); // Durata dell'animazione
@@ -549,6 +612,7 @@ const handleFileUpload = async (event) => {
   const files = event.target.files;
   if (!files) return;
 
+  const failed = [];
   for (const file of files) {
     const formData = new FormData();
     formData.append('files', file);
@@ -561,16 +625,19 @@ const handleFileUpload = async (event) => {
       });
 
       if (!response.ok || response.status !== 201) {
-        console.error(`Failed to upload ${file.name}: ${response.statusText}`);
-        // Optionally handle error (e.g., show a notification)
-      } else {
-        console.log(`Uploaded ${file.name} successfully`);
-        // Optionally refresh the file list or handle success
+        // the server explains a refusal in `detail` (FastAPI), otherwise the status text is shown
+        const body = await response.json().catch(() => ({}));
+        const reason = typeof body.detail === 'string' ? body.detail : response.statusText;
+        console.error(`Failed to upload ${file.name}: ${reason}`);
+        failed.push(`${file.name} (${reason})`);
       }
     } catch (error) {
       console.error(`Error uploading ${file.name}:`, error);
+      failed.push(file.name);
     }
   }
+
+  if (failed.length) notify(`Upload failed: ${failed.join(', ')}`, 'error');
 
   // Clear the input so the same file can be selected again if needed
   event.target.value = '';
@@ -600,8 +667,17 @@ const addSelected = () => {
 
 const deleteSelected = () => {
   const using = [...new Set(selectedFiles.value.flatMap(f => usedIn.value[f] ?? []))].map(playlistName_);
-  if (using.length && !confirm(`The selected files are used in: ${using.join(', ')}. Delete them and remove them from those playlists?`)) return;
+  if (using.length) {
+    filesUsedIn.value = using.join(', ');
+    showDeleteFilesDialog.value = true;
+    return;
+  }
+  confirmDeleteFiles();
+}
+
+const confirmDeleteFiles = () => {
   api.Scheduler.delete_files({files: [... selectedFiles.value]});
+  showDeleteFilesDialog.value = false;
   deselectAll();
 }
 

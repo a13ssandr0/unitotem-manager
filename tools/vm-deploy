@@ -19,6 +19,15 @@ if [ ! -f "$REPO/manager/static/manifest.json" ]; then
     exit 1
 fi
 
+# One deploy per VM at a time: rsync --delete of a second run would remove the first run's files.
+# The lock is released when the process exits, also on failure.
+VM_LOCK="${XDG_RUNTIME_DIR:-/tmp}/unitotem-vm-deploy-$(printf '%s' "$VM_HOST" | tr -c 'A-Za-z0-9._-' '_').lock"
+exec 9>"$VM_LOCK" || { echo "vm-deploy: cannot create lock file $VM_LOCK" >&2; exit 1; }
+if ! flock -n 9; then
+    echo "vm-deploy: another deploy to $VM_HOST is running (lock $VM_LOCK); retry when it finishes." >&2
+    exit 1
+fi
+
 # manager/static/ is included deliberately: it holds the built web UI, and
 # manifest.json must travel with assets/ or the server keeps serving the old
 # hashed bundles with no error anywhere.

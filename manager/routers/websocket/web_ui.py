@@ -36,6 +36,7 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.success('User {} connected', user.name)
 
     while True:
+        t = None                                # the command being answered; errors carry it so the page that sent it hears of them
         try:
             data: dict[str, Any] = await websocket.receive_json()
             t = data.pop('target')
@@ -50,10 +51,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif isinstance(ret, dict):
                         await WS.send(websocket, ret.pop('target', t), **ret)
             except KeyError:
-                await WS.send(websocket, 'error', error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
+                await WS.send(websocket, t, error='Invalid command', extra=dumps({'target': t, **data}, indent=4))
                 logger.error('Invalid command: {}', {'target': t, **data})
             except APIPermissionError:
-                await WS.send(websocket, 'error', error=f'Permission error: not allowed to execute {t}')
+                await WS.send(websocket, t, error=f'Permission error: not allowed to execute {t}')
                 logger.error('Permission error: not allowed to execute {}', t)
 
         except WebSocketDisconnect:
@@ -61,6 +62,6 @@ async def websocket_endpoint(websocket: WebSocket):
             break
         except Exception:
             logger.error(format_exc())
-            await WS.send(websocket, 'error', error='Internal error')
+            await WS.send(websocket, t if isinstance(t, str) and t else 'error', error='Internal error')
     sessions.untrack(websocket)
     WS.disconnect(websocket, user.name)
