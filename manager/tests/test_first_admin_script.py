@@ -20,6 +20,7 @@ import syslog
 import termios
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from loguru import logger
@@ -92,14 +93,36 @@ def _forbidden_spawn(monkeypatch):
     return spawned
 
 
-def _run(monkeypatch, tmp_path, *, input_fn, getpass_fn=None, is_tty=True, argv=ARGV):
+def _run(monkeypatch, tmp_path, *, input_fn, getpass_fn=None, is_tty=True, argv=ARGV, etc_dir=None,
+         overlay_status=None):
     """Runs script.main with every spawn guarded and checks the clean environment afterwards."""
     spawned = _forbidden_spawn(monkeypatch)
     rc = script.main(argv, input_fn=input_fn, getpass_fn=getpass_fn or _scripted([]),
-                     manager_dir=str(REPO_MANAGER), is_tty=lambda: is_tty)
+                     manager_dir=str(REPO_MANAGER), is_tty=lambda: is_tty,
+                     etc_dir=etc_dir or str(_tmp_etc(tmp_path)),
+                     overlay_status=overlay_status or str(tmp_path / 'no-overlay-status'))
     assert spawned == []
     assert dict(os.environ) == CLEAN_ENV
     return rc
+
+
+def _tmp_etc(tmp_path):
+    etc = tmp_path / 'etc'
+    etc.mkdir(exist_ok=True)
+    return etc
+
+
+def _read_only_etc(monkeypatch, tmp_path):
+    """Makes statvfs report the tmp etc dir as a read-only mount; every other path is untouched."""
+    etc = _tmp_etc(tmp_path)
+    real_statvfs = os.statvfs
+
+    def statvfs(path):
+        if os.fspath(path) == str(etc):
+            return SimpleNamespace(f_flag=os.ST_RDONLY)
+        return real_statvfs(path)
+    monkeypatch.setattr(os, 'statvfs', statvfs)
+    return etc
 
 
 @pytest.fixture(autouse=True)
@@ -403,6 +426,85 @@ def test_umask_is_077_only_inside_the_run(monkeypatch, tmp_path, fake_os, capfd)
     os.umask(before)
 
 
+# Storage (read-only /etc) and overlay state
+
+MSG_READ_ONLY = 'Storage is read-only. Account creation is not possible.'
+MSG_VOLATILE = 'No data partition: settings are lost on reboot.'
+
+
+def test_read_only_etc_refuses_before_any_question(monkeypatch, tmp_path, fake_os, capfd):
+    etc = _read_only_etc(monkeypatch, tmp_path)
+    prompts, getpass = _scripted([]), _scripted([])
+    rc = _run(monkeypatch, tmp_path, input_fn=prompts, getpass_fn=getpass, etc_dir=str(etc))
+    assert rc == 1
+    assert prompts.prompts == []
+    assert getpass.prompts == []
+    assert capfd.readouterr().out == MSG_READ_ONLY + '\n'
+    assert fake_os.calls == []
+
+
+def test_read_only_etc_does_not_prevent_the_admin_exists_message(monkeypatch, tmp_path, fake_os, capfd):
+    fake_os.admin = True
+    etc = _read_only_etc(monkeypatch, tmp_path)
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted([]), getpass_fn=_scripted([]), etc_dir=str(etc))
+    assert rc == 0
+    assert capfd.readouterr().out == MSG_ADMIN_EXISTS + '\n'
+
+
+def test_read_only_etc_is_checked_after_the_terminal_check(monkeypatch, tmp_path, fake_os, capfd):
+    etc = _read_only_etc(monkeypatch, tmp_path)
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted([]), getpass_fn=_scripted([]), is_tty=False,
+              etc_dir=str(etc))
+    assert rc == 1
+    assert capfd.readouterr().out == MSG_NO_TERMINAL + '\n'
+
+
+def test_writable_etc_proceeds_to_the_rules_and_the_prompt(monkeypatch, tmp_path, fake_os, capfd):
+    prompts = _scripted(['alice'])
+    rc = _run(monkeypatch, tmp_path, input_fn=prompts, getpass_fn=_scripted([GOOD_PASSWORD] * 2))
+    assert rc == 0
+    assert prompts.prompts == ['User name: ']
+    assert capfd.readouterr().out == RULES_OUT + 'Administrator alice created. Log in again as alice.\n'
+
+
+def test_read_only_etc_wins_over_the_volatile_line(monkeypatch, tmp_path, fake_os, capfd):
+    etc = _read_only_etc(monkeypatch, tmp_path)
+    status = tmp_path / 'overlay-status'
+    status.write_text('volatile:no-data\n')
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted([]), getpass_fn=_scripted([]), etc_dir=str(etc),
+              overlay_status=str(status))
+    assert rc == 1
+    assert capfd.readouterr().out == MSG_READ_ONLY + '\n'
+
+
+def test_volatile_overlay_prints_one_line_before_the_rules(monkeypatch, tmp_path, fake_os, capfd):
+    status = tmp_path / 'overlay-status'
+    status.write_text('volatile:data-mount\n')
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']), getpass_fn=_scripted([GOOD_PASSWORD] * 2),
+              overlay_status=str(status))
+    assert rc == 0
+    assert capfd.readouterr().out == (MSG_VOLATILE + '\n' + RULES_OUT
+                                      + 'Administrator alice created. Log in again as alice.\n')
+    assert fake_os.calls[0] == ('create', 'alice', GOOD_PASSWORD, True, False)
+
+
+@pytest.mark.parametrize('content', ['ok\n', 'failed:data-mount\n', 'no-data\n', 'ok\nno-data\n', ''])
+def test_other_overlay_states_print_no_volatile_line(monkeypatch, tmp_path, fake_os, capfd, content):
+    status = tmp_path / 'overlay-status'
+    status.write_text(content)
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']), getpass_fn=_scripted([GOOD_PASSWORD] * 2),
+              overlay_status=str(status))
+    assert rc == 0
+    assert MSG_VOLATILE not in capfd.readouterr().out
+
+
+def test_missing_or_unreadable_overlay_status_prints_no_volatile_line(monkeypatch, tmp_path, fake_os, capfd):
+    rc = _run(monkeypatch, tmp_path, input_fn=_scripted(['alice']), getpass_fn=_scripted([GOOD_PASSWORD] * 2),
+              overlay_status=str(tmp_path / 'absent'))
+    assert rc == 0
+    assert MSG_VOLATILE not in capfd.readouterr().out
+
+
 # Signals and timeout
 
 _sentinel_handler_calls = []
@@ -511,7 +613,11 @@ def _build_copy(tmp_path, admin_exists):
     (stub / 'utils' / 'first_access.py').write_text(STUB_FIRST_ACCESS.replace('MARKER', repr(str(marker))))
     text = SCRIPT.read_text()
     text = text.replace("MANAGER_DIR = '/usr/share/unitotem-manager'", f'MANAGER_DIR = {str(stub)!r}')
+    text = text.replace("ETC_DIR = '/etc'", f'ETC_DIR = {str(_tmp_etc(tmp_path))!r}')
+    text = text.replace("OVERLAY_STATUS = '/run/unitotem-overlay.status'",
+                        f'OVERLAY_STATUS = {str(tmp_path / "no-overlay-status")!r}')
     assert str(stub) in text
+    assert str(_tmp_etc(tmp_path)) in text
     copy = tmp_path / 'unitotem-first-admin-copy.py'
     copy.write_text(text)
     return copy, marker

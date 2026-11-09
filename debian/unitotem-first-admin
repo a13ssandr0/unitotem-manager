@@ -21,6 +21,11 @@ ATTEMPTS = 3
 MSG_ADMIN_EXISTS = 'Root accepts SSH keys only. Log in with an administrator account.'
 MSG_NO_TERMINAL_FIRST = 'First access: connect with an interactive terminal (ssh -t).'
 MSG_FAILED = 'First access failed. Details are in the system log.'
+MSG_READ_ONLY = 'Storage is read-only. Account creation is not possible.'
+MSG_VOLATILE = 'No data partition: settings are lost on reboot.'
+# Written by the initramfs overlay hook: one line, `volatile:<reason>` when DATA is absent or unusable (state in RAM).
+OVERLAY_STATUS = '/run/unitotem-overlay.status'
+ETC_DIR = '/etc'
 
 
 def _log_to_syslog(text: str):
@@ -54,7 +59,21 @@ def _restore_signals(previous: list):
         signal.signal(signum, handler)
 
 
-def _run(input_fn, getpass_fn, manager_dir, is_tty) -> int:
+def _read_only(etc_dir) -> bool:
+    """True when /etc is on a read-only mount (no write probe: nothing is written)."""
+    return bool(os.statvfs(etc_dir).f_flag & os.ST_RDONLY)
+
+
+def _volatile(overlay_status) -> bool:
+    """True when the overlay hook recorded a volatile state (settings are lost on reboot)."""
+    try:
+        with open(overlay_status, encoding='utf-8') as status:
+            return status.readline().rstrip('\n') .startswith('volatile:')
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def _run(input_fn, getpass_fn, manager_dir, is_tty, etc_dir, overlay_status) -> int:
     sys.path.insert(0, manager_dir)
     from utils import first_access, osusers, passwords
     from loguru import logger
@@ -69,6 +88,11 @@ def _run(input_fn, getpass_fn, manager_dir, is_tty) -> int:
     if osusers.admin_exists():
         print(MSG_ADMIN_EXISTS)
         return 0
+    if _read_only(etc_dir):
+        print(MSG_READ_ONLY)
+        return 1
+    if _volatile(overlay_status):
+        print(MSG_VOLATILE)
 
     print('Password rules:')
     for rule in passwords.rules_spec()['rules']:
@@ -113,7 +137,7 @@ def _run(input_fn, getpass_fn, manager_dir, is_tty) -> int:
 
 
 def main(argv_ignored=None, *, input_fn=input, getpass_fn=getpass.getpass, manager_dir=MANAGER_DIR,
-         is_tty=None) -> int:
+         is_tty=None, etc_dir=ETC_DIR, overlay_status=OVERLAY_STATUS) -> int:
     # argv_ignored is accepted only so that every caller shape works: nothing in it is read
     os.umask(0o077)
     os.environ.clear()
@@ -122,7 +146,7 @@ def main(argv_ignored=None, *, input_fn=input, getpass_fn=getpass.getpass, manag
         is_tty = sys.stdin.isatty
     previous = _install_signals()
     try:
-        return _run(input_fn, getpass_fn, manager_dir, is_tty)
+        return _run(input_fn, getpass_fn, manager_dir, is_tty, etc_dir, overlay_status)
     except (EOFError, KeyboardInterrupt):
         return 1
     except SystemExit:

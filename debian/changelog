@@ -1,3 +1,11 @@
+unitotem-manager (3.0.0~dev26) stable; urgency=medium
+
+  * Viewers: playlist x window matrix with a per-window detail panel; Display: per-screen resolution, refresh rate, orientation, power and touch, with a 15 s revert and screen identify; screen id on the no-assets and welcome pages with more than one screen
+  * Backend defects: scheduled enable/disable, media probe, uploads, ticker, remote retries, network/Wi-Fi/hotspot input validation, timers, backup parts for screens and touch, terminal session limit, devtools paths, VNC cleanup, audio volume range
+  * nouveau gets the NVIDIA GPU profile
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sun, 08 Nov 2026 12:00:00 +0100
+
 unitotem-manager (3.0.0~dev25) stable; urgency=medium
 
   * Users page: deleting a user asks for confirmation; the password checklist wraps long rules instead of truncating them in the dialogs
