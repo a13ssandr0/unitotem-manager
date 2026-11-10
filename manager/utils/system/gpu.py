@@ -187,6 +187,14 @@ PROFILES: Dict[str, Dict[str, str]] = {
         "webgl-antialiasing-mode": "none",
     },
 
+    # Raspberry Pi 3 (VideoCore IV: vc4 display and render, V3D 2.1, GLES 2.0 / GL 2.1 only). Chromium 147 asks the GPU process for
+    # an ES 3.0 context; vc4 cannot offer it, so the GPU process exits at start whatever ANGLE backend is requested (measured:
+    # `gles`, `gl-egl`, Mesa ES 3.0 override) and the viewer ends up in software. `disable-gpu` states that outcome up front:
+    # same CPU cost, no GPU process start-up failures and no error log spam.
+    "pi3": {
+        "disable-gpu": "",
+    },
+
     # V4L2 stateless/stateful decoders (other boards). No VA-API
     # driver is involved, and asking for one risks Chromium giving up on the
     # V4L2 path that does work.
@@ -222,6 +230,8 @@ VERIFIED: Dict[str, bool] = {
     # 2d_canvas and webgl are "enabled" (glImplementationParts gl=egl-angle,angle=opengles). Video: H.264/AAC decode in
     # software (FFmpegVideoDecoder) measured with the codecs build; V4L2 hardware decode stalls (see the "pi" profile).
     "pi": True,
+    # Measured on a Raspberry Pi 3 Model B (Mesa 26.2, VC4 V3D 2.1): see docs/manager/viewer.md.
+    "pi3": True,
 }
 
 # Profiles whose machine is expected to composite on the GPU: when Chromium says otherwise the viewer logs a warning.
@@ -229,6 +239,10 @@ EXPECTS_COMPOSITING = frozenset({"nvidia", "vaapi", "v4l2", "pi"})
 
 # DRM drivers of the Raspberry Pi (display: vc4, render: v3d).
 _PI_DRM_NAMES = ("vc4", "vc4-drm", "v3d")
+
+# Raspberry Pi models whose GPU is VideoCore IV (vc4 only, no v3d): Pi 3 family and Pi Zero 2 W.
+_PI3_MODEL_PREFIXES = ("Raspberry Pi 3", "Raspberry Pi Zero 2")
+_DEVICE_TREE_MODEL = "/proc/device-tree/model"
 
 
 def _read_drm_drivers() -> List[str]:
@@ -248,6 +262,16 @@ def _read_drm_drivers() -> List[str]:
     if os.path.exists("/proc/driver/nvidia/version") and "nvidia" not in names:
         names.append("nvidia")
     return names
+
+
+def _is_pi3() -> bool:
+    """True on a Raspberry Pi with the VideoCore IV GPU (GLES 2.0 only)."""
+    try:
+        with open(_DEVICE_TREE_MODEL, "rb") as f:
+            model = f.read().decode("utf-8", "replace").strip("\0 \n")
+    except OSError:
+        return False
+    return model.startswith(_PI3_MODEL_PREFIXES)
 
 
 def _installed_va_drivers() -> List[str]:
@@ -313,6 +337,9 @@ def detect_gpu() -> GpuProfile:
                          drm, va, v4l2)
 
     if any(d in _PI_DRM_NAMES for d in drm):
+        if "v3d" not in drm and _is_pi3():
+            return _make("pi3", f"Raspberry Pi 3 graphics ({', '.join(d for d in drm if d in _PI_DRM_NAMES)}), GLES 2.0 only",
+                         drm, va, v4l2)
         return _make("pi", f"Raspberry Pi graphics ({', '.join(d for d in drm if d in _PI_DRM_NAMES)})", drm, va, v4l2)
 
     if v4l2:
