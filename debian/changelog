@@ -1,3 +1,9 @@
+unitotem-manager (3.0.0~dev28) stable; urgency=medium
+
+  * Raspberry Pi 3 (VC4, OpenGL ES 2.0 only): the viewer runs with --disable-gpu instead of a GPU process that fails at every start
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Tue, 10 Nov 2026 12:00:00 +0100
+
 unitotem-manager (3.0.0~dev27) stable; urgency=medium
 
   * First access: one line when the data partition is missing (settings lost on reboot) and a clear stop before any question when /etc is read-only
