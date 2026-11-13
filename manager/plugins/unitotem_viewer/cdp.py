@@ -114,6 +114,29 @@ CURSOR_SCRIPT = r"""
 })();
 """ % 3000
 
+# A page in a frame is a cross-site page (the window document is local), and the browser rejects a cookie it writes without a SameSite
+# attribute (default Lax) from there: a site that keeps its language or session in such a cookie never finds it again. The setter of
+# `document.cookie` in https frames adds `SameSite=None; Secure` to a cookie that names no SameSite of its own.
+FRAME_COOKIE_SCRIPT = r"""
+(() => {
+  if (window.top === window || location.protocol !== 'https:' || window.__utFrameCookie) return;
+  window.__utFrameCookie = true;
+  const desc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+  if (!desc || !desc.set) return;
+  Object.defineProperty(document, 'cookie', {
+    configurable: true,
+    get() { return desc.get.call(document); },
+    set(value) {
+      value = String(value);
+      if (!/;\s*samesite\s*=/i.test(value)) value += '; SameSite=None; Secure';
+      desc.set.call(document, value);
+    },
+  });
+})();
+"""
+
+PAGE_SCRIPTS = FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT + CURSOR_SCRIPT + FRAME_COOKIE_SCRIPT
+
 # What a special key is for the browser: (key, code, windowsVirtualKeyCode, text)
 SPECIAL_KEYS = {
     'Backspace': ('Backspace', 'Backspace', 8, None),
@@ -267,8 +290,8 @@ class Cdp:
         await self._send('Page.enable', session=session)
         await self._send('Network.enable', session=session)
         await self._apply_language(session)
-        await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT + CURSOR_SCRIPT}, session)
-        await self._send('Runtime.evaluate', {'expression': FOCUS_SCRIPT + ACTIVITY_SCRIPT + NO_PRINT_SCRIPT + NO_DROP_SCRIPT + CURSOR_SCRIPT}, session)
+        await self._send('Page.addScriptToEvaluateOnNewDocument', {'source': PAGE_SCRIPTS}, session)
+        await self._send('Runtime.evaluate', {'expression': PAGE_SCRIPTS}, session)
         # frames of other origins appear as targets of their own
         await self._send('Target.setAutoAttach',
                          {'autoAttach': True, 'waitForDebuggerOnStart': False, 'flatten': True}, session)
