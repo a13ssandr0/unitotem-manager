@@ -93,9 +93,11 @@ NO_DROP_SCRIPT = r"""
 })();
 """
 
-# The pointer of a mouse is hidden unless the mouse moved a moment ago; a touch never shows it. Every frame does it for itself (the cursor over a frame is
-# the frame's own, so the page that holds it cannot hide it): a style that hides the cursor everywhere is switched off while a mouse moves and on again after
-# CURSOR_HIDE_MS without movement. Only pointer events of type mouse count (the mouse events that follow a touch are not pointer moves).
+# The pointer of a mouse is hidden until the mouse moves, and again CURSOR_HIDE_MS after its last movement; a touch never shows it. Every frame does it for
+# itself (the cursor over a frame is the frame's own, so the page that holds it cannot hide it): a style that hides the cursor everywhere is switched off while a
+# mouse moves and on again after CURSOR_HIDE_MS without movement. Only pointer events of type mouse count (the mouse events that follow a touch are not pointer
+# moves). The script runs before the document has a root element: the style waits for one (without it the pointer stayed visible from the start).
+CURSOR_HIDE_MS = 10000
 CURSOR_SCRIPT = r"""
 (() => {
   if (window.__utCursor) return;
@@ -103,7 +105,16 @@ CURSOR_SCRIPT = r"""
   const style = document.createElement('style');
   style.dataset.utCursor = '';
   style.textContent = '*, *::before, *::after { cursor: none !important; }';
-  (document.head || document.documentElement).append(style);
+  const mount = () => {
+    const root = document.head || document.documentElement;
+    if (!root) return false;
+    root.append(style);
+    return true;
+  };
+  if (!mount()) {
+    const observer = new MutationObserver(() => { if (mount()) observer.disconnect(); });
+    observer.observe(document, {childList: true, subtree: true});
+  }
   let timer = 0;
   addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse') return;
@@ -112,7 +123,7 @@ CURSOR_SCRIPT = r"""
     timer = setTimeout(() => { style.disabled = false; }, %d);
   }, {capture: true, passive: true});
 })();
-""" % 3000
+""" % CURSOR_HIDE_MS
 
 # A page in a frame is a cross-site page (the window document is local), and the browser rejects a cookie it writes without a SameSite
 # attribute (default Lax) from there: a site that keeps its language or session in such a cookie never finds it again. The setter of
