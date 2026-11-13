@@ -1,3 +1,15 @@
+unitotem-manager (3.0.0~dev30) stable; urgency=medium
+
+  * Viewer: a cookie that a page in a frame writes without SameSite gets `SameSite=None; Secure`; a site that keeps its language in such a cookie reloaded itself every few seconds
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Fri, 13 Nov 2026 12:30:00 +0100
+
+unitotem-manager (3.0.0~dev29) stable; urgency=medium
+
+  * Depends on python3-pampy again (module `pam`, python-pam 2.x): python3-pam is PyPAM (module `PAM`) and the web login answered HTTP 500 with it
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Fri, 13 Nov 2026 02:00:00 +0100
+
 unitotem-manager (3.0.0~dev28) stable; urgency=medium
 
   * Raspberry Pi 3 (VC4, OpenGL ES 2.0 only): the viewer runs with --disable-gpu instead of a GPU process that fails at every start
