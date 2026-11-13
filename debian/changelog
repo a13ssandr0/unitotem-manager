@@ -1,3 +1,9 @@
+unitotem-manager (3.0.0~dev31) stable; urgency=medium
+
+  * Viewer: the mouse pointer is hidden from the start of every document, appears on the first mouse movement and hides 10 s after the last one (the style was mounted before the document had a root element and threw)
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Fri, 13 Nov 2026 22:30:00 +0100
+
 unitotem-manager (3.0.0~dev30) stable; urgency=medium
 
   * Viewer: a cookie that a page in a frame writes without SameSite gets `SameSite=None; Secure`; a site that keeps its language in such a cookie reloaded itself every few seconds
