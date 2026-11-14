@@ -30,7 +30,7 @@ SSH_PASSWORD = os.environ.get('UI_SSH_PASSWORD', 'unitotem')
 SSH = ['sshpass', '-e']
 OPTS = ['-o', 'PreferredAuthentications=password', '-o', 'PubkeyAuthentication=no', '-o', 'UserKnownHostsFile=/dev/null',
         '-o', 'StrictHostKeyChecking=no', '-o', 'LogLevel=ERROR', '-o', 'ConnectTimeout=10']
-# Same child environment as deploy/lib.sh (_sshpass): no askpass, no display, never a prompt.
+# Same child environment as deploy/script/lib.sh (_sshpass): no askpass, no display, never a prompt.
 ENV = {k: v for k, v in os.environ.items() if k not in ('DISPLAY', 'SSH_ASKPASS')}
 ENV.update(SSH_ASKPASS_REQUIRE='never', SSHPASS=SSH_PASSWORD)
 
