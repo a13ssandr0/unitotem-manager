@@ -74,6 +74,10 @@ export interface Api {
     set_default_playlist: ApiCall<{ playlist_id: string }>
   }
   Settings: {
+    AcpiStorms: {
+      /** The ACPI events the storm guard masked (the Info page reads it on load; changes are pushed). */
+      list: ApiCall<Record<string, never>>
+    }
     Audio: {
       /** [requires: audio] */
       devices: ApiCall<Record<string, never>>
@@ -81,7 +85,7 @@ export interface Api {
       set_default_device: ApiCall<{ device: string }>
       /** `device` None means the default one. [requires: audio] */
       set_mute: ApiCall<{ mute: boolean; device?: null | string }>
-      /** `device` None means the default one. [requires: audio] */
+      /** `device` None means the default one. Volume is a 0.0-1.0 level: values outside it are clamped; NaN, infinity and [requires: audio] */
       set_volume: ApiCall<{ volume: number; device?: null | string }>
     }
     DateTime: {
@@ -163,6 +167,14 @@ export interface Api {
       set_flip: ApiCall<{ viewer_id: string; window_id: number; flip: number }>
       /** [requires: admin] */
       set_orientation: ApiCall<{ viewer_id: string; window_id: number; orientation: number }>
+    }
+    Firmware: {
+      /** [requires: admin] */
+      apply: ApiCall<{ files?: boolean; eeprom?: boolean }>
+      /** [requires: admin] */
+      check: ApiCall<Record<string, never>>
+      /** [requires: admin] */
+      status: ApiCall<Record<string, never>>
     }
     Network: {
       /** Activate a connection on a device. [requires: admin] */
