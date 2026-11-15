@@ -57,8 +57,13 @@
     </div>
 
     <div class="sysinfo">
-        <p style="font-size: 1vw; margin-block:0;">UniTotem 3.0.0~dev18<br>Running on Debian GNU/Linux 13 (trixie)<br>IP address: 192.0.2.254<br>Hostname: unitotem</p>
+        <p style="font-size: 1vw; margin-block:0;">UniTotem 3.0.0~dev18<br>Running on Debian GNU/Linux 13 (trixie)<br>IP address: <span id="ip">192.0.2.254</span><br>Hostname: unitotem</p>
     </div>
+<script>
+    // the address is pushed by the manager when the network changes (DHCP can finish after this page was drawn)
+    const events = new EventSource('/unitotem-first-boot/address');
+    events.onmessage = e => { document.getElementById('ip').textContent = e.data; };
+</script>
 </body>
 
 </html>
