@@ -66,6 +66,18 @@ def on_startup(loop):
         except Exception:
             logger.exception('Update progress watch failed to start')
 
+    async def firmware_progress_at_start():
+        """Tell the pages (and the bell) what the firmware helper is doing, also when the manager did not start it."""
+        from .system.firmware_progress import firmware_progress
+
+        async def pushed(status):
+            await WS.broadcast('Settings/Firmware/status', status=status)
+
+        try:
+            await firmware_progress.start(pushed)
+        except Exception:
+            logger.exception('Firmware progress watch failed to start')
+
     async def touch_at_start():
         """Map every touch screen to its output now, and again whenever one (or a screen) appears or goes away."""
         from .system.touch_service import touch_service
@@ -95,6 +107,7 @@ def on_startup(loop):
     loop.create_task(suspend.watch_sleep(), name='sleep_watch')
     loop.create_task(update_watch(), name='update_watch')
     loop.create_task(update_progress_at_start(), name='update_progress')
+    loop.create_task(firmware_progress_at_start(), name='firmware_progress')
     from .system import dbus_system
 
     async def hostname_watch():
@@ -154,6 +167,8 @@ async def on_shutdown():
     touch_service.stop()
     from .system.update_progress import update_progress
     update_progress.stop()
+    from .system.firmware_progress import firmware_progress
+    firmware_progress.stop()
     from .system.network.hotspot import stop_hotspot
     await stop_hotspot()
 
@@ -320,6 +335,7 @@ PLUGIN = Plugin(
         ('unitotem_node.api.date_time', 'DateTime', 'Settings'),
         ('unitotem_node.api.power', 'Power', None),
         ('unitotem_node.api.updater', 'Update', 'Settings'),
+        ('unitotem_node.api.firmware', 'Firmware', 'Settings'),
         ('unitotem_node.api.display', 'Display', 'Settings'),
         ('unitotem_node.api.vnc', 'Vnc', None),
     ),

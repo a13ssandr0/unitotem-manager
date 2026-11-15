@@ -13,6 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AssetPreview: typeof import('./src/components/AssetPreview.vue')['default']
     CardColumn: typeof import('./src/components/CardColumn.vue')['default']
+    FirmwareCard: typeof import('./src/components/FirmwareCard.vue')['default']
     FloatingWindow: typeof import('./src/components/FloatingWindow.vue')['default']
     NotificationMenu: typeof import('./src/components/NotificationMenu.vue')['default']
     NotificationToasts: typeof import('./src/components/NotificationToasts.vue')['default']
