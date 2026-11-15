@@ -1,6 +1,7 @@
 import re
 from asyncio import run, sleep
 from os import environ
+from pathlib import Path
 from socket import gethostname
 from uuid import uuid4
 
@@ -26,8 +27,18 @@ if 'hotspot_uuid' not in environ:
     set_key(const.envfile, 'hotspot_uuid', environ['hotspot_uuid'])
 
 
+# Written on the first boot by `unitotem-hostname`: the last three bytes of the machine UUID, six capital hex digits.
+SUFFIX_FILE = Path('/etc/unitotem/device-suffix')
+
+
 def _default_ssid() -> str:
-    """The hostname as SSID, cut to 32 bytes at a character boundary (a hostname can be longer)."""
+    """unitotem-<SUFFIX> from the first-boot suffix; without it (a development run) the hostname, cut to 32 bytes at a character boundary."""
+    try:
+        suffix = SUFFIX_FILE.read_text().strip()
+    except OSError:
+        suffix = ''
+    if re.fullmatch(r'[0-9A-F]{6}', suffix):
+        return f'unitotem-{suffix}'
     return gethostname().encode()[:SSID_MAX_BYTES].decode('utf-8', 'ignore')
 
 
