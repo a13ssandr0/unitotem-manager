@@ -6,6 +6,14 @@
         <p class="text-subtitle-1 text-medium-emphasis">Uptime: {{ info.uptime }}</p>
       </v-col>
     </v-row>
+    <v-row v-if="storms.length">
+      <v-col cols="12" v-for="storm in storms" :key="storm.name">
+        <v-alert type="warning" variant="tonal" density="compact">
+          <div>{{ stormTitle(storm) }}</div>
+          <div class="text-caption text-medium-emphasis">{{ stormDetail(storm) }}</div>
+        </v-alert>
+      </v-col>
+    </v-row>
     <v-row>
       <v-col cols="12" md="6" lg="4">
         <v-card class="mb-6">
@@ -133,12 +141,14 @@ import { ref, onMounted, computed, defineComponent, h } from 'vue';
 import { useTheme } from 'vuetify';
 import { VProgressLinear, VChip } from 'vuetify/components';
 import Chart from 'chart.js/auto';
+import {stormDetail, stormTitle} from '@/acpi-storms-core.js';
 
 const theme = useTheme();
 const isDark = computed(() => theme.global.current.value.dark);
 
 const info = ref(null);
 const gpu = ref({});
+const storms = ref([]);
 
 // Graphics feature status of the viewer (chrome://gpu's list), labels and colours ported from Chromium's info_view
 // Inspired by Chromium's chrome://gpu page (content/browser/resources/gpu/info_view.ts)
@@ -188,6 +198,10 @@ const gpuStatusLabels = {
 }
 api.Settings.Display.gpu_feature_stats.on(data => {
   gpu.value = data.features;
+}, {init: true})
+// The ACPI events the storm guard masked: read on load, pushed when the record changes
+api.Settings.AcpiStorms.list.on(data => {
+  storms.value = data.storms;
 }, {init: true})
 const cpuChartCanvas = ref(null);
 let cpuChart = null;

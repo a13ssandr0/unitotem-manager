@@ -78,6 +78,18 @@ def on_startup(loop):
         except Exception:
             logger.exception('Firmware progress watch failed to start')
 
+    async def acpi_storms_at_start():
+        """Tell the Info page (and the bell) about the ACPI events the storm guard masked, also after a manager restart."""
+        from .system.acpi_storms import acpi_storms
+
+        async def pushed(storms):
+            await WS.broadcast('Settings/AcpiStorms/list', storms=storms)
+
+        try:
+            await acpi_storms.start(pushed)
+        except Exception:
+            logger.exception('ACPI storm watch failed to start')
+
     async def touch_at_start():
         """Map every touch screen to its output now, and again whenever one (or a screen) appears or goes away."""
         from .system.touch_service import touch_service
@@ -108,6 +120,7 @@ def on_startup(loop):
     loop.create_task(update_watch(), name='update_watch')
     loop.create_task(update_progress_at_start(), name='update_progress')
     loop.create_task(firmware_progress_at_start(), name='firmware_progress')
+    loop.create_task(acpi_storms_at_start(), name='acpi_storms')
     from .system import dbus_system
 
     async def hostname_watch():
@@ -169,6 +182,8 @@ async def on_shutdown():
     update_progress.stop()
     from .system.firmware_progress import firmware_progress
     firmware_progress.stop()
+    from .system.acpi_storms import acpi_storms
+    acpi_storms.stop()
     from .system.network.hotspot import stop_hotspot
     await stop_hotspot()
 
@@ -336,6 +351,7 @@ PLUGIN = Plugin(
         ('unitotem_node.api.power', 'Power', None),
         ('unitotem_node.api.updater', 'Update', 'Settings'),
         ('unitotem_node.api.firmware', 'Firmware', 'Settings'),
+        ('unitotem_node.api.acpi_storms', 'AcpiStorms', 'Settings'),
         ('unitotem_node.api.display', 'Display', 'Settings'),
         ('unitotem_node.api.vnc', 'Vnc', None),
     ),
