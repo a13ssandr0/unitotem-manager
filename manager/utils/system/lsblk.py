@@ -120,7 +120,14 @@ def _probe_ext(f) -> Optional[tuple[int, int]]:
     if unpack_from('<I', sb, 96)[0] & 0x80:  # INCOMPAT_64BIT
         blocks |= unpack_from('<I', sb, 0x150)[0] << 32
         free |= unpack_from('<I', sb, 0x158)[0] << 32
-    return blocks * block_size, (blocks - free) * block_size
+    # statvfs (what a mounted filesystem shows, like df) leaves the metadata (inode tables, journal, bitmaps) out of both the size and the
+    # used space: the kernel takes it from s_overhead_clusters, which mkfs stores. Without it an unmounted copy of the same filesystem would
+    # look about 165 MiB larger and fuller than the mounted one.
+    overhead = unpack_from('<I', sb, 0x248)[0] * (1024 << unpack_from('<I', sb, 28)[0])
+    total, used = blocks * block_size, (blocks - free) * block_size
+    if 0 < overhead < min(total, used):
+        total, used = total - overhead, used - overhead
+    return total, used
 
 
 def _probe_fat(f) -> Optional[tuple[int, int]]:
