@@ -129,6 +129,7 @@
         >Download</v-btn>
       </v-card-actions>
     </v-card>
+    <FirmwareCard v-if="firmwareAllowed" />
     <v-card v-if="status && status.ab" class="ma-4 mt-0" max-width="600" width="100%" title="Automatic updates">
       <v-card-text>
         <div class="d-flex flex-wrap align-center ga-4">
@@ -189,7 +190,12 @@
 
 <script setup>
 import {computed, onUnmounted, ref} from 'vue'
-import {api, onApi, onOpen, useApiState} from '@/api'
+import {api, canCall, onApi, onOpen, useApiState} from '@/api'
+import FirmwareCard from '@/components/FirmwareCard.vue'
+
+// The firmware card subscribes to its status only for a user who may read it
+const currentUser = api.Settings.Security.current_user.use()
+const firmwareAllowed = computed(() => !!currentUser.value?.perms && canCall('Settings/Firmware/status', currentUser.value))
 
 // The failure of a command arrives as a window event (base.vue shows the message); this runs `callback` for the target's failures
 function onApiError(target, callback) {
