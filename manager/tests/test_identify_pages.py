@@ -25,7 +25,7 @@ def test_one_screen_with_an_explicit_empty_label_is_the_same_page(template):
 def test_the_label_goes_under_the_address_on_both_pages():
     context = dict(BENIGN, **screen_context('HDMI-A-1', '2'))
     no_assets = render('no-assets.html.j2', context, True)
-    assert 'IP address: 192.168.0.254<br>Screen 2: HDMI-A-1<br>Hostname: unitotem' in no_assets
+    assert 'IP address: <span id="ip">192.168.0.254</span><br>Screen 2: HDMI-A-1<br>Hostname: unitotem' in no_assets
     first_boot = render('first-boot.html.j2', context, True)
     assert 'IP address: <span id="ip">192.168.0.254</span><br>Screen 2: HDMI-A-1<br>Hostname: unitotem' in first_boot
 
@@ -41,3 +41,12 @@ def test_the_label_is_validated_and_numbered_from_one():
 def test_a_hostile_name_cannot_reach_the_page_as_markup():
     assert screen_context('<script>alert(1)</script>', '2') == {}
     assert 'screen_label' not in files['no-assets.html.j2'].split('{% if')[0]
+
+
+@pytest.mark.parametrize('template', PAGES)
+def test_both_idle_pages_follow_the_address_pushed_by_the_manager(template):
+    """DHCP can finish after the page was drawn: the page listens to the address stream and rewrites the address."""
+    page = render(template, BENIGN, True)
+    assert "new EventSource('/unitotem-first-boot/address')" in page
+    assert "document.getElementById('ip').textContent = e.data" in page
+    assert page.count('id="ip"') == 1
