@@ -3,6 +3,7 @@ its SSID/passphrase checks. NetworkManager is replaced by a fake: no D-Bus, no r
 import asyncio
 import contextlib
 import os
+import pathlib
 from types import SimpleNamespace
 
 import pytest
@@ -113,6 +114,7 @@ def install(monkeypatch, state, hostname='unitotem-test'):
     monkeypatch.setattr(hotspot, 'NetworkDeviceWireless', Device)
     monkeypatch.setattr(hotspot, 'get_default_wireless', lambda: 'wlan0' if state.device else None)
     monkeypatch.setattr(hotspot, 'gethostname', lambda: hostname)
+    monkeypatch.setattr(hotspot, 'SUFFIX_FILE', pathlib.Path('/nonexistent/device-suffix'))
     monkeypatch.setattr(hotspot, 'sleep', no_sleep)
     return state
 
@@ -272,3 +274,18 @@ def test_a_default_ssid_longer_than_32_bytes_is_refused_or_shortened(state, monk
         assert state.added == []
         return
     assert len(ssid.encode()) <= 32
+
+
+def test_the_default_ssid_is_unitotem_and_the_first_boot_suffix(state, monkeypatch, tmp_path):
+    f = tmp_path / 'device-suffix'
+    f.write_text('51B600\n')
+    monkeypatch.setattr(hotspot, 'SUFFIX_FILE', f)
+    assert start()[0] == 'unitotem-51B600'
+
+
+@pytest.mark.parametrize('content', ['', '51b600', '51B60', '51B6000', 'ZZZZZZ', '51B600\nabc'])
+def test_a_malformed_suffix_falls_back_to_the_hostname(state, monkeypatch, tmp_path, content):
+    f = tmp_path / 'device-suffix'
+    f.write_text(content)
+    monkeypatch.setattr(hotspot, 'SUFFIX_FILE', f)
+    assert start()[0] == 'unitotem-test'
