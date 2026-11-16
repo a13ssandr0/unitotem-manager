@@ -145,3 +145,27 @@ def test_unflatten_builds_the_api_tree():
     from utils.objs import unflatten
     assert unflatten({'Settings/Audio/devices': 'a', 'Settings/Audio/set_mute': 'b', 'Power/reboot': 'c'}) == {
         'Settings': {'Audio': {'devices': 'a', 'set_mute': 'b'}}, 'Power': {'reboot': 'c'}}
+
+
+def test_a_playlist_loaded_after_the_binder_is_bound_before_it_is_changed(manager, tmp_path):
+    """The Scheduler API object exists before the playlists are loaded at start: their changes must still be pushed to the clients."""
+    seen = []
+
+    def binder(am):
+        async def push(assets, current, _pid=am.playlist_id):
+            seen.append((_pid, 'assets'))
+
+        am.set_on_assets_update(push)
+
+    manager.set_binder(binder)
+    pid = manager.default.playlist_id
+    other = PlaylistsManager()
+    other._binder = binder
+    other._playlists = dict(manager._playlists)
+    for am in other._playlists.values():
+        am._on_assets_update = None             # as a playlist loaded from disk, before anything binds it
+    am = other.get(pid)
+    assert am._on_assets_update is not None
+    am.append({'url': 'https://example.com/a', 'duration': 5})
+    asyncio.get_event_loop().run_until_complete(asyncio.sleep(0))
+    assert (pid, 'assets') in seen
