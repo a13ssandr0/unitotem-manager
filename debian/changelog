@@ -1,3 +1,9 @@
+unitotem-manager (3.0.0~dev32) stable; urgency=medium
+
+  * Write budget: the browser's shader and GPU caches and its metrics file live in RAM (symlinks into /var/cache/unitotem-cef before the browser starts), the browser log is errors only and in RAM; the manager marks its log lines with journal priorities so the journal can keep warnings and errors only
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Mon, 16 Nov 2026 01:30:00 +0100
+
 unitotem-manager (3.0.0~dev31) stable; urgency=medium
 
   * Viewer: the mouse pointer is hidden from the start of every document, appears on the first mouse movement and hides 10 s after the last one (the style was mounted before the document had a root element and threw)

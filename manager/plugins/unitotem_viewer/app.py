@@ -18,6 +18,7 @@ which is the only thread-safe bridge between the two event loops.
 import asyncio
 import json
 import os
+import shutil
 import socket
 import sys
 import ssl
@@ -66,6 +67,46 @@ PRESENT_MS = 300     # from the page's first drawn frame to the splash leaving
 
 BROWSER_PROFILE = '/var/lib/unitotem/browser'
 BROWSER_CACHE = '/var/cache/unitotem-cef'
+
+
+# Browser scratch that lives in the profile (on DATA) and is rewritten every few minutes: shader and GPU caches, and the metrics
+# file (a 4 MiB mmap). They are symlinked into the RAM cache before the browser starts.
+RAM_PROFILE_PATHS = ('BrowserMetrics', 'BrowserMetrics-spare.pma', 'GrShaderCache', 'ShaderCache', 'GraphiteDawnCache',
+                     'Default/GPUCache', 'Default/DawnGraphiteCache', 'Default/DawnWebGPUCache')
+
+
+# Emptied at every start: the browser removes the link when it exits or restarts, not the files behind it (4 MiB per run)
+RAM_PROFILE_WIPE = ('BrowserMetrics',)
+
+
+def link_ram_caches(profile: str, cache: str, paths=RAM_PROFILE_PATHS, wipe=RAM_PROFILE_WIPE):
+    """Makes each of `paths` (relative to the profile) a symlink into `cache`/profile/, creating the target directories. A directory
+    that was a real one before (an older profile) is deleted: it only held cache. Never raises: a path that cannot be linked stays as it is."""
+    base = os.path.join(cache, 'profile')
+    for rel in paths:
+        link = os.path.join(profile, rel)
+        target = os.path.join(base, rel)
+        try:
+            is_file = rel.endswith('.pma')
+            os.makedirs(os.path.dirname(target) if is_file else target, exist_ok=True)
+            if rel in wipe:
+                for entry in os.scandir(target):
+                    if entry.is_dir(follow_symlinks=False):
+                        shutil.rmtree(entry.path, ignore_errors=True)
+                    else:
+                        os.unlink(entry.path)
+            os.makedirs(os.path.dirname(link), exist_ok=True)
+            if os.path.islink(link):
+                if os.readlink(link) == target:
+                    continue
+                os.unlink(link)
+            elif os.path.isdir(link):
+                shutil.rmtree(link)
+            elif os.path.lexists(link):
+                os.unlink(link)
+            os.symlink(target, link)
+        except OSError as e:
+            logger.warning('Cannot move {} to RAM: {}', rel, e)
 
 
 def clear_stale_locks(profile: str):
@@ -193,6 +234,7 @@ class WebviewApp:
         os.makedirs(cache_path, exist_ok=True)
         os.makedirs(BROWSER_CACHE, exist_ok=True)
         clear_stale_locks(cache_path)
+        link_ram_caches(cache_path, BROWSER_CACHE)
         profile_prefs.apply(cache_path, accept_languages=Cdp.accept_language(default_language()))
 
         # multi_threaded_message_loop must stay False - it's a Windows-only
@@ -301,7 +343,9 @@ class WebviewApp:
             settings={
                 'windowless_rendering_enabled' : False,
                 'multi_threaded_message_loop'  : False,
-                'log_severity'                 : cef.LOGSEVERITY_WARNING,
+                # Errors only, in RAM: the WARNING log in the profile grew to 122 MB in two days (one "speculative frame" line per page change)
+                'log_severity'                 : cef.LOGSEVERITY_ERROR,
+                'log_file'                     : os.path.join(BROWSER_CACHE, 'chrome_debug.log'),
                 'remote_debugging_port'        : CDP_PORT,
                 'cache_path'                   : cache_path,
                 # A site that asks for a login keeps it in a session cookie (no expiry date): without this the browser forgets
@@ -518,9 +562,6 @@ class WebviewApp:
             message = (f"GPU profile '{self.gpu_profile.name}' expects hardware compositing but Chromium reports "
                        f"gpu_compositing={status.get('gpu_compositing')} (gl={parts}): the screen is drawn by the CPU")
             logger.warning(message)
-            if os.environ.get('JOURNAL_STREAM'):
-                # journald keeps only warnings and the unit's stderr is stored below that: the sd-daemon prefix keeps this one
-                print(f'<4>{message}', file=sys.stderr, flush=True)
 
     def _raise_splashes(self):
         for splash in self._splashes.values():

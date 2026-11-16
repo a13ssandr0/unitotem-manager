@@ -39,7 +39,9 @@ import sys
 import uvloop
 
 import utils.constants as const
-from utils._logging import install_logger
+from utils._logging import install_journal_sink, install_logger
+
+install_journal_sink()
 
 logger.info('Starting UniTotem Manager {} (Python {})', const.__version__, sys.version)
 

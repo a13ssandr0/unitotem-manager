@@ -1,5 +1,7 @@
 import inspect
 import logging
+import os
+import sys
 from typing import Any
 
 import hypercorn.logging
@@ -67,3 +69,23 @@ def install_logger():
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
     logging.basicConfig(handlers=[InterceptHandler()], level=0)
+
+
+# sd-daemon priorities (journald reads the "<N>" line prefix of a service's stderr; without one every line is INFO)
+JOURNAL_PRIORITY = {'TRACE': 7, 'DEBUG': 7, 'INFO': 6, 'SUCCESS': 6, 'WARNING': 4, 'ERROR': 3, 'CRITICAL': 2}
+
+
+def journal_sink(message, stream=None):
+    """Writes a formatted log record to stderr with its sd-daemon priority on every line, so journald can keep warnings and errors only."""
+    prio = JOURNAL_PRIORITY.get(message.record['level'].name, 6)
+    lines = str(message).rstrip('\n').split('\n')
+    (stream or sys.stderr).write(''.join(f'<{prio}>{line}\n' for line in lines))
+
+
+def install_journal_sink(environ=None):
+    """Under journald, replaces the default stderr sink by one that carries priorities. Returns whether it did."""
+    if not (os.environ if environ is None else environ).get('JOURNAL_STREAM'):
+        return False
+    logger.remove()
+    logger.add(journal_sink, format='{name}:{function}:{line} - {message}\n{exception}', colorize=False)
+    return True
