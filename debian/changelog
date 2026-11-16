@@ -1,3 +1,9 @@
+unitotem-manager (3.0.0~dev33) stable; urgency=medium
+
+  * Playlists loaded at start are bound to the clients' push: an edit in the web UI (duration, name, enable) reaches the clients
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Mon, 16 Nov 2026 15:50:00 +0100
+
 unitotem-manager (3.0.0~dev32) stable; urgency=medium
 
   * Write budget: the browser's shader and GPU caches and its metrics file live in RAM (symlinks into /var/cache/unitotem-cef before the browser starts), the browser log is errors only and in RAM; the manager marks its log lines with journal priorities so the journal can keep warnings and errors only
