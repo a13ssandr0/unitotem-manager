@@ -76,9 +76,8 @@ def probe_media_type(url: str) -> MediaType:
 class Scheduler(WSAPIBase):
     def __init__(self, ws: WSManager, remote_ws: WSManager):
         super().__init__(ws, remote_ws)
-        # Register callbacks for all existing playlists
-        for am in playlists_manager.playlists.values():
-            self._bind_playlist_callbacks(am)
+        # The push callbacks of every playlist, also of those loaded or restored after this object exists
+        playlists_manager.set_binder(self._bind_playlist_callbacks)
 
     def _bind_playlist_callbacks(self, am: AssetsManager):
         pid = am.playlist_id

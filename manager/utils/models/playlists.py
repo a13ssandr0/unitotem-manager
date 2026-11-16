@@ -21,6 +21,7 @@ class PlaylistsManager:
     def __init__(self):
         self._playlists: dict[str, AssetsManager] = {}
         self._default_id: Optional[str] = None
+        self._binder = None
 
     @classmethod
     def get_instance(cls) -> PlaylistsManager:
@@ -32,12 +33,24 @@ class PlaylistsManager:
     def playlists(self) -> dict[str, AssetsManager]:
         return self._playlists
 
+    def set_binder(self, binder):
+        """`binder(playlist)` connects a playlist to the clients' push (assets and current updates). It runs for the playlists that exist
+        and for each one that appears later (loaded at start, created, restored): a playlist is never changed without it."""
+        self._binder = binder
+        for am in self._playlists.values():
+            binder(am)
+
+    def _bound(self, am: AssetsManager) -> AssetsManager:
+        if self._binder is not None and am._on_assets_update is None:
+            self._binder(am)
+        return am
+
     @property
     def default(self) -> AssetsManager:
         if self._default_id and self._default_id in self._playlists:
-            return self._playlists[self._default_id]
+            return self._bound(self._playlists[self._default_id])
         if self._playlists:
-            return next(iter(self._playlists.values()))
+            return self._bound(next(iter(self._playlists.values())))
         raise RuntimeError("No playlists available")
 
     def get(self, playlist_id: Optional[str] = None) -> AssetsManager:
@@ -45,7 +58,7 @@ class PlaylistsManager:
             return self.default
         if playlist_id not in self._playlists:
             raise KeyError(f"Playlist {playlist_id!r} not found")
-        return self._playlists[playlist_id]
+        return self._bound(self._playlists[playlist_id])
 
     def create(self, name: str = 'New Playlist') -> AssetsManager:
         am = AssetsManager(name=name)
