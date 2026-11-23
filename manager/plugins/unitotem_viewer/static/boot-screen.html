@@ -387,6 +387,8 @@
       routeToOutput(el);
     }
 
+    const WEB_LOAD_MS = 10000;           // longest wait for a web page to load before it is shown anyway
+
     class Stage {
       constructor(id, el) {
         this.id = id;
@@ -414,7 +416,23 @@
       hideAll() {
         for (const el of Object.values(this.containers)) {
           el.style.display = 'none';
+          el.style.visibility = '';
+          el.style.position = '';
         }
+      }
+
+      // Sets src on the web frame and resolves when it has loaded, or after WEB_LOAD_MS
+      loadWeb(el, src) {
+        return new Promise(resolve => {
+          const done = () => {
+            clearTimeout(timer);
+            el.removeEventListener('load', done);
+            resolve();
+          };
+          const timer = setTimeout(done, WEB_LOAD_MS);
+          el.addEventListener('load', done);
+          el.src = src;
+        });
       }
 
       /**
@@ -463,22 +481,46 @@
        * @param {string} container - 'boot' | 'web' | 'image' | 'video' | 'audio'
        * @param {string} fit       - 'contain' | 'cover' | 'fill'
        * @param {string} bg_color  - CSS colour, e.g. 'rgb(0,0,0)'
+       *
+       * A web page is loaded out of sight and swapped in when loaded, so the previous asset stays until then.
        */
       async show(src, container, fit, bg_color, volume, muted, zoom, allowPinch, idle) {
         const seq = ++this.seq;
         if (!container) container = await detectContainer(src);
         if (seq !== this.seq) return;        // a newer asset arrived while the type was being probed
 
+        // A web page already on screen: it stays visible while the new one navigates (see the web case below)
+        const web = this.containers.web;
+        const webShown = container === 'web' && web.style.display === 'block' && web.style.visibility !== 'hidden';
+        const webLoading = container === 'web' && !webShown;
+        // current describes the requested asset, the one about to be on screen
         this.current = {src, container, idle: !!idle};
         this.el.classList.toggle('inert', !!idle || container === 'boot');
         updateInert();
-        this.setBackdrop(bg_color || 'rgb(0,0,0)');
-        this.hideAll();
+        if (!webLoading) {
+          this.setBackdrop(bg_color || 'rgb(0,0,0)');
+          if (!webShown) this.hideAll();
+        }
 
         const el = this.containers[container];
         if (!el) return;
         // Zoom and pinch are properties of a web page; never leave them behind on the frame for the next asset
         if (container !== 'web') this.applyWebView(1, false);
+
+        if (webLoading) {
+          // Laid out at full size but out of sight, so the asset on screen keeps its place and is not pushed down
+          this.applyWebView(zoom, allowPinch);
+          el.style.display = 'block';
+          el.style.visibility = 'hidden';
+          el.style.position = 'absolute';
+          el.style.left = el.style.top = '0';
+          await this.loadWeb(el, src);
+          if (seq !== this.seq) return;      // a newer asset arrived: its show() resets the frame
+          this.hideAll();
+          this.setBackdrop(bg_color || 'rgb(0,0,0)');
+          el.style.display = 'block';
+          return;
+        }
 
         switch (container) {
           case 'boot':
@@ -486,6 +528,7 @@
             break;
 
           case 'web':
+            // Chromium keeps painting the old document until the new one commits, so the frame stays visible
             el.style.display = 'block';
             this.applyWebView(zoom, allowPinch);
             el.src = src;
