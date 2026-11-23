@@ -8,9 +8,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile
 from starlette import status
 from starlette.responses import Response
 
-import utils.constants as const
 from routers.login import require_perm
-from utils import backup
+from utils import backup, release
 
 router = APIRouter()
 
@@ -39,7 +38,7 @@ async def create_backup(parts: Annotated[Optional[list[str]], Query()] = None):
 
     zip_buffer = BytesIO()
     with ZipFile(zip_buffer, 'w', ZIP_DEFLATED, False) as zip_file:
-        zip_file.writestr('config.json', json.dumps({'version': const.__version__, 'parts': data}))
+        zip_file.writestr('config.json', json.dumps({'version': release.version(), 'parts': data}))
         for part in selected:
             if part.export_files:
                 await backup.maybe_await(part.export_files(zip_file))

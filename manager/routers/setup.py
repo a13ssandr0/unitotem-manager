@@ -14,10 +14,9 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
-import utils.constants as const
 from routers.login import LOGMAN, session_cookie
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
-from utils import first_access, osusers, passwords
+from utils import first_access, osusers, passwords, release
 from utils.models.user import user_manager
 from utils.system.ip import reachable_ipv4
 from webview.controller import WebviewManager
@@ -46,7 +45,7 @@ async def setup_page(request: Request):
     return templates.TemplateResponse(request, 'base.html', {
         'assets': assets,
         'state': {
-            'ut_vers': const.__version__,
+            'ut_vers': release.version(),
             'os_vers': os_release()['PRETTY_NAME'],
             'ip_addr': reachable_ipv4(),
             'hostname': gethostname(),

@@ -5,7 +5,7 @@ from templates import files, templates
 
 PAGES = ['base.html', 'first-boot.html.j2', 'no-assets.html.j2', 'errors/error.html.j2']
 BENIGN = {
-    'ut_vers': '3.0.0~dev18', 'os_vers': 'Debian GNU/Linux 13 (trixie)', 'ip_addr': '192.0.2.254', 'hostname': 'unitotem', 'boot_id': 'abc123',
+    'ut_vers': '2026.12~dev1', 'os_vers': 'Debian GNU/Linux 13 (trixie)', 'ip_addr': '192.0.2.254', 'hostname': 'unitotem', 'boot_id': 'abc123',
     'wifi': {'ssid': 'UniTotem-1F2E', 'password': 'p4ssw0rd', 'qrcode': '<svg viewBox="0 0 10 10"><path d="M0 0h1v1H0z"/></svg>'},
     'assets': {'css': ['/assets/main-AbC123.css'], 'js': '/assets/main-AbC123.js', 'dev': False},
     'state': {'user': 'admin', 'hostname': 'unitotem', 'plugins': ['unitotem_node']},

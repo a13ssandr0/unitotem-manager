@@ -28,8 +28,8 @@ from pydantic import BaseModel, Field
 from starlette.requests import Request
 from starlette.responses import Response
 
-import utils.constants as const
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
+from utils import release
 from utils.environment import environ
 from utils.models.user import User, user_manager
 from utils.models.security import security_settings
@@ -184,7 +184,7 @@ async def login_page(request: Request, src: Optional[str] = '/'):
         "state": {
             "src": src,
             "show_users": security_settings.show_login_users,
-            "ut_vers": const.__version__,
+            "ut_vers": release.version(),
             "os_vers": os_release()['PRETTY_NAME'],
             "ip_addr": reachable_ipv4(),
             "hostname": gethostname(),

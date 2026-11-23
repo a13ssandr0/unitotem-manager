@@ -6,8 +6,8 @@ import asyncio
 import socket
 
 from loguru import logger
-from packaging.version import Version
 
+from utils import release
 from utils.plugins import BackupPart, Plugin
 
 UPDATE_CHECK_FIRST_DELAY = 180      # the network may not be up yet right after a boot
@@ -207,7 +207,8 @@ async def _restore_hostname(name, _version):
 def _restore_audio(device, version):
     from .system.audio import set_default_audio_device
     # with version 3.0.0 audio controls changed from alsa to pulseaudio: an older name means nothing here
-    if Version(version) >= Version('3.0.0'):
+    # archives from date-based versions carry a larger number; old ~dev archives are compared by their numeric part
+    if release.version_at_least(version, '3.0.0'):
         set_default_audio_device(device)
 
 

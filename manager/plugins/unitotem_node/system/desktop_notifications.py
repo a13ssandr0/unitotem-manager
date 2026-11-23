@@ -41,7 +41,7 @@ from sdbus.exceptions import DbusFailedError
 from loguru import logger
 from sdbus import DbusInterfaceCommonAsync, dbus_method_async, dbus_signal_async
 
-import utils.constants as const
+from utils import release
 from utils.notifications import DEFAULT_TIMEOUT, Notification, notifications
 
 NAME = 'org.freedesktop.Notifications'
@@ -117,7 +117,7 @@ class Server(DbusInterfaceCommonAsync, interface_name=NAME):
 
     @dbus_method_async(result_signature='ssss', method_name='GetServerInformation')
     async def get_server_information(self) -> tuple[str, str, str, str]:
-        return 'UniTotem', 'UniTotem', const.__version__, '1.2'
+        return 'UniTotem', 'UniTotem', release.version(), '1.2'
 
     @dbus_signal_async('us', signal_name='ActionInvoked')
     def action_invoked(self) -> tuple[int, str]:

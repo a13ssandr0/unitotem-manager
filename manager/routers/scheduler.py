@@ -6,10 +6,10 @@ from starlette import status
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
-import utils.constants as const
 import utils.plugins as plugins
 from routers.login import LOGMAN
 from templates import get_vite_assets, is_vite_dev, load_vite_manifest, templates
+from utils import release
 from utils.models.user import User
 from utils.storage.uploadmanager import upload_manager
 from utils.system.ip import reachable_ipv4
@@ -51,7 +51,7 @@ async def home(request: Request, path: str, user: User = Depends(LOGMAN)):
         "assets": assets,
         "state": {
             "user": user.name,
-            "ut_vers": const.__version__,
+            "ut_vers": release.version(),
             "os_vers": os_release()['PRETTY_NAME'],
             "ip_addr": reachable_ipv4(),
             "hostname": gethostname(),

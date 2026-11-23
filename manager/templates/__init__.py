@@ -10,6 +10,7 @@ from starlette.templating import Jinja2Templates
 
 import resources
 import utils.constants as const
+from utils import release
 from utils.objs import flatten
 from utils.system.ip import address_text
 
@@ -17,7 +18,7 @@ from utils.system.ip import address_text
 def ctx_proc(request):
     return dict(
             R=resources,
-            ut_vers=const.__version__,
+            ut_vers=release.version(),
             os_vers=os_release()['PRETTY_NAME'],
             ip_addr=address_text(),
             hostname=gethostname(),

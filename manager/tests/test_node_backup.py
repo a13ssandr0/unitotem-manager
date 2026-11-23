@@ -110,7 +110,7 @@ def test_the_default_audio_device_is_exported_and_none_without_a_sound_server(no
     assert node.plugin._export_audio() is None
 
 
-@pytest.mark.parametrize('version', ['2.9.0', '1.0.0'])
+@pytest.mark.parametrize('version', ['2.9.0', '1.0.0', '2.3.0', 'garbage'])
 def test_an_audio_name_from_before_3_0_0_means_nothing_and_is_not_applied(node, monkeypatch, version):
     applied = []
     monkeypatch.setattr(node.audio, 'set_default_audio_device', applied.append)
@@ -118,10 +118,11 @@ def test_an_audio_name_from_before_3_0_0_means_nothing_and_is_not_applied(node, 
     assert applied == []
 
 
-def test_an_audio_name_from_3_0_0_is_applied(node, monkeypatch):
+@pytest.mark.parametrize('version', ['3.0.0', '2026.12', '2026.12~dev1', '2026.12.1'])
+def test_an_audio_name_from_3_0_0_or_later_is_applied(node, monkeypatch, version):
     applied = []
     monkeypatch.setattr(node.audio, 'set_default_audio_device', applied.append)
-    node.plugin._restore_audio('alsa_output.usb', '3.0.0')
+    node.plugin._restore_audio('alsa_output.usb', version)
     assert applied == ['alsa_output.usb']
 
 

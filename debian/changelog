@@ -1,3 +1,9 @@
+unitotem-manager (2026.12~dev1) stable; urgency=medium
+
+  * Date-based version scheme shared with the image: the version comes from the release file read at runtime and is shown in full
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Mon, 23 Nov 2026 10:00:00 +0100
+
 unitotem-manager (3.0.0~dev33) stable; urgency=medium
 
   * Playlists loaded at start are bound to the clients' push: an edit in the web UI (duration, name, enable) reaches the clients

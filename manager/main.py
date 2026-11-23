@@ -9,12 +9,12 @@ from functools import cache, lru_cache
 from pathlib import Path
 from typing import Literal, Union
 
-import utils.constants as const
+from utils import release
 
 # --version is answered before the modules below load: utils.models.command_line parses argv when it is imported, and
 # the other options are read there (parse_known_args leaves them alone)
 _version = ArgumentParser(prog='unitotem-manager', add_help=False, allow_abbrev=False)
-_version.add_argument('--version', action='version', version=f'%(prog)s {const.__version__}')
+_version.add_argument('--version', action='version', version=f'%(prog)s {release.version()}')
 _version.parse_known_args()
 
 import urllib3
@@ -99,7 +99,7 @@ class UploadedFiles(StaticFiles):
 
 # noinspection PyTypeChecker
 WWW = FastAPI(
-        title='UniTotem', version=const.__version__,
+        title='UniTotem', version=release.version(),
         middleware=[
             Middleware(HTTPSRedirectMiddleware),
         ],
@@ -171,7 +171,7 @@ async def health(request: Request):
     """
     if request.client is None or request.client.host not in ('127.0.0.1', '::1'):
         raise HTTPException(status_code=404)
-    return {'status': 'ok', 'version': const.__version__}
+    return {'status': 'ok', 'version': release.version()}
 
 
 @WWW.get('/api/schema', dependencies=[Depends(LOGMAN)])
