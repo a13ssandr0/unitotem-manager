@@ -1,6 +1,7 @@
 unitotem-manager (2026.12~dev1) stable; urgency=medium
 
   * Date-based version scheme shared with the image: the version comes from the release file read at runtime and is shown in full
+  * A web asset is loaded out of sight and replaces the previous asset when it has loaded: no stale web page and no black frame before it
 
  -- Alessandro Campolo <campolo.alex@gmail.com>  Mon, 23 Nov 2026 10:00:00 +0100
 
