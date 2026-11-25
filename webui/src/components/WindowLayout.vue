@@ -125,7 +125,7 @@ const leaves = node => node.kind === 'leaf' ? [node.id] : [...leaves(node.a), ..
 const leafIds = computed(() => leaves(layout.value.tree))
 const playlistName = id => props.playlists.find(p => p.playlist_id === id)?.name
 const labels = computed(() => Object.fromEntries(leafIds.value.map(id => [id, playlistName(layout.value.panes[id])])))
-const playlistItems = computed(() => [{title: 'None (idle page)', value: ''},
+const playlistItems = computed(() => [{title: 'Default playlist', value: ''},
   ...props.playlists.map(p => ({title: p.name, value: p.playlist_id}))])
 
 // ── the area ───────────────────────────────────────────────────────────────

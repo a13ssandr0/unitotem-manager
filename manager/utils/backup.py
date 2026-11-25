@@ -27,20 +27,91 @@ from utils.storage.uploadmanager import upload_manager
 
 # ── playlists ────────────────────────────────────────────────────────────────
 
+ASSIGNMENTS_VERSION = 1
+
+
 def _export_playlists():
+    """The playlists, their default and the 'assignments' key (version 1): the screens of this node and the playlist
+    each one shows, {'version': 1, 'screens': {screen name: playlist id}}. Only the local viewer is exported: a paired
+    node's screens are driven by its own bundle. Only playlists that exist in the archive are kept."""
+    from utils.remote.bundle import LOCAL_VIEWER
+    from webview.controller import WebviewManager
+    try:
+        found = WebviewManager.get_instance().screen_assignments(LOCAL_VIEWER)
+    except RuntimeError:
+        found = {}          # no viewer manager: nothing is assigned yet
+    screens = {screen: pid for screen, pid in found.items() if pid in playlists_manager.playlists}
     return {'playlists': {pid: json.loads(am.model_dump_json()) for pid, am in playlists_manager.playlists.items()},
-            'default': playlists_manager._default_id}
+            'default': playlists_manager._default_id,
+            'assignments': {'version': ASSIGNMENTS_VERSION, 'screens': screens}}
 
 
-def _restore_playlists(data, _version):
+async def _restore_playlists(data, _version):
     playlists_manager._playlists.clear()
     for pid, am_data in data['playlists'].items():
         am = AssetsManager.model_validate(am_data)
         am._filepath = playlists_manager._playlist_path(am.playlist_id)
         am.save()
         playlists_manager._playlists[pid] = am
-    playlists_manager._default_id = data.get('default')
+    default = data.get('default')
+    if default not in playlists_manager._playlists:
+        default = next(iter(playlists_manager._playlists), None)     # the first restored one
+    playlists_manager._default_id = default
     playlists_manager._save_index()
+    for pid in list(playlists_manager._playlists):
+        playlists_manager.get(pid)      # runs the binder: the push callbacks of the new objects
+    _playlists_replaced()
+    _restore_assignments(data.get('assignments'))
+    await _playlists_broadcast()
+
+
+def _playlists_replaced():
+    """The windows rebuild their playlist loops from the restored playlists."""
+    from webview.controller import WebviewManager
+    try:
+        WebviewManager.get_instance().playlists_replaced()
+    except (RuntimeError, AttributeError):
+        pass        # no viewer manager yet: the windows read the playlists when they start
+
+
+def _restore_assignments(assignments):
+    """Applies the screen assignments of an archive (version 1). Anything else is ignored: the archive still restores."""
+    from utils.remote.bundle import LOCAL_VIEWER
+    from webview.controller import WebviewManager
+    if assignments is None:
+        return      # an archive from before the key existed
+    if not (isinstance(assignments, dict) and type(assignments.get('version')) is int
+            and assignments['version'] == ASSIGNMENTS_VERSION
+            and isinstance(assignments.get('screens'), dict)):
+        logger.warning('Unknown screen assignments in the backup, ignored: {}', assignments)
+        return
+    try:
+        applied = WebviewManager.get_instance().apply_screen_assignments(LOCAL_VIEWER, assignments['screens'])
+    except RuntimeError:
+        logger.warning('No viewer manager: the screen assignments of the backup are not applied')
+        return
+    logger.info('Applied {} screen assignments from the backup', applied)
+
+
+async def _playlists_broadcast():
+    """The clients and the windows get the restored playlists through the same callbacks used for every change."""
+    from api.ws.endpoints import WS
+    from webview.controller import WebviewManager
+    try:
+        await WS.broadcast('Scheduler/playlists', playlists=playlists_manager.serialize())
+    except (RuntimeError, AttributeError):
+        pass        # no websocket server (unit tests)
+    for am in list(playlists_manager.playlists.values()):
+        try:
+            am.on_assets_update()
+        except (RuntimeError, AttributeError):
+            pass        # no event loop (unit tests)
+    try:
+        vm = WebviewManager.get_instance()
+    except RuntimeError:
+        return
+    from utils.remote import viewers
+    await viewers.publish(vm)
 
 
 def _reset_playlists():

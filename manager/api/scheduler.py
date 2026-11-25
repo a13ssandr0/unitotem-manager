@@ -110,12 +110,14 @@ class Scheduler(WSAPIBase):
         return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
 
     @UserPerms.requires.scheduler
-    def delete_playlist(self, playlist_id: str):
+    async def delete_playlist(self, playlist_id: str):
         try:
             playlists_manager.delete(playlist_id)
             try:
                 from webview.controller import WebviewManager
                 WebviewManager.get_instance().remove_playlist_loop(playlist_id)
+                # Panes that fell back to the default show it on Viewers/list at once
+                await WebviewManager.get_instance()._publish_viewers()
             except RuntimeError:
                 pass
         except ValueError as e:
@@ -131,11 +133,18 @@ class Scheduler(WSAPIBase):
         return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
 
     @UserPerms.requires.scheduler
-    def set_default_playlist(self, playlist_id: str):
+    async def set_default_playlist(self, playlist_id: str):
         try:
             playlists_manager.set_default(playlist_id)
         except KeyError as e:
             return WSResponse(error=str(e))
+        try:
+            from webview.controller import WebviewManager
+            WebviewManager.get_instance().default_changed()
+            # Panes without a playlist show the default: every page gets Viewers/list now
+            await WebviewManager.get_instance()._publish_viewers()
+        except RuntimeError:
+            pass        # no viewer manager yet: the windows read the default when they start
         return WSBroadcast(self.playlists, playlists=playlists_manager.serialize())
 
     @UserPerms.requires.scheduler

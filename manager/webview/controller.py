@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -15,6 +16,7 @@ from utils.models.command_line import cmdargs
 from utils.ticker import push as ticker_push
 from utils.models import layout as layouts
 from utils.models.layout import Area, LayoutError, WindowLayout, window_layouts
+from utils.models.playlists import playlists_manager
 from utils.models.viewer import KeyboardSettings, RefreshSettings, ScreensaverSettings, valid_language, viewer_settings
 
 if TYPE_CHECKING:
@@ -200,6 +202,13 @@ class WebviewManager:
         self._loops[playlist.playlist_id] = loop
         loop.start()
 
+    def default_playlist_id(self) -> Optional[str]:
+        """The default playlist, if it has a loop: what a pane with no playlist of its own plays. None otherwise."""
+        pid = playlists_manager._default_id
+        if pid not in playlists_manager.playlists:
+            pid = next(iter(playlists_manager.playlists), None)
+        return pid if pid is not None and pid in self._loops else None
+
     def asset_audio_changed(self, playlist_id: str, asset: Asset):
         """The volume or mute of an asset was edited: windows showing it right now follow at once."""
         loop = self._loops.get(playlist_id)
@@ -220,14 +229,54 @@ class WebviewManager:
                     self.layouts.put(key, layouts.with_panes(
                         layout, {p: pid for p, pid in layout.panes.items() if pid != playlist_id}))
             # Deleting a playlist leaves its windows with nothing to show;
-            # they must fall back to the idle page like any other
-            # unassigned window rather than freeze on the last asset.
+            # they must fall back to the default playlist, or to the idle
+            # page when there is none, rather than freeze on the last asset.
             # Only a screen that currently has a window can be told; one
-            # that is off or unplugged gets the idle page from
+            # that is off or unplugged gets the same from
             # _restore_assignments when it comes back.
-            for vid in list(self._webviews):
-                for window_id, screen_name in self._windows_of(vid):
-                    self._sync_window(vid, window_id, screen_name)
+            self._sync_every_window()
+
+    def default_changed(self):
+        """The default playlist changed: the panes without a playlist of their own follow it."""
+        self._sync_every_window()
+
+    def playlists_replaced(self):
+        """All playlists were replaced as a whole (backup restore): every loop is rebuilt on the new objects, and whatever
+        still points at a playlist that is gone is dropped."""
+        for loop in self._loops.values():
+            loop.stop()
+        self._loops.clear()
+        for pid in list(playlists_manager.playlists):
+            self.add_playlist_loop(playlists_manager.get(pid))
+
+        changed = False
+        for key in [k for k, pid in self._assignments.items() if pid not in self._loops]:
+            del self._assignments[key]
+            changed = True
+        for key, layout in list(self.layouts.windows.items()):
+            stale = [p for p, pid in layout.panes.items() if pid is not None and pid not in self._loops]
+            if stale:
+                self.layouts.put(key, layouts.with_panes(
+                    layout, {p: pid for p, pid in layout.panes.items() if p not in stale}))
+        for vid in list(self._pending_window_assignments):
+            pending = self._pending_window_assignments[vid]
+            for wid in [w for w, pid in pending.items() if pid not in self._loops]:
+                del pending[wid]
+                changed = True
+            if not pending:
+                del self._pending_window_assignments[vid]
+        for vid in [v for v, pid in self._legacy_assignments.items() if pid not in self._loops]:
+            del self._legacy_assignments[vid]
+            changed = True
+        if changed:
+            self._save_assignments()
+        self._sync_every_window()
+
+    def _sync_every_window(self):
+        """Syncs every window of every viewer, with its playlists as they are now."""
+        for vid in list(self._webviews):
+            for window_id, screen_name in self._windows_of(vid):
+                self._sync_window(vid, window_id, screen_name)
 
     # ── Webview registration ───────────────────────────────────────────────
 
@@ -435,9 +484,15 @@ class WebviewManager:
 
     def _wanted_playlists(self, instance_id: str, screen_name: Optional[str],
                           layout: WindowLayout) -> dict[int, Optional[str]]:
-        """The playlist of every pane of a window: the assignment of the screen for the main pane, the layout's for the others."""
-        wanted = {pane: layout.panes.get(pane) for pane in layout.leaf_ids}
-        wanted[layout.main] = self._assignments.get((instance_id, screen_name)) if screen_name else None
+        """The playlist of every pane of a window: the assignment of the screen for the main pane, the layout's for the others.
+        A pane with no playlist of its own plays the default one (default_playlist_id), or None, which is the idle page."""
+        default = self.default_playlist_id()
+        wanted = {}
+        for pane in layout.leaf_ids:
+            pid = layout.panes.get(pane)
+            wanted[pane] = default if pid is None else pid
+        main = self._assignments.get((instance_id, screen_name)) if screen_name else None
+        wanted[layout.main] = default if main is None else main
         return wanted
 
     def _sync_window(self, instance_id: str, window_id: int, screen_name: Optional[str]):
@@ -684,6 +739,29 @@ class WebviewManager:
         self._assignments[(webview_id, screen_name)] = playlist_id
         self._save_assignments()
         self._restore_assignments(webview_id)
+
+    def screen_assignments(self, viewer_id: str) -> dict[str, str]:
+        """{screen name: playlist id} of the explicit assignments of a viewer."""
+        return {name: pid for (vid, name), pid in self._assignments.items() if vid == viewer_id}
+
+    def apply_screen_assignments(self, viewer_id: str, screens) -> int:
+        """Applies {screen name: playlist id} to a viewer, for the screens with no explicit assignment yet; an existing one is
+        never overridden. The input is untrusted: at most 64 entries, names checked, playlists must have a loop.
+        Returns how many were applied."""
+        if not isinstance(screens, dict):
+            return 0
+        applied = 0
+        for name, pid in list(screens.items())[:64]:
+            if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9._:+-]{1,64}', name):
+                continue
+            if not isinstance(pid, str) or pid not in self._loops:
+                continue
+            if (viewer_id, name) in self._assignments:
+                continue
+            self.assign_screen(viewer_id, name, pid)
+            applied += 1
+        logger.info('Applied {} screen assignment(s) of {}', applied, viewer_id)
+        return applied
 
     def pane_assignments(self) -> list[tuple[str, str, int, str]]:
         """(viewer id, screen name, pane, playlist id) of every pane that is not the main one: what the main assignments do not say
