@@ -69,11 +69,14 @@ const LEVELS = {
   warning: {icon: 'mdi-alert', color: 'warning'},
   error: {icon: 'mdi-alert-circle', color: 'error'},
 }
-const levelOf = (n) => LEVELS[n.level] ?? LEVELS.info
+// A progress notification (an operation running) is not a failure, whatever its level
+const PROGRESS = {icon: 'mdi-progress-download', color: 'primary'}
+const levelOf = (n) => n.progress != null ? PROGRESS : (LEVELS[n.level] ?? LEVELS.info)
 
 const unread = computed(() => items.value.filter(n => !n.read))
 const worstUnread = computed(() => {
-  const levels = unread.value.map(n => n.level)
+  // progress notifications stay in the count but do not colour the badge
+  const levels = unread.value.filter(n => n.progress == null).map(n => n.level)
   return levels.includes('error') ? 'error' : levels.includes('warning') ? 'warning' : 'primary'
 })
 

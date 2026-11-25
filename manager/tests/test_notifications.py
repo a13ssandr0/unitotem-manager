@@ -358,3 +358,13 @@ def test_without_a_user_the_old_calls_still_mean_everybody(center):
     assert center.snapshot(['admin'])[0]['read'] is True
     center.dismiss([nid], ['admin'])
     assert center.snapshot(['admin'], 'ann') == []
+
+
+def test_get_reads_back_what_is_up_for_a_key(center):
+    assert center.get('k') is None
+    center.notify('k', 'info', 'One', progress=5, persistent=True)
+    assert center.get('k')['title'] == 'One' and center.get('k')['level'] == 'info'
+    center.notify('k', 'error', 'One', progress=5, persistent=True)
+    assert center.get('k')['level'] == 'error' and center.get('k')['persistent'] is True
+    center.resolve('k')
+    assert center.get('k') is None

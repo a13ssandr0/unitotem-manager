@@ -1,33 +1,21 @@
-import asyncio
-
 from api.ws.responses import WSBroadcast
 from api.ws.wsmanager import WSAPIBase
 from utils.models.user import UserPerms
 from unitotem_node.system import updater
 
-POLL_INTERVAL = 2  # seconds, only while an operation is running
+
+async def _pushed(ws, result):
+    """The result of a command, after the status is pushed once more. (A module function: the endpoint loader exposes every method.)"""
+    await ws.broadcast('Settings/Update/status', status=await updater.status())
+    return WSBroadcast(result=result)
 
 
 class Update(WSAPIBase):
-    _poller: asyncio.Task | None = None
-
-    async def _poll(self):
-        """Pushes the status to every client while the updater reports an operation in progress."""
-        while True:
-            status = await updater.status()
-            await self.ws.broadcast('Settings/Update/status', status=status)
-            if not status.get('op'):
-                return
-            await asyncio.sleep(POLL_INTERVAL)
-
-    def _start_polling(self):
-        if Update._poller is None or Update._poller.done():
-            Update._poller = asyncio.get_running_loop().create_task(self._poll(), name='update_poll')
+    # The status of a running operation is pushed by system/update_progress.py (inotify on the updater's progress file); each command
+    # below pushes it once more, so the page also sees what the command did at once.
 
     async def status(self):
         status = await updater.status()
-        if status.get('op'):
-            self._start_polling()
         return WSBroadcast(status=status)
 
     async def check(self):
@@ -43,34 +31,22 @@ class Update(WSAPIBase):
         return WSBroadcast(availability=updater.availability)
 
     async def fetch(self, force: bool = False):
-        result = await updater.fetch(force)
-        self._start_polling()
-        return WSBroadcast(result=result)
+        return await _pushed(self.ws, await updater.fetch(force))
 
     async def cancel(self):
-        result = await updater.cancel()
-        self._start_polling()
-        return WSBroadcast(result=result)
+        return await _pushed(self.ws, await updater.cancel())
 
     async def apply(self, reboot: bool = True):
-        result = await updater.apply(reboot)
-        self._start_polling()
-        return WSBroadcast(result=result)
+        return await _pushed(self.ws, await updater.apply(reboot))
 
     async def confirm(self):
-        result = await updater.confirm()
-        self._start_polling()
-        return WSBroadcast(result=result)
+        return await _pushed(self.ws, await updater.confirm())
 
     async def rollback(self, reboot: bool = True):
-        result = await updater.rollback(reboot)
-        self._start_polling()
-        return WSBroadcast(result=result)
+        return await _pushed(self.ws, await updater.rollback(reboot))
 
     async def copy_to_other(self):
-        result = await updater.copy_to_other()
-        self._start_polling()
-        return WSBroadcast(result=result)
+        return await _pushed(self.ws, await updater.copy_to_other())
 
     async def set_policy(self, mode: str, time: str = '04:00'):
         if mode not in updater.POLICY_MODES:

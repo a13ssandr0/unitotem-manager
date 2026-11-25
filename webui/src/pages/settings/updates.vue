@@ -59,16 +59,14 @@
 
         <div v-if="busy" class="mt-4 update-progress">
           <div class="mb-1">
-            {{ progressTitle }}<span v-if="progress && progress.phase">: {{ phaseNames[progress.phase] ?? progress.phase }}</span>
-            <span v-if="progress && progress.eta_s"> - about {{ progress.eta_s }} s left</span>
+            {{ progressTitle }}<span v-if="phaseText">: {{ phaseText }}</span>
+            <span v-if="progress?.eta_s"> - about {{ progress.eta_s }} s left</span>
           </div>
-          <v-progress-linear :model-value="progress?.percent || 0" :indeterminate="!progress || progress.percent == null"
+          <v-progress-linear :model-value="progress?.percent || 0" :indeterminate="progress?.percent == null"
                              height="14" color="primary" rounded>
-            <small v-if="progress && progress.percent != null">{{ Math.round(progress.percent) }}%</small>
+            <small v-if="progress?.percent != null">{{ Math.round(progress.percent) }}%</small>
           </v-progress-linear>
-          <div class="text-caption mt-1">
-            While the new image is being written there is no rollback available.
-          </div>
+          <div v-if="sizeCaption" class="text-caption mt-1">{{ sizeCaption }}</div>
         </div>
 
         <v-alert v-if="message" :type="message.type" variant="tonal" class="mt-4">{{ message.text }}</v-alert>
@@ -98,17 +96,18 @@
           @click="runCheck"
         >Check updates</v-btn>
         <v-btn
-          v-if="busy"
           variant="text"
           color="warning"
           prepend-icon="mdi-cancel"
+          :disabled="!busy"
           @click="send('cancel')"
         >Cancel</v-btn>
         <v-btn
-          v-else-if="status?.pending_confirm"
+          v-if="status?.pending_confirm"
           variant="text"
           color="green"
           prepend-icon="mdi-check"
+          :disabled="busy"
           @click="send('confirm')"
         >Confirm this version</v-btn>
         <v-btn
@@ -174,7 +173,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="confirmAction = null">Cancel</v-btn>
-          <v-btn variant="text" color="red" @click="send(confirmAction); confirmAction = null">Continue</v-btn>
+          <v-btn variant="text" color="red" :disabled="busy" @click="send(confirmAction); confirmAction = null">Continue</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -273,20 +272,37 @@ const autoTexts = {
 }
 const autoText = computed(() => autoTexts[status.value?.auto?.state?.action] ?? '')
 const busy = computed(() => !!status.value?.op)
-const canDownload = computed(() => !!status.value?.ab && !!check.value?.available)
+const canDownload = computed(() => !!status.value?.ab && !busy.value && !!check.value?.available)
 const canInstall = computed(() => !!status.value?.ab && !busy.value && !status.value.armed && newerInOther.value)
 const canCopy = computed(() => !!status.value?.ab && !busy.value && !status.value.pending_confirm)
 const canSwitch = computed(() => !!status.value?.ab && !busy.value && !!status.value.other_version)
-const phaseNames = {check: 'checking', download: 'downloading', write: 'writing', verify: 'verifying', arm: 'preparing the restart',
-  reboot: 'restarting'}
+const phaseNames = {check: 'Checking', download: 'Downloading', verify: 'Verifying', arm: 'Preparing', reboot: 'Restarting'}
+// A repair write is a copy, which the title already says: no phase text. A fetch writes the downloaded image
+const phaseText = computed(() => {
+  const p = progress.value
+  if (!p?.phase) return ''
+  if (p.phase === 'write') return p.op === 'repair' ? '' : 'Writing'
+  return phaseNames[p.phase] ?? p.phase
+})
+const MB = 1000 * 1000
+// Shown only when both sizes are sane numbers; otherwise the bar speaks for itself
+const sizeCaption = computed(() => {
+  const {bytes, total} = progress.value ?? {}
+  if (!Number.isFinite(bytes) || !Number.isFinite(total) || total <= 0 || bytes < 0 || bytes > total) return ''
+  return `${Math.round(bytes / MB)} / ${Math.round(total / MB)} MB`
+})
 const damaged = ['label', 'fsck', 'mount']
 const progressTitle = computed(() => {
-  const op = progress.value?.op
-  const titles = {fetch: 'Downloading the update', apply: 'Installing the update', rollback: 'Going back to the previous version',
-    repair: status.value?.copy_from ? `Copying slot ${slotName(status.value.copy_from)} to slot ${slotName(status.value.other_slot)}`
-      : `Rebuilding slot ${slotName(status.value?.other_slot)}` + (damaged.includes(progress.value?.cause) ||
-      progress.value?.cause?.startsWith('bootfile:') ? ' after damage' : progress.value?.cause === 'empty' ? ' (incomplete system)' : '')}
-  return titles[op] ?? 'Working'
+  const p = progress.value
+  const s = status.value
+  const other = slotName(s?.other_slot)
+  const titles = {fetch: 'Downloading the update', apply: 'Installing the update', rollback: 'Going back to the previous version'}
+  if (!p) return 'Working'
+  if (p.op !== 'repair') return titles[p.op] ?? 'Working'
+  // a repair the node started after a boot has no copy_from: an absent or first-boot cause is a plain copy of the running slot
+  if (!s?.copy_from && (damaged.includes(p.cause) || p.cause?.startsWith('bootfile:'))) return `Rebuilding slot ${other} after damage`
+  if (!s?.copy_from && p.cause === 'empty') return `Rebuilding slot ${other} (incomplete system)`
+  return `Copying slot ${slotName(s?.copy_from ?? s?.slot)} to slot ${other}`
 })
 
 // Slot names are always shown in capitals (the server already sends them so; this is the second lock)

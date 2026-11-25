@@ -23,6 +23,7 @@ How a producer uses it (core code and plugins alike: a plugin may import this mo
 * `progress` (0-100, or -1 for "working, unknown how far") turns a notification into a progress bar and `persistent` makes it
   impossible to dismiss while the work lasts: `notifications.set_progress(key, percent, text)` moves the bar without making
   the notification unread again, `resolve(key)` removes it when the work ends (the updater's download and repair).
+  `get(key)` reads back what is up for a key (None if nothing), so a producer can tell whether it must raise it again.
 * `timeout` is how long the page shows the notification as a pop-up, in milliseconds, with the meaning of the freedesktop
   `expire_timeout`: None = the default of its level (`DEFAULT_TIMEOUT`), 0 = until somebody clicks it, > 0 = that long. The bell keeps
   it either way (it is the notification center, the freedesktop `persistence` capability). `actions` are freedesktop (id, label) pairs:
@@ -266,6 +267,13 @@ class NotificationCenter:
             item.progress, item.text, item.updated = progress, text, self._now()
             self._changed()
         return True
+
+    def get(self, key: str) -> Optional[dict]:
+        """What is up for `key`, as a page sees it (`public()`), None if nothing is. Read-only."""
+        with self._lock:
+            self._load()
+            item = next((i for i in self._items if i.key == key), None)
+            return None if item is None else item.public()
 
     def resolve(self, key: str) -> bool:
         """The problem behind `key` is gone: remove its notification. True if there was one."""

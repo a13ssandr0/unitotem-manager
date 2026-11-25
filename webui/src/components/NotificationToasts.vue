@@ -43,7 +43,9 @@ const LEVELS = {
   warning: {icon: 'mdi-alert', color: 'warning'},
   error: {icon: 'mdi-alert-circle', color: 'error'},
 }
-const levelOf = n => LEVELS[n.level] ?? LEVELS.info
+// A progress notification (an operation running) is not a failure, whatever its level
+const PROGRESS = {icon: 'mdi-progress-download', color: 'primary'}
+const levelOf = n => n.progress != null ? PROGRESS : (LEVELS[n.level] ?? LEVELS.info)
 
 const byId = computed(() => new Map((items.value ?? []).map(n => [n.id, n])))
 const shown = computed(() => toasts.value.map(t => ({id: t.id, n: byId.value.get(t.id) ?? t.n})))
