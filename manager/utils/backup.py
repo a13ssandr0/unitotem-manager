@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from shutil import disk_usage
 from typing import Optional
 
 from loguru import logger
@@ -22,7 +23,7 @@ from utils.models.playlists import playlists_manager
 from utils.models.remote import RemoteManager
 from utils.models.user import UserPerms, user_manager
 from utils.plugins import BackupPart
-from utils.storage.uploadmanager import upload_manager
+from utils.storage.uploadmanager import plain_filename, upload_manager
 
 
 # ── playlists ────────────────────────────────────────────────────────────────
@@ -283,11 +284,35 @@ def _export_files(zip_file):
         zip_file.write(file.absolute(), 'uploaded/' + file.name)
 
 
+_MAX_RESTORED_FILES = 10000
+_DISK_RESERVE = 0.05        # share of the disk kept free after the restore
+
+
 async def _restore_files(zip_file):
-    for name in zip_file.namelist():
-        if name.startswith('uploaded/') and not name.endswith('/'):
-            with zip_file.open(name) as infile:
-                await upload_manager.save(infile, name)
+    """Every archived upload is stored under its own name. Nothing is written unless all of them fit the free space."""
+    members = []
+    for member in zip_file.infolist():
+        if not member.filename.startswith('uploaded/') or member.filename.endswith('/'):
+            continue
+        if len(members) >= _MAX_RESTORED_FILES:
+            logger.error('The backup holds more than {} uploaded files: the others are not restored',
+                         _MAX_RESTORED_FILES)
+            break
+        try:
+            plain_filename(member.filename)
+        except ValueError as exc:
+            logger.warning('Uploaded file not restored: {}', exc)
+            continue
+        members.append(member)
+
+    total = sum(member.file_size for member in members)
+    reserve = int(upload_manager.disk_total * _DISK_RESERVE)
+    if total > disk_usage(upload_manager.folder).free - reserve:
+        raise ValueError('Not enough disk space for the uploaded files')
+
+    for member in members:
+        with zip_file.open(member) as infile:
+            await upload_manager.restore(infile, member.filename, max_bytes=member.file_size, size=member.file_size)
 
 
 def _reset_files():

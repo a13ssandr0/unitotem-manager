@@ -251,12 +251,14 @@ def test_an_archive_without_config_gives_its_parts_back(node):
 def test_uploaded_files_are_written_under_uploaded_and_restored_from_there(node, monkeypatch, tmp_path):
     source = tmp_path / 'clip.mp4'
     source.write_bytes(b'video')
-    saved = []
+    restored = []
 
-    async def save(infile, name):
-        saved.append((name, infile.read()))
+    async def restore(infile, name, max_bytes=None, size=None):
+        restored.append((name, infile.read(), max_bytes, size))
 
-    monkeypatch.setattr(node.backup, 'upload_manager', SimpleNamespace(files=[source], save=save))
+    stub = SimpleNamespace(files=[source], folder=tmp_path, disk_total=10**12, restore=restore)
+    monkeypatch.setattr(node.backup, 'upload_manager', stub)
+    monkeypatch.setattr(node.backup, 'disk_usage', lambda path: SimpleNamespace(free=10**12))
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, 'w') as archive:
         node.backup._export_files(archive)
@@ -265,4 +267,4 @@ def test_uploaded_files_are_written_under_uploaded_and_restored_from_there(node,
     with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
         assert archive.namelist() == ['uploaded/clip.mp4', 'config.json', 'uploaded/']
         asyncio.run(node.backup._restore_files(archive))
-    assert saved == [('uploaded/clip.mp4', b'video')]
+    assert restored == [('uploaded/clip.mp4', b'video', 5, 5)]

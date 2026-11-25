@@ -1,6 +1,7 @@
 import asyncio
+import errno
 import os
-from asyncio import iscoroutinefunction
+from inspect import iscoroutinefunction
 from pathlib import Path
 from shutil import disk_usage
 from typing import Callable, Coroutine, Union
@@ -14,6 +15,20 @@ from utils.storage.file_info import FileInfo, get_file_info
 from utils.units import human_readable_size
 
 _buf_size = 64 * 1024 * 1024  # 64MB buffer
+_archive_prefix = 'uploaded/'
+
+
+def plain_filename(name: str) -> str:
+    """The plain file name of an archived upload (the 'uploaded/' prefix is optional). Raises ValueError otherwise."""
+    if name.startswith(_archive_prefix):
+        name = name[len(_archive_prefix):]
+    if not name or len(name) > 255 or name in ('.', '..') or name.startswith('/'):
+        raise ValueError(f'Unsafe file name: {name!r}')
+    if '/' in name or '\\' in name or any(ord(c) < 32 or ord(c) == 127 for c in name):
+        raise ValueError(f'Unsafe file name: {name!r}')
+    if secure_filename(name) != name:
+        raise ValueError(f'Unsafe file name: {name!r}')
+    return name
 
 
 class UploadManager(FileSystemEventHandler):
@@ -138,6 +153,39 @@ class UploadManager(FileSystemEventHandler):
         am.save()
 
         return out_filename
+
+    async def restore(self, infile, name, max_bytes=None, size=None) -> Path:
+        """Backup restore: store the stream under its archived plain name, replacing a file of the same name; no
+        renamed copy, no asset."""
+        final = self._folder.joinpath(plain_filename(name))
+        self.mkdirs()
+        if final.parent.resolve() != self._folder.resolve():
+            raise ValueError(f'Unsafe file name: {name!r}')
+        free = disk_usage(self._folder).free
+        if size is not None and size > free:
+            raise OSError(errno.ENOSPC, 'Not enough disk space', str(final))
+        temp = self._folder / f'.restore-{os.urandom(8).hex()}.tmp'
+        written = 0
+        try:
+            async with aopen(temp, 'wb') as out:
+                reader = infile.read
+                while True:
+                    buf = await reader(_buf_size) if iscoroutinefunction(reader) else reader(_buf_size)
+                    if not buf:
+                        break
+                    written += len(buf)
+                    if max_bytes is not None and written > max_bytes:
+                        raise ValueError(f'{name!r} is larger than its declared size')
+                    if written > free:
+                        raise OSError(errno.ENOSPC, 'Not enough disk space', str(final))
+                    await out.write(buf)
+            os.replace(temp, final)
+        except BaseException:
+            # a partial file never replaces the existing one
+            temp.unlink(missing_ok=True)
+            raise
+        self.scan_folder()
+        return final
 
     def mkdirs(self):
         self._folder.mkdir(parents=True, exist_ok=True)
