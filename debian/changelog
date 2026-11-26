@@ -1,3 +1,9 @@
+unitotem-manager (2026.12~dev4) stable; urgency=medium
+
+  * Boot hand-over the Debian way: the compositor unit replaces plymouth-quit like gdm3 and lightdm and quits Plymouth with --retain-splash; GRUB boot pictures for any display mode
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Thu, 26 Nov 2026 23:52:28 +0100
+
 unitotem-manager (2026.12~dev3) stable; urgency=medium
 
   * Boot continuity: Plymouth shows slot and version, the unit being started and Starting compositor; the Qt splash shows Starting viewer
