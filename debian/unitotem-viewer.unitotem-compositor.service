@@ -33,6 +33,8 @@ Environment=LIBSEAT_BACKEND=builtin
 # panel's calibration matrix with the C library's strtof in the language of the process, and under a locale with a decimal comma "1.06" is refused and
 # the whole matrix silently dropped (the matrices that are only turns and mirrors have no decimals, which hid it).
 Environment=LANG=C
+# The compositor's own pointer is transparent: it would sit at the top-left until a client takes over (no pointing device sets or moves it).
+Environment=XCURSOR_THEME=unitotem-blank
 # base configuration of the image, then the fragment of the node (touch screens)
 Environment=XDG_CONFIG_DIRS=/usr/share/unitotem/xdg:/run/unitotem/labwc/node
 # the theme paints the status line on its next refresh (50 Hz); the pause lets the frame that stays on screen show "Starting compositor" before `deactivate` freezes it
