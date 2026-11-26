@@ -6,6 +6,12 @@ Description=UniTotem compositor (labwc)
 # frame stays scanned out). The time the compositor needs to initialise is covered by the Plymouth frame.
 After=plymouth-start.service systemd-udevd.service
 Before=unitotem-manager.service
+# Like gdm3 and lightdm in Debian: the service that takes over the screen replaces plymouth-quit.service and quits Plymouth itself. Debian's
+# plymouth-quit.service runs a plain `plymouth quit` about a second after Plymouth starts, before the compositor exists: the VT goes back to
+# text mode and the kernel console repaints the boot text (kernel errors, systemd status lines) over the splash (measured on the amd64 test PC with the HDMI
+# capture, 2026-11-26: a burst of console text and black at the hand-over). OnFailure keeps Debian's safety net: if this unit fails Plymouth still quits.
+Conflicts=plymouth-quit.service plymouth-quit-wait.service
+OnFailure=plymouth-quit.service
 
 [Service]
 Type=simple
@@ -38,11 +44,11 @@ ExecStartPre=/bin/chmod 700 /run/unitotem/xdg
 ExecStartPre=/bin/touch /run/unitotem/xdg/output-pending
 ExecStartPre=/bin/sh -c 'for n in node; do f=/run/unitotem/labwc/$n/labwc/rc.xml; [ -e "$f" ] || printf \'<?xml version="1.0"?>\\n<labwc_config>\\n</labwc_config>\\n\' > "$f"; done'
 ExecStart=/usr/bin/labwc --merge-config
-# once the compositor really answers (the socket exists), turn and mirror the outputs as saved; then remove Plymouth WITHOUT `plymouth quit`: quit puts the VT back into
-# text mode, which makes the kernel console repaint over the new frame. Plymouth is already deactivated, so killing it only drops
-# the process; the screen is not cleared: the retained frame stays until the compositor and the splash paint over it (clearing
-# /dev/fb0 or tty1 blanked it; measured in a VM, 2026-11-26).
-ExecStartPost=-/bin/sh -c 'i=0; until [ -S /run/unitotem/xdg/wayland-0 ] || [ $i -ge 400 ]; do sleep 0.05; i=$((i+1)); done; /usr/bin/python3 /usr/share/unitotem-manager/plugins/unitotem_viewer/output_transform.py; pkill -KILL -x plymouthd'
+# once the compositor really answers (the socket exists), turn and mirror the outputs as saved; then quit Plymouth with `--retain-splash`, as gdm and sddm
+# do: the splash stays on screen and the VT stays in graphics mode (a plain quit puts it back in text mode and the console repaints). Plymouth is already
+# deactivated, so this only ends the process. The screen is not cleared: the retained frame stays until the compositor and the splash paint over it (clearing
+# /dev/fb0 or tty1 blanked it).
+ExecStartPost=-/bin/sh -c 'i=0; until [ -S /run/unitotem/xdg/wayland-0 ] || [ $i -ge 400 ]; do sleep 0.05; i=$((i+1)); done; /usr/bin/python3 /usr/share/unitotem-manager/plugins/unitotem_viewer/output_transform.py; /usr/bin/plymouth quit --retain-splash'
 Restart=always
 RestartSec=3
 
