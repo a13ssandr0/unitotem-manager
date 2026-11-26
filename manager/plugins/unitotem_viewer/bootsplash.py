@@ -9,7 +9,9 @@ UniTotem wordmark and the spinning ring on every output, tells systemd it is rea
 the viewer ends it (a D-Bus StopUnit, see boot.py) once its own splash, which looks the same, is on screen. It must stay free
 of imports from the rest of UniTotem: it is run as a script, not as part of the plugin package.
 """
+import math
 import os
+import re
 import signal
 import sys
 import time
@@ -30,6 +32,23 @@ SPINNER_OVERSAMPLE = 2             # spinner-*.png is drawn at twice the size it
 REVOLUTION = 1.0                   # seconds per turn, clockwise
 STEPS = 60                         # pictures per turn of the ring
 FRAME = 1 / 30                     # seconds between two frames of the ring
+
+# The two text lines under the wordmark, as the Plymouth theme draws them. Regular weight: the variable font's default
+# instance, which is Regular (wght 400); its variation is not changed.
+FONT = HERE / 'static' / 'NotoSans.ttf'
+FONT_WIDTH_PER_PT = 90             # point size = screen width / 90 (1280 -> 14, 1920 -> 21, 3840 -> 43)
+CAPTION_TOP = 1.2                  # line 1 top below the wordmark bottom, in em (PX)
+CAPTION_STEP = 1.82                # line 2 top below line 1 top, in em (PX); calibrated against the Plymouth theme's rendering, 2026-11-26
+CAPTION_ALPHA = (0.8, 0.5)         # white opacity of line 1 and line 2
+CAPTION_CHARS = 48
+CAPTION_DY = 0                     # calibration against the Plymouth frame, in pixels
+VIEWER_STATUS = 'Starting viewer'
+
+# The slot and the version of the image: the kernel command line and the release file of the image.
+CMDLINE_PATH = Path('/proc/cmdline')
+RELEASE_VERSION_PATH = Path('/usr/share/unitotem/release-version')
+SLOT_TOKEN = re.compile(r'unitotem\.slot=([ab])')
+VERSION = re.compile(r'[0-9A-Za-z.+~:-]+')
 
 
 def wait_for_compositor(timeout: float = 120.0) -> bool:
@@ -91,6 +110,78 @@ def _qimage(picture):
     return QImage(rgb.tobytes(), rgb.width, rgb.height, rgb.width * 3, QImage.Format.Format_RGB888).copy()
 
 
+def _qimage_rgba(picture):
+    """Non-premultiplied RGBA, the layout PIL writes: the alpha of the caption is blended by the painter."""
+    from PySide6.QtGui import QImage
+    rgba = picture.convert('RGBA')
+    return QImage(rgba.tobytes(), rgba.width, rgba.height, rgba.width * 4, QImage.Format.Format_RGBA8888).copy()
+
+
+def _ascii(text: str) -> str:
+    """Printable ASCII only: any other character is shown as '?'."""
+    return ''.join(c if 0x20 <= ord(c) < 0x7F else '?' for c in str(text))
+
+
+def read_slot_and_version() -> tuple[str | None, str | None]:
+    """(slot letter 'A' or 'B', version) from the kernel command line and the release file; None for what is missing or
+    not valid. Never raises."""
+    slot = version = None
+    try:
+        for token in CMDLINE_PATH.read_text(errors='replace').split():
+            match = SLOT_TOKEN.fullmatch(token)
+            if match:
+                slot = match.group(1).upper()
+                break
+    except Exception:
+        pass
+    try:
+        first = RELEASE_VERSION_PATH.read_text(errors='replace').splitlines()[0].strip()
+        if VERSION.fullmatch(first):
+            version = first
+    except Exception:
+        pass
+    return slot, version
+
+
+def boot_label() -> str:
+    """Line 1 of the caption: "Slot A: UniTotem 2026.12", "UniTotem 2026.12" without a slot, "UniTotem" without a version."""
+    slot, version = read_slot_and_version()
+    label = f'UniTotem {version}' if version else 'UniTotem'
+    return f'Slot {slot}: {label}' if slot else label
+
+
+def caption(width: int, lines) -> tuple:
+    """(RGBA image as wide as the screen, top of the image below the wordmark's bottom edge). Line 1 and line 2 are drawn
+    in the image, each centred, at most CAPTION_CHARS characters, printable ASCII. The image is None when the font file is
+    missing or unreadable: then nothing is drawn. Never logs; the callers do."""
+    from PIL import Image, ImageDraw, ImageFont
+    width = max(1, int(width))
+    px = max(1, round(width / FONT_WIDTH_PER_PT)) * 96 / 72
+    step = round(CAPTION_STEP * px)
+    offset = round(CAPTION_TOP * px) + CAPTION_DY
+    height = step + math.ceil(1.4 * px)       # ascender to descender of the line 2 glyphs
+    try:
+        font = ImageFont.truetype(str(FONT), px)
+    except OSError:
+        return None, offset
+    mask = Image.new('L', (width, height), 0)
+    draw = ImageDraw.Draw(mask)
+    for index, text in enumerate(lines[:len(CAPTION_ALPHA)]):
+        text = _ascii(text)[:CAPTION_CHARS]
+        if not text:
+            continue
+        x = round((width - font.getlength(text)) / 2)
+        draw.text((x, index * step), text, font=font, fill=round(255 * CAPTION_ALPHA[index]), anchor='la')
+    image = Image.new('RGBA', (width, height), (255, 255, 255, 0))
+    image.putalpha(mask)
+    return image, offset
+
+
+def viewer_caption(width: int) -> tuple:
+    """The caption of the viewer's splashes: boot_label() and VIEWER_STATUS, for a screen this wide."""
+    return caption(width, (boot_label(), VIEWER_STATUS))
+
+
 def _window_class():
     from PySide6.QtCore import QRect
     from PySide6.QtGui import QPainter, QRasterWindow
@@ -108,6 +199,15 @@ def _window_class():
             self.box = (centre[0] - self.ring_size // 2, centre[1] - self.ring_size // 2)
             self.started = time.monotonic()
             self.frames = {}
+            self.caption = None
+            try:
+                image, self.caption_offset = viewer_caption(width)
+                if image is None:
+                    print(f'unitotem-splash: no font {FONT}, no text drawn', file=sys.stderr)
+                else:
+                    self.caption = _qimage_rgba(image)
+            except Exception as error:      # the splash stays up without its text
+                print(f'unitotem-splash: no caption ({error})', file=sys.stderr)
 
         def frame(self):
             """The ring at the angle of this moment (clockwise: PIL turns counter-clockwise), over the part of the wordmark
@@ -130,6 +230,8 @@ def _window_class():
             top = (self.height() - self.picture.height()) // 2
             painter.drawImage(left, top, self.picture)
             painter.drawImage(left + self.box[0], top + self.box[1], self.frame())
+            if self.caption is not None:
+                painter.drawImage(0, top + self.picture.height() + self.caption_offset, self.caption)
 
     return SplashWindow
 

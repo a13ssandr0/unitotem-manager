@@ -5,19 +5,19 @@
 // colored #FF3D00). The wordmark and ring are pre-rendered PNGs (see
 // ../generate-assets.py) rather than drawn with Image.Text()/Image.Rotate()
 // primitives on hand-built glyphs, for two reasons:
-//   - Image.Text() needs plymouth-label + a system font in the initramfs,
-//     neither of which the kiosk image guarantees; without them it silently
-//     returns a 0x0 image and the splash is blank.
 //   - it lets the splash reuse the exact font and layout boot-screen.html
 //     renders live, instead of an approximation.
+// The status lines below use Image.Text(): the image ships plymouth-label
+// (label-freetype) and the theme's subset font, which replaces
+// /usr/share/fonts/Plymouth.ttf in the initramfs.
 // generate-assets.py emits 4 width tiers (1280/1920/2560/3840); this script
 // picks the closest tier for the smallest connected screen and does one
 // Image.Scale() to the exact pixel size that screen needs (at most 1.5x in
 // either direction - verified visually lossless against Plymouth's own
 // bilinear scaler for this artwork).
 //
-// No status line: the theme shows the wordmark and the ring and nothing else (unit names flashing by are noise on a
-// kiosk, and unitotem-splash, which takes over, draws the same picture).
+// Two status lines under the wordmark: line 1 the message from the initramfs
+// (slot and version), line 2 the systemd unit ids and "Starting compositor".
 //
 // Only Plymouth script primitives verified against the installed script.so
 // (strings /usr/lib/*/plymouth/script.so) or already used by a real deployed
@@ -91,6 +91,76 @@ did_initial_layout  = 0;
 frame_count         = 0;
 spin_angle          = 0;
 
+// ---- Status lines under the wordmark --------------------------------------
+// Text size PT = round(smallest width / 90); offsets in pixels from PX =
+// PT * 96 / 72 (measured: Image.Text size N draws N * 96 / 72 px per em).
+LINE1_ALPHA = 0.8;
+LINE2_ALPHA = 0.5;
+LINE_MAX    = 48;     // characters kept from each message
+
+line1_sprite  = Sprite();
+line2_sprite  = Sprite();
+line1_text    = "";
+line2_text    = "";
+line2_latched = 0;    // set by a "Starting ..." status: later updates are ignored
+line_pt       = 0;
+line_top1     = 0;
+line_top2     = 0;
+line_opacity  = 0;    // follows the wordmark fade
+
+fun starts_with(text, prefix) {
+    if (text.Length() < prefix.Length()) return 0;
+    return text.SubString(0, prefix.Length()) == prefix;
+}
+
+fun clip_line(text) {
+    if (text.Length() > LINE_MAX) return text.SubString(0, LINE_MAX);
+    return text;
+}
+
+fun draw_line(sprite, text, alpha, top) {
+    if (text == "") {
+        sprite.SetOpacity(0);
+        return;
+    }
+    local.img = Image.Text(text, 1, 1, 1, alpha, "Noto Sans " + line_pt, "center");
+    sprite.SetImage(img);
+    sprite.SetPosition(Window.GetWidth() / 2 - img.GetWidth() / 2, top, 12);
+    sprite.SetOpacity(line_opacity);
+}
+
+fun draw_lines() {
+    draw_line(line1_sprite, line1_text, LINE1_ALPHA, line_top1);
+    draw_line(line2_sprite, line2_text, LINE2_ALPHA, line_top2);
+}
+
+fun fade_lines(op) {
+    line_opacity = op;
+    if (line1_text != "") line1_sprite.SetOpacity(op);
+    if (line2_text != "") line2_sprite.SetOpacity(op);
+}
+
+fun display_message_callback(text) {
+    line1_text = clip_line(text);
+    draw_line(line1_sprite, line1_text, LINE1_ALPHA, line_top1);
+}
+
+// Unit ids ("foo.service") are shown without the suffix.
+// SubString(start, end): the end index is exclusive.
+fun update_status_callback(text) {
+    if (line2_latched) return;
+    local.name = text;
+    if (name.Length() > 8)
+        if (name.SubString(name.Length() - 8, name.Length()) == ".service")
+            name = name.SubString(0, name.Length() - 8);
+    line2_text = clip_line(name);
+    if (starts_with(line2_text, "Starting ")) line2_latched = 1;
+    draw_line(line2_sprite, line2_text, LINE2_ALPHA, line_top2);
+}
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+Plymouth.SetUpdateStatusFunction(update_status_callback);
+
 fun layout() {
     local.screen_width  = Window.GetWidth();
     local.screen_height = Window.GetHeight();
@@ -130,6 +200,12 @@ fun layout() {
     ring_sprite.SetPosition(ring_center_x - ring_img.GetWidth()  / 2,
                              ring_center_y - ring_img.GetHeight() / 2, 11);
 
+    local.px = Math.Int(min_width / 90 + 0.5) * 96 / 72;
+    line_pt   = Math.Int(min_width / 90 + 0.5);
+    line_top1 = wordmark_y + wordmark_img.GetHeight() + Math.Int(1.2 * px + 0.5);
+    line_top2 = line_top1 + Math.Int(2.0 * px + 0.5);
+    draw_lines();
+
     if (!did_initial_layout) {
         // Fade the whole logo in from transparent instead of the HTML's old
         // scale(0.75->2) zoom: Plymouth hands off to boot-screen.html at
@@ -149,6 +225,7 @@ fun refresh_callback() {
         local.opacity = t * t; // ease-in, matching boot-screen.html's old fade-in curve
         wordmark_sprite.SetOpacity(opacity);
         ring_sprite.SetOpacity(opacity);
+        fade_lines(opacity);
     }
 
     // Rotate() returns a buffer the same size as its source and rotates

@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget
 
-from .bootsplash import artwork
+from .bootsplash import FONT, _qimage_rgba, artwork, viewer_caption
 
 
 class Splash(QWidget):
@@ -31,6 +31,16 @@ class Splash(QWidget):
         except Exception as e:      # a splash must never take the viewer down: a black frame is better than none
             logger.error('Cannot draw the boot picture ({}), showing a black frame', e)
             self._picture = QImage()
+        self._caption = QImage()
+        self._caption_offset = 0
+        try:
+            image, self._caption_offset = viewer_caption(screen.geometry().width())
+            if image is None:
+                logger.error('Cannot read the caption font {}, drawing no text', FONT)
+            else:
+                self._caption = _qimage_rgba(image)
+        except Exception as e:
+            logger.error('Cannot draw the caption ({}), drawing no text', e)
 
     @staticmethod
     def _compose(width: int) -> QImage:
@@ -49,8 +59,10 @@ class Splash(QWidget):
         painter.fillRect(self.rect(), Qt.GlobalColor.black)
         if self._picture.isNull():
             return
-        painter.drawImage((self.width() - self._picture.width()) // 2, (self.height() - self._picture.height()) // 2,
-                          self._picture)
+        top = (self.height() - self._picture.height()) // 2
+        painter.drawImage((self.width() - self._picture.width()) // 2, top, self._picture)
+        if not self._caption.isNull():
+            painter.drawImage(0, top + self._picture.height() + self._caption_offset, self._caption)
 
 
 def show_splashes(screens, timeout: float = 3.0) -> list[Splash]:

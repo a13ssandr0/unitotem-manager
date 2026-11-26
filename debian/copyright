@@ -51,6 +51,12 @@ Files: manager/plugins/unitotem_viewer/static/NotoSans.ttf
 Copyright: 2012 Google Inc. and the Noto Project Authors
 License: OFL-1.1
 
+Files: plymouth/unitotem/NotoSans-subset.ttf
+Copyright: 2012 Google Inc. and the Noto Project Authors
+Comment: Modified version of manager/plugins/unitotem_viewer/static/NotoSans.ttf:
+ static Regular instance (wght=400, wdth=100), subset to U+0020-007E, no hinting.
+License: OFL-1.1
+
 Files: manager/utils/system/cpu.py manager/utils/system/sensors.py manager/utils/system/procfs.py
 Copyright: 2009 Jay Loden, Dave Daeschler, Giampaolo Rodola
            2022-2026 Alessandro Campolo
