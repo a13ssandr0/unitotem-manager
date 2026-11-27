@@ -6,15 +6,28 @@
     <gap>0</gap>
   </core>
   <!-- A kiosk has no shortcuts and no menus: with no <default /> and at least one entry of their own, labwc loads none of its
-       default keybinds (close, terminal, menus, window switcher) or mousebinds (root menu). The entries are inert: no action. -->
+       default keybinds (close, terminal, menus, window switcher) or mousebinds (root menu). The only keybind is the one the
+       autostart script presses once (see HideCursor below); the Root mousebind is inert: no action. -->
   <keyboard>
-    <keybind key="W-F24"/>
+    <keybind key="W-F23">
+      <action name="HideCursor"/>
+      <action name="WarpCursor" to="output" x="-1" y="-1"/>
+    </keybind>
   </keyboard>
   <mouse>
     <context name="Root">
       <mousebind button="Left" action="Press"/>
     </context>
   </mouse>
+  <!-- The compositor draws its own pointer from its start; there is no pointing device to set or move it. HideCursor (labwc 0.8.4
+       and later) hides it until a real pointer moves, WarpCursor moves it into the corner (the only one 0.8.3 has: the pointer
+       hangs off the screen). Done once at start (autostart presses W-F23) and for every window that maps. -->
+  <windowRules>
+    <windowRule identifier="*">
+      <action name="HideCursor"/>
+      <action name="WarpCursor" to="output" x="-1" y="-1"/>
+    </windowRule>
+  </windowRules>
   <theme>
     <cornerRadius>0</cornerRadius>
   </theme>

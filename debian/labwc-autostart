@@ -1,0 +1,10 @@
+#!/bin/sh
+# Run by labwc once its configuration is read: hide the compositor's own pointer (rc.xml binds W-F23 to HideCursor and WarpCursor).
+# The output must exist first, or labwc draws the pointer again when it appears.
+i=0
+until wlr-randr 2>/dev/null | grep -q .; do
+    i=$((i + 1))
+    [ "$i" -ge 100 ] && break
+    sleep 0.1
+done
+exec wtype -M logo -k F23 -m logo
