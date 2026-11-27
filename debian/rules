@@ -47,9 +47,6 @@ override_dh_auto_install-indep:
 	chmod 644 debian/plymouth-theme-unitotem/usr/share/plymouth/themes/unitotem/*
 	# base configuration of the compositor
 	install -D -m 644 debian/labwc-rc.xml debian/unitotem-viewer/usr/share/unitotem/xdg/labwc/rc.xml
-	# transparent pointer for the compositor's own cursor (selected by XCURSOR_THEME in its unit)
-	python3 debian/blank-cursor.py debian/unitotem-viewer/usr/share/icons/unitotem-blank
-	chmod 644 debian/unitotem-viewer/usr/share/icons/unitotem-blank/index.theme debian/unitotem-viewer/usr/share/icons/unitotem-blank/cursors/default
 	# launcher
 	install -D -m 755 debian/unitotem-manager.sh debian/unitotem-manager/usr/sbin/unitotem-manager
 	# first access: login shell of root and sshd ForceCommand while no administrator exists
