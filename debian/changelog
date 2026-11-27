@@ -1,3 +1,9 @@
+unitotem-manager (2026.12~dev6) stable; urgency=medium
+
+  * The compositor pointer is hidden with labwc actions (HideCursor, WarpCursor) instead of a cursor theme
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Fri, 27 Nov 2026 20:56:05 +0100
+
 unitotem-manager (2026.12~dev5) stable; urgency=medium
 
   * The compositor pointer is transparent: cursor theme unitotem-blank selected by XCURSOR_THEME in the compositor unit
