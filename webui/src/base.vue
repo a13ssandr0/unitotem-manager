@@ -123,7 +123,7 @@
       <span class="error-snack-text">{{ errorText }}</span>
     </v-snackbar>
 
-    <v-dialog :model-value="!connected" persistent max-width="400" class="reconnect-dialog">
+    <v-dialog :model-value="showReconnect" persistent max-width="400" class="reconnect-dialog">
       <v-card class="pa-4 d-flex align-center">
         <v-progress-circular indeterminate color="primary" size="64" class="mt-4"></v-progress-circular>
         <span class="text-h6 mt-6">Reconnecting...</span>
@@ -199,6 +199,22 @@ const unitotem_version = ref(window.__INITIAL_STATE__.ut_vers)
 const logged_user = ref({name: 'user', perms: null})
 const disp_size = ref(null)
 const connected = ref(false)
+// The overlay appears only when the link stays down: a drop that heals at once (a network change in the browser) shows nothing
+const RECONNECT_OVERLAY_MS = 2000
+const showReconnect = ref(false)
+let overlayTimer = null
+let retryMs = 500
+function setConnected(up) {
+  connected.value = up
+  if (up) {
+    clearTimeout(overlayTimer)
+    overlayTimer = null
+    showReconnect.value = false
+  } else if (overlayTimer === null && !showReconnect.value) {
+    // armed once per outage: failed attempts in a row must not push it back
+    overlayTimer = setTimeout(() => { overlayTimer = null; showReconnect.value = !connected.value }, RECONNECT_OVERLAY_MS)
+  }
+}
 const errorSnack = ref(false)
 const errorText = ref('')
 
@@ -279,7 +295,8 @@ async function reloadFresh(boot) {
 function connectWs() {
   ws = new WebSocket(`/ws`)
   ws.onopen = () => {
-    connected.value = true
+    setConnected(true)
+    retryMs = 500
     initialCommands().forEach(cmd => send(cmd))
     // getBounds requires a viewer_id; the navbar shows this device's own
     // local screen, not an arbitrary/remote one.
@@ -304,17 +321,18 @@ function connectWs() {
     dispatch(data)
   }
   ws.onclose = (e) => {
-    connected.value = false
+    setConnected(false)
     if (e.reason === 'Not Authenticated') {
       // The server ended this session (the password changed, the account is gone): the cookie no longer works, so reloading
       // lands on the login page. Courtesy only: the session is already closed.
       window.location.reload()
       return
     }
-    setTimeout(connectWs, 3000)
+    setTimeout(connectWs, retryMs)       // 0.5 s, then doubling up to 3 s
+    retryMs = Math.min(retryMs * 2, 3000)
   }
   ws.onerror = (e) => {
-    connected.value = false
+    setConnected(false)
     console.error('WebSocket error:', e)
   }
 }
