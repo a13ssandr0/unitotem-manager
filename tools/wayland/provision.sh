@@ -1,15 +1,16 @@
 #!/bin/sh
 # Prepares a test board for tools/wayland/session.sh: the Wayland stack of the kiosk extracted from the Debian trixie debs into
 # $W (default /var/lib/unitotem/wl) on the board, plus the code tree. Nothing is installed on the board, no dpkg change.
-#   tools/wayland/provision.sh HOST ARCH      ARCH = amd64 | arm64     (root, password unitotem)
+#   UT_PASSWORD_FILE=FILE tools/wayland/provision.sh HOST ARCH      ARCH = amd64 | arm64     (root, password read from FILE, mode 0600)
 # Needs docker on this machine (the debs are downloaded in a trixie container, multiarch, no qemu), sshpass, zstd.
 set -e
 HOST=$1; ARCH=$2; W=${W:-/var/lib/unitotem/wl}
+: "${UT_PASSWORD_FILE:?file holding the root password of the board}"
 [ -n "$HOST" ] && [ -n "$ARCH" ] || { echo "usage: $0 HOST amd64|arm64" >&2; exit 2; }
 case $ARCH in amd64) TRIPLET=x86_64-linux-gnu;; arm64) TRIPLET=aarch64-linux-gnu;; *) echo "bad arch" >&2; exit 2;; esac
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
-SSH="env -u DISPLAY -u SSH_ASKPASS SSH_ASKPASS_REQUIRE=never sshpass -p unitotem ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR root@$HOST"
+SSH="env -u DISPLAY -u SSH_ASKPASS SSH_ASKPASS_REQUIRE=never sshpass -f "$UT_PASSWORD_FILE" ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR root@$HOST"
 docker run --rm -v "$WORK:/out" debian:trixie sh -c "
   set -e
   dpkg --add-architecture $ARCH; apt-get update -qq

@@ -4,17 +4,17 @@
 # (whole directories, because a bind needs an existing target and the ticker adds new files); feedparser (not in the image
 # yet: python3-feedparser is a new Depends) is put on PYTHONPATH by a volatile drop-in. Nothing survives a reboot.
 #
-#   tools/ticker/deploy-board.sh HOST [PASSWORD]      (build the web UI first: cd webui && npx vite build)
+#   tools/ticker/deploy-board.sh HOST [PASSWORD_FILE]      (root password read from the file, default $UT_PASSWORD_FILE, mode 0600; build the web UI first: cd webui && npx vite build)
 #
 # No graphical password prompt can ever appear: every call has SSH_ASKPASS_REQUIRE=never and uses sshpass.
 set -eu
 HOST=${1:?host}
-PASS=${2:-unitotem}
+PASSFILE=${2:-${UT_PASSWORD_FILE:?file holding the root password of the board}}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 SSH_OPTS=(-o PreferredAuthentications=password -o PubkeyAuthentication=no -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR)
-run() { env -u DISPLAY -u SSH_ASKPASS SSH_ASKPASS_REQUIRE=never sshpass -p "$PASS" "$@"; }
+run() { env -u DISPLAY -u SSH_ASKPASS SSH_ASKPASS_REQUIRE=never sshpass -f "$PASSFILE" "$@"; }
 rsh() { run ssh "${SSH_OPTS[@]}" root@"$HOST" "$@"; }
 
 mkdir -p "$STAGE/pylib"
