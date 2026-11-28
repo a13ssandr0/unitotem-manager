@@ -1,3 +1,9 @@
+unitotem-manager (2026.12~dev8) stable; urgency=medium
+
+  * Raspberry Pi card: firmware version, one restart
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sat, 28 Nov 2026 19:11:58 +0100
+
 unitotem-manager (2026.12~dev7) stable; urgency=medium
 
   * amd64 images carry labwc 0.8.4 (HideCursor); build-debs.sh labwc
