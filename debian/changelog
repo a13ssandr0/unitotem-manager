@@ -1,3 +1,9 @@
+unitotem-manager (2026.12~dev7) stable; urgency=medium
+
+  * amd64 images carry labwc 0.8.4 (HideCursor); build-debs.sh labwc
+
+ -- Alessandro Campolo <campolo.alex@gmail.com>  Sat, 28 Nov 2026 10:40:34 +0100
+
 unitotem-manager (2026.12~dev6) stable; urgency=medium
 
   * The compositor pointer is hidden with labwc actions (HideCursor, WarpCursor) instead of a cursor theme

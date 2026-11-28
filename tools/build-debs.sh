@@ -5,6 +5,7 @@
 #   tools/build-debs.sh third-party     # python3-fastapi-login, python3-sdbus-networkmanager
 #   tools/build-debs.sh main            # unitotem-manager, unitotem-viewer, python3-cefpython3, plymouth-theme-unitotem
 #   tools/build-debs.sh cefpython       # only python3-cefpython3 (the one architecture-dependent package), no npm
+#   tools/build-debs.sh labwc           # labwc 0.8.4 for Debian 13 (amd64 image: trixie has 0.8.3, which lacks the HideCursor action)
 #   tools/build-debs.sh all
 #
 # `TARGET_ARCH=arm64 tools/build-debs.sh cefpython` CROSS builds the arm64 python3-cefpython3 (arch-all packages are the same on every
@@ -76,7 +77,31 @@ build_cefpython() {
     cp ../python3-cefpython3_*.deb /out/
 }
 
+build_labwc() {
+    # Debian 13 ships labwc 0.8.3. The pointer of the compositor is hidden with the HideCursor action, added in 0.8.4 (same wlroots 0.18,
+    # no other dependency change). Debian source package 0.8.3-1 (its packaging has no patches) with the upstream 0.8.4 tarball.
+    lw_version=0.8.4
+    lw_sha256=2d3ded90f78efb5060f7057ea802c78a79dc9b2e82ae7a2ad902af957b8b9797
+    apt-get install -y -qq --no-install-recommends curl >/dev/null
+    sed -i "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/debian.sources
+    apt-get update -qq
+    rm -rf /tmp/build/labwc; mkdir -p /tmp/build/labwc; cd /tmp/build/labwc
+    apt-get source --download-only labwc >/dev/null 2>&1
+    dpkg-source -x labwc_*.dsc old >/dev/null 2>&1
+    curl -fsSL -o "labwc_$lw_version.orig.tar.gz" "https://github.com/labwc/labwc/archive/refs/tags/$lw_version.tar.gz"
+    echo "$lw_sha256  labwc_$lw_version.orig.tar.gz" | sha256sum -c
+    mkdir "labwc-$lw_version"; tar -xzf "labwc_$lw_version.orig.tar.gz" -C "labwc-$lw_version" --strip-components=1
+    cp -r old/debian "labwc-$lw_version/debian"
+    cd "labwc-$lw_version"
+    DEBFULLNAME="Alessandro Campolo" DEBEMAIL=campolo.alex@gmail.com dch -v "$lw_version-1~unitotem1" -D trixie --force-distribution \
+        "Upstream $lw_version (HideCursor action, touch override with --merge-config) rebuilt for Debian 13; no other change."
+    apt-get build-dep -y -qq . >/dev/null
+    dpkg-buildpackage -us -uc -b >/dev/null
+    cp ../labwc_*unitotem1_*.deb /out/
+}
+
 case "$WHAT" in main|all) build_main ;; esac
+case "$WHAT" in labwc|all) build_labwc ;; esac
 case "$WHAT" in cefpython) build_cefpython ;; esac
 
 echo "=== lintian"
