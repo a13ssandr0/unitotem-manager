@@ -7,7 +7,7 @@ fixed offsets after each image -> web transition. It only observes: the playlist
 The DevTools bridge (port 9223, loopback on the node) is reached through an ssh tunnel opened with the helpers of
 deploy/script/lib.sh (_sshpass, SSH_OPTS). The tunnel and the page hooks are removed at exit.
 
-    tools/viewer-swap-trace.py --host 192.0.2.102 --user admin --password-file FILE --window 0 \\
+    tools/viewer-swap-trace.py --host 192.0.2.10 --user admin --password-file FILE --window 0 \\
         --seconds 70 --out-dir DIR --prefix viewer-fix-pi3-before
 
 FILE holds the login password only, mode 0600; it goes into the environment of the ssh process, never on this command line.
