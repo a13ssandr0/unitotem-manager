@@ -1,12 +1,12 @@
 <template>
-  <v-card v-if="status && status.kind === 'pi' && status.supported" class="ma-4 mt-0" max-width="600" width="100%" title="Firmware">
+  <v-card v-if="status && status.kind === 'pi' && status.supported" class="ma-4 mt-0" max-width="600" width="100%" title="Raspberry Pi">
     <v-card-text>
       <v-table density="compact">
         <tbody>
           <tr>
-            <td class="row-name">Boot files</td>
+            <td class="row-name">Firmware</td>
             <td>
-              {{ files?.installed || '-' }}<span v-if="files?.update === true"> &rarr; {{ files.available }}</span>
+              {{ filesText }}<span v-if="files?.update === true"> &rarr; {{ files.available }}</span>
             </td>
             <td class="row-state text-right">
               <v-chip v-if="files?.update === true" size="x-small" color="primary">Update available</v-chip>
@@ -19,7 +19,7 @@
               {{ eeprom.installed || '-' }}<span v-if="eeprom.update === true && eeprom.available"> &rarr; {{ eeprom.available }}</span>
             </td>
             <td class="row-state text-right">
-              <v-chip v-if="eeprom.pending" size="x-small" color="warning">Restart to finish</v-chip>
+              <v-chip v-if="eeprom.pending" size="x-small" color="warning">Restart pending</v-chip>
               <v-chip v-else-if="eeprom.update === true" size="x-small" color="primary">Update available</v-chip>
               <v-chip v-else-if="eeprom.update === false" size="x-small" color="green">Up to date</v-chip>
             </td>
@@ -50,7 +50,7 @@
     <v-card-actions>
       <v-spacer></v-spacer>
       <v-btn
-        v-if="status.reboot_required"
+        v-if="status.reboot_required && !status.restart_pending"
         variant="text"
         color="red"
         prepend-icon="mdi-restart"
@@ -73,10 +73,10 @@
       >Update</v-btn>
     </v-card-actions>
     <v-dialog v-model="confirmDialog" max-width="420">
-      <v-card title="Update firmware?">
+      <v-card :title="canRestart ? 'Update and restart?' : 'Update firmware?'">
         <v-card-text>
           <div>Do not power off during the update.</div>
-          <div>A restart is needed to finish.</div>
+          <div v-if="!canRestart">A restart is needed to finish.</div>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -124,6 +124,12 @@ const confirmDialog = ref(false)
 const restartDialog = ref(false)
 
 const files = computed(() => status.value?.files ?? null)
+// A custom boot files set shows the package it came from
+const filesText = computed(() => {
+  const f = files.value
+  if (f?.custom) return f.package ? `Custom (from ${f.package})` : 'Custom'
+  return f?.installed || '-'
+})
 const eeprom = computed(() => status.value?.eeprom ?? null)
 const blockers = computed(() => status.value?.blockers ?? [])
 // The helper's failures are text, a failed operation is {error, error_code}: both are shown as the text
@@ -164,7 +170,7 @@ onOpen(() => { checking.value = false })
 
 function applyUpdate() {
   confirmDialog.value = false
-  api.Settings.Firmware.apply({files: applyFiles.value, eeprom: applyEeprom.value})
+  api.Settings.Firmware.apply({files: applyFiles.value, eeprom: applyEeprom.value, restart: canRestart.value})
 }
 
 function restart() {

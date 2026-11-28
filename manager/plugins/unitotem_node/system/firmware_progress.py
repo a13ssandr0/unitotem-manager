@@ -18,7 +18,7 @@ from typing import Awaitable, Callable, Optional
 from loguru import logger
 
 from utils.notifications import notifications
-from . import firmware
+from . import firmware, restart
 from .update_progress import RUN_DIR, _inotify, names_in
 
 PROGRESS_FILE = 'unitotem-firmware.progress'
@@ -105,6 +105,10 @@ class FirmwareProgress:
         """The operation the notification was about is over: the bar goes, and what came of it is told."""
         self._seen = None
         notifications.resolve(KEY)
+        restart_asked = firmware._restart_requested
+        firmware.request_restart(False)       # every end clears the request; a started restart sets it again
+        if 'restart_pending' in status:
+            status['restart_pending'] = False
         error = status.get('error')
         if error:
             notifications.notify('firmware.failed', 'error', 'Firmware update failed',
@@ -112,10 +116,24 @@ class FirmwareProgress:
                                  audience='admin', link='/settings/updates')
         elif op == 'apply':
             notifications.resolve('firmware.failed')
-            text = ('Restart the device to start the new firmware.' if status.get('reboot_required')
-                    else 'The firmware is up to date.')
+            reboot = bool(status.get('reboot_required'))
+            automatic = reboot and restart_asked
+            text = ('The device restarts now.' if automatic else
+                    'Restart the device to start the new firmware.' if reboot else 'The firmware is up to date.')
             notifications.notify('firmware.done', 'info', 'Firmware updated', text, source='updates', audience='admin',
                                  link='/settings/updates')
-
+            if automatic:
+                # the state stays "restart pending" until the manager goes down with the device
+                firmware.request_restart(True)
+                status['restart_pending'] = True
+                try:
+                    await restart.restart()
+                except Exception:
+                    logger.exception('Restart after the firmware update failed')
+                    firmware.request_restart(False)
+                    status['restart_pending'] = False
+                    notifications.notify('firmware.done', 'info', 'Firmware updated',
+                                         'Restart the device to start the new firmware.', source='updates',
+                                         audience='admin', link='/settings/updates')
 
 firmware_progress = FirmwareProgress()

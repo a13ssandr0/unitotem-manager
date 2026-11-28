@@ -388,3 +388,181 @@ def test_without_inotify_the_watch_still_reads_the_status_once(center, monkeypat
 def test_the_watch_file_and_keys_are_the_contract_names():
     assert fp.PROGRESS_FILE == 'unitotem-firmware.progress'
     assert fp.KEY == 'firmware.progress'
+
+
+# ── restart after an apply ────────────────────────────────────────────────────
+
+RUNNING_APPLY = {'supported': True, 'op': 'apply', 'phase': 'swap', 'percent': 40}
+
+
+@pytest.fixture(autouse=True)
+def _restart_request_reset():
+    firmware.request_restart(False)
+    yield
+    firmware.request_restart(False)
+
+
+@pytest.fixture
+def restarts(monkeypatch):
+    calls = []
+
+    async def restart():
+        calls.append(True)
+
+    monkeypatch.setattr(fp.restart, 'restart', restart)
+    return calls
+
+
+def fake_apply_answer(monkeypatch, answer):
+    async def apply(files=True, eeprom=True):
+        return answer
+
+    async def status():
+        return {'supported': True, 'op': None}
+
+    monkeypatch.setattr(firmware, 'apply', apply)
+    monkeypatch.setattr(firmware, 'status', status)
+
+
+def test_apply_asks_for_a_restart_only_when_the_apply_started(api, monkeypatch):
+    instance, _ = api
+    fake_apply_answer(monkeypatch, {'started': True, 'op': 'apply'})
+
+    async def scenario():
+        await instance.apply(restart=True)
+        await api_firmware.Firmware._poller
+
+    asyncio.run(scenario())
+    assert firmware._restart_requested is True
+
+
+def test_a_refused_apply_does_not_ask_for_a_restart(api, monkeypatch):
+    instance, _ = api
+    fake_apply_answer(monkeypatch, {'supported': True, 'error': 'A firmware operation is already running', 'error_code': 'busy'})
+
+    async def scenario():
+        await instance.apply(restart=True)
+        await api_firmware.Firmware._poller
+
+    asyncio.run(scenario())
+    assert firmware._restart_requested is False
+
+
+def test_apply_without_restart_clears_the_request(api, monkeypatch):
+    instance, _ = api
+    firmware.request_restart(True)
+    fake_apply_answer(monkeypatch, {'started': True, 'op': 'apply'})
+
+    async def scenario():
+        await instance.apply(restart=False)
+        await api_firmware.Firmware._poller
+
+    asyncio.run(scenario())
+    assert firmware._restart_requested is False
+
+
+def test_apply_restart_must_be_a_boolean(api, monkeypatch):
+    instance, _ = api
+    calls = mock_exec(monkeypatch, FakeProc(0, b'{"started":true}'))
+    reply = asyncio.run(instance.apply(restart='yes'))
+    assert reply.kwargs['result'] == {'supported': True, 'error': 'restart is true or false', 'error_code': 'bad-argument'}
+    assert calls == [] and firmware._restart_requested is False
+
+
+def test_status_tells_whether_a_restart_is_pending(monkeypatch):
+    mock_exec(monkeypatch, FakeProc(0, STATUS.encode()))
+    assert asyncio.run(firmware.status())['restart_pending'] is False
+    firmware.request_restart(True)
+    assert asyncio.run(firmware.status())['restart_pending'] is True
+
+
+def test_status_without_a_card_has_no_restart_key(monkeypatch):
+    mock_exec(monkeypatch, missing=True)
+    firmware.request_restart(True)
+    assert 'restart_pending' not in asyncio.run(firmware.status())
+
+
+def test_an_apply_with_restart_restarts_once_when_it_ends(center, monkeypatch, restarts):
+    firmware.request_restart(True)
+    end = {'supported': True, 'op': None, 'reboot_required': True, 'error': None, 'restart_pending': True}
+    scenario, pushed = run_watch(monkeypatch, [dict(RUNNING_APPLY), end])
+
+    async def run():
+        watcher = await scenario()
+        await watcher.refresh()
+        await watcher.refresh()
+
+    asyncio.run(run())
+    assert restarts == [True]
+    assert [n['text'] for n in center.snapshot(['admin']) if n['title'] == 'Firmware updated'] == ['The device restarts now.']
+    assert pushed[-1]['restart_pending'] is True
+    assert firmware._restart_requested is True
+
+
+def test_a_failed_restart_keeps_the_normal_text(center, monkeypatch):
+    firmware.request_restart(True)
+
+    async def boom():
+        raise RuntimeError('no system bus')
+
+    monkeypatch.setattr(fp.restart, 'restart', boom)
+    end = {'supported': True, 'op': None, 'reboot_required': True, 'error': None, 'restart_pending': True}
+    scenario, pushed = run_watch(monkeypatch, [dict(RUNNING_APPLY), end])
+
+    async def run():
+        watcher = await scenario()
+        await watcher.refresh()
+        await watcher.refresh()
+
+    asyncio.run(run())
+    assert [n['text'] for n in center.snapshot(['admin']) if n['title'] == 'Firmware updated'] == [
+        'Restart the device to start the new firmware.']
+    assert pushed[-1]['restart_pending'] is False
+    assert firmware._restart_requested is False
+
+
+def test_an_error_end_does_not_restart_and_clears_the_request(center, monkeypatch, restarts):
+    firmware.request_restart(True)
+    end = {'supported': True, 'op': None, 'error': {'error': 'Signature does not match', 'error_code': 'bad-signature'},
+           'restart_pending': True}
+    scenario, pushed = run_watch(monkeypatch, [dict(RUNNING_APPLY), end])
+
+    async def run():
+        watcher = await scenario()
+        await watcher.refresh()
+        await watcher.refresh()
+
+    asyncio.run(run())
+    assert restarts == []
+    assert firmware._restart_requested is False
+    assert pushed[-1]['restart_pending'] is False
+
+
+def test_no_reboot_required_means_no_restart(center, monkeypatch, restarts):
+    firmware.request_restart(True)
+    end = {'supported': True, 'op': None, 'reboot_required': False, 'error': None, 'restart_pending': True}
+    scenario, pushed = run_watch(monkeypatch, [dict(RUNNING_APPLY), end])
+
+    async def run():
+        watcher = await scenario()
+        await watcher.refresh()
+        await watcher.refresh()
+
+    asyncio.run(run())
+    assert restarts == []
+    assert [n['text'] for n in center.snapshot(['admin']) if n['title'] == 'Firmware updated'] == [
+        'The firmware is up to date.']
+    assert pushed[-1]['restart_pending'] is False
+
+
+def test_power_reboot_goes_through_restart(monkeypatch):
+    from unitotem_node.api import power as api_power
+    from unitotem_node.system import restart as restart_module
+    calls = []
+
+    async def restart():
+        calls.append(True)
+
+    monkeypatch.setattr(restart_module, 'restart', restart)
+    asyncio.run(api_power.Power.reboot())
+    assert calls == [True]

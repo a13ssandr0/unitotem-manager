@@ -34,7 +34,11 @@ class Firmware(WSAPIBase):
         await self.ws.broadcast('Settings/Firmware/status', status=await firmware.status())
         return WSBroadcast(check=result)
 
-    async def apply(self, files: bool = True, eeprom: bool = True):
+    async def apply(self, files: bool = True, eeprom: bool = True, restart: bool = False):
+        # Settings/Firmware/* is admin-only and admin holds every permission, power included: no extra check here.
+        if not isinstance(restart, bool):
+            return WSBroadcast(result={'supported': True, 'error': 'restart is true or false', 'error_code': 'bad-argument'})
         result = await firmware.apply(files, eeprom)
+        firmware.request_restart(restart and result.get('started') is True and 'error' not in result)
         self._start_polling()
         return WSBroadcast(result=result)

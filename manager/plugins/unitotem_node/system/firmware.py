@@ -64,8 +64,19 @@ async def run(*args: str) -> dict[str, Any]:
     return parse_output(proc.returncode, out.decode(errors='replace'))
 
 
+_restart_requested = False  # set by the apply that asked for a restart; read by firmware_progress when the apply ends
+
+
+def request_restart(value: bool):
+    global _restart_requested
+    _restart_requested = bool(value)
+
+
 async def status() -> dict[str, Any]:
-    return await run('status')
+    result = await run('status')
+    if result.get('supported') is True:
+        result['restart_pending'] = _restart_requested
+    return result
 
 
 async def check() -> dict[str, Any]:
